@@ -49,6 +49,7 @@ services:
         max-size: "100m"
         max-file: "3"
     # 方式A：把stdout/stderr重定向到容器内文件（简单粗暴）
+    # `>` 是 yaml 语法：多行字符串，把换行换成空格
     command: >
       sh -c "mkdir -p /app-server/logs && python3 -m src.com.damon.ming.main > /app-server/logs/app.log 2>&1"
 

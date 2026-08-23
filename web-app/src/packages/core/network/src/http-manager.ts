@@ -1,6 +1,11 @@
 // src/packages/core/network/src/http-manager.ts
 import { HttpClient } from "./http-client";
-import { ApiResponse, HttpClientConfig } from "./types";
+import {
+  ApiResponse,
+  HttpClientConfig,
+  InterceptorConfig,
+  NormalizedRequest,
+} from "./types";
 
 export class HttpManager {
   // 私有默认客户端，外部无法直接修改
@@ -80,5 +85,21 @@ export class HttpManager {
     cfg?: Parameters<HttpClient["patch"]>[2],
   ): Promise<ApiResponse<T>> {
     return this.getDefaultClient().patch<T>(url, data, cfg);
+  }
+
+  async sse(
+    url: string,
+    body?: any,
+    opts?: {
+      signal?: AbortSignal;
+      extraHeaders?: Record<string, string>;
+      interceptors?: {
+        request?:
+          | InterceptorConfig<NormalizedRequest>
+          | InterceptorConfig<NormalizedRequest>[];
+      };
+    },
+  ) {
+    return this.getDefaultClient().sse(url, body, opts);
   }
 }

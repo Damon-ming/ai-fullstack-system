@@ -1,15 +1,10 @@
 // src/packages/core/network/src/types.ts
 // 保留必要字段，按场景拆分
-import {
-  AxiosHeaderValue,
-  AxiosRequestConfig,
-  AxiosResponse,
-  InternalAxiosRequestConfig,
-} from "axios";
+import { AxiosHeaderValue, AxiosRequestConfig } from "axios";
 
 // 公共：剔除冲突字段后的 axios 扩展配置，两处共用
 // type 用来给一个类型起一个新的名字（别名），方便复用和维护
-type CommonAxiosConfig = Omit<
+export type CommonAxiosConfig = Omit<
   AxiosRequestConfig,
   "url" | "method" | "params" | "data" | "headers"
 >;
@@ -27,8 +22,12 @@ export interface RequestConfig {
     // InternalAxiosRequestConfig 是专门为请求拦截器设计的内部类型，而 AxiosRequestConfig 是你在创建请求时传入的通用配置类型
     // AxiosRequestConfig 中的 headers 通常允许是多种类型，比如 RawAxiosRequestHeaders & MethodsHeaders 的交叉类型，或 AxiosHeaders 对象。
     // 而 InternalAxiosRequestConfig 明确要求 headers 必须是 AxiosRequestHeaders 类型，且不再是可选属性
-    request?: InterceptorConfig<InternalAxiosRequestConfig>;
-    response?: InterceptorConfig<AxiosResponse>;
+    request?:
+      | InterceptorConfig<NormalizedRequest>
+      | InterceptorConfig<NormalizedRequest>[];
+    response?:
+      | InterceptorConfig<NormalizedResponse>
+      | InterceptorConfig<NormalizedResponse>[];
   };
 }
 
@@ -39,11 +38,11 @@ export interface HttpClientConfig {
   axiosConfig?: CommonAxiosConfig; // 复用公共类型，不再重复写Omit
   interceptors?: {
     request?:
-      | InterceptorConfig<InternalAxiosRequestConfig>
-      | InterceptorConfig<InternalAxiosRequestConfig>[];
+      | InterceptorConfig<NormalizedRequest>
+      | InterceptorConfig<NormalizedRequest>[];
     response?:
-      | InterceptorConfig<AxiosResponse>
-      | InterceptorConfig<AxiosResponse>[];
+      | InterceptorConfig<NormalizedResponse>
+      | InterceptorConfig<NormalizedResponse>[];
   };
 }
 
@@ -69,4 +68,33 @@ export interface InterceptorManager<T = any> {
     onRejected?: (error: any) => any,
   ): number;
   eject(id: number): void;
+}
+
+/**
+ * 【标准化请求】库无关的请求配置
+ * 替换原 InternalAxiosRequestConfig，拦截器链中统一使用此结构
+ * 底层从 axios 迁移到 fetch / undici 时，拦截器代码零改动
+ */
+export interface NormalizedRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  params?: Record<string, any>;
+  data?: any;
+  timeout?: number;
+  withCredentials?: boolean;
+  responseType?: "json" | "text" | "blob" | "arraybuffer";
+  signal?: AbortSignal;
+}
+
+/**
+ * 【标准化响应】库无关的响应结构
+ * 替换原 AxiosResponse
+ */
+export interface NormalizedResponse<T = any> {
+  data: T;
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  config: NormalizedRequest;
 }

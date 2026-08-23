@@ -1,24 +1,19 @@
 // src/packages/biz-common/net-api/index.ts
 
-// 1. 导出初始化逻辑与全局客户端
-export { initNetApi} from './init'
+export { initNetApi } from "./init";
+export { netClient } from "./net-client";
+export type { INetClient } from "./interface";
 
-// 2. 导出常用业务网络类型（来自 biz-common-net）
+// 网络层类型继续从这里导出（这一层本来就是类型门面）
 export type {
   BizApiResponse,
-  BaseRequest,
   BizResult,
   ErrDataResponse,
   BizRequestConfig,
-  BizHttpClientConfig,
-  ClientErrData,
-  BizHttp,
-  ClientErrorCode, BizCodeRange
-} from '@ming/biz-common-net'
-
-/**
- * 导出全局网络 Client 实例
- * 业务模块（如 chat）直接使用该实例发起业务请求
- */
-import { bizHttp,BizHttp } from '@ming/biz-common-net'
-export const netClient: BizHttp = bizHttp
+  BizRequestCallbacks,
+  SseStreamOptions,
+  SseRequestOptions,
+  SseStreamCallbacks,
+  SseFinalState
+} from "@ming/biz-common-net";
+export { ClientErrorCode, BizCodeRange } from "@ming/biz-common-net";

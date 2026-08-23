@@ -4,3 +4,4 @@
 *.md
 dist
 build
+node_modules

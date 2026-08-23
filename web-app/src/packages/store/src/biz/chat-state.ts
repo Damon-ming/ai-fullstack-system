@@ -54,12 +54,27 @@ export const useChatMessageStore = createAppStore<ChatMessageState>((set) => ({
 
 // Chat 上传交互状态：只负责上传流程和全局上传弹窗数据。
 export type UploadStatus = "idle" | "uploading" | "success" | "error";
-export interface ChatUploadFileResult { filename: string; file_md5: string; file_size: number; duplicate: boolean; indexed: boolean; }
+export interface ChatUploadFileResult {
+  filename: string;
+  file_md5: string;
+  file_size: number;
+  duplicate: boolean;
+  indexed: boolean;
+}
 
 export interface ChatUploadState {
-  upload: { status: UploadStatus; message: string; fileNames: string[]; files: ChatUploadFileResult[] };
+  upload: {
+    status: UploadStatus;
+    message: string;
+    fileNames: string[];
+    files: ChatUploadFileResult[];
+  };
   startUpload: (fileNames: string[]) => void;
-  finishUpload: (status: "success" | "error", message: string, files?: ChatUploadFileResult[]) => void;
+  finishUpload: (
+    status: "success" | "error",
+    message: string,
+    files?: ChatUploadFileResult[],
+  ) => void;
   closeUpload: () => void;
 }
 

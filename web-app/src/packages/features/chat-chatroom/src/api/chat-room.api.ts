@@ -1,63 +1,63 @@
-import { dataApi } from "@ming/data-layer";
-import type { ChatRoomApiResponse, ChatRoomRequest, ChatSseMessage } from "./types";
+// web-app/src/packages/features/chat-chatroom/src/api/chat-room.api.ts
+import { dataApi, QueryFactory } from "@ming/data-layer";
+import type {
+  ChatRoomApiResponse,
+  ChatRoomRequest,
+  ChatSseMessage,
+} from "./types";
 import { createLogger } from "@ming/core-log";
+import type {
+  ErrDataResponse,
+  SseStreamCallbacks,
+  SseStreamOptions,
+  SseFinalState,
+} from "@ming/biz-common-net-api";
 
 const log = createLogger("chat-chatroom/api");
 
-// 同步接口 /api/llm/v1/send
-export const sendChatRoomMessage = (
+// 同步接口 /api/llm/send/v1
+export const sendChatRoomMessageFn = (
   request: ChatRoomRequest,
 ): Promise<ChatRoomApiResponse> => {
-  log.debug("send request", { endpoint: "/api/llm/send/v1", queryLength: request.query.length });
-  return dataApi.post("/api/llm/send/v1", request)
-    .then((response) => { log.debug("send response received"); return response; })
-    .catch((error) => { log.error("send request failed", error); throw error; });
+  log.debug("send request", {
+    endpoint: "/api/llm/send/v1",
+    queryLength: request.query.length,
+  });
+  return dataApi
+    .post("/api/llm/send/v1", request)
+    .then((response) => {
+      log.debug("send response received");
+      return response;
+    })
+    .catch((error) => {
+      log.error("send request failed", error);
+      throw error;
+    });
 };
 
-// 流式接口 /api/llm/v1/chat SSE
-export const streamChatRoomMessage = async (
+export const sendChatRoomMessage = sendChatRoomMessageFn;
+
+export const useSendChatRoomMessage = QueryFactory.genMutationHook(
+  sendChatRoomMessageFn,
+  {
+    retry: 0, // 发送聊天消息默认不重试，收敛在此处
+  },
+);
+
+/**
+ * 命令式调用（适配新签名：callbacks + opts）
+ * - callbacks：onMessage / onError / onComplete
+ * - opts：signal / extraHeaders / interceptors(单次请求拦截器) / parse / validateMessage / messageInterceptors
+ */
+export const streamChatRoomMessage = (
   request: ChatRoomRequest,
-  onMessage: (payload: ChatSseMessage) => void
-) => {
-  log.debug("stream request", { endpoint: "/api/llm/chat/v1", queryLength: request.query.length });
-  const res = await fetch("/api/llm/chat/v1", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-      // 若项目需要token鉴权，自行补充 Authorization
-      // Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify(request),
-  });
-
-  if (!res.ok) { const error = new Error(`请求失败 status:${res.status}`); log.error("stream response failed", error, { status: res.status }); throw error; }
-
-  const reader = res.body?.getReader();
-  if (!reader) { const error = new Error("当前环境不支持流式读取"); log.error("stream reader unavailable", error); throw error; }
-
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      const trimLine = line.trim();
-      if (!trimLine || !trimLine.startsWith("data: ")) continue;
-      const jsonStr = trimLine.slice(6);
-      try {
-        const payload = JSON.parse(jsonStr) as ChatSseMessage;
-        onMessage(payload);
-      } catch (err) {
-        log.warn("SSE JSON parse failed", { json: jsonStr });
-      }
-    }
-  }
-  log.debug("stream response completed");
+  callbacks: SseStreamCallbacks<ChatSseMessage>,
+  opts?: SseStreamOptions<ChatSseMessage>,
+): Promise<SseFinalState> => {
+  return dataApi.sse<ChatSseMessage>(
+    "/api/llm/chat/v1",
+    request,
+    callbacks,
+    opts,
+  );
 };
