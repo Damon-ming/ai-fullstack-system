@@ -7,7 +7,6 @@ import type {
 } from "./types";
 import { createLogger } from "@ming/core-log";
 import type {
-  ErrDataResponse,
   SseStreamCallbacks,
   SseStreamOptions,
   SseFinalState,

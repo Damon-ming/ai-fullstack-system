@@ -1,5 +1,5 @@
 import { uploadFile as requestUploadFile } from '../api'
-import type { BizApiResponse } from '@ming/biz-common-net-api'
+import type { DataApiResponse } from '@ming/data-layer'
 import type { UploadRequest, UploadResponse } from '../api/types'
 import { createLogger } from '@ming/core-log'
 
@@ -23,7 +23,7 @@ function createUploadRequest(files: File[]): UploadRequest {
   return { files, requestId: String(Date.now()), requestedAt: Date.now() }
 }
 
-export async function uploadFile(files: File[]): Promise<BizApiResponse<UploadResponse>> {
+export async function uploadFiles(files: File[]): Promise<DataApiResponse<UploadResponse>> {
   log.debug('upload started', { fileCount: files.length, fileNames: files.map(file => file.name) })
   try {
     const response = await requestUploadFile(createUploadRequest(files))

@@ -1,1 +1,1 @@
-export { useUploadApi } from "./api/upload-api.api"
+export { uploadFiles } from "./api/upload-api.api"

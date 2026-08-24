@@ -7,6 +7,14 @@ export { DataProvider } from "./provider";
 
 export type {
   DataLayerRequestConfig,
+  DataApiResponse,
+  DataLayerError,
+  DataLayerRequestMeta,
+  DataLayerSseRequestOptions,
+  DataLayerSseStreamOptions,
+  DataLayerSseMessageInterceptor,
+  DataLayerSseCallbacks,
+  DataLayerSseFinalState,
   BaseQueryOptions,
   BaseMutationOptions,
 } from "./types";

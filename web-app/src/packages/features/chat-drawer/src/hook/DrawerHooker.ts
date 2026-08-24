@@ -1,5 +1,5 @@
 import { useHistory } from "@ming/features-history-api";
-import { useUploadApi } from "@ming/features-upload-api";
+import { uploadFiles as uploadFilesFromApi } from "@ming/features-upload-api";
 import {
   useChatUiStore,
   useChatMessageStore,
@@ -47,7 +47,7 @@ export function useDrawerHook() {
     if (!files.length) return;
     startUpload(files.map((file) => file.name));
     try {
-      const response = await useUploadApi(files);
+      const response = await uploadFilesFromApi(files);
       if (response.bizCode >= 40000) throw new Error("服务端返回上传失败");
       const resultFiles = Array.isArray(response.data?.files)
         ? response.data.files

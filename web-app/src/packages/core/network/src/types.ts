@@ -54,6 +54,10 @@ export interface InterceptorConfig<T = any> {
   onRejected?: (error: any) => any;
 }
 
+export type InterceptorConfigCollection<T = any> =
+  | InterceptorConfig<T>
+  | InterceptorConfig<T>[];
+
 // any 让你失去了 TypeScript 的所有保护，编译时不会报错，但运行时可能崩溃。
 // unknown —— 安全的类型检查
 export interface ApiResponse<T = unknown> {

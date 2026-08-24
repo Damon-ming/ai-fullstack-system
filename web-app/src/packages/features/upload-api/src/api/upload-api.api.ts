@@ -1,2 +1,5 @@
-import { uploadFile } from "@ming/features-upload"
-export function useUploadApi(files: File[]) { return uploadFile(files) }
+import { uploadFiles as uploadFilesInFeature } from "@ming/features-upload"
+
+export function uploadFiles(files: File[]) {
+  return uploadFilesInFeature(files)
+}

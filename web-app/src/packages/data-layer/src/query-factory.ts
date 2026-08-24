@@ -6,7 +6,7 @@ import {
   UseMutationOptions,
   QueryKey,
 } from "@tanstack/react-query";
-import type { BizApiResponse, ErrDataResponse } from "@ming/biz-common-net-api";
+import type { DataApiResponse, DataLayerError } from "./types";
 
 export class QueryFactory {
   /**
@@ -14,15 +14,15 @@ export class QueryFactory {
    */
   static genQueryHook<
     TData,
-    TError = ErrDataResponse,
+    TError = DataLayerError,
     TQueryKey extends QueryKey = QueryKey,
   >(
-    fetcher: () => Promise<BizApiResponse<TData>>,
+    fetcher: () => Promise<DataApiResponse<TData>>,
     defaultOptions: Omit<
       UseQueryOptions<
-        BizApiResponse<TData>,
+        DataApiResponse<TData>,
         TError,
-        BizApiResponse<TData>,
+        DataApiResponse<TData>,
         TQueryKey
       >,
       "queryKey" | "queryFn"
@@ -30,9 +30,9 @@ export class QueryFactory {
   ) {
     return (queryKey: TQueryKey, customOptions?: typeof defaultOptions) => {
       return useQuery<
-        BizApiResponse<TData>,
+        DataApiResponse<TData>,
         TError,
-        BizApiResponse<TData>,
+        DataApiResponse<TData>,
         TQueryKey
       >({
         queryKey,
@@ -43,20 +43,20 @@ export class QueryFactory {
     };
   }
 
-  static genMutationHook<TData, TVariables, TError = ErrDataResponse>(
-    fetcher: (vars: TVariables) => Promise<BizApiResponse<TData>>,
+  static genMutationHook<TData, TVariables, TError = DataLayerError>(
+    fetcher: (vars: TVariables) => Promise<DataApiResponse<TData>>,
     defaultOptions: Omit<
-      UseMutationOptions<BizApiResponse<TData>, TError, TVariables>,
+      UseMutationOptions<DataApiResponse<TData>, TError, TVariables>,
       "mutationFn"
     >,
   ) {
     return (
       customOptions?: Omit<
-        UseMutationOptions<BizApiResponse<TData>, TError, TVariables>,
+        UseMutationOptions<DataApiResponse<TData>, TError, TVariables>,
         "mutationFn"
       >,
     ) => {
-      return useMutation<BizApiResponse<TData>, TError, TVariables>({
+      return useMutation<DataApiResponse<TData>, TError, TVariables>({
         mutationFn: fetcher,
         ...defaultOptions,
         ...customOptions,

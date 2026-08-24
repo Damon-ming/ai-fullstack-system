@@ -6,9 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.0.0"
-  },
-  "devDependencies": {
+    "@tanstack/react-query": "^5.0.0",
     "@ming/biz-common-net-api": "workspace:*"
   }
 }

@@ -89,7 +89,8 @@ export function chatMessageHook() {
         think: false,
       };
 
-      await streamChatRoomMessage(req, (payload) => {
+      await streamChatRoomMessage(req, {
+        onMessage: (payload) => {
         log.debug("sendStream received event", { event: payload.event });
         if (payload.event === "delta") {
           const data = payload.data as { answer_content: string };
@@ -119,6 +120,21 @@ export function chatMessageHook() {
             ),
           );
         }
+        },
+        onError: (error) => {
+          streamFinished = true;
+          const httpCode = error.clientErrData?.httpCode;
+          const message = error.clientErrData?.message || "流式请求失败";
+          const errorText = httpCode
+            ? `请求失败（HTTP ${httpCode}）：${message}`
+            : message;
+          log.error("sendStream response failed", error, { httpCode });
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMsgId ? { ...msg, text: errorText } : msg,
+            ),
+          );
+        },
       });
     } catch (e) {
       log.error("sendStream failed", e);

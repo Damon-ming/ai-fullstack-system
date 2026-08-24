@@ -1,9 +1,9 @@
-import type { BizApiResponse } from "@ming/biz-common-net-api";
+import type { DataApiResponse } from "@ming/data-layer";
 export interface ChatRoomSyncData {
   answer_content: string;
   thinking_process?: string;
 }
-export type ChatRoomApiResponse = BizApiResponse<ChatRoomSyncData>;
+export type ChatRoomApiResponse = DataApiResponse<ChatRoomSyncData>;
 export type SseEvent = "delta" | "done" | "error";
 export interface ChatDeltaData {
   answer_content: string;

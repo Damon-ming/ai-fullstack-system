@@ -1,5 +1,6 @@
 // src/packages/data-layer/src/unwrapper.ts
 import type { BizApiResponse, ErrDataResponse, BizResult } from '@ming/biz-common-net-api'
+import type { DataApiResponse, DataLayerError } from './types'
 
 /**
  * 核心解包纯函数：将网络层返回的 [err, res] 元组转换为标准的 Standard Promise
@@ -8,22 +9,22 @@ import type { BizApiResponse, ErrDataResponse, BizResult } from '@ming/biz-commo
  */
 export async function unwrapBizResult<T = any, F = any>(
   requestPromise: Promise<BizResult<T, F>>
-): Promise<BizApiResponse<T>> {
+): Promise<DataApiResponse<T>> {
   const [err, res] = await requestPromise
 
   if (err) {
     // 抛出错误，促使 TanStack Query 状态变为 isError，透传完整 ErrDataResponse
-    return Promise.reject(err)
+    return Promise.reject(err as DataLayerError<F>)
   }
 
   if (res) {
     // 成功，透传完整的 BizApiResponse
-    return res
+    return { bizCode: res.bizCode, data: res.data }
   }
 
   // 兜底防御
   return Promise.reject({
     bizCode: -1,
     clientErrData: { message: 'Unknown data layer error: Both res and err are null' }
-  } as ErrDataResponse<F>)
+  } as DataLayerError<F>)
 }

@@ -1,5 +1,5 @@
 import { dataApi } from '@ming/data-layer'
-import type { BizApiResponse } from '@ming/biz-common-net-api'
+import type { DataApiResponse } from '@ming/data-layer'
 import type { UploadRequest, UploadResponse } from './types'
 import { createLogger } from '@ming/core-log'
 
@@ -7,7 +7,7 @@ const log = createLogger('upload/api')
 
 /** 服务端上传接口实现。请求实体由 hook 层创建并透传。 */
 /** @internal */
-export async function uploadFile(request: UploadRequest): Promise<BizApiResponse<UploadResponse>> {
+export async function uploadFile(request: UploadRequest): Promise<DataApiResponse<UploadResponse>> {
   log.debug('upload request', { endpoint: '/api/files/upload/v1', fileCount: request.files.length })
   const formData = new FormData()
   request.files.forEach(file => formData.append('files', file, file.name))

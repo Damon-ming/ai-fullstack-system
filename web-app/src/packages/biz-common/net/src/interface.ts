@@ -1,11 +1,70 @@
-import { BizRequestCallbacks, BizRequestConfig, BizResult } from "./types";
-
 // src/packages/biz-common/net/src/interface.ts
+import {
+  BizRequestCallbacks,
+  BizRequestConfig,
+  BizResult,
+  SseFinalState,
+  SseStreamCallbacks,
+  SseStreamOptions,
+} from "./types";
+
+
 export interface INetClient {
   get<T = any, F = any>(
     url: string,
     cfg?: BizRequestConfig,
     callbacks?: BizRequestCallbacks<T, F>,
   ): Promise<BizResult<T, F>>;
-  // ... 其余方法签名，和现在 interface.ts 一样
+  post<T = any, F = any>(
+    url: string,
+    data?: any,
+    cfg?: BizRequestConfig,
+    callbacks?: BizRequestCallbacks<T, F>,
+  ): Promise<BizResult<T, F>>;
+  post<T = any, F = any>(
+    url: string,
+    data?: any,
+    callbacks?: BizRequestCallbacks<T, F>,
+  ): Promise<BizResult<T, F>>;
+
+  put<T = any, F = any>(
+    url: string,
+    data?: any,
+    cfg?: BizRequestConfig,
+    callbacks?: BizRequestCallbacks<T, F>,
+  ): Promise<BizResult<T, F>>;
+  put<T = any, F = any>(
+    url: string,
+    data?: any,
+    callbacks?: BizRequestCallbacks<T, F>,
+  ): Promise<BizResult<T, F>>;
+
+  delete<T = any, F = any>(
+    url: string,
+    cfg?: BizRequestConfig,
+    callbacks?: BizRequestCallbacks<T, F>,
+  ): Promise<BizResult<T, F>>;
+  delete<T = any, F = any>(
+    url: string,
+    callbacks?: BizRequestCallbacks<T, F>,
+  ): Promise<BizResult<T, F>>;
+
+  patch<T = any, F = any>(
+    url: string,
+    data?: any,
+    cfg?: BizRequestConfig,
+    callbacks?: BizRequestCallbacks<T, F>,
+  ): Promise<BizResult<T, F>>;
+  patch<T = any, F = any>(
+    url: string,
+    data?: any,
+    callbacks?: BizRequestCallbacks<T, F>,
+  ): Promise<BizResult<T, F>>;
+
+  sseStream<T = any>(
+    url: string,
+    body: unknown,
+    callbacks?: SseStreamCallbacks<T>,
+    opts?: SseStreamOptions<T>,
+  ): Promise<SseFinalState>;
 }
