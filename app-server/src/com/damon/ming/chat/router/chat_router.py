@@ -1,30 +1,29 @@
 # app-server/src/com/damon/ming/chat/router/chat_router.py
-from fastapi import APIRouter
-from src.com.damon.ming.chat.schemas.bean import ChatRequest
-from src.com.damon.ming.ai.rag_tool import get_rag_container
-from src.com.damon.ming.ai.registry.inference_registry import register_all_inferences
-from src.com.damon.ming.ai.inference.config import InferenceConfig
-from src.com.damon.ming.ai.intent.intention_config import IntentionConfig
-from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
-from src.com.damon.ming.ai.schemas.response import BaseLLMFailedData, BaseLLMSuccessResponse, ChatDeltaData, ChatDoneData, StreamMessage
-from src.com.damon.ming.ai.schemas.inference_params import get_chat_schema
+import asyncio
 import json
-from sse_starlette.sse import EventSourceResponse
+
+from fastapi import APIRouter, Request
+from src.com.damon.ming.ai.schemas.inference_params import get_chat_schema
+from src.com.damon.ming.ai.schemas.response import (
+    BaseLLMFailedData,
+    BaseLLMFailedResponse,
+    BaseLLMSuccessData,
+    BaseLLMSuccessResponse,
+    ChatDeltaData,
+    ChatDoneData,
+    StreamMessage,
+)
+from src.com.damon.ming.chat.schemas.bean import ChatRequest
 from src.com.damon.ming.log import pin
+from sse_starlette.sse import EventSourceResponse
 
 logger = pin("chat.router")
 
 router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
 
-# 全局单例初始化
-rag_app = get_rag_container()
-register_all_inferences()
-
-# 推理客户端全局初始化
-infer_config = InferenceConfig()
-infer_profile = "default"
-infer_service: BaseInferenceService = infer_config.create_infer_client(profile=infer_profile)
-llm_model_name = infer_config.get_llm_model_name(infer_profile)
+# ========== 全局信号量：控制同时执行LLM推理的并发数量，4090可以调到3~6，看模型大小 ==========
+INFER_SEM = asyncio.Semaphore(4)
+INFER_WAIT_TIMEOUT = 30
 
 # todo 后期加上
 # 加载配置，创建意图识别器
@@ -47,80 +46,128 @@ SYSTEM_PROMPT_TPL = """
 {ref_content}
 """
 
-@router.post("/send/v1", response_class=BaseLLMSuccessResponse)
-async def chat(request: ChatRequest):
-    logger.info("同步聊天请求开始 | query_length=%s | think=%s", len(request.query), request.think)
-    # 1. 调用RAG检索，获取拼接完整章节上下文
-    ref_content = await rag_app.query_rag(request.query)
 
-    schema = get_chat_schema(request.think)
-    
-    # 2. 填充固定Prompt，构造标准messages数组
-    system_prompt = SYSTEM_PROMPT_TPL.format(
-        ref_content=ref_content
-    )
-    prompt_messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": request.query}
-    ]
-
-    # 3. 调用推理服务生成回答
-    llm_raw = await infer_service.text_generation(
-        model_name=llm_model_name,
-        messages=prompt_messages,
-        think_flag=request.think,
-        response_schema=schema
+@router.post("/send/v1")
+async def chat(req: Request, body: ChatRequest):
+    logger.info(
+        "同步聊天请求开始 | query_length=%s | think=%s",
+        len(body.query),
+        body.think,
     )
 
-    # 4. 组装返回结构体，think控制是否携带思考过程（当前固定空）
-    resp_inner = json.loads(llm_raw)
-    logger.info("同步聊天请求完成")
+    try:
+        async with INFER_SEM:
+            async with asyncio.timeout(INFER_WAIT_TIMEOUT):
+                logger.debug("开始执行同步 RAG 检索")
 
-    # 外层统一返回
-    return BaseLLMSuccessResponse(bizCode=100000, data=resp_inner)
+                # 1. 调用RAG检索，获取拼接完整章节上下文
+                ref_content = await asyncio.to_thread(
+                    req.app.state.rag_app.query_rag(body.query)
+                )
 
-@router.post("/chat/v1", response_class=EventSourceResponse)
-async def chat_stream(request: ChatRequest):
+                schema = get_chat_schema(body.think)
+
+                # 2. 填充固定Prompt，构造标准messages数组
+                system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
+                prompt_messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": body.query},
+                ]
+
+                llm_raw = await req.app.state.infer_service.text_generation(
+                    model_name=req.app.state.llm_model_name,
+                    messages=prompt_messages,
+                    think_flag=body.think,
+                    response_schema=schema,
+                )
+
+            # 4. 组装返回结构体，think控制是否携带思考过程（当前固定空）
+            resp_inner = json.loads(llm_raw)
+            logger.info("同步聊天请求完成")
+            # 外层统一返回
+            return BaseLLMSuccessResponse[BaseLLMSuccessData](
+                bizCode=100000, data=BaseLLMSuccessData(result=resp_inner)
+            )
+    except TimeoutError as e:
+        logger.warning("同步聊天请求超时")
+        return BaseLLMFailedResponse[BaseLLMFailedData](
+            bizCode=300001,
+            data=BaseLLMFailedData(error_msg=str(e)),
+        )
+    except asyncio.CancelledError:
+        logger.warning("【统计】同步聊天请求被客户端主动取消")
+        raise
+    except Exception as e:
+        logger.exception("同步聊天请求未知异常")
+        return BaseLLMFailedResponse[BaseLLMFailedData](
+            bizCode=300002,
+            data=BaseLLMFailedData(error_msg=str(e)),
+        )
+
+
+@router.post("/chat/v1")
+async def chat_stream(req: Request, body: ChatRequest):
     """流式问答接口，SSE流式输出"""
-    logger.info("流式聊天请求开始 | query_length=%s", len(request.query))
-    generator = stream_chat_generator(request)
+    logger.info("流式聊天请求开始 | query_length=%s", len(body.query))
+    generator = stream_chat_generator(req, body)
     return EventSourceResponse(generator)
 
-async def stream_chat_generator(request: ChatRequest):
-    try:
-        logger.debug("开始执行流式 RAG 检索")
-        ref_content = await rag_app.query_rag(request.query)
-        system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
-        prompt_messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": request.query}
-        ]
-        logger.debug("prompt_messages:\n%s", prompt_messages)
-        async for token in infer_service.stream_generate(
-            model_name=llm_model_name,
-            messages=prompt_messages
-        ):
-            delta_msg = StreamMessage[ChatDeltaData](
-                bizCode=100000,
-                event="delta",
-                data=ChatDeltaData(answer_content=token)
-            )
-            yield delta_msg.model_dump_json(ensure_ascii=False)
 
+async def stream_chat_generator(req: Request, body: ChatRequest):
+    try:
+        async with INFER_SEM:
+            try:
+                async with asyncio.timeout(INFER_WAIT_TIMEOUT):
+                    logger.debug("开始执行流式 RAG 检索")
+                    ref_content = await asyncio.to_thread(
+                        req.app.state.rag_app.query_rag(body.query)
+                    )
+
+                    system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
+                    prompt_messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": body.query},
+                    ]
+                    logger.debug("prompt_messages:\n%s", prompt_messages)
+
+                    try:
+                        async for token in req.app.state.infer_service.stream_generate(
+                            model_name=req.app.state.llm_model_name,
+                            messages=prompt_messages,
+                        ):
+                            delta_msg = StreamMessage[ChatDeltaData](
+                                bizCode=100000,
+                                event="delta",
+                                data=ChatDeltaData(answer_content=token),
+                            )
+                            yield delta_msg.model_dump_json(ensure_ascii=False)
+                    except asyncio.CancelledError:
+                        logger.warning("SSE客户端主动断开连接，取消推理任务")
+                        raise
+            except TimeoutError as e:
+                logger.warning("流式聊天请求超时")
+                err_msg = StreamMessage[BaseLLMFailedData](
+                    bizCode=300001,
+                    event="error",
+                    data=BaseLLMFailedData(error_msg=str(e)),
+                )
+                yield err_msg.model_dump_json(ensure_ascii=False)
+                return
         # 结束包
         done_msg = StreamMessage[ChatDoneData](
-            bizCode=100000,
-            event="done",
-            data=ChatDoneData()
+            bizCode=100000, event="done", data=ChatDoneData()
         )
         yield done_msg.model_dump_json(ensure_ascii=False)
         logger.info("流式聊天请求完成")
 
+    except asyncio.CancelledError:
+        logger.warning("【统计】流式SSE请求被客户端主动取消")
+        raise
     except Exception as e:
         logger.exception("流式聊天请求失败")
         err_msg = StreamMessage[BaseLLMFailedData](
-            bizCode=300001,
+            bizCode=300003,
             event="error",
-            data=BaseLLMFailedData(error_msg=str(e), error_code="STREAM_ERROR")
+            data=BaseLLMFailedData(error_msg=str(e)),
         )
         yield err_msg.model_dump_json(ensure_ascii=False)

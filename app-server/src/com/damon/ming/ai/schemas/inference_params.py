@@ -3,6 +3,7 @@
 # think=False 无思考过程
 from pydantic import BaseModel, Field
 
+
 class ChatRespNoThink(BaseModel):
     answer_content: str = Field(description="仅依据知识库作答，无相关内容填「不知道」，支持Markdown")
 

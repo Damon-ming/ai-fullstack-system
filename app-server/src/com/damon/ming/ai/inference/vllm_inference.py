@@ -2,12 +2,15 @@
 
 import json
 import time
-from typing import List, Dict, Any, Optional, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
+
 from openai import AsyncOpenAI
-from src.com.damon.ming.log import pin
 from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
+from src.com.damon.ming.log import pin
 
 logger = pin("VLLMInference")
+
 
 class VLLMInference(BaseInferenceService):
     def __init__(
@@ -18,7 +21,7 @@ class VLLMInference(BaseInferenceService):
         max_retries: int = 3,
         temperature: float = 0.1,
         top_p: float = 0.9,
-        num_ctx: int = 4096
+        num_ctx: int = 4096,
     ):
         self.client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
         self.base_url = base_url
@@ -28,32 +31,28 @@ class VLLMInference(BaseInferenceService):
         self.default_options = {
             "temperature": temperature,
             "top_p": top_p,
-            "max_tokens": num_ctx
+            "max_tokens": num_ctx,
         }
         logger.info(f"VLLM推理客户端初始化 | url={base_url}")
 
     async def text_generation(
         self,
         model_name: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         think_flag: bool = False,
-        response_schema: Optional[Dict[str, Any]] = None,
-        options: Optional[Dict[str, Any]] = None
+        response_schema: dict[str, Any] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> str:
         run_opts = self.default_options.copy()
         if options:
             run_opts.update(options)
 
-        create_kwargs = {
-            "model": model_name,
-            "messages": messages,
-            **run_opts
-        }
+        create_kwargs = {"model": model_name, "messages": messages, **run_opts}
         # VLLM OpenAI兼容json schema输出
         if response_schema:
             create_kwargs["response_format"] = {
                 "type": "json_object",
-                "schema": response_schema
+                "schema": response_schema,
             }
 
         err_msg = ""
@@ -62,9 +61,11 @@ class VLLMInference(BaseInferenceService):
                 resp = await self.client.chat.completions.create(**create_kwargs)
                 return resp.choices[0].message.content
             except Exception as e:
-                err_msg = f"VLLM调用异常: {str(e)}"
-                wait = 2 ** attempt
-                logger.warning(f"推理重试 {attempt+1}/{self.max_retries}, wait {wait}s | {err_msg}")
+                err_msg = f"VLLM调用异常: {e!s}"
+                wait = 2**attempt
+                logger.warning(
+                    f"推理重试 {attempt + 1}/{self.max_retries}, wait {wait}s | {err_msg}"
+                )
                 time.sleep(wait)
 
         logger.error(f"VLLM推理全部重试失败: {err_msg}")
@@ -80,17 +81,14 @@ class VLLMInference(BaseInferenceService):
     async def stream_generate(
         self,
         model_name: str,
-        messages: List[Dict[str, str]],
-        options: Optional[Dict[str, Any]] = None
+        messages: list[dict[str, str]],
+        options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[str, None]:
         run_opts = self.default_options.copy()
         if options:
             run_opts.update(options)
         stream = await self.client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            stream=True,
-            **run_opts
+            model=model_name, messages=messages, stream=True, **run_opts
         )
         async for chunk in stream:
             content = chunk.choices[0].delta.content
@@ -106,10 +104,10 @@ class VLLMInference(BaseInferenceService):
             logger.error("VLLM模型检测失败:", str(e))
             return False
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         return {
             "provider": "vllm",
             "base_url": self.base_url,
             "timeout": self.timeout,
-            "default_options": self.default_options
+            "default_options": self.default_options,
         }
