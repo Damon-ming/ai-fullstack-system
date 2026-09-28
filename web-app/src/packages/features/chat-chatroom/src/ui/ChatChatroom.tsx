@@ -18,8 +18,12 @@ export const ChatChatroom: React.FC<ChatChatroomProps> = () => {
     const container = messageContainerRef.current;
     if (!container) return;
     setIsScrolling(true);
-    if (scrollTimerRef.current !== null) window.clearTimeout(scrollTimerRef.current);
-    scrollTimerRef.current = window.setTimeout(() => setIsScrolling(false), 700);
+    if (scrollTimerRef.current !== null)
+      window.clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = window.setTimeout(
+      () => setIsScrolling(false),
+      700,
+    );
     const { scrollTop, scrollHeight, clientHeight } = container;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
     setIsUserScrollUp(!isAtBottom);
@@ -61,9 +65,13 @@ export const ChatChatroom: React.FC<ChatChatroomProps> = () => {
     }
   }, [sending]);
 
-  useEffect(() => () => {
-    if (scrollTimerRef.current !== null) window.clearTimeout(scrollTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (scrollTimerRef.current !== null)
+        window.clearTimeout(scrollTimerRef.current);
+    },
+    [],
+  );
 
   return (
     <main
@@ -84,33 +92,46 @@ export const ChatChatroom: React.FC<ChatChatroomProps> = () => {
               >
                 <div className={`feature-message-shell ${message.role}`}>
                   <div className={`feature-message-bubble ${message.role}`}>
-                  <div
-                    className={`feature-message ${message.role}`}
-                    style={{
-                      maxWidth: message.role === "user" ? "50%" : "100%",
-                      wordBreak: "break-word",
-                      whiteSpace: "normal",
-                    }}
-                  >
-                    {message.text === "正在思考中..." ? (
-                      <span className="feature-thinking" aria-label="正在思考中">
-                        正在思考中<span className="feature-thinking-dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span>
-                      </span>
-                    ) : message.role === "assistant" ? (
-                      <ReactMarkdown>{message.text}</ReactMarkdown>
-                    ) : (
-                      <span className="whitespace-pre-wrap">{message.text}</span>
-                    )}
-                  </div>
-                  <button
-                    className="feature-copy-button"
-                    type="button"
-                    aria-label="复制消息"
-                    title={copiedMessageId === message.id ? "已复制" : "复制"}
-                    onClick={() => void copyMessage(message.text, message.id)}
-                  >
-                    {copiedMessageId === message.id ? "✓" : "⧉"}
-                  </button>
+                    <div
+                      className={`feature-message ${message.role}`}
+                      style={{
+                        maxWidth: message.role === "user" ? "50%" : "100%",
+                        wordBreak: "break-word",
+                        whiteSpace: "normal",
+                      }}
+                    >
+                      {message.text === "正在思考中..." ? (
+                        <span
+                          className="feature-thinking"
+                          aria-label="正在思考中"
+                        >
+                          正在思考中
+                          <span
+                            className="feature-thinking-dots"
+                            aria-hidden="true"
+                          >
+                            <i>.</i>
+                            <i>.</i>
+                            <i>.</i>
+                          </span>
+                        </span>
+                      ) : message.role === "assistant" ? (
+                        <ReactMarkdown>{message.text}</ReactMarkdown>
+                      ) : (
+                        <span className="whitespace-pre-wrap">
+                          {message.text}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      className="feature-copy-button"
+                      type="button"
+                      aria-label="复制消息"
+                      title={copiedMessageId === message.id ? "已复制" : "复制"}
+                      onClick={() => void copyMessage(message.text, message.id)}
+                    >
+                      {copiedMessageId === message.id ? "✓" : "⧉"}
+                    </button>
                   </div>
                 </div>
               </div>

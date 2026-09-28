@@ -9,57 +9,57 @@ export function chatMessageHook() {
   const { input, setInput, messages, setMessages, sending, setSending } =
     useChatMessageStore();
 
-  // 同步一次性请求（保留备用）
-  const sendNormal = async () => {
-    const query = input.trim();
-    if (!query || sending) {
-      log.debug("sendNormal skipped", { hasQuery: Boolean(query), sending });
-      return;
-    }
-    log.debug("sendNormal started", { queryLength: query.length });
+    // 同步一次性请求（保留备用）
+    const sendNormal = async () => {
+      const query = input.trim();
+      if (!query || sending) {
+        log.debug("sendNormal skipped", { hasQuery: Boolean(query), sending });
+        return;
+      }
+      log.debug("sendNormal started", { queryLength: query.length });
 
-    const userMsgId = `user-${Date.now()}`;
-    const assistantMsgId = `assistant-${Date.now()}`;
+      const userMsgId = `user-${Date.now()}`;
+      const assistantMsgId = `assistant-${Date.now()}`;
 
-    // 预先插入消息，补充role
-    setMessages((items) => [
-      ...items,
-      { id: userMsgId, text: query, role: "user" },
-      { id: assistantMsgId, text: "正在思考中...", role: "assistant" },
-    ]);
-    setInput("");
-    setSending(true);
+      // 预先插入消息，补充role
+      setMessages((items) => [
+        ...items,
+        { id: userMsgId, text: query, role: "user" },
+        { id: assistantMsgId, text: "正在思考中...", role: "assistant" },
+      ]);
+      setInput("");
+      setSending(true);
 
-    try {
-      const req: ChatRoomRequest = {
-        query,
-        think: false,
-      };
-      const res = await sendChatRoomMessage(req);
-      log.debug("sendNormal succeeded");
-      const data = res.data;
-      if (data) {
-        setMessages((items) =>
-          items.map((msg) =>
-            msg.id === assistantMsgId
-              ? { ...msg, text: data.answer_content }
-              : msg,
+      try {
+        const req: ChatRoomRequest = {
+          query,
+          think: false,
+        };
+        const res = await sendChatRoomMessage(req);
+        log.debug("sendNormal succeeded");
+        const result = res.data?.result;
+        if (result) {
+          setMessages((items) =>
+            items.map((msg) =>
+              msg.id === assistantMsgId
+                ? { ...msg, text: result.answer_content }
+                : msg,
+            ),
+          );
+        }
+      } catch (e) {
+        log.error("sendNormal failed", e);
+        const errMsg =
+          e instanceof Error ? e.message : "消息发送失败，请稍后重试";
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId ? { ...msg, text: `${errMsg}` } : msg,
           ),
         );
+      } finally {
+        setSending(false);
       }
-    } catch (e) {
-      log.error("sendNormal failed", e);
-      const errMsg =
-        e instanceof Error ? e.message : "消息发送失败，请稍后重试";
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, text: `${errMsg}` } : msg,
-        ),
-      );
-    } finally {
-      setSending(false);
-    }
-  };
+    };
 
   // SSE流式（默认使用）
   const sendStream = async () => {
@@ -95,18 +95,27 @@ export function chatMessageHook() {
         if (payload.event === "delta") {
           const data = payload.data as { answer_content: string };
           const delta = data.answer_content || "";
-          setMessages((prev) =>
-            prev.map((msg) => {
-              if (msg.id === assistantMsgId) {
-                if (firstChunk) {
-                  firstChunk = false;
-                  return { ...msg, text: delta };
-                }
-                return { ...msg, text: msg.text + delta };
-              }
-              return msg;
-            }),
-          );
+          // 首包为空时不翻转 firstChunk，保留"正在思考中..."占位，避免闪烁
+          if (firstChunk) {
+            if (delta) {
+              firstChunk = false;
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId ? { ...msg, text: delta } : msg,
+                ),
+              );
+            }
+            return;
+          }
+          if (delta) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantMsgId
+                  ? { ...msg, text: msg.text + delta }
+                  : msg,
+              ),
+            );
+          }
         } else if (payload.event === "done") {
           streamFinished = true;
         } else if (payload.event === "error") {

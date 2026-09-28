@@ -4,48 +4,141 @@ import React from "react";
 import { useChatPageHook } from "../hook";
 
 export const ChatPage: React.FC = () => {
-  const { drawerOpen, chatSessionId, toggleDrawer, searchOpen, searchKeyword, closeSearch, setSearchKeyword, searchResults, accountOpen, draftName, closeAccount, setDraftName, saveAccount, loadHistory, upload, closeUpload } = useChatPageHook();
+  const {
+    drawerOpen,
+    chatSessionId,
+    toggleDrawer,
+    searchOpen,
+    searchKeyword,
+    closeSearch,
+    setSearchKeyword,
+    searchResults,
+    accountOpen,
+    draftName,
+    closeAccount,
+    setDraftName,
+    saveAccount,
+    loadHistory,
+    upload,
+    closeUpload,
+  } = useChatPageHook();
   return (
     <div className="feature-chat-page">
       <ChatDrawer />
       <ChatChatroom key={chatSessionId} />
-      {searchOpen && <div className="feature-search-backdrop" onClick={closeSearch}>
-        <section className="feature-search-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-          <input autoFocus value={searchKeyword} onChange={(event) => setSearchKeyword(event.target.value)} placeholder="搜索历史对话内容..." />
-          <div className="feature-search-results">
-            {searchKeyword.trim() && searchResults.length === 0 && <p>没有找到匹配的对话</p>}
-            {searchResults.map((item) => <button key={item.id} type="button" onClick={() => { loadHistory(item.id); closeSearch(); }}>
-              <strong>{item.title}</strong><small>{item.meta}</small>
-            </button>)}
-          </div>
-        </section>
-      </div>}
-      {accountOpen && <div className="feature-account-backdrop" onClick={closeAccount}>
-        <section className="feature-account-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-          <h2>账户信息</h2><p>信息仅保存在当前浏览器。</p>
-          <label>显示名称<input value={draftName} maxLength={30} autoFocus onChange={(event) => setDraftName(event.target.value)} /></label>
-          <div><button type="button" onClick={closeAccount}>取消</button><button type="button" onClick={saveAccount}>保存</button></div>
-        </section>
-      </div>}
+      {searchOpen && (
+        <div className="feature-search-backdrop" onClick={closeSearch}>
+          <section
+            className="feature-search-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <input
+              autoFocus
+              value={searchKeyword}
+              onChange={(event) => setSearchKeyword(event.target.value)}
+              placeholder="搜索历史对话内容..."
+            />
+            <div className="feature-search-results">
+              {searchKeyword.trim() && searchResults.length === 0 && (
+                <p>没有找到匹配的对话</p>
+              )}
+              {searchResults.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    loadHistory(item.id);
+                    closeSearch();
+                  }}
+                >
+                  <strong>{item.title}</strong>
+                  <small>{item.meta}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+      {accountOpen && (
+        <div className="feature-account-backdrop" onClick={closeAccount}>
+          <section
+            className="feature-account-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>账户信息</h2>
+            <p>信息仅保存在当前浏览器。</p>
+            <label>
+              显示名称
+              <input
+                value={draftName}
+                maxLength={30}
+                autoFocus
+                onChange={(event) => setDraftName(event.target.value)}
+              />
+            </label>
+            <div>
+              <button type="button" onClick={closeAccount}>
+                取消
+              </button>
+              <button type="button" onClick={saveAccount}>
+                保存
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {upload.status !== "idle" && (
         <div className="feature-upload-modal-backdrop" role="presentation">
-          <section className={`feature-upload-modal ${upload.status}`} role="dialog" aria-modal="true" aria-labelledby="upload-title">
-            <div className="feature-upload-icon">{upload.status === "uploading" ? "↥" : upload.status === "success" ? "✓" : "!"}</div>
-            <h2 id="upload-title">{upload.status === "uploading" ? "正在上传文件" : upload.status === "success" ? "上传完成" : "上传失败"}</h2>
+          <section
+            className={`feature-upload-modal ${upload.status}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="upload-title"
+          >
+            <div className="feature-upload-icon">
+              {upload.status === "uploading"
+                ? "↥"
+                : upload.status === "success"
+                  ? "✓"
+                  : "!"}
+            </div>
+            <h2 id="upload-title">
+              {upload.status === "uploading"
+                ? "正在上传文件"
+                : upload.status === "success"
+                  ? "上传完成"
+                  : "上传失败"}
+            </h2>
             <p>{upload.message}</p>
-            {upload.fileNames.length > 0 && <small>{upload.fileNames.join("、")}</small>}
+            {upload.fileNames.length > 0 && (
+              <small>{upload.fileNames.join("、")}</small>
+            )}
             {upload.files.length > 0 && (
               <div className="feature-upload-results">
                 {upload.files.map((file) => (
                   <div className="feature-upload-result" key={file.file_md5}>
                     <span>{file.indexed || file.duplicate ? "✓" : "◌"}</span>
                     <strong>{file.filename}</strong>
-                    <em>{file.duplicate ? "已存在" : file.indexed ? "已入语料库" : "更新中"}</em>
+                    <em>
+                      {file.duplicate
+                        ? "已存在"
+                        : file.indexed
+                          ? "已入语料库"
+                          : "更新中"}
+                    </em>
                   </div>
                 ))}
               </div>
             )}
-            {upload.status !== "uploading" && <button type="button" onClick={closeUpload}>知道了</button>}
+            {upload.status !== "uploading" && (
+              <button type="button" onClick={closeUpload}>
+                知道了
+              </button>
+            )}
           </section>
         </div>
       )}
