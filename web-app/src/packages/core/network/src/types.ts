@@ -1,13 +1,16 @@
 // src/packages/core/network/src/types.ts
 // 保留必要字段，按场景拆分
-import { AxiosHeaderValue, AxiosRequestConfig } from "axios";
-
 // 公共：剔除冲突字段后的 axios 扩展配置，两处共用
-// type 用来给一个类型起一个新的名字（别名），方便复用和维护
-export type CommonAxiosConfig = Omit<
-  AxiosRequestConfig,
-  "url" | "method" | "params" | "data" | "headers"
->;
+export interface CommonRequestConfig {
+  timeout?: number;
+  withCredentials?: boolean;
+  responseType?: "json" | "text" | "blob" | "arraybuffer";
+  signal?: AbortSignal;
+  [key: string]: unknown;
+}
+
+/** @deprecated Use CommonRequestConfig. Kept for compatibility. */
+export type CommonAxiosConfig = CommonRequestConfig;
 
 // 单次请求配置（接口维度）
 export interface RequestConfig {
@@ -15,7 +18,7 @@ export interface RequestConfig {
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   params?: Record<string, any>;
   data?: any;
-  headers?: Record<string, AxiosHeaderValue>;
+  headers?: Record<string, string | number | boolean | null | undefined>;
   axiosConfig?: CommonAxiosConfig;
   //  新增单次请求拦截器
   interceptors?: {
@@ -34,7 +37,7 @@ export interface RequestConfig {
 // 客户端实例配置（实例维度）
 export interface HttpClientConfig {
   baseURL: string;
-  headers?: Record<string, AxiosHeaderValue>;
+  headers?: Record<string, string | number | boolean | null | undefined>;
   axiosConfig?: CommonAxiosConfig; // 复用公共类型，不再重复写Omit
   interceptors?: {
     request?:

@@ -138,9 +138,21 @@ export interface SseStreamOptions<T = any> extends SseRequestOptions {
  */
 export interface SseStreamCallbacks<T = any> {
   onMessage?: (payload: T, meta?: { event?: string; id?: string }) => void;
+  onMessageError?: (error: unknown, rawPayload: string) => void;
   onError?: (err: ErrDataResponse) => void;
   onComplete?: () => void;
+  onStatus?: (status: SseStreamStatus) => void;
 }
+
+export type SseStreamStatus =
+  | "connected"
+  | "message"
+  | "heartbeat"
+  | "complete"
+  | "aborted"
+  | "transport-error"
+  | "parse-error"
+  | "business-error";
 
 /**
  * SSE 全局响应头拦截器

@@ -15,6 +15,7 @@ export type {
   DataLayerSseMessageInterceptor,
   DataLayerSseCallbacks,
   DataLayerSseFinalState,
+  DataLayerSseStatus,
   BaseQueryOptions,
   BaseMutationOptions,
 } from "./types";

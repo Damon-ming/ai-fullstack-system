@@ -10,7 +10,6 @@ import { InterceptorPipeline } from "./shared/interceptor-pipeline";
 import { RestfulClient } from "./restful/restful-client";
 import { SseTransport } from "./sse/sse-transport";
 import type { SseRequestOptions } from "./sse/sse-transport";
-import type { AxiosInstance } from "axios";
 
 /** Public facade combining REST and SSE transports without mixing their implementations. */
 export class HttpClient {
@@ -35,10 +34,6 @@ export class HttpClient {
     interceptor: InterceptorConfigCollection<any>,
   ) {
     return this.pipeline.addResponseInterceptor(interceptor as any);
-  }
-
-  getAxiosInstance(): AxiosInstance {
-    return this.restful.getAxiosInstance();
   }
 
   request<T = any>(config: RequestConfig): Promise<ApiResponse<T>> {

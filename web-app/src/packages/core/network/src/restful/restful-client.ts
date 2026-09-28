@@ -27,10 +27,6 @@ export class RestfulClient {
     });
   }
 
-  getAxiosInstance(): AxiosInstance {
-    return this.instance;
-  }
-
   private toNormalizedRequest(cfg: InternalAxiosRequestConfig): NormalizedRequest {
     const headers: Record<string, string> = {};
     if (cfg.headers) {

@@ -39,15 +39,34 @@ export class SseTransport {
     opts?: SseRequestOptions,
   ): Promise<Response> {
     const finalUrl = resolveRequestUrl(url, this.config.baseURL);
+    const commonConfig = this.config.axiosConfig ?? {};
     const headers: Record<string, string> = {};
     Object.entries(this.config.headers ?? {}).forEach(([key, value]) => {
       if (value != null) headers[key] = String(value);
     });
+    const configuredHeaders = commonConfig.headers;
+    if (configuredHeaders && typeof configuredHeaders === "object") {
+      Object.entries(configuredHeaders as Record<string, unknown>).forEach(
+        ([key, value]) => {
+          if (value != null) headers[key] = String(value);
+        },
+      );
+    }
     headers.Accept = "text/event-stream";
     Object.assign(headers, opts?.extraHeaders ?? {});
 
     const normalizedRequest = await this.pipeline.runRequest(
-      { url: finalUrl, method: "POST", headers, data: body },
+      {
+        url: finalUrl,
+        method: "POST",
+        headers,
+        data: body,
+        withCredentials:
+          typeof commonConfig.withCredentials === "boolean"
+            ? commonConfig.withCredentials
+            : undefined,
+        signal: opts?.signal ?? (commonConfig.signal as AbortSignal | undefined),
+      },
       opts?.interceptors?.request,
     );
 

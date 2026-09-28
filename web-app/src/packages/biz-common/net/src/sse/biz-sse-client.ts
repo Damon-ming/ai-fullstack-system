@@ -6,6 +6,7 @@ import type {
   SseGlobalMessageInterceptor,
   SseResponseHeadersInterceptor,
   SseStreamCallbacks,
+  SseStreamStatus,
   SseStreamOptions,
 } from "../types";
 import { ClientErrorCode } from "../error-code";
@@ -72,11 +73,28 @@ export class BizSseClient {
         console.error("[BizSseClient] onError callback error:", callbackError);
       }
     };
+    const safeOnMessageError = (error: unknown, rawPayload: string) => {
+      try {
+        callbacks.onMessageError?.(error, rawPayload);
+      } catch (callbackError) {
+        console.warn(
+          "[BizSseClient] onMessageError callback error:",
+          callbackError,
+        );
+      }
+    };
     const safeOnComplete = () => {
       try {
         onComplete?.();
       } catch (error) {
         console.error("[BizSseClient] onComplete callback error:", error);
+      }
+    };
+    const emitStatus = (status: SseStreamStatus) => {
+      try {
+        callbacks.onStatus?.(status);
+      } catch (error) {
+        console.warn("[BizSseClient] onStatus callback error:", error);
       }
     };
 
@@ -87,7 +105,7 @@ export class BizSseClient {
           await interceptor.onFulfilled?.(response);
         } catch (error) {
           try {
-            interceptor.onRejected?.(error);
+            await interceptor.onRejected?.(error);
           } catch {
             // Header interceptor errors must not terminate the stream.
           }
@@ -105,6 +123,7 @@ export class BizSseClient {
           response.status,
           text ? { message: text, rawBody: text } : undefined,
         );
+        emitStatus("transport-error");
         safeOnError(error);
         return { status: "error", error };
       }
@@ -115,9 +134,12 @@ export class BizSseClient {
           bizCode: ClientErrorCode.HTTP_UNKNOWN_CLIENT_ERR,
           clientErrData: { message: "ReadableStream reader is not available" },
         };
+        emitStatus("transport-error");
         safeOnError(error);
         return { status: "error", error };
       }
+
+      emitStatus("connected");
 
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
@@ -127,6 +149,7 @@ export class BizSseClient {
 
       const dispatch = async () => {
         if (!eventData) return;
+        emitStatus("message");
         const rawPayload = eventData.replace(/\n$/, "");
         const meta = { event: eventType, id: lastEventId };
         try {
@@ -134,9 +157,13 @@ export class BizSseClient {
             parse === false
               ? (rawPayload as T)
               : (parse ?? JSON.parse)(rawPayload);
+          if ((payload as { event?: string } | null)?.event === "error") {
+            emitStatus("business-error");
+          }
           if (validateMessage) {
             const result = validateMessage(payload);
             if (result.isError && result.error) {
+              emitStatus("business-error");
               safeOnError(result.error);
               return;
             }
@@ -149,13 +176,15 @@ export class BizSseClient {
               if (interceptor.onFulfilled)
                 payload = await interceptor.onFulfilled(payload, meta);
             } catch (error) {
-              const handled = interceptor.onRejected?.(error);
+              const handled = await interceptor.onRejected?.(error);
               if (handled === false) return;
               throw error;
             }
           }
           safeOnMessage(payload, meta);
         } catch (error) {
+          emitStatus("parse-error");
+          safeOnMessageError(error, rawPayload);
           console.warn("[BizSseClient] message process failed", {
             raw: rawPayload,
             error,
@@ -168,7 +197,10 @@ export class BizSseClient {
       };
 
       const processLine = (line: string) => {
-        if (line.startsWith(":")) return;
+        if (line.startsWith(":")) {
+          emitStatus("heartbeat");
+          return;
+        }
         if (line.startsWith("data:"))
           eventData += `${line.slice(5).trimStart()}\n`;
         else if (line.startsWith("event:")) eventType = line.slice(6).trim();
@@ -204,6 +236,7 @@ export class BizSseClient {
           }
           await dispatch();
         }
+        emitStatus("complete");
         safeOnComplete();
         return { status: "complete" };
       } finally {
@@ -211,6 +244,9 @@ export class BizSseClient {
       }
     } catch (error) {
       const mapped = formatSseException(error);
+      emitStatus(mapped.bizCode === ClientErrorCode.CONFIG_CANCEL
+        ? "aborted"
+        : "transport-error");
       safeOnError(mapped);
       return { status: "error", error: mapped };
     }

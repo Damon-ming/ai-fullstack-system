@@ -55,7 +55,7 @@ export class BizRestClient {
           bizCode: BizCodeRange.SUCCESS_204,
           data: undefined as unknown as T,
         };
-      } else if (httpCode !== 200) {
+      } else if (httpCode < 200 || httpCode >= 300) {
         errRes = buildHttpCodeError<F>(
           httpCode,
           bizBody as Record<string, any>,

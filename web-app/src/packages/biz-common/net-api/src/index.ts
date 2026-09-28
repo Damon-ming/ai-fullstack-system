@@ -15,5 +15,6 @@ export type {
   SseRequestOptions,
   SseStreamCallbacks,
   SseFinalState,
+  SseStreamStatus,
 } from "@ming/biz-common-net";
 export { ClientErrorCode, BizCodeRange } from "@ming/biz-common-net";

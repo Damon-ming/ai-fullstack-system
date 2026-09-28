@@ -56,9 +56,21 @@ export interface DataLayerSseMessageInterceptor<T = unknown> {
 
 export interface DataLayerSseCallbacks<T = unknown> {
   onMessage?: (payload: T, meta?: DataLayerRequestMeta) => void
+  onMessageError?: (error: unknown, rawPayload: string) => void
   onError?: (error: DataLayerError) => void
   onComplete?: () => void
+  onStatus?: (status: DataLayerSseStatus) => void
 }
+
+export type DataLayerSseStatus =
+  | "connected"
+  | "message"
+  | "heartbeat"
+  | "complete"
+  | "aborted"
+  | "transport-error"
+  | "parse-error"
+  | "business-error"
 
 export type DataLayerSseFinalState =
   | { status: "complete" }

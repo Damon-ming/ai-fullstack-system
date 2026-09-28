@@ -33,11 +33,14 @@ export function formatAxiosException<F = any>(err: any): ErrDataResponse<F> {
     };
   }
 
+  if (err.response) {
+    return buildHttpCodeError<F>(err.response.status, err.response.data);
+  }
+
   if (
     err.code === "ECONNABORTED" ||
-    err.message?.includes("timeout") ||
-    err.message?.includes("Network Error") ||
-    !err.response
+    err.code === "ETIMEDOUT" ||
+    /timeout/i.test(err.message || "")
   ) {
     return {
       bizCode: ClientErrorCode.NET_TIMEOUT,
@@ -48,10 +51,8 @@ export function formatAxiosException<F = any>(err: any): ErrDataResponse<F> {
     };
   }
 
-  if (err.response)
-    return buildHttpCodeError<F>(err.response.status, err.response.data);
   return {
-    bizCode: ClientErrorCode.HTTP_UNKNOWN_CLIENT_ERR,
+    bizCode: ClientErrorCode.NET_ERROR,
     clientErrData: {
       message: err.message || ERROR_MESSAGES.unknownError,
       rawServerRes: err,
