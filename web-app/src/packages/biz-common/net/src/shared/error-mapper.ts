@@ -21,6 +21,7 @@ export function buildHttpCodeError<F = any>(
   };
 }
 
+// todo 补齐工业判断场景
 export function formatAxiosException<F = any>(err: any): ErrDataResponse<F> {
   if (
     err.message?.includes("canceled") ||
@@ -37,6 +38,9 @@ export function formatAxiosException<F = any>(err: any): ErrDataResponse<F> {
     return buildHttpCodeError<F>(err.response.status, err.response.data);
   }
 
+  // ① axios 超时错误码
+  // ② Node 超时错误码
+  // ③ 错误信息里含 "timeout"
   if (
     err.code === "ECONNABORTED" ||
     err.code === "ETIMEDOUT" ||

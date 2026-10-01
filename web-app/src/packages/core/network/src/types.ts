@@ -1,16 +1,16 @@
 // src/packages/core/network/src/types.ts
 // 保留必要字段，按场景拆分
 // 公共：剔除冲突字段后的 axios 扩展配置，两处共用
+// interface 想成一张表格模板 / 一份合同，用来描述一个对象的"形状"（结构）
 export interface CommonRequestConfig {
   timeout?: number;
+  // 控制跨域请求时是否携带凭据（Cookie、认证头等）
   withCredentials?: boolean;
   responseType?: "json" | "text" | "blob" | "arraybuffer";
+  // 用于取消（中止）正在进行的请求
   signal?: AbortSignal;
   [key: string]: unknown;
 }
-
-/** @deprecated Use CommonRequestConfig. Kept for compatibility. */
-export type CommonAxiosConfig = CommonRequestConfig;
 
 // 单次请求配置（接口维度）
 export interface RequestConfig {
@@ -19,7 +19,7 @@ export interface RequestConfig {
   params?: Record<string, any>;
   data?: any;
   headers?: Record<string, string | number | boolean | null | undefined>;
-  axiosConfig?: CommonAxiosConfig;
+  axiosConfig?: CommonRequestConfig;
   //  新增单次请求拦截器
   interceptors?: {
     // InternalAxiosRequestConfig 是专门为请求拦截器设计的内部类型，而 AxiosRequestConfig 是你在创建请求时传入的通用配置类型
@@ -37,8 +37,9 @@ export interface RequestConfig {
 // 客户端实例配置（实例维度）
 export interface HttpClientConfig {
   baseURL: string;
+  // null：主动置空，人为赋的"没有值"	undefined：未定义，还没赋值 / 不存在
   headers?: Record<string, string | number | boolean | null | undefined>;
-  axiosConfig?: CommonAxiosConfig; // 复用公共类型，不再重复写Omit
+  axiosConfig?: CommonRequestConfig; // 复用公共类型，不再重复写Omit
   interceptors?: {
     request?:
       | InterceptorConfig<NormalizedRequest>
@@ -49,6 +50,8 @@ export interface HttpClientConfig {
   };
 }
 
+// 这个类型参数在库内部会被使用（读属性、调用方法等），那用 unknown 更安全
+// 而如果 T 只是透传给用户、库内部不碰，那默认 any 更实用：
 // 拦截器配置 - 支持数组形式，可以注入多个
 export interface InterceptorConfig<T = any> {
   // T | Promise<T> 表示这个函数既可以返回同步值（T），也可以返回异步的 Promise（Promise<T>）
@@ -70,10 +73,12 @@ export interface ApiResponse<T = unknown> {
 
 // 拦截器管理器接口
 export interface InterceptorManager<T = any> {
+  // use(...) —— 注册一个拦截器,返回值是一个数字，代表这个拦截器的唯一 id
   use(
     onFulfilled?: (value: T) => T | Promise<T>,
     onRejected?: (error: any) => any,
   ): number;
+  // eject(id: number): void —— 移除拦截器
   eject(id: number): void;
 }
 

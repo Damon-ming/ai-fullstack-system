@@ -8,7 +8,6 @@ import {
   SseStreamOptions,
 } from "./types";
 
-
 export interface INetClient {
   get<T = any, F = any>(
     url: string,

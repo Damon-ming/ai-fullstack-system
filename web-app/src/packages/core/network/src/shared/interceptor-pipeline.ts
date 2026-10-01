@@ -1,3 +1,5 @@
+// web-app/src/packages/core/network/src/shared/interceptor-pipeline.ts
+// type: 类型擦除
 import type {
   HttpClientConfig,
   InterceptorConfig,
@@ -51,7 +53,10 @@ export class InterceptorPipeline {
     value: NormalizedRequest,
     single?: InterceptorConfigOptions["request"],
   ): Promise<NormalizedRequest> {
+    // let 声明一个变量
     let current = value;
+    // 就是把两个数组"拼接"成一个新数组，而且是立即完成的（马上得到结果）。
+    // 先遍历全局+单词拦截
     for (const interceptor of [
       ...this.requestInterceptors,
       ...asArray(single),

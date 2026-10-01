@@ -6,6 +6,7 @@ import type { InterceptorConfig, NormalizedRequest } from "@ming/core-network";
 /**
  * 单次业务请求配置 (BizRequestConfig)
  * 复用 core 的 RequestConfig (剔除 url 和 method)，并补充/覆盖业务特有配置
+ * 后半部分 { timeout?: number }：补充的一个新字段
  */
 export type BizRequestConfig = Omit<RequestConfig, "url" | "method"> & {
   /** 单次请求超时时间（单位：毫秒） */
@@ -14,6 +15,7 @@ export type BizRequestConfig = Omit<RequestConfig, "url" | "method"> & {
 
 export interface BaseRequest {
   requestId?: string;
+  // todo
   requestedAt?: number;
 }
 

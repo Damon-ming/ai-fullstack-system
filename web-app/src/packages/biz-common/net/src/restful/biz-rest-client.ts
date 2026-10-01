@@ -1,8 +1,4 @@
-import type {
-  HttpManager,
-  HttpClient,
-  RequestConfig,
-} from "@ming/core-network";
+import type { HttpManager, RequestConfig } from "@ming/core-network";
 import {
   BizCodeRange,
   ClientErrorCode,
@@ -15,7 +11,6 @@ import type {
   BizResult,
   ErrDataResponse,
 } from "../types";
-import { ERROR_MESSAGES } from "../error-messages";
 import {
   buildHttpCodeError,
   formatAxiosException,
@@ -53,6 +48,8 @@ export class BizRestClient {
       if (httpCode === 204) {
         successRes = {
           bizCode: BizCodeRange.SUCCESS_204,
+          // 把一个 undefined 值，"强行断言"成类型 T，好让代码通过 TypeScript 的类型检查
+          // 所以用断言"骗"过编译器
           data: undefined as unknown as T,
         };
       } else if (httpCode < 200 || httpCode >= 300) {
@@ -104,6 +101,7 @@ export class BizRestClient {
     );
   }
 
+  // 核心：因为调用者可能传 (url, config) 或 (url, callbacks) 或 (url, config, callbacks)，所以需要"猜"第二个参数到底是配置还是回调。
   private parseArgs<T, F>(arg2?: any, arg3?: any) {
     return {
       cfg: this.isCallbacks<T, F>(arg2)

@@ -135,6 +135,27 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
                             model_name=req.app.state.llm_model_name,
                             messages=prompt_messages,
                         ):
+                            # todo 补充hearbeat用:, event添加start(携带元信息)， :id，后期可以做断点续传,retry:重连
+                            # todo 空行隔开事件
+                            # todo event: delta
+                            # todo data: {"bizCode":100000,"data":{...}}
+                            # start结构
+                            # msgId	本次回答的消息 id	"msg_abc123"
+                            # conversationId	会话 id	"conv_456"
+                            # model	用的模型	"gpt-4"
+                            # createdAt	开始时间戳	1700000000
+                            # traceId	链路追踪 id	"trace_xyz"
+                            # event: start
+                            # data: {
+                            #   "bizCode": 100000,
+                            #   "data": {
+                            #     "msgId": "msg_abc123",
+                            #     "conversationId": "conv_456",
+                            #     "model": "gpt-4",
+                            #     "createdAt": 1700000000,
+                            #     "traceId": "trace_xyz"
+                            #   }
+                            # }
                             delta_msg = StreamMessage[ChatDeltaData](
                                 bizCode=100000,
                                 event="delta",
