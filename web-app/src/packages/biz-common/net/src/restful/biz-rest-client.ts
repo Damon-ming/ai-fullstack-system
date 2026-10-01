@@ -5,11 +5,11 @@ import {
   getBizCodeCategory,
 } from "../error-code";
 import type {
-  BizApiResponse,
+  BizApiSuccessResponse,
   BizRequestCallbacks,
   BizRequestConfig,
   BizResult,
-  ErrDataResponse,
+  BizApiErrorResponse,
 } from "../types";
 import {
   buildHttpCodeError,
@@ -36,18 +36,18 @@ export class BizRestClient {
   }
 
   private async requestWrap<T = any, F = any>(
-    requestPromise: Promise<{ httpCode: number; data?: BizApiResponse<T> }>,
+    requestPromise: Promise<{ httpCode: number; data?: BizApiSuccessResponse<T> }>,
     callbacks?: BizRequestCallbacks<T, F>,
   ): Promise<BizResult<T, F>> {
     const { onSuccess, onFailed, onFinally } = callbacks || {};
-    let errRes: ErrDataResponse<F> | null = null;
-    let successRes: BizApiResponse<T> | null = null;
+    let errRes: BizApiErrorResponse<F> | null = null;
+    let successRes: BizApiSuccessResponse<T> | null = null;
 
     try {
       const { httpCode, data: bizBody } = await requestPromise;
       if (httpCode === 204) {
         successRes = {
-          bizCode: BizCodeRange.SUCCESS_204,
+          code: BizCodeRange.SUCCESS_204,
           // 把一个 undefined 值，"强行断言"成类型 T，好让代码通过 TypeScript 的类型检查
           // 所以用断言"骗"过编译器
           data: undefined as unknown as T,
@@ -58,13 +58,13 @@ export class BizRestClient {
           bizBody as Record<string, any>,
         );
       } else if (!bizBody) {
-        errRes = { bizCode: ClientErrorCode.HTTP_BODY_NULL_ERR };
+        errRes = { code: ClientErrorCode.HTTP_BODY_NULL_ERR };
       } else {
-        const { bizCode, data } = bizBody;
-        const category = getBizCodeCategory(bizCode);
-        if (category === "success") successRes = { bizCode, data: data as T };
-        else if (category === "fail") errRes = { bizCode, errData: data as F };
-        else errRes = { bizCode: ClientErrorCode.HTTP_UNKNOWN_ERR };
+        const { code, data } = bizBody;
+        const category = getBizCodeCategory(code);
+        if (category === "success") successRes = { code, data: data as T };
+        else if (category === "fail") errRes = { code, data: data as F };
+        else errRes = { code: ClientErrorCode.HTTP_UNKNOWN_ERR };
       }
     } catch (error) {
       errRes = formatAxiosException<F>(error);
@@ -129,7 +129,7 @@ export class BizRestClient {
   ): Promise<BizResult<T, F>> {
     const { cfg, callbacks } = this.parseArgs<T, F>(arg2, arg3);
     return this.requestWrap(
-      this.httpManager.get<BizApiResponse<T>>(url, this.initConfig(cfg)),
+      this.httpManager.get<BizApiSuccessResponse<T>>(url, this.initConfig(cfg)),
       callbacks,
     );
   }
@@ -153,7 +153,7 @@ export class BizRestClient {
   ): Promise<BizResult<T, F>> {
     const { cfg, callbacks } = this.parseArgs<T, F>(arg3, arg4);
     return this.requestWrap(
-      this.httpManager.post<BizApiResponse<T>>(url, data, this.initConfig(cfg)),
+      this.httpManager.post<BizApiSuccessResponse<T>>(url, data, this.initConfig(cfg)),
       callbacks,
     );
   }
@@ -177,7 +177,7 @@ export class BizRestClient {
   ): Promise<BizResult<T, F>> {
     const { cfg, callbacks } = this.parseArgs<T, F>(arg3, arg4);
     return this.requestWrap(
-      this.httpManager.put<BizApiResponse<T>>(url, data, this.initConfig(cfg)),
+      this.httpManager.put<BizApiSuccessResponse<T>>(url, data, this.initConfig(cfg)),
       callbacks,
     );
   }
@@ -198,7 +198,7 @@ export class BizRestClient {
   ): Promise<BizResult<T, F>> {
     const { cfg, callbacks } = this.parseArgs<T, F>(arg2, arg3);
     return this.requestWrap(
-      this.httpManager.delete<BizApiResponse<T>>(url, this.initConfig(cfg)),
+      this.httpManager.delete<BizApiSuccessResponse<T>>(url, this.initConfig(cfg)),
       callbacks,
     );
   }
@@ -222,7 +222,7 @@ export class BizRestClient {
   ): Promise<BizResult<T, F>> {
     const { cfg, callbacks } = this.parseArgs<T, F>(arg3, arg4);
     return this.requestWrap(
-      this.httpManager.patch<BizApiResponse<T>>(
+      this.httpManager.patch<BizApiSuccessResponse<T>>(
         url,
         data,
         this.initConfig(cfg),

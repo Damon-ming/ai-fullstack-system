@@ -4,22 +4,6 @@ import { HttpClientConfig, RequestConfig } from "@ming/core-network";
 import type { InterceptorConfig, NormalizedRequest } from "@ming/core-network";
 
 /**
- * 单次业务请求配置 (BizRequestConfig)
- * 复用 core 的 RequestConfig (剔除 url 和 method)，并补充/覆盖业务特有配置
- * 后半部分 { timeout?: number }：补充的一个新字段
- */
-export type BizRequestConfig = Omit<RequestConfig, "url" | "method"> & {
-  /** 单次请求超时时间（单位：毫秒） */
-  timeout?: number;
-};
-
-export interface BaseRequest {
-  requestId?: string;
-  // todo
-  requestedAt?: number;
-}
-
-/**
  * 全局启动/初始化网络配置 (BizHttpClientConfig)
  * 继承 core 的 HttpClientConfig，并定义业务启动层需要的字段
  */
@@ -36,17 +20,33 @@ export interface BizHttpClientConfig extends HttpClientConfig {
     | SseGlobalMessageInterceptor[];
 }
 
-/** 后端标准错误详情 ErrDataResponse */
-export interface ErrDataResponse<ErrData = any> {
-  bizCode: number;
-  clientErrData?: ClientErrData; // 只有客户端抛出异常或处理网络错误时存在
-  errData?: ErrData;
+/**
+ * 单次业务请求配置 (BizRequestConfig)
+ * 复用 core 的 RequestConfig (剔除 url 和 method)，并补充/覆盖业务特有配置
+ * 后半部分 { timeout?: number }：补充的一个新字段
+ */
+export type BizRequestConfig = Omit<RequestConfig, "url" | "method"> & {
+  /** 单次请求超时时间（单位：毫秒） */
+  timeout?: number;
+};
+
+export interface BaseRequest {
+  requestId?: string;
+  // todo
+  requestedAt?: number;
 }
 
 /** 业务层包装后的完整响应 = 底层http壳 + 后端业务体 */
-export interface BizApiResponse<T = any> {
-  bizCode: number;
+export interface BizApiSuccessResponse<T = any> {
+  code: number;
   data?: T;
+}
+
+/** 后端标准错误详情 BizApiErrorResponse */
+export interface BizApiErrorResponse<ErrData = any> {
+  code: number;
+  clientData?: ClientErrData; // 只有客户端抛出异常或处理网络错误时存在
+  data?: ErrData;
 }
 
 /** 客户端专属错误信息（仅网络/配置/HTTP非200时存在） */
@@ -58,19 +58,19 @@ export interface ClientErrData {
 
 /** 请求回调集合 */
 export interface BizRequestCallbacks<T = any, F = any> {
-  onSuccess?: (res: BizApiResponse<T>) => void;
-  onFailed?: (error: ErrDataResponse<F>) => void;
+  onSuccess?: (res: BizApiSuccessResponse<T>) => void;
+  onFailed?: (error: BizApiErrorResponse<F>) => void;
   onFinally?: () => void;
 }
 
 /**
- * 核心：元组返回格式 [ErrDataResponse | null, BizApiResponse | null]
- * 失败：[ErrDataResponse, null]
- * 成功：[null, BizApiResponse]
+ * 核心：元组返回格式 [BizApiErrorResponse | null, BizApiSuccessResponse | null]
+ * 失败：[BizApiErrorResponse, null]
+ * 成功：[null, BizApiSuccessResponse]
  */
 export type BizResult<T = any, F = any> = [
-  ErrDataResponse<F> | null,
-  BizApiResponse<T> | null,
+  BizApiErrorResponse<F> | null,
+  BizApiSuccessResponse<T> | null,
 ];
 
 /**
@@ -87,9 +87,12 @@ export interface SseRequestOptions {
  * SSE流式回调
  * rawData：剥离 `data: ` 之后的原始字符串，上层自行JSON.parse
  */
+/**
+ * @deprecated 使用 SseStreamCallbacks.onMessage 替代
+ */
 export type SseOnMessage = (
   rawData: string,
-  meta?: { event?: string; id?: string },
+  meta?: { event?: string; id?: string; retry?: number },
 ) => void;
 
 /**
@@ -100,7 +103,7 @@ export type SseOnMessage = (
 export interface SseMessageInterceptor<T = any> {
   onFulfilled?: (
     payload: T,
-    meta?: { event?: string; id?: string },
+    meta?: { event?: string; id?: string; retry?: number },
   ) => T | Promise<T>;
   onRejected?: (error: any) => any;
 }
@@ -124,7 +127,7 @@ export interface SseStreamOptions<T = any> extends SseRequestOptions {
    */
   validateMessage?: (payload: T) => {
     isError: boolean;
-    error?: ErrDataResponse;
+    error?: BizApiErrorResponse;
   };
   /** 消息级拦截器链（可选） */
   messageInterceptors?: SseMessageInterceptor<T> | SseMessageInterceptor<T>[];
@@ -139,9 +142,12 @@ export interface SseStreamOptions<T = any> extends SseRequestOptions {
  * SSE 流式回调（对齐 BizRequestCallbacks）
  */
 export interface SseStreamCallbacks<T = any> {
-  onMessage?: (payload: T, meta?: { event?: string; id?: string }) => void;
+  onMessage?: (
+    payload: T,
+    meta?: { event?: string; id?: string; retry?: number },
+  ) => void;
   onMessageError?: (error: unknown, rawPayload: string) => void;
-  onError?: (err: ErrDataResponse) => void;
+  onError?: (err: BizApiErrorResponse) => void;
   onComplete?: () => void;
   onStatus?: (status: SseStreamStatus) => void;
 }
@@ -173,7 +179,7 @@ export interface SseResponseHeadersInterceptor {
 export interface SseGlobalMessageInterceptor {
   onFulfilled?: (
     payload: any,
-    meta?: { event?: string; id?: string },
+    meta?: { event?: string; id?: string; retry?: number },
   ) => any | Promise<any>;
   /** 返回 false 表示吞掉这条消息，不再向下传递 */
   onRejected?: (error: any) => any;
@@ -187,4 +193,4 @@ export interface SseGlobalMessageInterceptor {
  */
 export type SseFinalState =
   | { status: "complete" }
-  | { status: "error"; error: ErrDataResponse };
+  | { status: "error"; error: BizApiErrorResponse };

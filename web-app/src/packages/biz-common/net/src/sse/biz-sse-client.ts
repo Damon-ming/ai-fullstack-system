@@ -1,7 +1,7 @@
 import type { HttpManager } from "@ming/core-network";
 import type {
   BizHttpClientConfig,
-  ErrDataResponse,
+  BizApiErrorResponse,
   SseFinalState,
   SseGlobalMessageInterceptor,
   SseResponseHeadersInterceptor,
@@ -114,7 +114,7 @@ export class BizSseClient {
         console.error("[BizSseClient] onMessage callback error:", error);
       }
     };
-    const safeOnError = (error: ErrDataResponse) => {
+    const safeOnError = (error: BizApiErrorResponse) => {
       try {
         onError?.(error);
       } catch (callbackError) {
@@ -180,9 +180,9 @@ export class BizSseClient {
 
       const reader = response.body?.getReader();
       if (!reader) {
-        const error: ErrDataResponse = {
-          bizCode: ClientErrorCode.HTTP_UNKNOWN_CLIENT_ERR,
-          clientErrData: { message: "ReadableStream reader is not available" },
+        const error: BizApiErrorResponse = {
+          code: ClientErrorCode.HTTP_UNKNOWN_CLIENT_ERR,
+          clientData: { message: "ReadableStream reader is not available" },
         };
         emitStatus("transport-error");
         safeOnError(error);
@@ -198,13 +198,14 @@ export class BizSseClient {
       let eventData = "";
       let eventType = "message";
       let lastEventId = "";
+      let retryMs: number | undefined;
 
       const dispatch = async () => {
         if (!eventData) return;
         emitStatus("message");
         // CRLF	CR + LF	回车+换行	\r\n
         const rawPayload = eventData.replace(/\n$/, "");
-        const meta = { event: eventType, id: lastEventId };
+        const meta = { event: eventType, id: lastEventId, retry: retryMs };
         try {
           let payload: T =
             parse === false
@@ -248,6 +249,7 @@ export class BizSseClient {
           eventData = "";
           eventType = "message";
           lastEventId = "";
+          retryMs = undefined;
         }
       };
 
@@ -260,6 +262,12 @@ export class BizSseClient {
           eventData += `${line.slice(5).trimStart()}\n`;
         else if (line.startsWith("event:")) eventType = line.slice(6).trim();
         else if (line.startsWith("id:")) lastEventId = line.slice(3).trim();
+        else if (line.startsWith("retry:")) {
+          // retry: 毫秒数，供客户端断线重连时等待指定时长后再发起请求
+          const val = line.slice(6).trim();
+          const parsed = Number.parseInt(val, 10);
+          if (!Number.isNaN(parsed)) retryMs = parsed;
+        }
       };
 
       try {
@@ -305,7 +313,7 @@ export class BizSseClient {
     } catch (error) {
       const mapped = formatSseException(error);
       emitStatus(
-        mapped.bizCode === ClientErrorCode.CONFIG_CANCEL
+        mapped.code === ClientErrorCode.CONFIG_CANCEL
           ? "aborted"
           : "transport-error",
       );

@@ -90,7 +90,7 @@ export const ChatChatroom: React.FC<ChatChatroomProps> = () => {
                 key={message.id}
                 className={`feature-message-row flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                <div className={`feature-message-shell ${message.role}`}>
+                  <div className={`feature-message-shell ${message.role}`}>
                   <div className={`feature-message-bubble ${message.role}`}>
                     <div
                       className={`feature-message ${message.role}`}
@@ -116,13 +116,46 @@ export const ChatChatroom: React.FC<ChatChatroomProps> = () => {
                           </span>
                         </span>
                       ) : message.role === "assistant" ? (
-                        <ReactMarkdown>{message.text}</ReactMarkdown>
+                        <>
+                          {message.thinking && (
+                            <details className="feature-thinking-content">
+                              <summary>思考过程</summary>
+                              <ReactMarkdown>{message.thinking}</ReactMarkdown>
+                            </details>
+                          )}
+                          <ReactMarkdown>{message.text}</ReactMarkdown>
+                        </>
                       ) : (
                         <span className="whitespace-pre-wrap">
                           {message.text}
                         </span>
                       )}
                     </div>
+                    {/* 助手消息元信息 —— 由 SSE start 事件携带 */}
+                    {message.role === "assistant" &&
+                      message.text !== "正在思考中..." &&
+                      message.msgId && (
+                        <div className="feature-message-meta">
+                          {message.model && (
+                            <span className="feature-meta-item">
+                              model: {message.model}
+                            </span>
+                          )}
+                          {message.createdAt && (
+                            <span className="feature-meta-item">
+                              {new Date(
+                                message.createdAt * 1000,
+                              ).toLocaleTimeString()}
+                            </span>
+                          )}
+                          {message.traceId && (
+                            <span className="feature-meta-item feature-meta-trace"
+                                  title={message.traceId}>
+                              trace: {message.traceId.slice(0, 8)}…
+                            </span>
+                          )}
+                        </div>
+                      )}
                     <button
                       className="feature-copy-button"
                       type="button"
@@ -191,4 +224,10 @@ const thinkingStyles = `
 .feature-thinking-dots i:nth-child(2){animation-delay:.4s}
 .feature-thinking-dots i:nth-child(3){animation-delay:.8s}
 @keyframes feature-thinking-dot{0%,25%{opacity:0}26%,50%{opacity:1}51%,100%{opacity:0}}
+.feature-message-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:11px;color:rgba(120,120,120,.8)}
+.feature-meta-item{padding:1px 6px;border-radius:3px;background:rgba(150,150,150,.08)}
+.feature-meta-trace{font-family:monospace;cursor:help}
+.feature-thinking-content{margin-bottom:8px;padding:6px 10px;border-radius:6px;background:rgba(150,150,150,.06);font-size:13px;color:rgba(120,120,120,.85)}
+.feature-thinking-content summary{cursor:pointer;user-select:none}
+.feature-thinking-content p{margin:4px 0}
 `;

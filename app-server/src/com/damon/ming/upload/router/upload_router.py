@@ -44,9 +44,9 @@ async def save_files(
         success_data = FileUploadSuccessData(
             server_time=datetime.now(tz=UTC).isoformat(), files=saved_files
         )
-        return BaseSuccessResponse(bizCode=10000, data=success_data)
+        return BaseSuccessResponse(code=10000, data=success_data)
 
     except Exception as e:  # noqa: BLE001
         logger.warning("文件上传请求失败")
         fail_data = FileUploadFailedData(error_msg=str(e))
-        return BaseFailedResponse(bizCode=40000, data=fail_data)
+        return BaseFailedResponse(code=40000, data=fail_data)

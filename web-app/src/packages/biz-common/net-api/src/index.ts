@@ -5,9 +5,9 @@ export { netClient } from "./net-client";
 export type { INetClient } from "@ming/biz-common-net"; // re-export 接口
 // 网络层类型继续从这里导出（这一层本来就是类型门面）
 export type {
-  BizApiResponse,
+  BizApiSuccessResponse,
+  BizApiErrorResponse,
   BizResult,
-  ErrDataResponse,
   BaseRequest,
   BizRequestConfig,
   BizRequestCallbacks,

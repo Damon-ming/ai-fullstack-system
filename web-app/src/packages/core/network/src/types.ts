@@ -67,7 +67,7 @@ export type InterceptorConfigCollection<T = any> =
 // any 让你失去了 TypeScript 的所有保护，编译时不会报错，但运行时可能崩溃。
 // unknown —— 安全的类型检查
 export interface ApiResponse<T = unknown> {
-  httpCode: number; // HTTP状态码
+  code: number; // HTTP状态码
   data: T;
 }
 

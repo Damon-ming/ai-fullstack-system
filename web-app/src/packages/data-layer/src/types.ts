@@ -1,21 +1,21 @@
 // web-app/src/packages/data-layer/src/types.ts
 import type { UseQueryOptions, UseMutationOptions } from '@tanstack/react-query'
 
-/** 数据层成功响应。网络层的 BizApiResponse 不直接暴露给上层业务。 */
+/** 数据层成功响应。网络层的 BizApiSuccessResponse 不直接暴露给上层业务。 */
 export interface DataApiResponse<T = unknown> {
-  bizCode: number
+  code: number
   data?: T
 }
 
 /** 数据层错误。保留业务错误码和客户端错误详情，供 query/mutation 使用。 */
 export interface DataLayerError<ErrData = unknown> {
-  bizCode: number
-  clientErrData?: {
+  code: number
+  clientData?: {
     message?: string
     httpCode?: number
     rawServerRes?: Record<string, unknown>
   }
-  errData?: ErrData
+  data?: ErrData
 }
 
 /** 

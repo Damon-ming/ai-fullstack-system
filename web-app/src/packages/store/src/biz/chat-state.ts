@@ -24,6 +24,14 @@ export interface ChatMessage {
   id: string;
   text: string;
   role: "user" | "assistant";
+  /** 思考过程文本（SSE thinking 事件累加），正文回答在 text */
+  thinking?: string;
+  /** SSE start 事件携带的元信息，由 hook 在流式开始时写入 */
+  msgId?: string;
+  conversationId?: string;
+  model?: string;
+  createdAt?: number;
+  traceId?: string;
 }
 
 export interface ChatMessageState {
