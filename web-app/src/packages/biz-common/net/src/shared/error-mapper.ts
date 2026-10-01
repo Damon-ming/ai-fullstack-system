@@ -1,28 +1,44 @@
-import { ClientErrorCode } from "../error-code";
+// src/packages/biz-common/net/src/shared/error-mapper.ts
+import { ClientErrorCode, isServerCode } from "../error-code";
 import { ERROR_MESSAGES, getHttpStatusMessage } from "../error-messages";
-import type { BizApiErrorResponse } from "../types";
+import type { BizApiErrorResponse } from "../shared/types";
 
+/**
+ * 非 2xx HTTP 响应的错误构造
+ *
+ * 优先级：bizCode > httpCode
+ * - 服务端返回了结构化 body（含业务 code）→ 用业务 code
+ * - 服务端返回了非结构化 body（HTML/反向代理拦截）→ 用 HTTP 状态码
+ */
 export function buildHttpCodeError<F = any>(
   httpCode: number,
   rawRes?: Record<string, any>,
 ): BizApiErrorResponse<F> {
-  let code: ClientErrorCode = ClientErrorCode.HTTP_4XX_ERR;
-  if (httpCode >= 300 && httpCode < 400) code = ClientErrorCode.HTTP_3XX_ERR;
-  else if (httpCode >= 500 && httpCode < 600)
-    code = ClientErrorCode.HTTP_5XX_ERR;
+  // 服务端返回了结构化的业务错误体 {code, data, message}
+  if (rawRes && typeof rawRes.code === "number" && isServerCode(rawRes.code)) {
+    return {
+      code: rawRes.code,
+      data: (rawRes.data ?? undefined) as F | undefined,
+      clientData: {
+        message: rawRes.message || rawRes.msg || getHttpStatusMessage(httpCode),
+      },
+    };
+  }
 
+  // 服务端未返回结构化错误 → 直接透传 HTTP 状态码
   return {
-    code,
+    code: httpCode,
     clientData: {
       message: rawRes?.message || rawRes?.msg || getHttpStatusMessage(httpCode),
-      httpCode,
-      rawServerRes: rawRes,
     },
   };
 }
 
-// todo 补齐工业判断场景
+/**
+ * axios 异常格式化 —— 纯客户端场景（无 HTTP 响应）
+ */
 export function formatAxiosException<F = any>(err: any): BizApiErrorResponse<F> {
+  // 请求被取消
   if (
     err.message?.includes("canceled") ||
     err.message?.includes("cancelled") ||
@@ -34,13 +50,12 @@ export function formatAxiosException<F = any>(err: any): BizApiErrorResponse<F> 
     };
   }
 
+  // 服务端返回了 HTTP 错误响应（有 response 对象）
   if (err.response) {
     return buildHttpCodeError<F>(err.response.status, err.response.data);
   }
 
-  // ① axios 超时错误码
-  // ② Node 超时错误码
-  // ③ 错误信息里含 "timeout"
+  // 网络超时
   if (
     err.code === "ECONNABORTED" ||
     err.code === "ETIMEDOUT" ||
@@ -48,23 +63,24 @@ export function formatAxiosException<F = any>(err: any): BizApiErrorResponse<F> 
   ) {
     return {
       code: ClientErrorCode.NET_TIMEOUT,
-      clientData: {
-        message: ERROR_MESSAGES[ClientErrorCode.NET_TIMEOUT],
-        rawServerRes: err.config || undefined,
-      },
+      clientData: { message: ERROR_MESSAGES[ClientErrorCode.NET_TIMEOUT] },
     };
   }
 
+  // 其他客户端错误（配置错误等）
   return {
-    code: ClientErrorCode.NET_ERROR,
+    code: ClientErrorCode.CONFIG_ERR,
     clientData: {
       message: err.message || ERROR_MESSAGES.unknownError,
-      rawServerRes: err,
     },
   };
 }
 
+/**
+ * SSE 异常格式化
+ */
 export function formatSseException(err: any): BizApiErrorResponse {
+  // 请求被取消
   if (
     err.name === "AbortError" ||
     err.message?.includes("canceled") ||
@@ -76,6 +92,7 @@ export function formatSseException(err: any): BizApiErrorResponse {
     };
   }
 
+  // 网络超时
   if (
     err.message?.includes("timeout") ||
     err.message?.includes("NetworkError") ||
@@ -88,11 +105,9 @@ export function formatSseException(err: any): BizApiErrorResponse {
   }
 
   return {
-    code: ClientErrorCode.HTTP_UNKNOWN_CLIENT_ERR,
+    code: ClientErrorCode.CONFIG_ERR,
     clientData: {
       message: err?.message || ERROR_MESSAGES.unknownError,
-      httpCode: err?.status,
-      rawServerRes: err?.body ? { body: err.body } : undefined,
     },
   };
 }

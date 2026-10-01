@@ -12,8 +12,6 @@ export interface DataLayerError<ErrData = unknown> {
   code: number
   clientData?: {
     message?: string
-    httpCode?: number
-    rawServerRes?: Record<string, unknown>
   }
   data?: ErrData
 }

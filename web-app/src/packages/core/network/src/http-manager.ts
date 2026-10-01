@@ -3,9 +3,11 @@ import { HttpClient } from "./http-client";
 import {
   ApiResponse,
   HttpClientConfig,
+} from "./restful/types";
+import {
   InterceptorConfig,
   NormalizedRequest,
-} from "./types";
+} from "./shared/types";
 
 export class HttpManager {
   // 私有默认客户端，外部无法直接修改

@@ -1,16 +1,17 @@
 import type { HttpManager, RequestConfig } from "@ming/core-network";
 import {
   BizCodeRange,
-  ClientErrorCode,
   getBizCodeCategory,
 } from "../error-code";
 import type {
   BizApiSuccessResponse,
+  BizApiErrorResponse,
+} from "../shared/types";
+import type {
   BizRequestCallbacks,
   BizRequestConfig,
   BizResult,
-  BizApiErrorResponse,
-} from "../types";
+} from "./types";
 import {
   buildHttpCodeError,
   formatAxiosException,
@@ -36,7 +37,7 @@ export class BizRestClient {
   }
 
   private async requestWrap<T = any, F = any>(
-    requestPromise: Promise<{ httpCode: number; data?: BizApiSuccessResponse<T> }>,
+    requestPromise: Promise<{ code: number; data?: BizApiSuccessResponse<T> }>,
     callbacks?: BizRequestCallbacks<T, F>,
   ): Promise<BizResult<T, F>> {
     const { onSuccess, onFailed, onFinally } = callbacks || {};
@@ -44,27 +45,39 @@ export class BizRestClient {
     let successRes: BizApiSuccessResponse<T> | null = null;
 
     try {
-      const { httpCode, data: bizBody } = await requestPromise;
+      const { code: httpCode, data: bizBody } = await requestPromise;
+
+      // HTTP 204 → 无内容，兜底为统一成功码
       if (httpCode === 204) {
         successRes = {
-          code: BizCodeRange.SUCCESS_204,
-          // 把一个 undefined 值，"强行断言"成类型 T，好让代码通过 TypeScript 的类型检查
-          // 所以用断言"骗"过编译器
+          code: BizCodeRange.SUCCESS_NO_CONTENT,
           data: undefined as unknown as T,
         };
-      } else if (httpCode < 200 || httpCode >= 300) {
+      }
+      // HTTP 非 2xx → 走错误构造（内部判断服务端是否有结构化 body）
+      else if (httpCode < 200 || httpCode >= 300) {
         errRes = buildHttpCodeError<F>(
           httpCode,
           bizBody as Record<string, any>,
         );
-      } else if (!bizBody) {
-        errRes = { code: ClientErrorCode.HTTP_BODY_NULL_ERR };
-      } else {
+      }
+      // HTTP 2xx + 有 body → 拆包业务码
+      else if (bizBody && typeof bizBody.code === "number") {
         const { code, data } = bizBody;
         const category = getBizCodeCategory(code);
-        if (category === "success") successRes = { code, data: data as T };
-        else if (category === "fail") errRes = { code, data: data as F };
-        else errRes = { code: ClientErrorCode.HTTP_UNKNOWN_ERR };
+        if (category === "success") {
+          successRes = { code, data: data as T };
+        } else {
+          // fail 或 unknown server code → 都交给错误处理
+          errRes = { code, data: data as F };
+        }
+      }
+      // HTTP 2xx + 空 body → 返回 HTTP 200 作为成功码（无业务数据）
+      else {
+        successRes = {
+          code: httpCode,
+          data: undefined as unknown as T,
+        };
       }
     } catch (error) {
       errRes = formatAxiosException<F>(error);

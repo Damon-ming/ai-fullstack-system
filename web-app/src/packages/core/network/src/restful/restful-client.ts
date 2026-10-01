@@ -5,13 +5,8 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from "axios";
-import type {
-  ApiResponse,
-  HttpClientConfig,
-  NormalizedRequest,
-  NormalizedResponse,
-  RequestConfig,
-} from "../types";
+import type { ApiResponse, HttpClientConfig, RequestConfig } from "./types";
+import type { NormalizedRequest, NormalizedResponse } from "../shared/types";
 import { InterceptorPipeline } from "../shared/interceptor-pipeline";
 
 export class RestfulClient {
@@ -124,8 +119,9 @@ export class RestfulClient {
       this.toNormalizedResponse(rawResponse),
       config.interceptors?.response,
     );
+
     return {
-      httpCode: normalizedResponse.status,
+      code: normalizedResponse.status,
       data: normalizedResponse.data,
     };
   }

@@ -1,14 +1,14 @@
+// web-app/src/packages/biz-common/net/src/sse/biz-sse-client.ts
 import type { HttpManager } from "@ming/core-network";
+import type { BizHttpClientConfig, BizApiErrorResponse } from "../shared/types";
 import type {
-  BizHttpClientConfig,
-  BizApiErrorResponse,
   SseFinalState,
   SseGlobalMessageInterceptor,
   SseResponseHeadersInterceptor,
   SseStreamCallbacks,
   SseStreamStatus,
   SseStreamOptions,
-} from "../types";
+} from "./types";
 import { ClientErrorCode } from "../error-code";
 import { buildHttpCodeError, formatSseException } from "../shared/error-mapper";
 
@@ -181,7 +181,7 @@ export class BizSseClient {
       const reader = response.body?.getReader();
       if (!reader) {
         const error: BizApiErrorResponse = {
-          code: ClientErrorCode.HTTP_UNKNOWN_CLIENT_ERR,
+          code: ClientErrorCode.CONFIG_ERR,
           clientData: { message: "ReadableStream reader is not available" },
         };
         emitStatus("transport-error");

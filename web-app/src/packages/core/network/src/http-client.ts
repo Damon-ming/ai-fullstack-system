@@ -1,11 +1,12 @@
 import type {
-  ApiResponse,
   HttpClientConfig,
-  InterceptorConfig,
+  RequestConfig,
+  ApiResponse,
+} from "./restful/types";
+import type {
   InterceptorConfigCollection,
   NormalizedRequest,
-  RequestConfig,
-} from "./types";
+} from "./shared/types";
 import { InterceptorPipeline } from "./shared/interceptor-pipeline";
 import { RestfulClient } from "./restful/restful-client";
 import { SseTransport } from "./sse/sse-transport";
@@ -18,7 +19,8 @@ export class HttpClient {
   private readonly sseTransport: SseTransport;
 
   constructor(private readonly config: HttpClientConfig) {
-    if (typeof config.baseURL !== "string") throw new Error("HttpClientConfig.baseURL must be string");
+    if (typeof config.baseURL !== "string")
+      throw new Error("HttpClientConfig.baseURL must be string");
     this.pipeline = new InterceptorPipeline(config.interceptors);
     this.restful = new RestfulClient(config, this.pipeline);
     this.sseTransport = new SseTransport(config, this.pipeline);
@@ -30,9 +32,7 @@ export class HttpClient {
     return this.pipeline.addRequestInterceptor(interceptor);
   }
 
-  addResponseInterceptor(
-    interceptor: InterceptorConfigCollection<any>,
-  ) {
+  addResponseInterceptor(interceptor: InterceptorConfigCollection<any>) {
     return this.pipeline.addResponseInterceptor(interceptor as any);
   }
 
@@ -44,11 +44,19 @@ export class HttpClient {
     return this.restful.get<T>(url, config);
   }
 
-  post<T = any>(url: string, data?: any, config?: Omit<RequestConfig, "url" | "method" | "data">) {
+  post<T = any>(
+    url: string,
+    data?: any,
+    config?: Omit<RequestConfig, "url" | "method" | "data">,
+  ) {
     return this.restful.post<T>(url, data, config);
   }
 
-  put<T = any>(url: string, data?: any, config?: Omit<RequestConfig, "url" | "method" | "data">) {
+  put<T = any>(
+    url: string,
+    data?: any,
+    config?: Omit<RequestConfig, "url" | "method" | "data">,
+  ) {
     return this.restful.put<T>(url, data, config);
   }
 
@@ -56,7 +64,11 @@ export class HttpClient {
     return this.restful.delete<T>(url, config);
   }
 
-  patch<T = any>(url: string, data?: any, config?: Omit<RequestConfig, "url" | "method" | "data">) {
+  patch<T = any>(
+    url: string,
+    data?: any,
+    config?: Omit<RequestConfig, "url" | "method" | "data">,
+  ) {
     return this.restful.patch<T>(url, data, config);
   }
 
@@ -66,7 +78,7 @@ export class HttpClient {
 
   createChild(config: Partial<HttpClientConfig>): HttpClient {
     const currentInterceptors = this.pipeline.getConfig();
-    const asArray = <T,>(value?: T | T[]): T[] =>
+    const asArray = <T>(value?: T | T[]): T[] =>
       value ? (Array.isArray(value) ? value : [value]) : [];
     return new HttpClient({
       ...this.config,

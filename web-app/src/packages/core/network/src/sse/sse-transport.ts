@@ -1,8 +1,5 @@
-import type {
-  HttpClientConfig,
-  InterceptorConfig,
-  NormalizedRequest,
-} from "../types";
+import type { HttpClientConfig } from "../restful/types";
+import type { InterceptorConfig, NormalizedRequest } from "../shared/types";
 import { InterceptorPipeline } from "../shared/interceptor-pipeline";
 
 export interface SseRequestOptions {

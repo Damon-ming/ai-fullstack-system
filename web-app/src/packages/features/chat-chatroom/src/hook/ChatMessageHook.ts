@@ -166,12 +166,9 @@ export function chatMessageHook() {
         },
         onError: (error) => {
           streamFinished = true;
-          const httpCode = error.clientData?.httpCode;
           const message = error.clientData?.message || "流式请求失败";
-          const errorText = httpCode
-            ? `请求失败（HTTP ${httpCode}）：${message}`
-            : message;
-          log.error("sendStream response failed", error, { httpCode });
+          const errorText = message;
+          log.error("sendStream response failed", error);
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMsgId ? { ...msg, text: errorText } : msg,

@@ -3,10 +3,12 @@ import {
   BizRequestCallbacks,
   BizRequestConfig,
   BizResult,
+} from "./restful/types";
+import {
   SseFinalState,
   SseStreamCallbacks,
   SseStreamOptions,
-} from "./types";
+} from "./sse/types";
 
 export interface INetClient {
   get<T = any, F = any>(

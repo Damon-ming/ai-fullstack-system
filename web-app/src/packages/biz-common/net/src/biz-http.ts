@@ -3,15 +3,17 @@ import {
   type HttpClient,
   type HttpClientConfig,
 } from "@ming/core-network";
+import type { BizHttpClientConfig } from "./shared/types";
 import type {
-  BizHttpClientConfig,
   BizRequestCallbacks,
   BizRequestConfig,
   BizResult,
+} from "./restful/types";
+import type {
   SseFinalState,
   SseStreamCallbacks,
   SseStreamOptions,
-} from "./types";
+} from "./sse/types";
 import type { INetClient } from "./interface";
 import { BizRestClient } from "./restful/biz-rest-client";
 import { BizSseClient } from "./sse/biz-sse-client";

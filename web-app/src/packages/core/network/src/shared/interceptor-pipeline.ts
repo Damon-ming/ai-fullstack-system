@@ -1,11 +1,11 @@
 // web-app/src/packages/core/network/src/shared/interceptor-pipeline.ts
 // type: 类型擦除
+import type { HttpClientConfig } from "../restful/types";
 import type {
-  HttpClientConfig,
   InterceptorConfig,
   NormalizedRequest,
   NormalizedResponse,
-} from "../types";
+} from "./types";
 
 type RequestInterceptor = InterceptorConfig<NormalizedRequest>;
 type ResponseInterceptor = InterceptorConfig<NormalizedResponse>;
