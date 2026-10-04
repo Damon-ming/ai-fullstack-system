@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { chatMessageHook } from "../hook";
+import { useChatMessageStateHook } from "../hook/useChatMessageStateHook";
+import { useChatSendStreamHook } from "../hook/useChatSendStreamHook";
 
-export interface ChatChatroomProps {}
-export const ChatChatroom: React.FC<ChatChatroomProps> = () => {
-  const { input, setInput, sending, messages, sendStream } = chatMessageHook();
+export const ChatChatroom: React.FC = () => {
+  const { input, setInput, sending, messages } = useChatMessageStateHook();
+  const { sendStream } = useChatSendStreamHook();
   const send = sendStream;
 
   const messageContainerRef = useRef<HTMLDivElement>(null);
@@ -75,127 +76,139 @@ export const ChatChatroom: React.FC<ChatChatroomProps> = () => {
 
   return (
     <main
-      className={`feature-chatroom ${messages.length ? "has-messages" : "is-empty"}`}
+      className={`flex min-h-0 flex-1 flex-col items-center px-7 py-8 ${
+        messages.length === 0 ? "justify-center" : ""
+      }`}
     >
       {messages.length > 0 && (
         <section
           ref={messageContainerRef}
-          className={`feature-messages flex flex-col gap-8 ${isScrolling ? "is-scrolling" : ""}`}
           onScroll={handleScroll}
-          style={{ overflowY: "auto", flex: 1 }}
+          className={`flex w-full min-h-0 flex-1 flex-col gap-8 overflow-y-auto py-2 ${
+            isScrolling ? "is-scrolling" : ""
+          }`}
+          style={{
+            scrollbarWidth: "thin",
+            scrollbarColor: "transparent transparent",
+          }}
         >
-          {messages.map((message) => {
-            return (
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+            >
               <div
-                key={message.id}
-                className={`feature-message-row flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`group relative flex w-full items-end ${message.role === "user" ? "justify-end pr-11" : "pr-2.5"}`}
               >
-                  <div className={`feature-message-shell ${message.role}`}>
-                  <div className={`feature-message-bubble ${message.role}`}>
-                    <div
-                      className={`feature-message ${message.role}`}
-                      style={{
-                        maxWidth: message.role === "user" ? "50%" : "100%",
-                        wordBreak: "break-word",
-                        whiteSpace: "normal",
-                      }}
-                    >
-                      {message.text === "正在思考中..." ? (
-                        <span
-                          className="feature-thinking"
-                          aria-label="正在思考中"
-                        >
-                          正在思考中
-                          <span
-                            className="feature-thinking-dots"
-                            aria-hidden="true"
-                          >
-                            <i>.</i>
-                            <i>.</i>
-                            <i>.</i>
-                          </span>
+                <div
+                  className={`relative w-fit ${message.role === "user" ? "max-w-[50%]" : "max-w-full"}`}
+                >
+                  <div
+                    className={`whitespace-normal break-words rounded-2xl px-4 py-3 leading-relaxed ${
+                      message.role === "user"
+                        ? "rounded-br-sm bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/20"
+                        : "rounded-bl-sm border border-slate-200 bg-white/80 text-slate-700 shadow-sm"
+                    }`}
+                  >
+                    {message.text === "正在思考中..." ? (
+                      <span aria-label="正在思考中">
+                        正在思考中
+                        <span className="inline-flex min-w-[1.2em] animate-pulse">
+                          ...
                         </span>
-                      ) : message.role === "assistant" ? (
-                        <>
-                          {message.thinking && (
-                            <details className="feature-thinking-content">
-                              <summary>思考过程</summary>
-                              <ReactMarkdown>{message.thinking}</ReactMarkdown>
-                            </details>
-                          )}
-                          <ReactMarkdown>{message.text}</ReactMarkdown>
-                        </>
-                      ) : (
-                        <span className="whitespace-pre-wrap">
-                          {message.text}
-                        </span>
-                      )}
-                    </div>
-                    {/* 助手消息元信息 —— 由 SSE start 事件携带 */}
-                    {message.role === "assistant" &&
-                      message.text !== "正在思考中..." &&
-                      message.msgId && (
-                        <div className="feature-message-meta">
-                          {message.model && (
-                            <span className="feature-meta-item">
-                              model: {message.model}
-                            </span>
-                          )}
-                          {message.createdAt && (
-                            <span className="feature-meta-item">
-                              {new Date(
-                                message.createdAt * 1000,
-                              ).toLocaleTimeString()}
-                            </span>
-                          )}
-                          {message.traceId && (
-                            <span className="feature-meta-item feature-meta-trace"
-                                  title={message.traceId}>
-                              trace: {message.traceId.slice(0, 8)}…
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    <button
-                      className="feature-copy-button"
-                      type="button"
-                      aria-label="复制消息"
-                      title={copiedMessageId === message.id ? "已复制" : "复制"}
-                      onClick={() => void copyMessage(message.text, message.id)}
-                    >
-                      {copiedMessageId === message.id ? "✓" : "⧉"}
-                    </button>
+                      </span>
+                    ) : message.role === "assistant" ? (
+                      <>
+                        {message.thinking && (
+                          <details className="mb-1.5 rounded-md bg-gray-500/5 px-2.5 py-1.5 text-sm text-gray-500/85">
+                            <summary className="cursor-pointer select-none">
+                              思考过程
+                            </summary>
+                            <ReactMarkdown>{message.thinking}</ReactMarkdown>
+                          </details>
+                        )}
+                        <ReactMarkdown>{message.text}</ReactMarkdown>
+                      </>
+                    ) : (
+                      <span className="whitespace-pre-wrap">
+                        {message.text}
+                      </span>
+                    )}
                   </div>
+                  {/* 助手消息元信息 —— 由 SSE start 事件携带 */}
+                  {message.role === "assistant" &&
+                    message.text !== "正在思考中..." &&
+                    message.msgId && (
+                      <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-gray-500/70">
+                        {message.model && (
+                          <span className="rounded bg-gray-500/5 px-1.5 py-0.5">
+                            model: {message.model}
+                          </span>
+                        )}
+                        {message.createdAt && (
+                          <span className="rounded bg-gray-500/5 px-1.5 py-0.5">
+                            {new Date(
+                              message.createdAt * 1000,
+                            ).toLocaleTimeString()}
+                          </span>
+                        )}
+                        {message.traceId && (
+                          <span
+                            className="cursor-help rounded bg-gray-500/5 px-1.5 py-0.5 font-mono"
+                            title={message.traceId}
+                          >
+                            trace: {message.traceId.slice(0, 8)}…
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  <button
+                    type="button"
+                    aria-label="复制消息"
+                    title={copiedMessageId === message.id ? "已复制" : "复制"}
+                    onClick={() => void copyMessage(message.text, message.id)}
+                    className="absolute -right-9 bottom-2.5 h-[27px] w-[27px] rounded-lg border border-slate-200 bg-white/95 text-sm text-indigo-500 opacity-0 transition-all duration-150 hover:bg-indigo-50 group-hover:opacity-100 focus-visible:opacity-100"
+                    style={{ transform: "translateY(4px)" }}
+                  >
+                    {copiedMessageId === message.id ? "✓" : "⧉"}
+                  </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </section>
       )}
+
       {messages.length > 0 && isUserScrollUp && (
         <button
-          className="feature-scroll-bottom"
           type="button"
           aria-label="滚动到底部"
           title="滚动到底部"
           onClick={scrollToBottom}
+          className="absolute bottom-[90px] right-[18px] z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/96 text-lg text-indigo-500 shadow-lg transition-transform hover:-translate-y-0.5"
         >
           ↓
         </button>
       )}
-      <style>{thinkingStyles}</style>
-      <section className="feature-composer-area">
+
+      <section className="flex w-full max-w-[900px] flex-col">
         {messages.length === 0 && (
-          <section className="feature-welcome">
-            <div>✦</div>
-            <h1>今天想聊点什么？</h1>
-            <p>向我提问、写点东西，或上传文件一起分析。</p>
+          <section className="m-auto text-center">
+            <div className="mx-auto flex h-[66px] w-[66px] items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-[32px] text-white shadow-lg shadow-indigo-500/25">
+              ✦
+            </div>
+            <h1 className="mt-5 text-[31px] font-semibold tracking-tight text-slate-800">
+              今天想聊点什么？
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              向我提问、写点东西，或上传文件一起分析。
+            </p>
           </section>
         )}
-        <footer className="feature-composer">
+        <footer className="flex items-end gap-2.5 rounded-2xl border border-slate-200 bg-white/92 px-3.5 py-3 shadow-xl transition-all focus-within:-translate-y-0.5 focus-within:border-indigo-300 focus-within:shadow-lg">
           <textarea
             ref={composerInputRef}
-            className="w-full resize-y overflow-auto whitespace-pre-wrap"
+            className="min-h-[36px] max-h-[140px] flex-1 resize-none border-0 bg-transparent leading-6 text-slate-700 outline-0 placeholder:text-slate-400"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -204,30 +217,20 @@ export const ChatChatroom: React.FC<ChatChatroomProps> = () => {
                 send();
               }
             }}
-            placeholder={"输入消息..."}
+            placeholder="输入消息..."
             disabled={sending}
           />
           <button
+            type="button"
             onClick={() => void send()}
             aria-label="发送消息"
             disabled={sending}
-          ></button>
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-lg text-white shadow-lg shadow-indigo-500/20 transition-all hover:-translate-y-0.5 hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            ↑
+          </button>
         </footer>
       </section>
     </main>
   );
 };
-
-const thinkingStyles = `
-.feature-thinking-dots{display:inline-flex;min-width:1.2em;text-align:left}
-.feature-thinking-dots i{font-style:normal;opacity:0;animation:feature-thinking-dot 1.2s steps(1,end) infinite}
-.feature-thinking-dots i:nth-child(2){animation-delay:.4s}
-.feature-thinking-dots i:nth-child(3){animation-delay:.8s}
-@keyframes feature-thinking-dot{0%,25%{opacity:0}26%,50%{opacity:1}51%,100%{opacity:0}}
-.feature-message-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:11px;color:rgba(120,120,120,.8)}
-.feature-meta-item{padding:1px 6px;border-radius:3px;background:rgba(150,150,150,.08)}
-.feature-meta-trace{font-family:monospace;cursor:help}
-.feature-thinking-content{margin-bottom:8px;padding:6px 10px;border-radius:6px;background:rgba(150,150,150,.06);font-size:13px;color:rgba(120,120,120,.85)}
-.feature-thinking-content summary{cursor:pointer;user-select:none}
-.feature-thinking-content p{margin:4px 0}
-`;

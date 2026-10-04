@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { uploadFiles } from "@ming/features-upload-api";
-import { useChatUploadStore } from "@ming/store/biz/chat-state";
+import { useChatUploadStore } from "@ming/store/biz/upload-state";
 
 export function chatUploadHook() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
-  const { startUpload, finishUpload } = useChatUploadStore();
+  const startUpload = useChatUploadStore((s) => s.startUpload);
+  const finishUpload = useChatUploadStore((s) => s.finishUpload);
 
   const handleFileChange = async (fileList?: FileList | null) => {
     const files = fileList ? Array.from(fileList) : [];

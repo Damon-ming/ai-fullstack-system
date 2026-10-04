@@ -9,3 +9,25 @@
   html, body, #root { width: 100%; height: 100%; margin: 0; }
   button, input, textarea { font: inherit; }
 }
+
+@layer utilities {
+  /* 滚动条 —— 滚动时才显示（需 JS 切换 is-scrolling） */
+  .is-scrolling {
+    scrollbar-color: #c7cdea transparent;
+  }
+  .is-scrolling::-webkit-scrollbar {
+    width: 8px;
+  }
+  .is-scrolling::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .is-scrolling::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 99px;
+    background-clip: padding-box;
+    background-color: #c7cdea;
+  }
+  .is-scrolling::-webkit-scrollbar-thumb:hover {
+    background-color: #9da7df;
+  }
+}

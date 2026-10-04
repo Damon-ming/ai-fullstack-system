@@ -6,6 +6,7 @@
     ".": "./src/index.ts",
     "./app-store": "./src/app-store.ts",
     "./biz/chat-state": "./src/biz/chat-state.ts",
+    "./biz/upload-state": "./src/biz/upload-state.ts",
     "./biz/search-state": "./src/biz/search-state.ts",
     "./biz/history-state": "./src/biz/history-state.ts",
     "./biz/account-state": "./src/biz/account-state.ts"
