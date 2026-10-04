@@ -76,6 +76,7 @@ export class HttpClient {
     return this.sseTransport.request(url, body, opts);
   }
 
+  // Partial: 把类型 `T` 里**所有属性全部变成可选**
   createChild(config: Partial<HttpClientConfig>): HttpClient {
     const currentInterceptors = this.pipeline.getConfig();
     const asArray = <T>(value?: T | T[]): T[] =>

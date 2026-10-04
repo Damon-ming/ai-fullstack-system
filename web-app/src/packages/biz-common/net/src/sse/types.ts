@@ -82,6 +82,7 @@ export type SseStreamStatus =
   | "connected"
   | "message"
   | "heartbeat"
+  | "retry-updated"
   | "complete"
   | "aborted"
   | "transport-error"

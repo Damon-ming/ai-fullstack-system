@@ -4,6 +4,7 @@ import type { BizHttpClientConfig, BizApiErrorResponse } from "../shared/types";
 import type {
   SseFinalState,
   SseGlobalMessageInterceptor,
+  SseMessageInterceptor,
   SseResponseHeadersInterceptor,
   SseStreamCallbacks,
   SseStreamStatus,
@@ -11,6 +12,7 @@ import type {
 } from "./types";
 import { ClientErrorCode } from "../error-code";
 import { buildHttpCodeError, formatSseException } from "../shared/error-mapper";
+import { SseParser } from "./sse-parser";
 
 export class BizSseClient {
   private responseHeadersInterceptors: SseResponseHeadersInterceptor[] = [];
@@ -19,8 +21,6 @@ export class BizSseClient {
   constructor(private readonly httpManager: HttpManager) {}
 
   configure(
-    // Pick<...> 是 TypeScript 的 工具类型
-    // 从 BizHttpClientConfig 这个类型中，只挑选 sseResponseHeadersInterceptors 和 sseMessageInterceptors 这两个属性，组成一个新的类型
     config: Pick<
       BizHttpClientConfig,
       "sseResponseHeadersInterceptors" | "sseMessageInterceptors"
@@ -89,92 +89,29 @@ export class BizSseClient {
     callbacks: SseStreamCallbacks<T> = {},
     opts: SseStreamOptions<T> = {},
   ): Promise<SseFinalState> {
-    const { onMessage, onError, onComplete } = callbacks;
     const {
-      // false | ((raw: string) => T)，	把原始字符串转成 payload。默认 JSON.parse
       parse,
       validateMessage,
       messageInterceptors,
       onResponseHeaders,
       ...transportOptions
     } = opts;
-    const localInterceptors = messageInterceptors
-      ? Array.isArray(messageInterceptors)
-        ? messageInterceptors
-        : [messageInterceptors]
-      : [];
-
-    const safeOnMessage = (
-      payload: T,
-      meta?: { event?: string; id?: string },
-    ) => {
-      try {
-        onMessage?.(payload, meta);
-      } catch (error) {
-        console.error("[BizSseClient] onMessage callback error:", error);
-      }
-    };
-    const safeOnError = (error: BizApiErrorResponse) => {
-      try {
-        onError?.(error);
-      } catch (callbackError) {
-        console.error("[BizSseClient] onError callback error:", callbackError);
-      }
-    };
-    const safeOnMessageError = (error: unknown, rawPayload: string) => {
-      try {
-        callbacks.onMessageError?.(error, rawPayload);
-      } catch (callbackError) {
-        console.warn(
-          "[BizSseClient] onMessageError callback error:",
-          callbackError,
-        );
-      }
-    };
-    const safeOnComplete = () => {
-      try {
-        onComplete?.();
-      } catch (error) {
-        console.error("[BizSseClient] onComplete callback error:", error);
-      }
-    };
-    const emitStatus = (status: SseStreamStatus) => {
-      try {
-        callbacks.onStatus?.(status);
-      } catch (error) {
-        console.warn("[BizSseClient] onStatus callback error:", error);
-      }
-    };
+    const localInterceptors = this.normalizeInterceptors(messageInterceptors);
 
     try {
+      // ── 1. 建立连接 ─────────────────────────────────────────
       const response = await this.httpManager.sse(url, body, transportOptions);
-      for (const interceptor of this.responseHeadersInterceptors) {
-        try {
-          await interceptor.onFulfilled?.(response);
-        } catch (error) {
-          try {
-            await interceptor.onRejected?.(error);
-          } catch {
-            // Header interceptor errors must not terminate the stream.
-          }
-        }
-      }
-      try {
-        await onResponseHeaders?.(response);
-      } catch (error) {
-        console.warn("[BizSseClient] onResponseHeaders error:", error);
-      }
+      await this.runHeaderInterceptors(response);
+      await onResponseHeaders?.(response);
 
       if (!response.ok) {
-        // response.text() 返回 Promise
-        // catch(() => "")：出错时返回空字符串 ""，不让异常抛出去
         const text = await response.text().catch(() => "");
         const error = buildHttpCodeError(
           response.status,
           text ? { message: text, rawBody: text } : undefined,
         );
-        emitStatus("transport-error");
-        safeOnError(error);
+        this.emitStatus(callbacks, "transport-error");
+        this.safeOnError(callbacks, error);
         return { status: "error", error };
       }
 
@@ -184,141 +121,69 @@ export class BizSseClient {
           code: ClientErrorCode.CONFIG_ERR,
           clientData: { message: "ReadableStream reader is not available" },
         };
-        emitStatus("transport-error");
-        safeOnError(error);
+        this.emitStatus(callbacks, "transport-error");
+        this.safeOnError(callbacks, error);
         return { status: "error", error };
       }
 
-      emitStatus("connected");
-
-      // 二进制字节（Uint8Array）解码成字符串。
-      const decoder = new TextDecoder("utf-8");
-      // 这是标准的 SSE 协议解析，遵循 data: / event: / id: / :（注释/心跳）四类行。
-      let buffer = "";
-      let eventData = "";
-      let eventType = "message";
-      let lastEventId = "";
-      let retryMs: number | undefined;
-
-      const dispatch = async () => {
-        if (!eventData) return;
-        emitStatus("message");
-        // CRLF	CR + LF	回车+换行	\r\n
-        const rawPayload = eventData.replace(/\n$/, "");
-        const meta = { event: eventType, id: lastEventId, retry: retryMs };
-        try {
-          let payload: T =
-            parse === false
-              ? (rawPayload as T)
-              : // JSON.parse 是 JavaScript 内置函数，把 JSON 字符串 转成 JS 对象/值。
-                (parse ?? JSON.parse)(rawPayload);
-          // 它比较两个值时，同时要求类型和值都相同，才返回 true
-          if ((payload as { event?: string } | null)?.event === "error") {
-            emitStatus("business-error");
-          }
-          if (validateMessage) {
-            const result = validateMessage(payload);
-            if (result.isError && result.error) {
-              emitStatus("business-error");
-              safeOnError(result.error);
-              return;
-            }
-          }
-          for (const interceptor of [
-            ...this.messageInterceptors,
-            ...localInterceptors,
-          ]) {
-            try {
-              if (interceptor.onFulfilled)
-                payload = await interceptor.onFulfilled(payload, meta);
-            } catch (error) {
-              const handled = await interceptor.onRejected?.(error);
-              if (handled === false) return;
-              throw error;
-            }
-          }
-          safeOnMessage(payload, meta);
-        } catch (error) {
-          emitStatus("parse-error");
-          safeOnMessageError(error, rawPayload);
-          console.warn("[BizSseClient] message process failed", {
-            raw: rawPayload,
-            error,
-          });
-        } finally {
-          eventData = "";
-          eventType = "message";
-          lastEventId = "";
-          retryMs = undefined;
-        }
-      };
-
-      const processLine = (line: string) => {
-        if (line.startsWith(":")) {
-          emitStatus("heartbeat");
-          return;
-        }
-        if (line.startsWith("data:"))
-          eventData += `${line.slice(5).trimStart()}\n`;
-        else if (line.startsWith("event:")) eventType = line.slice(6).trim();
-        else if (line.startsWith("id:")) lastEventId = line.slice(3).trim();
-        else if (line.startsWith("retry:")) {
-          // retry: 毫秒数，供客户端断线重连时等待指定时长后再发起请求
-          const val = line.slice(6).trim();
-          const parsed = Number.parseInt(val, 10);
-          if (!Number.isNaN(parsed)) retryMs = parsed;
-        }
-      };
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          // 把二进制 value 解码为字符串。
-          // stream: true 表示这不是最后一块：如果末尾正好截断了一个多字节字符（如中文一个字占 3 字节），先缓存起来不输出，等下一块拼齐再解码。
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          // Array.prototype.pop() 是数组方法：删除并返回数组的最后一个元素。
-          buffer = lines.pop() ?? "";
-          for (const line of lines) {
-            // SSE servers commonly use CRLF. After splitting on LF, the
-            // blank separator is represented as "\r", not "".
-            const normalizedLine = line.endsWith("\r")
-              ? line.slice(0, -1)
-              : line;
-            if (normalizedLine === "") await dispatch();
-            else processLine(normalizedLine);
-          }
-        }
-        // Flush a possible multi-byte UTF-8 sequence held by TextDecoder.
-        buffer += decoder.decode();
-        if (buffer) {
-          for (const line of buffer.split("\n")) {
-            const normalizedLine = line.endsWith("\r")
-              ? line.slice(0, -1)
-              : line;
-            if (normalizedLine === "") await dispatch();
-            else processLine(normalizedLine);
-          }
-          // 不遇到空行，就只累积（processLine 往 eventData 里加）。
-          // 一遇到空行，才把累积的内容打包派发出去。
-          await dispatch();
-        }
-        emitStatus("complete");
-        safeOnComplete();
-        return { status: "complete" };
-      } finally {
-        reader.releaseLock();
-      }
+      // ── 2. SSE 协议解析（委托给 SseParser）─────────────────
+      this.emitStatus(callbacks, "connected");
+      const parser = new SseParser<T>(callbacks, {
+        parse,
+        validateMessage,
+        globalInterceptors: this.messageInterceptors,
+        localInterceptors,
+      });
+      return await parser.parse(reader);
     } catch (error) {
       const mapped = formatSseException(error);
-      emitStatus(
-        mapped.code === ClientErrorCode.CONFIG_CANCEL
-          ? "aborted"
-          : "transport-error",
+      this.emitStatus(
+        callbacks,
+        mapped.code === ClientErrorCode.CONFIG_CANCEL ? "aborted" : "transport-error",
       );
-      safeOnError(mapped);
+      this.safeOnError(callbacks, mapped);
       return { status: "error", error: mapped };
+    }
+  }
+
+  // ─── 私有辅助 ───────────────────────────────────────────────
+
+  private normalizeInterceptors(
+    messageInterceptors: SseStreamOptions<any>["messageInterceptors"],
+  ): SseMessageInterceptor[] {
+    if (!messageInterceptors) return [];
+    return Array.isArray(messageInterceptors) ? messageInterceptors : [messageInterceptors];
+  }
+
+  private async runHeaderInterceptors(response: Response): Promise<void> {
+    for (const interceptor of this.responseHeadersInterceptors) {
+      try {
+        const result = interceptor.onFulfilled?.(response);
+        if (result) await Promise.resolve(result);
+      } catch (error) {
+        try {
+          const handled = interceptor.onRejected?.(error);
+          if (handled) await Promise.resolve(handled);
+        } catch {
+          // Header interceptor errors must not terminate the stream.
+        }
+      }
+    }
+  }
+
+  private emitStatus(callbacks: SseStreamCallbacks, status: SseStreamStatus): void {
+    try {
+      callbacks.onStatus?.(status);
+    } catch (error) {
+      console.warn("[BizSseClient] onStatus callback error:", error);
+    }
+  }
+
+  private safeOnError(callbacks: SseStreamCallbacks, error: BizApiErrorResponse): void {
+    try {
+      callbacks.onError?.(error);
+    } catch (callbackError) {
+      console.error("[BizSseClient] onError callback error:", callbackError);
     }
   }
 }

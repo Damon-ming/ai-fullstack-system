@@ -1,17 +1,11 @@
+// web-app/src/packages/biz-common/net/src/restful/biz-rest-client.ts
 import type { HttpManager, RequestConfig } from "@ming/core-network";
-import {
-  BizCodeRange,
-  getBizCodeCategory,
-} from "../error-code";
+import { BizCodeRange, getBizCodeCategory } from "../error-code";
 import type {
   BizApiSuccessResponse,
   BizApiErrorResponse,
 } from "../shared/types";
-import type {
-  BizRequestCallbacks,
-  BizRequestConfig,
-  BizResult,
-} from "./types";
+import type { BizRequestCallbacks, BizRequestConfig, BizResult } from "./types";
 import {
   buildHttpCodeError,
   formatAxiosException,
@@ -166,7 +160,11 @@ export class BizRestClient {
   ): Promise<BizResult<T, F>> {
     const { cfg, callbacks } = this.parseArgs<T, F>(arg3, arg4);
     return this.requestWrap(
-      this.httpManager.post<BizApiSuccessResponse<T>>(url, data, this.initConfig(cfg)),
+      this.httpManager.post<BizApiSuccessResponse<T>>(
+        url,
+        data,
+        this.initConfig(cfg),
+      ),
       callbacks,
     );
   }
@@ -190,7 +188,11 @@ export class BizRestClient {
   ): Promise<BizResult<T, F>> {
     const { cfg, callbacks } = this.parseArgs<T, F>(arg3, arg4);
     return this.requestWrap(
-      this.httpManager.put<BizApiSuccessResponse<T>>(url, data, this.initConfig(cfg)),
+      this.httpManager.put<BizApiSuccessResponse<T>>(
+        url,
+        data,
+        this.initConfig(cfg),
+      ),
       callbacks,
     );
   }
@@ -211,7 +213,10 @@ export class BizRestClient {
   ): Promise<BizResult<T, F>> {
     const { cfg, callbacks } = this.parseArgs<T, F>(arg2, arg3);
     return this.requestWrap(
-      this.httpManager.delete<BizApiSuccessResponse<T>>(url, this.initConfig(cfg)),
+      this.httpManager.delete<BizApiSuccessResponse<T>>(
+        url,
+        this.initConfig(cfg),
+      ),
       callbacks,
     );
   }
