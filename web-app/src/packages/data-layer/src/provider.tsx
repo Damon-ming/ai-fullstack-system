@@ -14,16 +14,22 @@ export interface DataProviderProps {
  * 数据层统一 Context Provider
  * 隐藏底层 @tanstack/react-query 的实现细节
  * 
- * //  直接创建（每次渲染都会创建新实例）
- * //  使用 useState（只在第一次渲染时创建）
+ * 直接创建（每次渲染都会创建新实例）
+ * 使用 useState（只在第一次渲染时创建）
   // function Welcome(props: { name: string })  // props 就是参数
 */
 // 调用组件
-  /* <Button text="Click me" /> */
+/* <Button text="Click me" /> */
 // 此时才执行！函数被调用，生成 React 元素
+// 箭头函数: 方法通常指对象里的函数，如 obj.method()。,函数是独立的可调用值。
+
 export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   // 使用 useState 确保 QueryClient 实例在组件生命周期内唯一
   // 数据缓存共享
+  // [] 是解构模式
+  // 对象解构	数组解构
+  // 语法	{ a, b }	[a, b]
+  // 取值方式	按属性名	按位置
   const [queryClient] = useState(
     () =>
       new QueryClient({

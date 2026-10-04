@@ -46,10 +46,14 @@ export function useDrawerHook() {
     const files = fileList ? Array.from(fileList) : [];
     if (!files.length) return;
     startUpload(files.map((file) => file.name));
-    try {
-      const response = await uploadFilesFromApi(files);
-      if (response.code >= 40000) throw new Error("服务端返回上传失败");
-      const resultFiles = Array.isArray(response.data?.files)
+    const [err, response] = await uploadFilesFromApi(files);
+    if (err) {
+      finishUpload(
+        "error",
+        err.clientData?.message || "文件上传失败",
+      );
+    } else {
+      const resultFiles = Array.isArray(response?.data?.files)
         ? response.data.files
         : [];
       const allIndexed =
@@ -59,11 +63,6 @@ export function useDrawerHook() {
         "success",
         allIndexed ? "文件已经进入语料库" : "文件已上传，部分词条仍在更新",
         resultFiles,
-      );
-    } catch (error) {
-      finishUpload(
-        "error",
-        error instanceof Error ? error.message : "文件上传失败",
       );
     }
   };

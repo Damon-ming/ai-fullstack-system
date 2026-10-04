@@ -1,6 +1,6 @@
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { ChatStartData, ChatRoomRequest } from "../api/types";
-import { sendChatRoomMessage, streamChatRoomMessage } from "../api";
+import { sendChatRoomMessageFn, streamChatRoomMessage } from "../api";
 import { createLogger } from "@ming/core-log";
 
 const log = createLogger("chat-chatroom/hook");
@@ -35,9 +35,9 @@ export function chatMessageHook() {
         query,
         think: false,
       };
-      const res = await sendChatRoomMessage(req);
+      const res = await sendChatRoomMessageFn(req);
       log.debug("sendNormal succeeded");
-      const result = res.data?.result;
+      const result = res.data?.data;
       if (result) {
         setMessages((items) =>
           items.map((msg) =>

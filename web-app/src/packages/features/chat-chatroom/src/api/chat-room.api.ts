@@ -1,5 +1,6 @@
 // web-app/src/packages/features/chat-chatroom/src/api/chat-room.api.ts
 import { dataApi, QueryFactory } from "@ming/data-layer";
+import { netClient } from "@ming/biz-common-net-api";
 import type {
   ChatRoomApiResponse,
   ChatRoomRequest,
@@ -34,8 +35,7 @@ export const sendChatRoomMessageFn = (
     });
 };
 
-export const sendChatRoomMessage = sendChatRoomMessageFn;
-
+// TanStack Mutation Hook（需要缓存/状态管理的地方走 data-layer）
 export const useSendChatRoomMessage = QueryFactory.genMutationHook(
   sendChatRoomMessageFn,
   {
@@ -44,16 +44,16 @@ export const useSendChatRoomMessage = QueryFactory.genMutationHook(
 );
 
 /**
- * 命令式调用（适配新签名：callbacks + opts）
- * - callbacks：onMessage / onError / onComplete
- * - opts：signal / extraHeaders / interceptors(单次请求拦截器) / parse / validateMessage / messageInterceptors
+ * SSE 流式请求 — 不走 TanStack，直接调 biz-common-net
+ * callbacks：onMessage / onError / onComplete
+ * opts：signal / extraHeaders / interceptors / parse / validateMessage / messageInterceptors
  */
 export const streamChatRoomMessage = (
   request: ChatRoomRequest,
   callbacks: SseStreamCallbacks<ChatSseMessage>,
   opts?: SseStreamOptions<ChatSseMessage>,
 ): Promise<SseFinalState> => {
-  return dataApi.sse<ChatSseMessage>(
+  return netClient.sseStream<ChatSseMessage>(
     "/api/llm/chat/v1",
     request,
     callbacks,

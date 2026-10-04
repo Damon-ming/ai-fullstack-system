@@ -24,11 +24,7 @@ export interface BizHttpClientConfig extends HttpClientConfig {
     | SseGlobalMessageInterceptor[];
 }
 
-export interface BaseRequest {
-  requestId?: string;
-  // todo
-  requestedAt?: number;
-}
+export interface BaseRequest {}
 
 /** 业务层包装后的完整响应 = 底层 http 壳 + 后端业务体 */
 export interface BizApiSuccessResponse<T = any> {

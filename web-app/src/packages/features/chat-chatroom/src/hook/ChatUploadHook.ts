@@ -14,9 +14,13 @@ export function chatUploadHook() {
     setError("");
     setUploading(true);
     startUpload(files.map((f) => f.name));
-    try {
-      const res = await uploadFiles(files);
-      const uploadedFiles = res.data?.files ?? [];
+    const [err, res] = await uploadFiles(files);
+    if (err) {
+      const errMsg = err.clientData?.message || "文件上传失败";
+      setError(errMsg);
+      finishUpload("error", errMsg);
+    } else {
+      const uploadedFiles = res?.data?.files ?? [];
       const duplicateCount = uploadedFiles.filter((f) => f.duplicate).length;
       const indexedCount = uploadedFiles.filter((f) => f.indexed).length;
       const message =
@@ -25,13 +29,8 @@ export function chatUploadHook() {
         (indexedCount > 0 ? `，${indexedCount} 个已编入知识库` : "");
 
       finishUpload("success", message, uploadedFiles);
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : "文件上传失败";
-      setError(errMsg);
-      finishUpload("error", errMsg);
-    } finally {
-      setUploading(false);
     }
+    setUploading(false);
   };
 
   return { uploading, error, handleFileChange };
