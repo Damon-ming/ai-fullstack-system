@@ -1,11 +1,29 @@
 // web-app/src/packages/biz-common/net/src/sse/sse-parser.ts
 import type { BizApiErrorResponse } from "../shared/types";
+import { getBizCodeCategory } from "../error-code";
 import type {
   SseStreamCallbacks,
   SseStreamStatus,
   SseFinalState,
   SseMessageInterceptor,
 } from "./types";
+
+/**
+ * 默认业务校验：仅当 payload 含有 number 类型的 code 时，
+ * 按 bizCode 范围判断成功/失败。无 code 的流式消息（如 chat delta）直接放行。
+ */
+function defaultValidateMessage<T>(payload: T): { isError: boolean; error?: BizApiErrorResponse } {
+  if (payload && typeof payload === "object" && typeof (payload as any).code === "number") {
+    const code = (payload as any).code as number;
+    if (getBizCodeCategory(code) === "fail") {
+      return {
+        isError: true,
+        error: { code, data: (payload as any).data },
+      };
+    }
+  }
+  return { isError: false };
+}
 
 interface SseParserOptions<T> {
   parse?: ((raw: string) => T) | false;
@@ -168,17 +186,16 @@ export class SseParser<T = any> {
         return; // error 终止事件不走 onMessage / 拦截器
       }
 
-      // 业务层校验
-      if (this.opts.validateMessage) {
-        const result = this.opts.validateMessage(payload);
-        if (result.isError && result.error) {
-          if (!this.sentOnError) {
-            this.emitStatus("business-error");
-            this.safeOnError(result.error);
-            this.sentOnError = true;
-          }
-          return;
+      // 业务层校验：优先用上层自定义，否则用内置默认（基于 bizCode 范围）
+      const validator = this.opts.validateMessage ?? defaultValidateMessage;
+      const result = validator(payload);
+      if (result.isError && result.error) {
+        if (!this.sentOnError) {
+          this.emitStatus("business-error");
+          this.safeOnError(result.error);
+          this.sentOnError = true;
         }
+        return;
       }
 
       // 拦截器链
