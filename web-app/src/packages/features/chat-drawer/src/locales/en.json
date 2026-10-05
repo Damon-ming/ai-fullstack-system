@@ -15,7 +15,9 @@
   },
   "history": {
     "title": "Recent Chats",
-    "delete": "Delete"
+    "delete": "Delete",
+    "loading": "Loading",
+    "empty": "No chat history"
   },
   "account": {
     "settings": "Settings ›"

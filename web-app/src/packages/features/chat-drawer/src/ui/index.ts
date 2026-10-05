@@ -6,3 +6,4 @@ export { DrawerSearch } from "./DrawerSearch";
 export { DrawerHistory } from "./DrawerHistory";
 export { DrawerAccount } from "./DrawerAccount";
 export { DrawerCollapsed } from "./DrawerCollapsed";
+export { ErrorBoundary } from "./ErrorBoundary";

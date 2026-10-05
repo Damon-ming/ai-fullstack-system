@@ -16,6 +16,8 @@ export interface ChatDrawerResources {
   history: {
     title: string;
     delete: string;
+    loading: string;
+    empty: string;
   };
   account: {
     settings: string;

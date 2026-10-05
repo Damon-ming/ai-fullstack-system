@@ -1,3 +1,5 @@
+// web-app/src/packages/features/chat-chatroom/src/ui/ChatChatroom.tsx
+
 import React, { useRef, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useChatMessageStateHook } from "../hook/useChatMessageStateHook";
@@ -132,7 +134,9 @@ export const ChatChatroom: React.FC = () => {
                         <ReactMarkdown>{message.text}</ReactMarkdown>
                       </>
                     ) : (
-                      <span className="whitespace-pre-wrap">{message.text}</span>
+                      <span className="whitespace-pre-wrap">
+                        {message.text}
+                      </span>
                     )}
                   </div>
                   {/* 助手消息元信息 —— 由 SSE start 事件携带 */}
@@ -165,7 +169,9 @@ export const ChatChatroom: React.FC = () => {
                   <button
                     type="button"
                     aria-label={t("copy")}
-                    title={copiedMessageId === message.id ? t("copied") : t("copy")}
+                    title={
+                      copiedMessageId === message.id ? t("copied") : t("copy")
+                    }
                     onClick={() => void copyMessage(message.text, message.id)}
                     className="absolute -right-9 bottom-2.5 h-[27px] w-[27px] rounded-lg border border-slate-200 bg-white/95 text-sm text-indigo-500 opacity-0 transition-all duration-150 hover:bg-indigo-50 group-hover:opacity-100 focus-visible:opacity-100"
                     style={{ transform: "translateY(4px)" }}
