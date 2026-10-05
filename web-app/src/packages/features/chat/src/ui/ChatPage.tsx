@@ -1,12 +1,13 @@
 import { ChatDrawer } from "@ming/features-chat-drawer";
 import { ChatChatroom } from "@ming/features-chat-chatroom";
-import React from "react";
+import React, { useMemo } from "react";
 import { useChatPageHook } from "../hook";
+import { useTranslation } from "@ming/i18n";
 
 export const ChatPage: React.FC = () => {
+  const { t } = useTranslation("chat-page");
   const {
     chatSessionId,
-    toggleDrawer,
     searchOpen,
     searchKeyword,
     closeSearch,
@@ -21,6 +22,26 @@ export const ChatPage: React.FC = () => {
     upload,
     closeUpload,
   } = useChatPageHook();
+
+  // store 不再持有 message —— UI 层根据 status + 结果数据生成文案
+  const uploadMessage = useMemo(() => {
+    switch (upload.status) {
+      case "uploading":
+        return t("upload.uploading");
+      case "error":
+        return t("upload.error");
+      case "success": {
+        const allIndexed =
+          upload.files.length === 0 ||
+          upload.files.every((f) => f.indexed || f.duplicate);
+        return allIndexed
+          ? t("upload.successAllIndexed")
+          : t("upload.successPartial");
+      }
+      default:
+        return "";
+    }
+  }, [upload.status, upload.files, t]);
 
   return (
     <div className="relative flex h-full w-full overflow-hidden font-sans text-slate-800">
@@ -43,13 +64,13 @@ export const ChatPage: React.FC = () => {
               autoFocus
               value={searchKeyword}
               onChange={(event) => setSearchKeyword(event.target.value)}
-              placeholder="搜索历史对话内容..."
+              placeholder={t("search.placeholder")}
               className="mt-2 block w-full rounded-lg border border-slate-200 bg-white/80 px-3 py-3 text-slate-700 outline-0 focus:border-indigo-300"
             />
             <div className="mt-3 max-h-[280px] overflow-auto">
               {searchKeyword.trim() && searchResults.length === 0 && (
                 <p className="py-2.5 text-center text-sm text-slate-400">
-                  没有找到匹配的对话
+                  {t("search.noResults")}
                 </p>
               )}
               {searchResults.map((item) => (
@@ -86,13 +107,13 @@ export const ChatPage: React.FC = () => {
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="m-0 text-xl font-semibold text-slate-800">
-              账户信息
+              {t("account.title")}
             </h2>
             <p className="mt-1.5 mb-5 text-xs text-slate-400">
-              信息仅保存在当前浏览器。
+              {t("account.hint")}
             </p>
             <label className="block text-xs font-semibold text-slate-500">
-              显示名称
+              {t("account.displayName")}
               <input
                 value={draftName}
                 maxLength={30}
@@ -107,14 +128,14 @@ export const ChatPage: React.FC = () => {
                 onClick={closeAccount}
                 className="rounded-lg bg-slate-100 px-4 py-2 text-slate-500 hover:bg-slate-200"
               >
-                取消
+                {t("account.cancel")}
               </button>
               <button
                 type="button"
                 onClick={saveAccount}
                 className="rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 px-4 py-2 font-semibold text-white shadow-lg shadow-indigo-500/20"
               >
-                保存
+                {t("account.save")}
               </button>
             </div>
           </section>
@@ -150,14 +171,16 @@ export const ChatPage: React.FC = () => {
               className="text-xl font-semibold text-slate-800"
             >
               {upload.status === "uploading"
-                ? "正在上传文件"
+                ? t("upload.uploading")
                 : upload.status === "success"
-                  ? "上传完成"
-                  : "上传失败"}
+                  ? t("upload.success")
+                  : t("upload.error")}
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-slate-500">
-              {upload.message}
-            </p>
+            {uploadMessage && (
+              <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                {uploadMessage}
+              </p>
+            )}
             {upload.fileNames.length > 0 && (
               <small className="mt-2 block truncate text-xs text-slate-400">
                 {upload.fileNames.join("、")}
@@ -178,10 +201,10 @@ export const ChatPage: React.FC = () => {
                     </strong>
                     <em className="whitespace-nowrap not-italic text-indigo-500">
                       {file.duplicate
-                        ? "已存在"
+                        ? t("upload.fileExists")
                         : file.indexed
-                          ? "已入语料库"
-                          : "更新中"}
+                          ? t("upload.fileIndexed")
+                          : t("upload.fileIndexing")}
                     </em>
                   </div>
                 ))}
@@ -193,7 +216,7 @@ export const ChatPage: React.FC = () => {
                 onClick={closeUpload}
                 className="mt-5 min-w-[112px] rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 px-5 py-2.5 font-bold text-white shadow-lg shadow-indigo-500/20"
               >
-                知道了
+                {t("upload.close")}
               </button>
             )}
           </section>

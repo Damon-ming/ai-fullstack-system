@@ -2,8 +2,10 @@ import React, { useRef, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useChatMessageStateHook } from "../hook/useChatMessageStateHook";
 import { useChatSendStreamHook } from "../hook/useChatSendStreamHook";
+import { useTranslation } from "@ming/i18n";
 
 export const ChatChatroom: React.FC = () => {
+  const { t } = useTranslation("chat-chatroom");
   const { input, setInput, sending, messages } = useChatMessageStateHook();
   const { sendStream } = useChatSendStreamHook();
   const send = sendStream;
@@ -110,9 +112,9 @@ export const ChatChatroom: React.FC = () => {
                         : "rounded-bl-sm border border-slate-200 bg-white/80 text-slate-700 shadow-sm"
                     }`}
                   >
-                    {message.text === "正在思考中..." ? (
-                      <span aria-label="正在思考中">
-                        正在思考中
+                    {message.text === t("thinking") ? (
+                      <span aria-label={t("thinkingAria")}>
+                        {t("thinking")}
                         <span className="inline-flex min-w-[1.2em] animate-pulse">
                           ...
                         </span>
@@ -122,7 +124,7 @@ export const ChatChatroom: React.FC = () => {
                         {message.thinking && (
                           <details className="mb-1.5 rounded-md bg-gray-500/5 px-2.5 py-1.5 text-sm text-gray-500/85">
                             <summary className="cursor-pointer select-none">
-                              思考过程
+                              {t("thinkingProcess")}
                             </summary>
                             <ReactMarkdown>{message.thinking}</ReactMarkdown>
                           </details>
@@ -130,14 +132,12 @@ export const ChatChatroom: React.FC = () => {
                         <ReactMarkdown>{message.text}</ReactMarkdown>
                       </>
                     ) : (
-                      <span className="whitespace-pre-wrap">
-                        {message.text}
-                      </span>
+                      <span className="whitespace-pre-wrap">{message.text}</span>
                     )}
                   </div>
                   {/* 助手消息元信息 —— 由 SSE start 事件携带 */}
                   {message.role === "assistant" &&
-                    message.text !== "正在思考中..." &&
+                    message.text !== t("thinking") &&
                     message.msgId && (
                       <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-gray-500/70">
                         {message.model && (
@@ -164,8 +164,8 @@ export const ChatChatroom: React.FC = () => {
                     )}
                   <button
                     type="button"
-                    aria-label="复制消息"
-                    title={copiedMessageId === message.id ? "已复制" : "复制"}
+                    aria-label={t("copy")}
+                    title={copiedMessageId === message.id ? t("copied") : t("copy")}
                     onClick={() => void copyMessage(message.text, message.id)}
                     className="absolute -right-9 bottom-2.5 h-[27px] w-[27px] rounded-lg border border-slate-200 bg-white/95 text-sm text-indigo-500 opacity-0 transition-all duration-150 hover:bg-indigo-50 group-hover:opacity-100 focus-visible:opacity-100"
                     style={{ transform: "translateY(4px)" }}
@@ -182,8 +182,8 @@ export const ChatChatroom: React.FC = () => {
       {messages.length > 0 && isUserScrollUp && (
         <button
           type="button"
-          aria-label="滚动到底部"
-          title="滚动到底部"
+          aria-label={t("scrollToBottomAria")}
+          title={t("scrollToBottom")}
           onClick={scrollToBottom}
           className="absolute bottom-[90px] right-[18px] z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/96 text-lg text-indigo-500 shadow-lg transition-transform hover:-translate-y-0.5"
         >
@@ -198,10 +198,10 @@ export const ChatChatroom: React.FC = () => {
               ✦
             </div>
             <h1 className="mt-5 text-[31px] font-semibold tracking-tight text-slate-800">
-              今天想聊点什么？
+              {t("welcome.title")}
             </h1>
             <p className="mt-2 text-sm text-slate-400">
-              向我提问、写点东西，或上传文件一起分析。
+              {t("welcome.subtitle")}
             </p>
           </section>
         )}
@@ -217,13 +217,13 @@ export const ChatChatroom: React.FC = () => {
                 send();
               }
             }}
-            placeholder="输入消息..."
+            placeholder={t("input.placeholder")}
             disabled={sending}
           />
           <button
             type="button"
             onClick={() => void send()}
-            aria-label="发送消息"
+            aria-label={t("input.sendAria")}
             disabled={sending}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-lg text-white shadow-lg shadow-indigo-500/20 transition-all hover:-translate-y-0.5 hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >

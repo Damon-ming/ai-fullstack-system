@@ -1,0 +1,22 @@
+{
+  "thinking": "正在思考中",
+  "thinkingAria": "正在思考中",
+  "thinkingProcess": "思考过程",
+  "copy": "复制",
+  "copied": "已复制",
+  "scrollToBottom": "滚动到底部",
+  "scrollToBottomAria": "滚动到底部",
+  "welcome": {
+    "title": "今天想聊点什么？",
+    "subtitle": "向我提问、写点东西，或上传文件一起分析。"
+  },
+  "input": {
+    "placeholder": "输入消息...",
+    "send": "发送消息",
+    "sendAria": "发送消息"
+  },
+  "error": {
+    "streamFailed": "流式请求失败",
+    "sendFailed": "消息发送失败，请稍后重试"
+  }
+}

@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./locales": "./src/locales/resources.ts"
   },
   "dependencies": {
     "@ming/store": "workspace:*",
@@ -11,9 +12,10 @@
     "@ming/features-upload-api": "workspace:*",
     "@ming/data-layer": "workspace:*",
     "@ming/biz-common-net-api": "workspace:*",
+    "@ming/i18n": "workspace:*",
     "react-markdown": "^9.0.1"
   },
   "peerDependencies": {
-    "react": "^18.2.0"
+    "react": "^18.0.0"
   }
 }

@@ -1,0 +1,24 @@
+{
+  "search": {
+    "placeholder": "搜索历史对话内容...",
+    "noResults": "没有找到匹配的对话"
+  },
+  "account": {
+    "title": "账户信息",
+    "hint": "信息仅保存在当前浏览器。",
+    "displayName": "显示名称",
+    "cancel": "取消",
+    "save": "保存"
+  },
+  "upload": {
+    "uploading": "正在上传文件",
+    "success": "上传完成",
+    "successAllIndexed": "上传完成 — 全部进入语料库",
+    "successPartial": "上传完成 — 部分仍在更新",
+    "error": "上传失败",
+    "fileExists": "已存在",
+    "fileIndexed": "已入语料库",
+    "fileIndexing": "更新中",
+    "close": "知道了"
+  }
+}

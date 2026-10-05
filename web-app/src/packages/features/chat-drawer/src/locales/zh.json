@@ -1,0 +1,27 @@
+{
+  "header": {
+    "brand": "Ming AI",
+    "collapse": "折叠抽屉",
+    "expand": "展开抽屉"
+  },
+  "newChat": "＋ 新建对话",
+  "search": "⌕搜索对话",
+  "upload": {
+    "idle": "⌁ 上传文件",
+    "uploading": "◌ 正在上传文件...",
+    "success_allIndexed": "文件已经进入语料库",
+    "success_partial": "文件已上传，部分词条仍在更新",
+    "error": "文件上传失败"
+  },
+  "history": {
+    "title": "最近对话",
+    "delete": "删除记录"
+  },
+  "account": {
+    "settings": "账户设置 ›"
+  },
+  "collapsed": {
+    "newChat": "新建对话",
+    "upload": "上传文件"
+  }
+}

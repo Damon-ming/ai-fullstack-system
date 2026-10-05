@@ -1,7 +1,9 @@
 import React from "react";
 import { useDrawerAccountHook } from "../hook/useDrawerAccountHook";
+import { useTranslation } from "@ming/i18n";
 
 export const DrawerAccount: React.FC = () => {
+  const { t } = useTranslation("chat-drawer");
   const { account, openAccount } = useDrawerAccountHook();
   return (
     <button
@@ -16,7 +18,9 @@ export const DrawerAccount: React.FC = () => {
         <strong className="text-sm font-medium text-slate-800">
           {account.name}
         </strong>
-        <small className="text-xs text-slate-400">账户设置 ›</small>
+        <small className="text-xs text-slate-400">
+          {t("account.settings")}
+        </small>
       </span>
     </button>
   );

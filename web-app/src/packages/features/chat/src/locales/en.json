@@ -1,0 +1,24 @@
+{
+  "search": {
+    "placeholder": "Search conversations...",
+    "noResults": "No matching conversations"
+  },
+  "account": {
+    "title": "Account Info",
+    "hint": "Info is saved in this browser only.",
+    "displayName": "Display name",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "upload": {
+    "uploading": "Uploading",
+    "success": "Upload complete",
+    "successAllIndexed": "Upload complete — all indexed",
+    "successPartial": "Upload complete — some still indexing",
+    "error": "Upload failed",
+    "fileExists": "Already exists",
+    "fileIndexed": "Indexed",
+    "fileIndexing": "Indexing",
+    "close": "OK"
+  }
+}

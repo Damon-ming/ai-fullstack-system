@@ -1,5 +1,6 @@
 // src/app/main/src/bootstrap.ts
 import { initNetApi } from "@ming/biz-common-net-api";
+import { i18n } from "@ming/i18n";
 
 /**
  * 应用最早期执行的全局初始化函数
@@ -10,6 +11,9 @@ export async function bootstrap(): Promise<void> {
 
   // 1. 最高优先级：初始化网络层
   initGlobalNetwork();
+
+  // 2. 初始化 i18n
+  console.log(`[App] i18n initialized, language: ${i18n.language}`);
 
   console.log("[App] Initialization complete.");
 }

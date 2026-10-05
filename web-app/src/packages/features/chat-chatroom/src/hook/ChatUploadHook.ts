@@ -2,6 +2,10 @@ import { useState } from "react";
 import { uploadFiles } from "@ming/features-upload-api";
 import { useChatUploadStore } from "@ming/store/biz/upload-state";
 
+/**
+ * @deprecated 使用 useDrawerUploadHook 替代，该 hook 支持 i18n。
+ * 保留此 hook 以维持 chat-chatroom 包的导出兼容性。
+ */
 export function chatUploadHook() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -17,19 +21,12 @@ export function chatUploadHook() {
     startUpload(files.map((f) => f.name));
     const [err, res] = await uploadFiles(files);
     if (err) {
-      const errMsg = err.clientData?.message || "文件上传失败";
+      const errMsg = err.clientData?.message || "upload failed";
       setError(errMsg);
-      finishUpload("error", errMsg);
+      finishUpload("error");
     } else {
       const uploadedFiles = res?.data?.files ?? [];
-      const duplicateCount = uploadedFiles.filter((f) => f.duplicate).length;
-      const indexedCount = uploadedFiles.filter((f) => f.indexed).length;
-      const message =
-        `${uploadedFiles.length} 个文件上传成功` +
-        (duplicateCount > 0 ? `（${duplicateCount} 个已存在）` : "") +
-        (indexedCount > 0 ? `，${indexedCount} 个已编入知识库` : "");
-
-      finishUpload("success", message, uploadedFiles);
+      finishUpload("success", uploadedFiles);
     }
     setUploading(false);
   };

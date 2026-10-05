@@ -2,14 +2,18 @@
   "name": "@ming/features-chat-drawer",
   "version": "0.0.1",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./locales": "./src/locales/resources.ts"
+  },
   "dependencies": {
     "@ming/store": "workspace:*",
     "@ming/features-history-api": "workspace:*",
     "@ming/features-search-api": "workspace:*",
     "@ming/features-account-api": "workspace:*",
     "@ming/features-upload-api": "workspace:*",
-    "@ming/core-util": "workspace:*"
+    "@ming/core-util": "workspace:*",
+    "@ming/i18n": "workspace:*"
   },
-  "peerDependencies": { "react": "^18.2.0" }
+  "peerDependencies": { "react": "^18.0.0" }
 }

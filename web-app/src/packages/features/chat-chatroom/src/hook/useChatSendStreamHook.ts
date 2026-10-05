@@ -1,12 +1,14 @@
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { streamChatRoomMessage } from "../api";
 import type { ChatRoomRequest, ChatStartData } from "../api/types";
+import { useTranslation } from "@ming/i18n";
 import { createLogger } from "@ming/core-log";
 
 const log = createLogger("chat-chatroom/hook/sendStream");
 
 /** SSE 流式请求（默认使用） */
 export function useChatSendStreamHook() {
+  const { t } = useTranslation("chat-chatroom");
   const input = useChatMessageStore((s) => s.input);
   const setInput = useChatMessageStore((s) => s.setInput);
   const setMessages = useChatMessageStore((s) => s.setMessages);
@@ -26,7 +28,7 @@ export function useChatSendStreamHook() {
     setMessages((items) => [
       ...items,
       { id: userMsgId, text: query, role: "user" },
-      { id: assistantMsgId, text: "正在思考中...", role: "assistant" },
+      { id: assistantMsgId, text: t("thinking"), role: "assistant" },
     ]);
     setInput("");
     setSending(true);
@@ -114,7 +116,8 @@ export function useChatSendStreamHook() {
         },
         onError: (error) => {
           streamFinished = true;
-          const message = error.clientData?.message || "流式请求失败";
+          const message =
+            error.clientData?.message || t("error.streamFailed");
           log.error("sendStream response failed", error);
           setMessages((prev) =>
             prev.map((msg) =>
@@ -125,11 +128,10 @@ export function useChatSendStreamHook() {
       });
     } catch (e) {
       log.error("sendStream failed", e);
-      const errMsg =
-        e instanceof Error ? e.message : "消息发送失败，请稍后重试";
+      const errMsg = e instanceof Error ? e.message : t("error.sendFailed");
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, text: `${errMsg}` } : msg,
+          msg.id === assistantMsgId ? { ...msg, text: errMsg } : msg,
         ),
       );
     } finally {

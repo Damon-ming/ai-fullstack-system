@@ -35,12 +35,21 @@ importers:
       '@ming/features-chat':
         specifier: workspace:*
         version: link:../../packages/features/chat
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      i18next:
+        specifier: ^26.4.2
+        version: 26.4.2(typescript@5.9.3)
       react:
         specifier: ^18.2.0
         version: 18.3.1
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
+      react-i18next:
+        specifier: ^17.0.15
+        version: 17.0.15(i18next@26.4.2(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
     devDependencies:
       '@vitejs/plugin-react':
         specifier: ^4.3.4
@@ -93,12 +102,12 @@ importers:
 
   src/packages/data-layer:
     dependencies:
-      '@tanstack/react-query':
-        specifier: ^5.0.0
-        version: 5.101.4(react@18.3.1)
       '@ming/biz-common-net-api':
         specifier: workspace:*
         version: link:../biz-common/net-api
+      '@tanstack/react-query':
+        specifier: ^5.0.0
+        version: 5.101.4(react@18.3.1)
 
   src/packages/features/account:
     dependencies:
@@ -129,14 +138,17 @@ importers:
       '@ming/features-search-api':
         specifier: workspace:*
         version: link:../search-api
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
       '@ming/store':
         specifier: workspace:*
         version: link:../../store
       react:
-        specifier: ^18.2.0
+        specifier: ^18.0.0
         version: 18.3.1
       react-dom:
-        specifier: ^18.2.0
+        specifier: ^18.0.0
         version: 18.3.1(react@18.3.1)
 
   src/packages/features/chat-chatroom:
@@ -153,11 +165,14 @@ importers:
       '@ming/features-upload-api':
         specifier: workspace:*
         version: link:../upload-api
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
       '@ming/store':
         specifier: workspace:*
         version: link:../../store
       react:
-        specifier: ^18.2.0
+        specifier: ^18.0.0
         version: 18.3.1
       react-markdown:
         specifier: ^9.0.1
@@ -180,11 +195,14 @@ importers:
       '@ming/features-upload-api':
         specifier: workspace:*
         version: link:../upload-api
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
       '@ming/store':
         specifier: workspace:*
         version: link:../../store
       react:
-        specifier: ^18.2.0
+        specifier: ^18.0.0
         version: 18.3.1
 
   src/packages/features/history:
@@ -235,6 +253,28 @@ importers:
         specifier: workspace:*
         version: link:../upload
 
+  src/packages/i18n:
+    dependencies:
+      i18next:
+        specifier: ^23.16.0
+        version: 23.16.8
+      react:
+        specifier: '>=18.0.0'
+        version: 18.3.1
+      react-i18next:
+        specifier: ^15.1.0
+        version: 15.7.4(i18next@23.16.8)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+    devDependencies:
+      '@ming/features-chat':
+        specifier: workspace:*
+        version: link:../features/chat
+      '@ming/features-chat-chatroom':
+        specifier: workspace:*
+        version: link:../features/chat-chatroom
+      '@ming/features-chat-drawer':
+        specifier: workspace:*
+        version: link:../features/chat-drawer
+
   src/packages/store:
     dependencies:
       '@ming/features-account-api':
@@ -245,7 +285,7 @@ importers:
         version: 18.3.1
       zustand:
         specifier: ^5.0.3
-        version: 5.0.15(@types/react@19.2.18)(react@18.3.1)
+        version: 5.0.15(@types/react@19.2.18)(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1))
 
 packages:
 
@@ -319,6 +359,10 @@ packages:
     engines: {node: '>=6.9.0'}
     peerDependencies:
       '@babel/core': ^7.0.0-0
+
+  '@babel/runtime@7.29.7':
+    resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
+    engines: {node: '>=6.9.0'}
 
   '@babel/template@7.29.7':
     resolution: {integrity: sha512-puq+Gf35oI24FeN11LkoUQFqv9uwNeWpxXZi/Ji3rRIoKAzKnxRaZ+Gkj0vKS9ZCiTESfng1N9LyOyXvo+m+Gg==}
@@ -974,12 +1018,29 @@ packages:
   hast-util-whitespace@3.0.0:
     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
 
+  html-parse-stringify@3.1.0:
+    resolution: {integrity: sha512-E0oAXcELOtsXe+BmpJ2EZyedbldPpriV5vICzEuo6xjC/D1lDukOI7KrpfQGF2Qc4wWEy0nk3bFORS2K5ZAhFQ==}
+
+  html-parse-stringify@4.0.1:
+    resolution: {integrity: sha512-0zHsZJrK7S3K2aucXWL6ycoYJ/iNtIcFHC/nYQgFklPtrv5LpJctIiSCroWZWeuoXvuyFdzp6KzjJQ+OT5MfFw==}
+
   html-url-attributes@3.0.1:
     resolution: {integrity: sha512-ol6UPyBWqsrO6EJySPz2O7ZSr856WDrEzM5zMqp+FJJLGMW35cLYmmZnl0vztAZxRUoNZJFTCohfjuIJ8I4QBQ==}
 
   https-proxy-agent@5.0.1:
     resolution: {integrity: sha512-dFcAjpTQFgoLMzC2VwU+C/CbS7uRL0lWmxDITmqm7C+7F0Odmj6s9l6alZc6AELXhrnggM2CeWSXHGOdX2YtwA==}
     engines: {node: '>= 6'}
+
+  i18next@23.16.8:
+    resolution: {integrity: sha512-06r/TitrM88Mg5FdUXAKL96dJMzgqLE5dv3ryBAra4KCwD9mJ4ndOTS95ZuymIGoE+2hzfdaMak2X11/es7ZWg==}
+
+  i18next@26.4.2:
+    resolution: {integrity: sha512-RX+R0VLg13IbvRuJSxnqykUFS9vQZTl8wYpWPCIUDWVrSGjsQywB5Y+pjzrkboxGAuYfJZVH1InFTdgBdxq6ug==}
+    peerDependencies:
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   inline-style-parser@0.2.7:
     resolution: {integrity: sha512-Nb2ctOyNR8DqQoR0OwRG95uNWIC0C1lCgf5Naz5H6Ji72KZ8OcFZLz2P5sNgwlyoJ8Yif11oMuYs5pBQa86csA==}
@@ -1237,6 +1298,38 @@ packages:
     peerDependencies:
       react: ^18.3.1
 
+  react-i18next@15.7.4:
+    resolution: {integrity: sha512-nyU8iKNrI5uDJch0z9+Y5XEr34b0wkyYj3Rp+tfbahxtlswxSCjcUL9H0nqXo9IR3/t5Y5PKIA3fx3MfUyR9Xw==}
+    peerDependencies:
+      i18next: '>= 23.4.0'
+      react: '>= 16.8.0'
+      react-dom: '*'
+      react-native: '*'
+      typescript: ^5
+    peerDependenciesMeta:
+      react-dom:
+        optional: true
+      react-native:
+        optional: true
+      typescript:
+        optional: true
+
+  react-i18next@17.0.15:
+    resolution: {integrity: sha512-7uYpx/oBkesLto7cOzOmfITlUBaXHCAcFahmgETMfWr8nbbWRRnVGvz8wsH/xpbNcyoH+NpCcnOQEqWPMO6/hw==}
+    peerDependencies:
+      i18next: '>= 26.2.0'
+      react: '>= 16.8.0'
+      react-dom: '*'
+      react-native: '*'
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      react-dom:
+        optional: true
+      react-native:
+        optional: true
+      typescript:
+        optional: true
+
   react-markdown@9.1.0:
     resolution: {integrity: sha512-xaijuJB0kzGiUdG7nc2MOMDUDBWPyGAjZtUrow9XxUeua8IqeP+VlIfAZ3bphpcLTnSZXz6z9jcVC/TCwbfgdw==}
     peerDependencies:
@@ -1327,6 +1420,11 @@ packages:
     peerDependencies:
       browserslist: '>= 4.21.0'
 
+  use-sync-external-store@1.7.0:
+    resolution: {integrity: sha512-6L+EeigHMQhdaIPNIFUKwfWJSwWFQ8gJbJ2DLOs5sDIegTwR9fRxvnM3uciHKjIZhFz+KAv2emhWMRvDmMcY8A==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   vfile-message@4.0.3:
     resolution: {integrity: sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw==}
 
@@ -1363,6 +1461,10 @@ packages:
         optional: true
       terser:
         optional: true
+
+  void-elements@3.1.0:
+    resolution: {integrity: sha512-Dhxzh5HZuiHQhbvTW9AMetFfBHDMYpo23Uo9btPXgdYP+3T5S+p+jgNy7spra+veYhBP2dCSgxR/i2Y02h5/6w==}
+    engines: {node: '>=0.10.0'}
 
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
@@ -1478,6 +1580,8 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
+
+  '@babel/runtime@7.29.7': {}
 
   '@babel/template@7.29.7':
     dependencies:
@@ -2022,6 +2126,12 @@ snapshots:
     dependencies:
       '@types/hast': 3.0.5
 
+  html-parse-stringify@3.1.0:
+    dependencies:
+      void-elements: 3.1.0
+
+  html-parse-stringify@4.0.1: {}
+
   html-url-attributes@3.0.1: {}
 
   https-proxy-agent@5.0.1:
@@ -2030,6 +2140,14 @@ snapshots:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
+
+  i18next@23.16.8:
+    dependencies:
+      '@babel/runtime': 7.29.7
+
+  i18next@26.4.2(typescript@5.9.3):
+    optionalDependencies:
+      typescript: 5.9.3
 
   inline-style-parser@0.2.7: {}
 
@@ -2381,6 +2499,27 @@ snapshots:
       react: 18.3.1
       scheduler: 0.23.2
 
+  react-i18next@15.7.4(i18next@23.16.8)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
+    dependencies:
+      '@babel/runtime': 7.29.7
+      html-parse-stringify: 3.1.0
+      i18next: 23.16.8
+      react: 18.3.1
+    optionalDependencies:
+      react-dom: 18.3.1(react@18.3.1)
+      typescript: 5.9.3
+
+  react-i18next@17.0.15(i18next@26.4.2(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
+    dependencies:
+      '@babel/runtime': 7.29.7
+      html-parse-stringify: 4.0.1
+      i18next: 26.4.2(typescript@5.9.3)
+      react: 18.3.1
+      use-sync-external-store: 1.7.0(react@18.3.1)
+    optionalDependencies:
+      react-dom: 18.3.1(react@18.3.1)
+      typescript: 5.9.3
+
   react-markdown@9.1.0(@types/react@19.2.18)(react@18.3.1):
     dependencies:
       '@types/hast': 3.0.5
@@ -2526,6 +2665,10 @@ snapshots:
       escalade: 3.2.0
       picocolors: 1.1.1
 
+  use-sync-external-store@1.7.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+
   vfile-message@4.0.3:
     dependencies:
       '@types/unist': 3.0.3
@@ -2545,11 +2688,14 @@ snapshots:
       fsevents: 2.3.3
       lightningcss: 1.32.0
 
+  void-elements@3.1.0: {}
+
   yallist@3.1.1: {}
 
-  zustand@5.0.15(@types/react@19.2.18)(react@18.3.1):
+  zustand@5.0.15(@types/react@19.2.18)(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1)):
     optionalDependencies:
       '@types/react': 19.2.18
       react: 18.3.1
+      use-sync-external-store: 1.7.0(react@18.3.1)
 
   zwitch@2.0.4: {}

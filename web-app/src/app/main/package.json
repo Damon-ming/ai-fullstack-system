@@ -1,13 +1,15 @@
 {
   "name": "@ming_app_main",
   "private": true,
-
   "dependencies": {
+    "@ming/biz-common-net-api": "workspace:*",
+    "@ming/data-layer": "workspace:*",
     "@ming/features-chat": "workspace:*",
-    "@ming/biz-common-net-api":"workspace:*",
-    "@ming/data-layer":"workspace:*",
+    "@ming/i18n": "workspace:*",
+    "i18next": "^26.4.2",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-i18next": "^17.0.15"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

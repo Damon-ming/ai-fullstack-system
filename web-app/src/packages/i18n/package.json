@@ -1,0 +1,21 @@
+{
+  "name": "@ming/i18n",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./resources": "./src/resources.ts"
+  },
+  "dependencies": {
+    "i18next": "^23.16.0",
+    "react-i18next": "^15.1.0"
+  },
+  "devDependencies": {
+    "@ming/features-chat-drawer": "workspace:*",
+    "@ming/features-chat": "workspace:*",
+    "@ming/features-chat-chatroom": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  }
+}

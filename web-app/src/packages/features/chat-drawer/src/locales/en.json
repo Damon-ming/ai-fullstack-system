@@ -1,0 +1,27 @@
+{
+  "header": {
+    "brand": "Ming AI",
+    "collapse": "Collapse drawer",
+    "expand": "Expand drawer"
+  },
+  "newChat": "＋ New Chat",
+  "search": "⌕Search",
+  "upload": {
+    "idle": "⌁ Upload",
+    "uploading": "◌ Uploading...",
+    "success_allIndexed": "All files indexed",
+    "success_partial": "Uploaded, some still indexing",
+    "error": "Upload failed"
+  },
+  "history": {
+    "title": "Recent Chats",
+    "delete": "Delete"
+  },
+  "account": {
+    "settings": "Settings ›"
+  },
+  "collapsed": {
+    "newChat": "New Chat",
+    "upload": "Upload"
+  }
+}

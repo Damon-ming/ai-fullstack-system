@@ -1,12 +1,14 @@
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { sendChatRoomMessageFn } from "../api";
 import type { ChatRoomRequest } from "../api/types";
+import { useTranslation } from "@ming/i18n";
 import { createLogger } from "@ming/core-log";
 
 const log = createLogger("chat-chatroom/hook/sendNormal");
 
 /** 同步一次性请求（保留备用） */
 export function useChatSendNormalHook() {
+  const { t } = useTranslation("chat-chatroom");
   const input = useChatMessageStore((s) => s.input);
   const setInput = useChatMessageStore((s) => s.setInput);
   const setMessages = useChatMessageStore((s) => s.setMessages);
@@ -28,7 +30,7 @@ export function useChatSendNormalHook() {
     setMessages((items) => [
       ...items,
       { id: userMsgId, text: query, role: "user" },
-      { id: assistantMsgId, text: "正在思考中...", role: "assistant" },
+      { id: assistantMsgId, text: t("thinking"), role: "assistant" },
     ]);
     setInput("");
     setSending(true);
@@ -49,11 +51,10 @@ export function useChatSendNormalHook() {
       }
     } catch (e) {
       log.error("sendNormal failed", e);
-      const errMsg =
-        e instanceof Error ? e.message : "消息发送失败，请稍后重试";
+      const errMsg = e instanceof Error ? e.message : t("error.sendFailed");
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, text: `${errMsg}` } : msg,
+          msg.id === assistantMsgId ? { ...msg, text: errMsg } : msg,
         ),
       );
     } finally {

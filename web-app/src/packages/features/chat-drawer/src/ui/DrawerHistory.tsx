@@ -1,14 +1,17 @@
 import React from "react";
 import { useDrawerHistoryHook } from "../hook/useDrawerHistoryHook";
+import { useTranslation } from "@ming/i18n";
 
 export const DrawerHistory: React.FC = () => {
+  const { t } = useTranslation("chat-drawer");
   const { list, groups, activeId, selectChat, deleteHistory } =
     useDrawerHistoryHook();
 
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-        最近对话 <span className="ml-1 text-slate-300">{list.length}</span>
+        {t("history.title")}{" "}
+        <span className="ml-1 text-slate-300">{list.length}</span>
       </div>
       <nav className="space-y-4 px-2">
         {groups.map((group) => (
@@ -40,7 +43,7 @@ export const DrawerHistory: React.FC = () => {
                 <button
                   type="button"
                   className="ml-2 hidden h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 transition hover:bg-slate-200 hover:text-slate-600 group-hover:flex"
-                  title="删除记录"
+                  title={t("history.delete")}
                   onClick={(event) => {
                     event.stopPropagation();
                     deleteHistory(item.id);
