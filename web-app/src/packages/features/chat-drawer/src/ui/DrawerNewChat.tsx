@@ -8,7 +8,7 @@ export const DrawerNewChat: React.FC = () => {
   return (
     <button
       type="button"
-      className="mx-3 flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-200 hover:text-gray-800"
       onClick={newChat}
     >
       {t("newChat")}

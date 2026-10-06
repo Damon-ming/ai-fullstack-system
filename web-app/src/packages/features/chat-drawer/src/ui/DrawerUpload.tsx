@@ -4,7 +4,7 @@ import { useDrawerUploadHook } from "../hook/useDrawerUploadHook";
 export const DrawerUpload: React.FC = () => {
   const { upload, message, handleUpload } = useDrawerUploadHook();
   return (
-    <label className="mx-3 flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-2.5 text-sm text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700">
+    <label className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-500 transition hover:bg-gray-200 hover:text-gray-700">
       <span>{message}</span>
       <input
         hidden

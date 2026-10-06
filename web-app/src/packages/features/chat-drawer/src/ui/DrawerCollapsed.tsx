@@ -13,10 +13,10 @@ export const DrawerCollapsed: React.FC = () => {
   const { handleUpload } = useDrawerUploadHook();
 
   return (
-    <div className="flex flex-col items-center gap-3 py-4">
+    <div className="flex flex-col items-center gap-2 py-3">
       <button
         type="button"
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-200 hover:text-gray-600"
         onClick={toggle}
         aria-label={t("header.expand")}
       >
@@ -24,22 +24,22 @@ export const DrawerCollapsed: React.FC = () => {
       </button>
       <button
         type="button"
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-        onClick={openSearch}
-        aria-label={t("search")}
-      >
-        ⌕
-      </button>
-      <button
-        type="button"
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-200 hover:text-gray-600"
         onClick={newChat}
         aria-label={t("collapsed.newChat")}
       >
         ＋
       </button>
+      <button
+        type="button"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-200 hover:text-gray-600"
+        onClick={openSearch}
+        aria-label={t("search")}
+      >
+        ⌕
+      </button>
       <label
-        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-200 hover:text-gray-600"
         aria-label={t("collapsed.upload")}
       >
         ⌁

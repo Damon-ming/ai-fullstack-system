@@ -4,7 +4,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./locales": "./src/locales/resources.ts"
+    "./locales": "./src/locales/resources.ts",
+    "./locales/en.json": "./src/locales/en.json",
+    "./locales/zh.json": "./src/locales/zh.json"
   },
   "dependencies": {
     "@ming/store": "workspace:*",

@@ -1,33 +1,47 @@
 @import "tailwindcss";
 
+/* 告诉 Tailwind v4 扫描 workspace 所有源码目录 */
+@source "../../../packages/**/*.{tsx,ts,jsx,js}";
+@source "../../../*/src/**/*.{tsx,ts,jsx,js}";
+
 @theme {
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
 }
 
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
   html, body, #root { width: 100%; height: 100%; margin: 0; }
+  body { background-color: #f9fafb; }
   button, input, textarea { font: inherit; }
 }
 
-@layer utilities {
-  /* 滚动条 —— 滚动时才显示（需 JS 切换 is-scrolling） */
-  .is-scrolling {
-    scrollbar-color: #c7cdea transparent;
-  }
-  .is-scrolling::-webkit-scrollbar {
-    width: 8px;
-  }
-  .is-scrolling::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .is-scrolling::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 99px;
-    background-clip: padding-box;
-    background-color: #c7cdea;
-  }
-  .is-scrolling::-webkit-scrollbar-thumb:hover {
-    background-color: #9da7df;
-  }
+/* ===== 滚动条：默认隐藏，滑动时出现 ===== */
+.scrollbar-hidden {
+  scrollbar-width: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.scrollbar-visible {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+.scrollbar-visible::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-visible::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background-clip: padding-box;
+  background-color: #d1d5db;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af;
 }

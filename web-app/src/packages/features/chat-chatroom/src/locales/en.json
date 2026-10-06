@@ -7,11 +7,11 @@
   "scrollToBottom": "Scroll to bottom",
   "scrollToBottomAria": "Scroll to bottom",
   "welcome": {
-    "title": "What would you like to chat about?",
+    "title": "Hi, What can I help with?",
     "subtitle": "Ask me something, write something, or upload files to analyze."
   },
   "input": {
-    "placeholder": "Type a message...",
+    "placeholder": "Send a message...",
     "send": "Send",
     "sendAria": "Send message"
   },

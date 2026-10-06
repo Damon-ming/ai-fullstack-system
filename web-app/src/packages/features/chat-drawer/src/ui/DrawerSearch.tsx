@@ -8,7 +8,7 @@ export const DrawerSearch: React.FC = () => {
   return (
     <button
       type="button"
-      className="mx-3 flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-500 transition hover:bg-gray-200 hover:text-gray-700"
       onClick={openSearch}
     >
       {t("search")}
