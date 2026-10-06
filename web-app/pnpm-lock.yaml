@@ -67,6 +67,9 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
     devDependencies:
+      '@ming/core-encryption':
+        specifier: workspace:*
+        version: link:../../core/encryption
       '@ming/core-network':
         specifier: workspace:*
         version: link:../../core/network
@@ -82,6 +85,8 @@ importers:
       '@ming/core-network':
         specifier: workspace:*
         version: link:../../core/network
+
+  src/packages/core/encryption: {}
 
   src/packages/core/log: {}
 

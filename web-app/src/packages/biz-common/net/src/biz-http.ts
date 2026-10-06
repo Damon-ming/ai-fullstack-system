@@ -1,3 +1,4 @@
+// web-app/src/packages/biz-common/net/src/biz-http.ts
 import {
   HttpManager,
   type HttpClient,
@@ -17,6 +18,7 @@ import type {
 import type { INetClient } from "./interface";
 import { BizRestClient } from "./restful/biz-rest-client";
 import { BizSseClient } from "./sse/biz-sse-client";
+import { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
 
 export class BizHttp implements INetClient {
   private readonly httpManager: HttpManager;
@@ -34,6 +36,7 @@ export class BizHttp implements INetClient {
       timeout = BizRestClient.getDefaultTimeout(),
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
+      enableEncryption = false,
       axiosConfig,
       ...restConfig
     } = config;
@@ -47,6 +50,17 @@ export class BizHttp implements INetClient {
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
     });
+
+    // 加密拦截器：OkHttp 风格，一个开关注册/不注册
+    if (enableEncryption) {
+      const encryption = createEncryptionInterceptors(
+        (url) => this.get(url),
+        (url, data) => this.post(url, data),
+      );
+      client.addRequestInterceptor(encryption.requestEncrypt);
+      client.addResponseInterceptor(encryption.responseDecrypt);
+    }
+
     return client;
   }
 

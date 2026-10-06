@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "devDependencies": {
+    "@ming/core-encryption": "workspace:*",
     "@ming/core-network": "workspace:*",
     "axios": "^1.7.7"
   },

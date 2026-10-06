@@ -22,6 +22,8 @@ export interface BizHttpClientConfig extends HttpClientConfig {
   sseMessageInterceptors?:
     | SseGlobalMessageInterceptor
     | SseGlobalMessageInterceptor[];
+  /** 是否启用全局请求/响应加密（默认 false） */
+  enableEncryption?: boolean;
 }
 
 export interface BaseRequest {}

@@ -22,14 +22,19 @@ export async function bootstrap(): Promise<void> {
  * 全局网络层初始化
  */
 function initGlobalNetwork() {
-  // 统一通过 Nginx 的 /api 反向代理访问后端，避免 80 与 8000 端口跨域。
+  // release 环境默认开启加密，debug 环境可通过 .env 手动开启
+  const enableEncryption =
+    import.meta.env.VITE_ENABLE_ENCRYPTION === "true" ||
+    (!import.meta.env.DEV && import.meta.env.VITE_ENABLE_ENCRYPTION !== "false");
+
   initNetApi({
     baseURL: "",
     timeout: 15000,
     headers: {
       "X-App-Version": "1.0.0",
     },
+    enableEncryption,
   });
 
-  // 提示：如果 initNetApi 需要动态注入 token，可以在这里或全局拦截器中配置
+  console.log(`[App] 网络层初始化完成 | 加密: ${enableEncryption ? "已启用" : "已关闭"}`);
 }
