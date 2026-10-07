@@ -1,11 +1,11 @@
 # app-server/src/com/damon/ming/main.py
 
-import os
 from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from com.damon.hong.debug import is_debug, is_trust_client_env
 from src.com.damon.ming.ai.inference.config import InferenceConfig
 from src.com.damon.ming.ai.rag_tool import get_rag_container
 from src.com.damon.ming.ai.registry.inference_registry import register_all_inferences
@@ -24,10 +24,10 @@ from src.com.damon.ming.router.upload.service.upload_service import UploadServic
 logger = pin("app.main")
 
 # ---------------------------------------------------------------------------
-# 环境判断
+# 环境判断（来自全局 debug 模块）
 # ---------------------------------------------------------------------------
 
-IS_DEBUG = os.environ.get("APP_ENV", "debug").lower() == "debug"
+IS_DEBUG = is_debug()
 
 
 # ---------------------------------------------------------------------------

@@ -23,19 +23,18 @@
   - /docs, /openapi.json → API 文档（开发环境）
 """
 
-import os
-
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
+from com.damon.hong.debug import is_debug, is_skip_auth, is_trust_client_env
 from src.com.damon.ming.log import pin
 
 logger = pin("middleware.auth")
 
-# 服务端自身环境（启动时确定）
-SERVER_IS_DEBUG = os.environ.get("APP_ENV", "debug").lower() == "debug"
+# 服务端自身环境（来自全局 debug 模块）
+SERVER_IS_DEBUG = is_debug()
 
 # Cookie 中 token 的 key 名（与前端约定一致）
 TOKEN_COOKIE_NAME = "device_auth_token"
@@ -72,10 +71,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # 0. 确定生效环境
         #     服务端 debug 时：信任前端传过来的 X-Client-Env（方便联调测试 release 行为）
         #     服务端 release 时：始终按 release 处理（防止客户端伪造）
-        if SERVER_IS_DEBUG:
-            effective_env = request.headers.get("x-client-env", "debug")
-        else:
-            effective_env = "release"
+        #     is_trust_client_env() 内部已判断 SERVER_IS_DEBUG + 运行时开关
+        effective_env = (
+            request.headers.get("x-client-env", "debug")
+            if is_trust_client_env()
+            else "release"
+        )
+
+        # 0.5 debug 环境下 skip_auth 开关开启 → 跳过认证
+        if is_skip_auth():
+            logger.debug("跳过认证（skip_auth 开关开启）| path=%s", request.url.path)
+            return await call_next(request)
 
         # 1. 公开路径直接放行
         if self._is_public_path(request.url.path):

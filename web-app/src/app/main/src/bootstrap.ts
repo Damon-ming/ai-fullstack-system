@@ -1,5 +1,6 @@
 // src/app/main/src/bootstrap.ts
 import { initNetApi } from "@ming/biz-common-net-api";
+import { useDebugStore } from "@ming/debug";
 import { i18n } from "@ming/i18n";
 
 /**
@@ -26,7 +27,8 @@ export async function bootstrap(): Promise<void> {
  *   release:  加密开、日志关、认证开、CORS 限制域名
  */
 function initGlobalNetwork() {
-  const isDebug = import.meta.env.DEV;
+  // 从全局 debug store 读取环境（后续所有模块统一从这里获取）
+  const isDebug = useDebugStore.getState().isDebug;
 
   initNetApi({
     baseURL: "",
