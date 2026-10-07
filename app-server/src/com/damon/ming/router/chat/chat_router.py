@@ -11,9 +11,9 @@ from src.com.damon.ming.ai.schemas.response import (
     BaseLLMSuccessResponse,
     ChatDeltaData,
 )
-from src.com.damon.ming.chat.schemas.bean import ChatRequest
-from src.com.damon.ming.chat.sse import SseEmitter, SseMessageFactory
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
+from src.com.damon.ming.router.chat.sse import SseEmitter, SseMessageFactory
 from sse_starlette.sse import EventSourceResponse
 
 logger = pin("chat.router")

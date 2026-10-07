@@ -24,9 +24,18 @@ export interface BizHttpClientConfig extends HttpClientConfig {
     | SseGlobalMessageInterceptor[];
   /** 是否启用全局请求/响应加密（默认 false） */
   enableEncryption?: boolean;
+  /** 请求签名密钥（与服务端共享）。启用加密时自动启用签名 */
+  signatureSecret?: string;
 }
 
-export interface BaseRequest {}
+export interface BaseRequest {
+  /** 请求时间戳（毫秒），由拦截器自动注入 */
+  timestamp?: number;
+  /** 请求随机数，由拦截器自动注入 */
+  nonce?: string;
+  /** HMAC-SHA256 签名，由拦截器自动注入 */
+  signature?: string;
+}
 
 /** 业务层包装后的完整响应 = 底层 http 壳 + 后端业务体 */
 export interface BizApiSuccessResponse<T = any> {

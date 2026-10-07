@@ -1,18 +1,24 @@
 # app-server/src/com/damon/ming/encryption/middleware.py
 """
-FastAPI 加密中间件
+FastAPI 加密 + 签名中间件
 
 职责（对上层路由透明）：
-  - 拦截请求体，如果 body 是加密格式则解密后再传给路由
-  - 拦截响应体，加密后再发回客户端
+  - 拦截请求体：
+    * JSON 加密格式 → 解密 → 验证签名
+    * FormData → 解密 meta_json_encrypted → 验证签名 → 还原 meta_json
+  - 拦截响应体：加密后再发回客户端
 
 协议：
-  加密 body = { "encrypted": base64, "nonce": base64, "keyId": string }
-  请求头 X-Encrypt-Enabled: 1  → 服务端对响应也加密返回
+  JSON:    加密 body = { "encrypted", "nonce", "keyId" }
+  FormData: meta_json_encrypted = { "encrypted", "nonce", "keyId" }
+           + form fields: timestamp, nonce, signature
 
-注意：
-  SSE 流式响应不在本中间件处理范围内（流式数据量小且实时性要求高），
-  流式接口如需加密需在 SSE 协议层另行处理。
+签名头：
+  X-Timestamp, X-Nonce, X-Signature  → 或从 FormData 字段读取
+
+错误码：
+  40101: 会话过期
+  40102: 签名验证失败
 """
 
 import json
@@ -21,6 +27,7 @@ from collections.abc import Callable
 from fastapi import Request
 from src.com.damon.ming.encryption.crypto_engine import AesGcmEngine, EncryptedPayload
 from src.com.damon.ming.encryption.key_management import KeyManager, SessionKey
+from src.com.damon.ming.encryption.signature import verify_signature
 from src.com.damon.ming.log import pin
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
@@ -28,15 +35,13 @@ from starlette.types import ASGIApp
 
 logger = pin("encryption.middleware")
 
-# 全局 KeyManager 实例（在 lifespan 中初始化）
 _key_manager: KeyManager | None = None
+_signature_secret: str = ""
 
 
 def get_key_manager() -> KeyManager:
     if _key_manager is None:
-        raise RuntimeError(
-            "KeyManager not initialized. Ensure lifespan calls initialize."
-        )
+        raise RuntimeError("KeyManager not initialized.")
     return _key_manager
 
 
@@ -45,99 +50,178 @@ def set_key_manager(km: KeyManager) -> None:
     _key_manager = km
 
 
-# ---------------------------------------------------------------------------
-# 中间件
-# ---------------------------------------------------------------------------
+def set_signature_secret(secret: str) -> None:
+    global _signature_secret
+    _signature_secret = secret
 
 
 class EncryptionMiddleware(BaseHTTPMiddleware):
-    """
-    透明加密 / 解密中间件。对路由 handler 完全透明。
-    """
+    """透明加密 / 解密 + 签名验证中间件。"""
 
     def __init__(self, app: ASGIApp):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         km = get_key_manager()
-
-        # 客户端是否期望加密响应（首次 key exchange 请求为 false）
         encrypt_response = request.headers.get("x-encrypt-enabled") == "1"
         session: SessionKey | None = None
 
-        # ---- 1. 尝试解密请求体 -------------------------------------------
         content_type = request.headers.get("content-type", "")
+
+        # ---- 1. JSON 加密请求：解密 + 验证签名 -----------------------
         if "application/json" in content_type:
             try:
                 raw_body = await request.body()
                 if raw_body:
                     body_json = json.loads(raw_body)
                     if _is_encrypted_body(body_json):
-                        session = km.get_session(body_json.get("keyId", ""))
+                        session = await self._decrypt_and_verify_json(
+                            request, km, body_json
+                        )
                         if session is None:
-                            logger.warning(
-                                "无效或过期的加密会话 | key_id=%s",
-                                body_json.get("keyId"),
-                            )
                             return JSONResponse(
                                 status_code=401,
                                 content={
                                     "code": 40101,
-                                    "data": {"error_msg": "Invalid or expired session"},
+                                    "data": {"error_msg": "Invalid session or bad signature"},
                                 },
                             )
-
-                        decrypted_str = AesGcmEngine.decrypt_payload(
-                            EncryptedPayload(
-                                encrypted=body_json["encrypted"],
-                                nonce=body_json["nonce"],
-                                key_id=body_json["keyId"],
-                            ),
-                            session.aes_key,
-                        )
-
-                        # 用解密后的明文替换 request.body() 的返回值
-                        _patch_request_body(request, decrypted_str)
-                        request.state.enc_session = session
                         encrypt_response = True
-                        logger.debug("请求已解密 | key_id=%s", session.key_id)
             except Exception as e:
-                logger.warning("请求解密失败: %s", e)
+                logger.warning("JSON 解密失败: %s", e)
                 return JSONResponse(
                     status_code=400,
                     content={"code": 40001, "data": {"error_msg": "Decryption failed"}},
                 )
 
-        # ---- 2. 调用下游路由 --------------------------------------------
+        # ---- 2. FormData 加密请求：解密 meta + 验证签名 ----------------
+        elif "multipart/form-data" in content_type:
+            try:
+                session = await self._decrypt_and_verify_formdata(request, km)
+                if session is None:
+                    return JSONResponse(
+                        status_code=401,
+                        content={
+                            "code": 40101,
+                            "data": {"error_msg": "Invalid session or bad signature"},
+                        },
+                    )
+                encrypt_response = True
+            except Exception as e:
+                logger.warning("FormData 解密失败: %s", e)
+                return JSONResponse(
+                    status_code=400,
+                    content={"code": 40002, "data": {"error_msg": "Meta decryption failed"}},
+                )
+
+        # ---- 3. 调用下游 --------------------------------------------
         response = await call_next(request)
 
-        # ---- 3. 加密响应 ------------------------------------------------
+        # ---- 4. 加密响应 --------------------------------------------
         if encrypt_response and _is_json_response(response):
-            try:
-                response_body = b""
-                async for chunk in response.body_iterator:
-                    response_body += chunk
+            return await self._encrypt_response(request, response, km, session)
 
-                body_json = json.loads(response_body)
-                # 优先使用本次请求解密时找到的 session
-                active_session = session or getattr(request.state, "enc_session", None)
-                if active_session is None:
-                    # 异常路径：客户端声明加密但无法找到会话，原样返回
-                    return Response(
-                        content=response_body,
-                        status_code=response.status_code,
-                        headers=dict(response.headers),
-                        media_type=response.media_type,
-                    )
+        return response
 
-                encrypted_payload = AesGcmEngine.encrypt_json(
-                    json.dumps(body_json, ensure_ascii=False),
-                    active_session.aes_key,
-                    active_session.key_id,
-                )
-                return JSONResponse(content=encrypted_payload.to_dict())
-            except Exception as e:
-                logger.warning("响应加密失败: %s", e)
+    # ==== 私有 ============================================================
+
+    async def _decrypt_and_verify_json(
+        self, request: Request, km: KeyManager, body_json: dict
+    ) -> SessionKey | None:
+        """解密 JSON 请求并验证签名。返回 session 或 None。"""
+        session = km.get_session(body_json.get("keyId", ""))
+        if session is None:
+            return None
+
+        decrypted_str = AesGcmEngine.decrypt_payload(
+            EncryptedPayload(
+                encrypted=body_json["encrypted"],
+                nonce=body_json["nonce"],
+                key_id=body_json["keyId"],
+            ),
+            session.aes_key,
+        )
+        decrypted_json = json.loads(decrypted_str)
+
+        # 验证签名
+        sig_ok, sig_reason = verify_signature(
+            params=decrypted_json,
+            secret=_signature_secret,
+            signature=decrypted_json.get("signature", ""),
+            timestamp=decrypted_json.get("timestamp", 0),
+            nonce=decrypted_json.get("nonce", ""),
+        )
+        if not sig_ok:
+            logger.warning("JSON 签名验证失败: %s", sig_reason)
+            return None
+
+        _patch_request_body(request, decrypted_str)
+        request.state.enc_session = session
+        logger.debug("JSON 请求已解密并验证签名 | key_id=%s", session.key_id)
+        return session
+
+    async def _decrypt_and_verify_formdata(
+        self, request: Request, km: KeyManager
+    ) -> SessionKey | None:
+        """解密 FormData 的 meta_json_encrypted 并验证签名。"""
+        form = await request.form()
+        meta_encrypted_str = form.get("meta_json_encrypted")
+        timestamp = int(form.get("timestamp", 0))
+        nonce = form.get("nonce", "")
+        signature = form.get("signature", "")
+
+        if not meta_encrypted_str:
+            return None
+
+        meta_encrypted = json.loads(meta_encrypted_str)
+        if not _is_encrypted_body(meta_encrypted):
+            return None
+
+        session = km.get_session(meta_encrypted.get("keyId", ""))
+        if session is None:
+            return None
+
+        # 解密 meta
+        decrypted_meta_str = AesGcmEngine.decrypt_payload(
+            EncryptedPayload(
+                encrypted=meta_encrypted["encrypted"],
+                nonce=meta_encrypted["nonce"],
+                key_id=meta_encrypted["keyId"],
+            ),
+            session.aes_key,
+        )
+        meta = json.loads(decrypted_meta_str)
+
+        # 验证签名
+        sig_ok, sig_reason = verify_signature(
+            params=meta,
+            secret=_signature_secret,
+            signature=signature,
+            timestamp=timestamp,
+            nonce=nonce,
+        )
+        if not sig_ok:
+            logger.warning("FormData 签名验证失败: %s", sig_reason)
+            return None
+
+        # 将解密后的 meta 注入 request.state，供路由读取
+        request.state.decrypted_meta = meta
+        request.state.enc_session = session
+        logger.debug("FormData 已解密并验证签名 | key_id=%s", session.key_id)
+        return session
+
+    async def _encrypt_response(
+        self, request: Request, response: Response, km: KeyManager, session: SessionKey | None
+    ) -> Response:
+        """加密 JSON 响应。"""
+        try:
+            response_body = b""
+            async for chunk in response.body_iterator:
+                response_body += chunk
+
+            body_json = json.loads(response_body)
+            active_session = session or getattr(request.state, "enc_session", None)
+            if active_session is None:
                 return Response(
                     content=response_body,
                     status_code=response.status_code,
@@ -145,16 +229,23 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                     media_type=response.media_type,
                 )
 
-        return response
-
-
-# ---------------------------------------------------------------------------
-# 私有辅助
-# ---------------------------------------------------------------------------
+            encrypted_payload = AesGcmEngine.encrypt_json(
+                json.dumps(body_json, ensure_ascii=False),
+                active_session.aes_key,
+                active_session.key_id,
+            )
+            return JSONResponse(content=encrypted_payload.to_dict())
+        except Exception as e:
+            logger.warning("响应加密失败: %s", e)
+            return Response(
+                content=response_body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type,
+            )
 
 
 def _is_encrypted_body(body: dict) -> bool:
-    """判断 body 是否为加密格式。"""
     return (
         isinstance(body, dict)
         and isinstance(body.get("encrypted"), str)
@@ -168,16 +259,9 @@ def _is_json_response(response: Response) -> bool:
 
 
 def _patch_request_body(request: Request, new_body: str) -> None:
-    """
-    替换 Starlette Request 的 body() 返回值。
-
-    Starlette 的 Request.body() 内部读取 stream 并缓存到 _body，
-    我们直接覆盖 _body 并替换 body() 方法，使下游路由能透明读取明文。
-    """
     body_bytes = new_body.encode("utf-8")
     request._body = body_bytes
 
-    # 替换 body() 方法，直接返回缓存的明文
     async def _new_body() -> bytes:
         return body_bytes
 

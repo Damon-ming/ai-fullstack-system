@@ -34,6 +34,7 @@ function initGlobalNetwork() {
       "X-App-Version": "1.0.0",
     },
     enableEncryption,
+    signatureSecret: import.meta.env.VITE_SIGNATURE_SECRET ?? "",
   });
 
   console.log(`[App] 网络层初始化完成 | 加密: ${enableEncryption ? "已启用" : "已关闭"}`);

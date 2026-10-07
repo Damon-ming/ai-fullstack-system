@@ -2,17 +2,15 @@
 import json
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.schemas.response import BaseFailedResponse, BaseSuccessResponse
-from src.com.damon.ming.upload.schemas.bean import (
+from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadFailedData,
     FileUploadRequest,
     FileUploadSuccessData,
 )
-from src.com.damon.ming.upload.service.upload_service import (
-    UploadService,
-)
+from src.com.damon.ming.router.upload.service.upload_service import UploadService
+from src.com.damon.ming.schemas.response import BaseFailedResponse, BaseSuccessResponse
 
 logger = pin("upload.router")
 
@@ -21,6 +19,7 @@ router = APIRouter(prefix="/api/files", tags=["文件管理"])
 
 @router.post("/upload/v1", response_model=None)
 async def save_files(
+    request: Request,
     files: list[UploadFile] = File(..., description="多文件"),  # noqa: B008
     meta_json: str = Form("", description="额外业务参数，JSON字符串"),
 ):
@@ -30,14 +29,14 @@ async def save_files(
         [file.filename for file in files],
     )
     try:
-        # 解析业务参数
-        req_data = (
-            FileUploadRequest(**json.loads(meta_json))
-            if meta_json
-            else FileUploadRequest()
-        )
+        # 优先从加密中间件注入的 decrypted_meta 读取（加密模式）
+        # 否则回退到明文 meta_json（兼容未加密场景）
+        meta = getattr(request.state, "decrypted_meta", None)
+        if meta is None:
+            meta = json.loads(meta_json) if meta_json else {}
 
-        # 调用service，路由不碰IO读写
+        req_data = FileUploadRequest(**meta) if meta else FileUploadRequest()
+
         saved_files = await UploadService.batch_save_files(files, req_data)
         logger.info("文件上传请求完成 | saved_count=%s", len(saved_files))
 

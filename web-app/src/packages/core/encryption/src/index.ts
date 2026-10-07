@@ -23,3 +23,8 @@ export {
   encryptJson,
   decryptPayload,
 } from "./crypto-engine";
+
+export {
+  generateNonce,
+  computeSignature,
+} from "./signature";

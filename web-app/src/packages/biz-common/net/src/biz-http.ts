@@ -37,6 +37,7 @@ export class BizHttp implements INetClient {
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
       enableEncryption = false,
+      signatureSecret = "",
       axiosConfig,
       ...restConfig
     } = config;
@@ -51,11 +52,12 @@ export class BizHttp implements INetClient {
       sseMessageInterceptors,
     });
 
-    // 加密拦截器：OkHttp 风格，一个开关注册/不注册
-    if (enableEncryption) {
+    // 加密 + 签名拦截器：OkHttp 风格，一个开关注册/不注册
+    if (enableEncryption && signatureSecret) {
       const encryption = createEncryptionInterceptors(
         (url) => this.get(url),
         (url, data) => this.post(url, data),
+        signatureSecret,
       );
       client.addRequestInterceptor(encryption.requestEncrypt);
       client.addResponseInterceptor(encryption.responseDecrypt);

@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import UploadFile
 from src.com.damon.ming.ai.rag_tool import get_rag_container
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.upload.schemas.bean import (
+from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadRequest,
     UploadInProgressError,
 )

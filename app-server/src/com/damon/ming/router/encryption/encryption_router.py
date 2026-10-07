@@ -4,7 +4,7 @@
 
 端点：
   GET  /api/encryption/key        → 获取 RSA 公钥（PEM 格式）
-  POST /api/encryption/session    → 注册 AES 会话
+  POST /api/encryption/session    → 注册 AES 会话（客户端传来 RSA 加密的 AES 密钥）
 
 这两个端点本身不加密（它们是加密体系的"引导"阶段）。
 """
@@ -23,7 +23,12 @@ router = APIRouter(prefix="/api/encryption", tags=["加密体系"])
 
 @router.get("/key")
 async def get_public_key():
-    """获取服务端 RSA 公钥（客户端用于加密 AES 会话密钥）。"""
+    """
+    获取服务端 RSA 公钥。
+
+    客户端拿到公钥后，用它加密自己生成的 AES-256 密钥，
+    再通过 POST /session 注册会话。
+    """
     km = get_key_manager()
     pem = km.get_public_key_pem()
     return BaseSuccessResponse(

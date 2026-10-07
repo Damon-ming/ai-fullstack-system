@@ -1,13 +1,19 @@
 // web-app/src/packages/biz-common/net/src/encryption/encryption-interceptor.ts
 /**
- * 加密拦截器装配 — 属于 biz-common/net 层
+ * 加密 + 签名拦截器装配 — 属于 biz-common/net 层
  *
- * 依赖方向（全部向下，无反向）：
- *   @ming/core-encryption ← net ← net-api ← feature
- *   @ming/core-network    ← net ← net-api ← feature
+ * 支持两种请求类型：
+ *   1. JSON: 整体签名 → 整体加密
+ *   2. FormData (文件上传): 提取 meta_json → 签名 + 加密 meta → 重新组装 FormData
  *
- * 密钥交换所需的 HTTP 调用通过注入的 get/post 函数提供，
- * 本模块不持有任何实例引用。
+ * 请求头：
+ *   X-Encrypt-Enabled: 1       → 服务端对响应也加密
+ *   X-Signature: <hex>         → 请求签名
+ *   X-Timestamp: <ms>          → 签名时间戳
+ *   X-Nonce: <hex>             → 签名随机数
+ *
+ * 响应流程：
+ *   收到密文 → 解密 → 明文 JSON
  */
 
 import type { InterceptorConfig } from "@ming/core-network";
@@ -17,6 +23,8 @@ import {
   rsaEncrypt,
   encryptJson,
   decryptPayload,
+  generateNonce,
+  computeSignature,
 } from "@ming/core-encryption";
 import type {
   EncryptedPayload,
@@ -26,7 +34,7 @@ import type {
 } from "@ming/core-encryption";
 
 // ---------------------------------------------------------------------------
-// netClient 的函数签名类型（不引用实例，只描述形状）
+// netClient 函数签名
 // ---------------------------------------------------------------------------
 
 type GetFn = <T = unknown>(
@@ -39,10 +47,14 @@ type PostFn = <T = unknown>(
 ) => Promise<[unknown, { data?: T } | null]>;
 
 // ---------------------------------------------------------------------------
-// 工厂函数：注入 get/post → 返回拦截器对
+// 工厂函数
 // ---------------------------------------------------------------------------
 
-export function createEncryptionInterceptors(get: GetFn, post: PostFn): {
+export function createEncryptionInterceptors(
+  get: GetFn,
+  post: PostFn,
+  signatureSecret: string,
+): {
   requestEncrypt: InterceptorConfig;
   responseDecrypt: InterceptorConfig;
 } {
@@ -73,7 +85,7 @@ export function createEncryptionInterceptors(get: GetFn, post: PostFn): {
   async function fetchPublicKey(): Promise<string> {
     const [err, res] = await get<PublicKeyResponse>("/api/encryption/key");
     if (err || !res?.data?.publicKey) {
-      throw new Error(`Failed to fetch public key`);
+      throw new Error("Failed to fetch public key");
     }
     return res.data.publicKey;
   }
@@ -89,7 +101,7 @@ export function createEncryptionInterceptors(get: GetFn, post: PostFn): {
       { encryptedAesKey: encryptedKeyB64 },
     );
     if (err || !res?.data?.keyId) {
-      throw new Error(`Session registration failed`);
+      throw new Error("Session registration failed");
     }
 
     return {
@@ -100,43 +112,28 @@ export function createEncryptionInterceptors(get: GetFn, post: PostFn): {
     };
   }
 
-  // ---- 请求拦截器 -----------------------------------------------------
+  // ---- 请求拦截器：签名 + 加密 ---------------------------------------
 
   const requestEncrypt: InterceptorConfig = {
     onFulfilled: async (request) => {
+      if (request.url?.includes("/api/encryption/")) return request;
+
+      // FormData：文件上传场景
+      if (request.data instanceof FormData) {
+        return handleFormData(request);
+      }
+
+      // JSON 请求
       const contentType = request.headers["content-type"] || "";
       if (!contentType.includes("application/json")) return request;
-      if (request.data instanceof FormData) return request;
       if (typeof request.data !== "object" || request.data === null) return request;
       if (isEncryptedPayload(request.data)) return request;
 
-      if (
-        request.url?.includes("/api/encryption/key") ||
-        request.url?.includes("/api/encryption/session")
-      ) {
-        return request;
-      }
-
-      try {
-        const session = await getSession();
-        const jsonStr = JSON.stringify(request.data);
-        const encrypted = await encryptJson(jsonStr, session.aesKey, session.keyId);
-        return {
-          ...request,
-          data: encrypted,
-          headers: {
-            ...request.headers,
-            "x-encrypt-enabled": "1",
-          },
-        };
-      } catch (error) {
-        console.warn("[Encryption] 请求加密失败，降级为明文:", error);
-        return request;
-      }
+      return handleJson(request);
     },
   };
 
-  // ---- 响应拦截器 -----------------------------------------------------
+  // ---- 响应拦截器：解密 ---------------------------------------------
 
   const responseDecrypt: InterceptorConfig = {
     onFulfilled: async (response) => {
@@ -145,10 +142,7 @@ export function createEncryptionInterceptors(get: GetFn, post: PostFn): {
       }
 
       const url = response.config?.url || "";
-      if (
-        url.includes("/api/encryption/key") ||
-        url.includes("/api/encryption/session")
-      ) {
+      if (url.includes("/api/encryption/")) {
         return response;
       }
 
@@ -181,6 +175,94 @@ export function createEncryptionInterceptors(get: GetFn, post: PostFn): {
   };
 
   return { requestEncrypt, responseDecrypt };
+
+  // ==== 私有 ==========================================================
+
+  /** 处理 JSON 请求：签名 + 加密 */
+  async function handleJson(request: {
+    data: unknown;
+    headers: Record<string, string>;
+    [key: string]: unknown;
+  }): Promise<unknown> {
+    try {
+      const signedData = await signParams(request.data as Record<string, unknown>);
+      const session = await getSession();
+      const jsonStr = JSON.stringify(signedData);
+      const encrypted = await encryptJson(jsonStr, session.aesKey, session.keyId);
+
+      return {
+        ...request,
+        data: encrypted,
+        headers: {
+          ...request.headers,
+          "x-encrypt-enabled": "1",
+        },
+      };
+    } catch (error) {
+      console.warn("[Encryption] JSON 加密失败，降级为明文:", error);
+      return request;
+    }
+  }
+
+  /** 处理 FormData 请求：加密 meta_json + 添加签名字段到 FormData */
+  async function handleFormData(request: {
+    data: FormData;
+    headers: Record<string, string>;
+    [key: string]: unknown;
+  }): Promise<unknown> {
+    try {
+      const formData = request.data as FormData;
+      const metaJson = formData.get("meta_json") as string | null;
+      const meta = metaJson ? JSON.parse(metaJson) : {};
+
+      // 签名
+      const timestamp = Date.now();
+      const nonce = generateNonce();
+      const signature = await computeSignature(meta, signatureSecret, timestamp, nonce);
+
+      // 加密 meta_json
+      const session = await getSession();
+      const encrypted = await encryptJson(
+        JSON.stringify(meta),
+        session.aesKey,
+        session.keyId,
+      );
+
+      // 重新组装 FormData：替换 meta_json 为加密版本，添加签名
+      const newFormData = new FormData();
+      // 复制所有文件
+      formData.forEach((value, key) => {
+        if (key !== "meta_json") {
+          newFormData.append(key, value);
+        }
+      });
+      newFormData.set("meta_json_encrypted", JSON.stringify(encrypted));
+      newFormData.set("timestamp", String(timestamp));
+      newFormData.set("nonce", nonce);
+      newFormData.set("signature", signature);
+
+      return {
+        ...request,
+        data: newFormData,
+        headers: {
+          ...request.headers,
+          "x-encrypt-enabled": "1",
+        },
+      };
+    } catch (error) {
+      console.warn("[Encryption] FormData 加密失败，降级为明文:", error);
+      return request;
+    }
+  }
+
+  async function signParams(
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const timestamp = Date.now();
+    const nonce = generateNonce();
+    const signature = await computeSignature(params, signatureSecret, timestamp, nonce);
+    return { ...params, timestamp, nonce, signature };
+  }
 }
 
 // ---------------------------------------------------------------------------
