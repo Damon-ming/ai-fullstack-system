@@ -41,7 +41,6 @@ export class RestfulClient {
       params: cfg.params,
       data: cfg.data,
       timeout: cfg.timeout,
-      withCredentials: cfg.withCredentials,
       responseType: cfg.responseType as NormalizedRequest["responseType"],
       signal: cfg.signal as AbortSignal | undefined,
     };
@@ -56,7 +55,6 @@ export class RestfulClient {
     target.data = normalized.data;
     target.params = normalized.params;
     target.timeout = normalized.timeout;
-    target.withCredentials = normalized.withCredentials;
     if (normalized.responseType)
       target.responseType = normalized.responseType as any;
     if (normalized.signal) target.signal = normalized.signal;

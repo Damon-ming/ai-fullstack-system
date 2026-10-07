@@ -28,6 +28,8 @@ export interface BizHttpClientConfig extends HttpClientConfig {
   signatureSecret?: string;
   /** 是否启用全局日志拦截器（打印请求/响应详情，仅 debug 环境使用） */
   enableLogging?: boolean;
+  /** 是否启用认证拦截器（注入设备 Token Cookie 头） */
+  enableAuth?: boolean;
 }
 
 export interface BaseRequest {

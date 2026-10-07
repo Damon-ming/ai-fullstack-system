@@ -67,10 +67,6 @@ export class SseTransport {
         method: "POST",
         headers,
         data: body,
-        withCredentials:
-          typeof commonConfig.withCredentials === "boolean"
-            ? commonConfig.withCredentials
-            : undefined,
         signal:
           opts?.signal ?? (commonConfig.signal as AbortSignal | undefined),
       },
@@ -103,13 +99,6 @@ export class SseTransport {
       headers: fetchHeaders,
       body: fetchBody,
       signal: normalizedRequest.signal ?? opts?.signal,
-      // "omit"	从不发送 Cookie
-      // "same-origin"（默认）	同源请求才发 Cookie，跨域不发
-      // "include"	同源和跨域都发 Cookie
-      // todo
-      credentials: normalizedRequest.withCredentials
-        ? "include"
-        : "same-origin",
     });
   }
 }

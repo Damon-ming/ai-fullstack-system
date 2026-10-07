@@ -1,5 +1,6 @@
 # app-server/src/com/damon/ming/main.py
 
+import os
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -14,7 +15,7 @@ from src.com.damon.ming.encryption.globals import (
 )
 from src.com.damon.ming.encryption.key_management import KeyManager
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.middleware import EncryptionMiddleware
+from src.com.damon.ming.middleware import AuthMiddleware, EncryptionMiddleware
 from src.com.damon.ming.router.chat import chat_router
 from src.com.damon.ming.router.encryption import encryption_router
 from src.com.damon.ming.router.upload import upload_router
@@ -22,10 +23,21 @@ from src.com.damon.ming.router.upload.service.upload_service import UploadServic
 
 logger = pin("app.main")
 
+# ---------------------------------------------------------------------------
+# 环境判断
+# ---------------------------------------------------------------------------
+
+IS_DEBUG = os.environ.get("APP_ENV", "debug").lower() == "debug"
+
+
+# ---------------------------------------------------------------------------
+# Lifespan
+# ---------------------------------------------------------------------------
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("lifespan startup begin")
+    logger.info("lifespan startup begin | debug=%s", IS_DEBUG)
 
     UploadService.init_sha_cache()
 
@@ -37,7 +49,9 @@ async def lifespan(app: FastAPI):
     logger.info("RSA-2048 密钥对生成完成")
 
     # 签名密钥（与环境变量保持一致，与前端共享）
-    sig_secret = "your-shared-secret-key-change-in-production"  # TODO: 从环境变量读取
+    sig_secret = os.environ.get(
+        "SIGNATURE_SECRET", "your-shared-secret-key-change-in-production"
+    )
     set_signature_secret(sig_secret)
     logger.info("签名密钥已设置")
 
@@ -58,39 +72,68 @@ async def lifespan(app: FastAPI):
     yield
     # ========== 应用关闭时 ==========
     logger.info("lifespan shutdown，释放资源")
-    # 在这里可以写关闭连接、释放资源的代码
 
 
-app = FastAPI(title="我的多功能应用", lifespan=lifespan, debug=True)
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+# ---------------------------------------------------------------------------
+# App 装配
+# ---------------------------------------------------------------------------
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源请求
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-# 加密中间件（必须在 CORS 之后、路由之前，才能拦截所有请求/响应）
+app = FastAPI(title="我的多功能应用", lifespan=lifespan, debug=IS_DEBUG)
+
+# ---- CORS ---------------------------------------------------------------
+# debug: 允许所有来源（前端 dev server 端口任意）
+# release: 限制为具体域名，allow_credentials 才能安全地设为 True
+# 注意：allow_origins=["*"] 与 allow_credentials=True 冲突（浏览器安全策略），
+#       release 环境必须指定具体 origins。
+
+if IS_DEBUG:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # debug 放行所有
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    logger.info("CORS: debug 模式，放行所有来源")
+else:
+    release_origins = os.environ.get(
+        "CORS_ORIGINS", "https://your-production-domain.com"
+    ).split(",")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in release_origins if o.strip()],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        allow_headers=["Authorization", "Content-Type", "X-*"],  # 允许自定义头
+    )
+    logger.info("CORS: release 模式，允许来源: %s", release_origins)
+
+# ---- 认证中间件 ---------------------------------------------------------
+# debug: 不启用认证（开发方便）
+# release: 启用，校验 device_auth_token
+# 注意：认证中间件在 CORS 之后，这样 CORS 预检请求（OPTIONS）不需要认证
+
+if not IS_DEBUG:
+    app.add_middleware(AuthMiddleware)
+    logger.info("认证中间件已启用（release 模式）")
+else:
+    logger.info("认证中间件已禁用（debug 模式）")
+
+# ---- 加密中间件 ---------------------------------------------------------
+
 app.add_middleware(EncryptionMiddleware)
 
-# 密钥交换路由（本身不加密，必须在 EncryptionMiddleware 之后注册，
-# 中间件会跳过对 /api/encryption/* 的处理）
+# ---- 路由 --------------------------------------------------------------
+
 app.include_router(encryption_router.router)
 app.include_router(upload_router.router)
 app.include_router(chat_router.router)
 logger.info("应用路由初始化完成")
 
+
 if __name__ == "__main__":
-    logger.info("启动 FastAPI 服务 | host=0.0.0.0 | port=8000")
+    logger.info("启动 FastAPI 服务 | host=0.0.0.0 | port=8000 | debug=%s", IS_DEBUG)
     uvicorn.run(
         app,
         host="0.0.0.0",

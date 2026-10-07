@@ -4,8 +4,6 @@
 /** 公共请求配置字段 */
 export interface CommonRequestConfig {
   timeout?: number;
-  /** 控制跨域请求时是否携带凭据（Cookie、认证头等） */
-  withCredentials?: boolean;
   responseType?: "json" | "text" | "blob" | "arraybuffer";
   /** 用于取消（中止）正在进行的请求 */
   signal?: AbortSignal;
@@ -47,7 +45,6 @@ export interface NormalizedRequest {
   params?: Record<string, any>;
   data?: any;
   timeout?: number;
-  withCredentials?: boolean;
   responseType?: "json" | "text" | "blob" | "arraybuffer";
   signal?: AbortSignal;
 }

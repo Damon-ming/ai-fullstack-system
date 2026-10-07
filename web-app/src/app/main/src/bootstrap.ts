@@ -20,9 +20,12 @@ export async function bootstrap(): Promise<void> {
 
 /**
  * 全局网络层初始化
+ *
+ * 单一环境判断派生所有开关：
+ *   debug:    加密关、日志开、认证关、CORS 全放行（前后端联调）
+ *   release:  加密开、日志关、认证开、CORS 限制域名
  */
 function initGlobalNetwork() {
-  // 单一环境判断：debug 开日志、关加密；release 开加密、关日志
   const isDebug = import.meta.env.DEV;
 
   initNetApi({
@@ -31,12 +34,15 @@ function initGlobalNetwork() {
     headers: {
       "X-App-Version": "1.0.0",
     },
+    // 安全开关（debug 关加密开日志，release 开加密关日志）
     enableEncryption: !isDebug,
+    enableAuth: !isDebug,
     enableLogging: isDebug,
+    // 签名密钥（加密关闭时留空）
     signatureSecret: import.meta.env.VITE_SIGNATURE_SECRET ?? "",
   });
 
   console.log(
-    `[App] 网络层初始化完成 | 加密: ${!isDebug ? "已启用" : "已关闭"} | 日志: ${isDebug ? "已启用" : "已关闭"}`,
+    `[App] 网络层初始化完成 | 加密: ${!isDebug ? "已启用" : "已关闭"} | 认证: ${!isDebug ? "已启用" : "已关闭"} | 日志: ${isDebug ? "已启用" : "已关闭"}`,
   );
 }

@@ -18,6 +18,7 @@ import type {
 import type { INetClient } from "./interface";
 import { BizRestClient } from "./restful/biz-rest-client";
 import { BizSseClient } from "./sse/biz-sse-client";
+import { createAuthInterceptor } from "./auth/auth-interceptor";
 import { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
 import { createLoggingInterceptors } from "./logging/logging-interceptor";
 
@@ -37,6 +38,7 @@ export class BizHttp implements INetClient {
       timeout = BizRestClient.getDefaultTimeout(),
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
+      enableAuth = false,
       enableEncryption = false,
       enableLogging = false,
       signatureSecret = "",
@@ -52,6 +54,17 @@ export class BizHttp implements INetClient {
     this.sseClient.configure({
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
+    });
+
+    // 环境头：所有请求携带 X-Client-Env，服务端可据此区分 debug/release 行为
+    client.addRequestInterceptor({
+      onFulfilled: (request) => ({
+        ...request,
+        headers: {
+          ...request.headers,
+          "X-Client-Env": import.meta.env.DEV ? "debug" : "release",
+        },
+      }),
     });
 
     // 加密 + 签名拦截器：OkHttp 风格，一个开关注册/不注册
@@ -70,6 +83,12 @@ export class BizHttp implements INetClient {
       const logging = createLoggingInterceptors();
       client.addRequestInterceptor(logging.requestLog);
       client.addResponseInterceptor(logging.responseLog);
+    }
+
+    // 认证拦截器：注入设备 Token Cookie 头
+    if (enableAuth) {
+      const auth = createAuthInterceptor();
+      client.addRequestInterceptor(auth);
     }
 
     return client;
