@@ -83,21 +83,23 @@ export function createEncryptionInterceptors(
   }
 
   async function fetchPublicKey(): Promise<string> {
-    const [err, res] = await get<PublicKeyResponse>("/api/encryption/key");
+    const [err, res] = await get<PublicKeyResponse>("/api/encryption/key/v1");
     if (err || !res?.data?.publicKey) {
       throw new Error("Failed to fetch public key");
     }
     return res.data.publicKey;
   }
 
-  async function createSession(publicKeyPem: string): Promise<EncryptionSession> {
+  async function createSession(
+    publicKeyPem: string,
+  ): Promise<EncryptionSession> {
     const { rawKeyBytes, cryptoKey } = await generateAesKey();
     const rsaKey = await importRsaPublicKey(publicKeyPem);
     const encryptedAesKey = await rsaEncrypt(rawKeyBytes, rsaKey);
     const encryptedKeyB64 = bytesToBase64(encryptedAesKey);
 
     const [err, res] = await post<SessionResponse>(
-      "/api/encryption/session",
+      "/api/encryption/session/v1",
       { encryptedAesKey: encryptedKeyB64 },
     );
     if (err || !res?.data?.keyId) {
@@ -116,7 +118,7 @@ export function createEncryptionInterceptors(
 
   const requestEncrypt: InterceptorConfig = {
     onFulfilled: async (request) => {
-      if (request.url?.includes("/api/encryption/")) return request;
+      if (request.url?.includes("/api/encryption/v1")) return request;
 
       // FormData：文件上传场景
       if (request.data instanceof FormData) {
@@ -126,7 +128,8 @@ export function createEncryptionInterceptors(
       // JSON 请求
       const contentType = request.headers["content-type"] || "";
       if (!contentType.includes("application/json")) return request;
-      if (typeof request.data !== "object" || request.data === null) return request;
+      if (typeof request.data !== "object" || request.data === null)
+        return request;
       if (isEncryptedPayload(request.data)) return request;
 
       return handleJson(request);
@@ -142,7 +145,7 @@ export function createEncryptionInterceptors(
       }
 
       const url = response.config?.url || "";
-      if (url.includes("/api/encryption/")) {
+      if (url.includes("/api/encryption/v1")) {
         return response;
       }
 
@@ -185,10 +188,16 @@ export function createEncryptionInterceptors(
     [key: string]: unknown;
   }): Promise<unknown> {
     try {
-      const signedData = await signParams(request.data as Record<string, unknown>);
+      const signedData = await signParams(
+        request.data as Record<string, unknown>,
+      );
       const session = await getSession();
       const jsonStr = JSON.stringify(signedData);
-      const encrypted = await encryptJson(jsonStr, session.aesKey, session.keyId);
+      const encrypted = await encryptJson(
+        jsonStr,
+        session.aesKey,
+        session.keyId,
+      );
 
       return {
         ...request,
@@ -218,7 +227,12 @@ export function createEncryptionInterceptors(
       // 签名
       const timestamp = Date.now();
       const nonce = generateNonce();
-      const signature = await computeSignature(meta, signatureSecret, timestamp, nonce);
+      const signature = await computeSignature(
+        meta,
+        signatureSecret,
+        timestamp,
+        nonce,
+      );
 
       // 加密 meta_json
       const session = await getSession();
@@ -260,7 +274,12 @@ export function createEncryptionInterceptors(
   ): Promise<Record<string, unknown>> {
     const timestamp = Date.now();
     const nonce = generateNonce();
-    const signature = await computeSignature(params, signatureSecret, timestamp, nonce);
+    const signature = await computeSignature(
+      params,
+      signatureSecret,
+      timestamp,
+      nonce,
+    );
     return { ...params, timestamp, nonce, signature };
   }
 }

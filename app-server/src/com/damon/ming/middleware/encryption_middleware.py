@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/encryption/middleware.py
+# app-server/src/com/damon/ming/middleware/encryption_middleware.py
 """
 FastAPI 加密 + 签名中间件
 
@@ -17,8 +17,15 @@ FastAPI 加密 + 签名中间件
   X-Timestamp, X-Nonce, X-Signature  → 或从 FormData 字段读取
 
 错误码：
-  40101: 会话过期
+  40001: JSON 解密失败
+  40002: FormData meta 解密失败
+  40101: 会话过期 / 无效
   40102: 签名验证失败
+
+设计说明：
+  本文件位于 middleware/ 而非 encryption/，因为它属于 HTTP 业务逻辑层。
+  encryption/ 只负责纯加密原语（AES-GCM、RSA-OAEP、HMAC-SHA256），
+  不感知 HTTP 协议。中间件是"用加密能力服务 HTTP 请求"的胶水层。
 """
 
 import json
@@ -26,6 +33,10 @@ from collections.abc import Callable
 
 from fastapi import Request
 from src.com.damon.ming.encryption.crypto_engine import AesGcmEngine, EncryptedPayload
+from src.com.damon.ming.encryption.globals import (
+    get_key_manager,
+    get_signature_secret,
+)
 from src.com.damon.ming.encryption.key_management import KeyManager, SessionKey
 from src.com.damon.ming.encryption.signature import verify_signature
 from src.com.damon.ming.log import pin
@@ -33,26 +44,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
-logger = pin("encryption.middleware")
-
-_key_manager: KeyManager | None = None
-_signature_secret: str = ""
-
-
-def get_key_manager() -> KeyManager:
-    if _key_manager is None:
-        raise RuntimeError("KeyManager not initialized.")
-    return _key_manager
-
-
-def set_key_manager(km: KeyManager) -> None:
-    global _key_manager
-    _key_manager = km
-
-
-def set_signature_secret(secret: str) -> None:
-    global _signature_secret
-    _signature_secret = secret
+logger = pin("middleware.encryption")
 
 
 class EncryptionMiddleware(BaseHTTPMiddleware):
@@ -83,7 +75,9 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                                 status_code=401,
                                 content={
                                     "code": 40101,
-                                    "data": {"error_msg": "Invalid session or bad signature"},
+                                    "data": {
+                                        "error_msg": "Invalid session or bad signature"
+                                    },
                                 },
                             )
                         encrypt_response = True
@@ -111,7 +105,10 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 logger.warning("FormData 解密失败: %s", e)
                 return JSONResponse(
                     status_code=400,
-                    content={"code": 40002, "data": {"error_msg": "Meta decryption failed"}},
+                    content={
+                        "code": 40002,
+                        "data": {"error_msg": "Meta decryption failed"},
+                    },
                 )
 
         # ---- 3. 调用下游 --------------------------------------------
@@ -146,7 +143,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         # 验证签名
         sig_ok, sig_reason = verify_signature(
             params=decrypted_json,
-            secret=_signature_secret,
+            secret=get_signature_secret(),
             signature=decrypted_json.get("signature", ""),
             timestamp=decrypted_json.get("timestamp", 0),
             nonce=decrypted_json.get("nonce", ""),
@@ -181,8 +178,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         if session is None:
             return None
 
-        # 解密 meta
-        decrypted_meta_str = AesGcmEngine.decrypt_payload(
+        meta_str = AesGcmEngine.decrypt_payload(
             EncryptedPayload(
                 encrypted=meta_encrypted["encrypted"],
                 nonce=meta_encrypted["nonce"],
@@ -190,12 +186,12 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             ),
             session.aes_key,
         )
-        meta = json.loads(decrypted_meta_str)
+        meta = json.loads(meta_str)
 
         # 验证签名
         sig_ok, sig_reason = verify_signature(
             params=meta,
-            secret=_signature_secret,
+            secret=get_signature_secret(),
             signature=signature,
             timestamp=timestamp,
             nonce=nonce,
@@ -211,7 +207,11 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         return session
 
     async def _encrypt_response(
-        self, request: Request, response: Response, km: KeyManager, session: SessionKey | None
+        self,
+        request: Request,
+        response: Response,
+        km: KeyManager,
+        session: SessionKey | None,
     ) -> Response:
         """加密 JSON 响应。"""
         try:

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from src.com.damon.ming.encryption.crypto_engine import AesGcmEngine
 
 # ---------------------------------------------------------------------------
 # 数据模型
@@ -79,10 +80,18 @@ class KeyManager:
         self._sessions: dict[str, SessionKey] = {}
         self._lock = threading.RLock()
 
+        # 数据加密密钥：key_id -> AES-256 key（持久化，用于数据库字段加解密）
+        # 与会话密钥分开管理 — 会话是 TTL 过期，数据密钥是版本轮换
+        self._data_keys: dict[str, bytes] = {}
+        self._current_data_key_id: str = ""
+
+        # 盲索引密钥：单一 key 即可，轮换需重建所有索引列
+        self._index_key: bytes = b""
+
     # ---- 生命周期 -------------------------------------------------------
 
     def initialize(self) -> None:
-        """生成 RSA 密钥对。应用启动时调用一次。"""
+        """生成 RSA 密钥对和数据密钥。应用启动时调用一次。"""
         self._private_key = rsa.generate_private_key(
             public_exponent=65537,
             key_size=self._rsa_key_size,
@@ -92,6 +101,14 @@ class KeyManager:
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
+
+        # 初始化默认数据密钥
+        default_key_id = "data-key-v1"
+        self._data_keys[default_key_id] = AesGcmEngine.generate_key()
+        self._current_data_key_id = default_key_id
+
+        # 初始化盲索引密钥
+        self._index_key = secrets.token_bytes(32)
 
     # ---- 公钥分发 -------------------------------------------------------
 
@@ -160,3 +177,46 @@ class KeyManager:
         expired = [k for k, v in self._sessions.items() if v.is_expired]
         for k in expired:
             del self._sessions[k]
+
+    # ---- 数据密钥（数据库字段加解密）------------------------------------
+
+    def get_data_key(self, key_id: str = "") -> bytes:
+        """
+        获取数据加密密钥。
+
+        参数：
+          key_id: 密钥 ID。为空时返回当前活跃密钥（用于加密新数据）。
+                 传入具体 ID 时返回历史密钥（用于解密旧数据）。
+        """
+        with self._lock:
+            if not key_id:
+                key_id = self._current_data_key_id
+            key = self._data_keys.get(key_id)
+            if key is None:
+                raise KeyError(f"Data key not found: {key_id}")
+            return key
+
+    def rotate_data_key(self, new_key_id: str) -> None:
+        """
+        轮换数据密钥 — 生成新密钥并设为当前活跃密钥。
+
+        旧密钥保留在 _data_keys 中（用于解密历史数据），
+        新写入的数据使用新密钥。
+
+        用法：
+          km.rotate_data_key("data-key-v2")
+          # 之后 encrypt() 默认用 v2，decrypt() 按密文中的 key_id 自动选
+        """
+        with self._lock:
+            if new_key_id in self._data_keys:
+                raise ValueError(f"Data key already exists: {new_key_id}")
+            self._data_keys[new_key_id] = AesGcmEngine.generate_key()
+            self._current_data_key_id = new_key_id
+
+    # ---- 盲索引密钥 -----------------------------------------------------
+
+    def get_index_key(self) -> bytes:
+        """获取盲索引密钥。"""
+        if not self._index_key:
+            raise RuntimeError("KeyManager not initialized. Call initialize() first.")
+        return self._index_key

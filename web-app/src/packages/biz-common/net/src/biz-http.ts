@@ -19,6 +19,7 @@ import type { INetClient } from "./interface";
 import { BizRestClient } from "./restful/biz-rest-client";
 import { BizSseClient } from "./sse/biz-sse-client";
 import { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
+import { createLoggingInterceptors } from "./logging/logging-interceptor";
 
 export class BizHttp implements INetClient {
   private readonly httpManager: HttpManager;
@@ -37,6 +38,7 @@ export class BizHttp implements INetClient {
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
       enableEncryption = false,
+      enableLogging = false,
       signatureSecret = "",
       axiosConfig,
       ...restConfig
@@ -61,6 +63,13 @@ export class BizHttp implements INetClient {
       );
       client.addRequestInterceptor(encryption.requestEncrypt);
       client.addResponseInterceptor(encryption.responseDecrypt);
+    }
+
+    // 日志拦截器：debug 环境打印请求/响应详情
+    if (enableLogging) {
+      const logging = createLoggingInterceptors();
+      client.addRequestInterceptor(logging.requestLog);
+      client.addResponseInterceptor(logging.responseLog);
     }
 
     return client;

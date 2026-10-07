@@ -26,6 +26,8 @@ export interface BizHttpClientConfig extends HttpClientConfig {
   enableEncryption?: boolean;
   /** 请求签名密钥（与服务端共享）。启用加密时自动启用签名 */
   signatureSecret?: string;
+  /** 是否启用全局日志拦截器（打印请求/响应详情，仅 debug 环境使用） */
+  enableLogging?: boolean;
 }
 
 export interface BaseRequest {

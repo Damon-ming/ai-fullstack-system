@@ -8,13 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.com.damon.ming.ai.inference.config import InferenceConfig
 from src.com.damon.ming.ai.rag_tool import get_rag_container
 from src.com.damon.ming.ai.registry.inference_registry import register_all_inferences
-from src.com.damon.ming.encryption.key_management import KeyManager
-from src.com.damon.ming.encryption.middleware import (
-    EncryptionMiddleware,
+from src.com.damon.ming.encryption.globals import (
     set_key_manager,
     set_signature_secret,
 )
+from src.com.damon.ming.encryption.key_management import KeyManager
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.middleware import EncryptionMiddleware
 from src.com.damon.ming.router.chat import chat_router
 from src.com.damon.ming.router.encryption import encryption_router
 from src.com.damon.ming.router.upload import upload_router
@@ -85,7 +85,6 @@ app.add_middleware(EncryptionMiddleware)
 # 密钥交换路由（本身不加密，必须在 EncryptionMiddleware 之后注册，
 # 中间件会跳过对 /api/encryption/* 的处理）
 app.include_router(encryption_router.router)
-
 app.include_router(upload_router.router)
 app.include_router(chat_router.router)
 logger.info("应用路由初始化完成")

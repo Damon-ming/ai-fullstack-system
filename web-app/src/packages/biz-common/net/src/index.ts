@@ -5,5 +5,6 @@ export * from "./restful/types";
 export * from "./error-code";
 export * from "./error-messages";
 export * from "./encryption/encryption-interceptor";
+export * from "./logging/logging-interceptor";
 export { BizHttp, bizHttp } from "./biz-http";
 export type { INetClient } from "./interface";

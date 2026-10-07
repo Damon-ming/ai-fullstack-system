@@ -17,6 +17,8 @@ AES-GCM 参数：
 """
 
 import base64
+import hashlib
+import hmac
 import json
 import os
 from dataclasses import dataclass
@@ -24,6 +26,7 @@ from dataclasses import dataclass
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from src.com.damon.ming.encryption.cipher_suite import CipherSuite
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -152,3 +155,107 @@ class RsaEngine:
                 label=None,
             ),
         )
+
+
+# ---------------------------------------------------------------------------
+# 统一加密入口 — 按套件分发
+# ---------------------------------------------------------------------------
+
+
+class CryptoEngine:
+    """
+    统一加密入口，按 CipherSuite 分发到具体算法。
+
+    用法：
+        # 数据库字段（随机 nonce，不可查询）
+        payload = CryptoEngine.encrypt(b"data", key, CipherSuite.DATABASE_AES_GCM)
+
+        # 数据库字段（确定性，支持等值查询）
+        payload = CryptoEngine.encrypt(b"data", key, CipherSuite.DATABASE_DETERMINISTIC)
+
+        # 盲索引（生成查询 token）
+        token = CryptoEngine.blind_index("phone", index_key)
+    """
+
+    @staticmethod
+    def encrypt(
+        plaintext: bytes,
+        key: bytes,
+        suite: CipherSuite,
+        aad: bytes | None = None,
+        nonce: bytes | None = None,
+    ) -> EncryptedPayload:
+        """
+        按套件加密。
+
+        参数：
+          plaintext: 待加密数据
+          key:        AES-256 密钥（32 字节）
+          suite:      加密套件，决定算法组合
+          aad:        附加认证数据（可选）
+          nonce:      外部指定 nonce（仅 DATABASE_DETERMINISTIC 用，其他套件自动生成）
+
+        返回：
+          EncryptedPayload（key_id 为空，由调用方填充）
+        """
+        if suite == CipherSuite.DATABASE_AES_GCM:
+            actual_nonce = nonce or os.urandom(AES_NONCE_SIZE)
+            # encrypt 返回的是 (nonce, ciphertext)，但我们自己传了 nonce
+            # 重新调用底层 AESGCM
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+            ct = AESGCM(key).encrypt(actual_nonce, plaintext, aad)
+            return EncryptedPayload(
+                encrypted=base64.b64encode(ct).decode("ascii"),
+                nonce=base64.b64encode(actual_nonce).decode("ascii"),
+                key_id="",  # 调用方需自行填充
+            )
+
+        if suite == CipherSuite.DATABASE_DETERMINISTIC:
+            # 确定性 nonce = HMAC(key, plaintext)[:12] — 相同明文总是产生相同 nonce
+            if nonce is None:
+                nonce = hmac.new(key, plaintext, hashlib.sha256).digest()[
+                    :AES_NONCE_SIZE
+                ]
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+            ct = AESGCM(key).encrypt(nonce, plaintext, aad)
+            return EncryptedPayload(
+                encrypted=base64.b64encode(ct).decode("ascii"),
+                nonce=base64.b64encode(nonce).decode("ascii"),
+                key_id="",
+            )
+
+        raise ValueError(f"CryptoEngine.encrypt 不支持套件: {suite}（{suite.value}）")
+
+    @staticmethod
+    def decrypt(
+        payload: EncryptedPayload,
+        key: bytes,
+        suite: CipherSuite,
+        aad: bytes | None = None,
+    ) -> bytes:
+        """按套件解密。"""
+        if suite in (CipherSuite.DATABASE_AES_GCM, CipherSuite.DATABASE_DETERMINISTIC):
+            nonce = base64.b64decode(payload.nonce)
+            ciphertext = base64.b64decode(payload.encrypted)
+            return AesGcmEngine.decrypt(nonce, ciphertext, key, aad)
+
+        raise ValueError(f"CryptoEngine.decrypt 不支持套件: {suite}（{suite.value}）")
+
+    @staticmethod
+    def blind_index(value: str, index_key: bytes, digest_size: int = 16) -> str:
+        """
+        生成盲索引 token。
+
+        用于加密字段的等值查询：WHERE blind_index_col = CryptoEngine.blind_index(?)。
+        相同 value + 相同 index_key → 相同 token。
+
+        使用 HMAC-SHA256（不是裸哈希），防止彩虹表攻击。
+        """
+        token = hmac.new(
+            index_key,
+            value.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()[: digest_size * 2]  # digest_size 字节 → 2x 十六进制字符
+        return token
