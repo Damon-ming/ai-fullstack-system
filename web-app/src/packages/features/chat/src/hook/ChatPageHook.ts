@@ -3,13 +3,14 @@ import {
   useChatUiStore,
   useChatUploadStore,
   useChatMessageStore,
+  useAccountStore,
 } from "@ming/store";
 import { useSearchStore } from "@ming/store";
-import { useAccountStore } from "@ming/store";
 import { useHistoryStore } from "@ming/store";
+import { useAppStore } from "@ming/store";
 import { useHistory } from "@ming/features-history-api";
 import { searchHistory } from "@ming/features-search-api";
-import { useAccount } from "@ming/features-account-api";
+import { useAccount, initDeviceToken } from "@ming/features-account-api";
 
 export function useChatPageHook() {
   const drawerOpen = useChatUiStore((state) => state.drawerOpen);
@@ -36,7 +37,6 @@ export function useChatPageHook() {
   const draftName = useAccountStore((state) => state.draftName);
   const closeAccount = useAccountStore((state) => state.closeDialog);
   const setAccountProfile = useAccountStore((state) => state.setProfile);
-  const setDraftName = useAccountStore((state) => state.setDraftName);
   const searchOpen = useSearchStore((state) => state.open);
   const searchKeyword = useSearchStore((state) => state.keyword);
   const closeSearch = useSearchStore((state) => state.closeSearch);
@@ -44,6 +44,15 @@ export function useChatPageHook() {
   const searchResults = searchHistory(searchKeyword);
   const upload = useChatUploadStore((state) => state.upload);
   const closeUpload = useChatUploadStore((state) => state.closeUpload);
+
+  // 进入页面时获取设备 Token，存入全局 store，后续拦截器自动携带
+  useEffect(() => {
+    const token = useAppStore.getState().token.deviceToken;
+    if (token) return;
+    initDeviceToken()
+      .then((t) => useAppStore.getState().token.setDeviceToken(t))
+      .catch((err) => console.error("[ChatPageHook] 获取设备 Token 失败:", err));
+  }, []);
 
   useEffect(() => {
     if (historyLoading) {

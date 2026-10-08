@@ -1,7 +1,8 @@
 // src/app/main/src/bootstrap.ts
 import { initNetApi } from "@ming/biz-common-net-api";
-import { useDebugStore } from "@ming/debug";
+import { isDebug } from "@ming/debug";
 import { i18n } from "@ming/i18n";
+import { useAppStore } from "@ming/store";
 
 /**
  * 应用最早期执行的全局初始化函数
@@ -22,13 +23,13 @@ export async function bootstrap(): Promise<void> {
 /**
  * 全局网络层初始化
  *
- * 单一环境判断派生所有开关：
- *   debug:    加密关、日志开、认证关、CORS 全放行（前后端联调）
- *   release:  加密开、日志关、认证开、CORS 限制域名
+ * 通过 isDebug 判断开关，一次性注入拦截器：
+ *   debug:    加密关、日志开、认证关
+ *   release:  加密开、日志关、认证开
  */
 function initGlobalNetwork() {
-  // 从全局 debug store 读取环境（后续所有模块统一从这里获取）
-  const isDebug = useDebugStore.getState().isDebug;
+  // 将环境标志写入全局 app-state
+  useAppStore.setState({ debug: { isDebug } });
 
   initNetApi({
     baseURL: "",
@@ -36,15 +37,13 @@ function initGlobalNetwork() {
     headers: {
       "X-App-Version": "1.0.0",
     },
-    // 安全开关（debug 关加密开日志，release 开加密关日志）
     enableEncryption: !isDebug,
     enableAuth: !isDebug,
     enableLogging: isDebug,
-    // 签名密钥（加密关闭时留空）
     signatureSecret: import.meta.env.VITE_SIGNATURE_SECRET ?? "",
   });
 
   console.log(
-    `[App] 网络层初始化完成 | 加密: ${!isDebug ? "已启用" : "已关闭"} | 认证: ${!isDebug ? "已启用" : "已关闭"} | 日志: ${isDebug ? "已启用" : "已关闭"}`,
+    `[App] 网络层初始化完成 | debug=${isDebug} | 加密: ${!isDebug ? "开" : "关"} | 认证: ${!isDebug ? "开" : "关"} | 日志: ${isDebug ? "开" : "关"}`,
   );
 }

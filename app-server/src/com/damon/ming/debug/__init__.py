@@ -1,4 +1,4 @@
-# app-server/src/com/damon/hong/debug/__init__.py
+# app-server/src/com/damon/ming/debug/__init__.py
 """
 服务端 Debug 全局状态
 
@@ -8,7 +8,7 @@
   - 提供运行时调试开关（如：强制信任客户端环境头、跳过认证）
 
 用法：
-  from com.damon.hong.debug import is_debug, is_trust_client_env, get_runtime_config
+  from com.damon.ming.debug import is_debug, is_trust_client_env, get_runtime_config
 
   if is_debug():
       logger.info("当前为 debug 模式")
@@ -19,7 +19,7 @@ from typing import Any
 
 from src.com.damon.ming.log import pin
 
-logger = pin("hong.debug")
+logger = pin("ming.debug")
 
 # ---------------------------------------------------------------------------
 # 核心环境标志

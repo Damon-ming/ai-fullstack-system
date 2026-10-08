@@ -18,7 +18,7 @@ import type {
 import type { INetClient } from "./interface";
 import { BizRestClient } from "./restful/biz-rest-client";
 import { BizSseClient } from "./sse/biz-sse-client";
-import { createAuthInterceptor } from "./auth/auth-interceptor";
+import { createTokenInterceptor } from "./auth/token-interceptor";
 import { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
 import { createLoggingInterceptors } from "./logging/logging-interceptor";
 
@@ -85,10 +85,10 @@ export class BizHttp implements INetClient {
       client.addResponseInterceptor(logging.responseLog);
     }
 
-    // 认证拦截器：注入设备 Token Cookie 头
+    // Token 拦截器：自动注入设备 token（从 store 或请求参数）
     if (enableAuth) {
-      const auth = createAuthInterceptor();
-      client.addRequestInterceptor(auth);
+      const tokenInterceptor = createTokenInterceptor();
+      client.addRequestInterceptor(tokenInterceptor);
     }
 
     return client;

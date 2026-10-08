@@ -23,13 +23,12 @@
   - /docs, /openapi.json → API 文档（开发环境）
 """
 
+from src.com.damon.ming.debug import is_debug, is_skip_auth, is_trust_client_env
+from src.com.damon.ming.log import pin
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
-
-from com.damon.hong.debug import is_debug, is_skip_auth, is_trust_client_env
-from src.com.damon.ming.log import pin
 
 logger = pin("middleware.auth")
 
@@ -42,6 +41,7 @@ TOKEN_COOKIE_NAME = "device_auth_token"
 # 无需认证的路径前缀列表
 PUBLIC_PATH_PREFIXES = (
     "/api/encryption",
+    "/api/account",
     "/health",
     "/docs",
     "/openapi.json",
@@ -165,16 +165,33 @@ import threading
 _token_lock = threading.Lock()
 
 
-def add_token(token: str) -> None:
-    """注册一个有效 token（客户端首次连接或登录时调用）。"""
+def add_token(token: str, device_id: str | None = None) -> None:
+    """
+    注册一个有效 token（客户端首次连接或登录时调用）。
+
+    如果传入 device_id，会建立 device_id → token 映射，
+    下次同一 device_id 请求时直接返回已有 token。
+    """
     with _token_lock:
         _token_whitelist.add(token)
+        if device_id:
+            _device_token_map[device_id] = token
+
+
+def get_token_by_device_id(device_id: str) -> str | None:
+    """根据 device_id 查询已签发的 token（如果存在）。"""
+    with _token_lock:
+        return _device_token_map.get(device_id)
 
 
 def remove_token(token: str) -> None:
     """移除 token（登出或安全重置时调用）。"""
     with _token_lock:
         _token_whitelist.discard(token)
+        # 清理 device_id 映射
+        for did, tok in list(_device_token_map.items()):
+            if tok == token:
+                del _device_token_map[did]
 
 
 def is_token_valid(token: str) -> bool:
@@ -185,3 +202,6 @@ def is_token_valid(token: str) -> bool:
 
 # 模块级白名单实例（供 Middleware 和管理函数共享）
 _token_whitelist: set[str] = set()
+
+# device_id → token 映射（同一设备复用 token）
+_device_token_map: dict[str, str] = {}

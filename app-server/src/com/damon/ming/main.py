@@ -5,10 +5,10 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from com.damon.hong.debug import is_debug, is_trust_client_env
 from src.com.damon.ming.ai.inference.config import InferenceConfig
 from src.com.damon.ming.ai.rag_tool import get_rag_container
 from src.com.damon.ming.ai.registry.inference_registry import register_all_inferences
+from src.com.damon.ming.debug import is_debug
 from src.com.damon.ming.encryption.globals import (
     set_key_manager,
     set_signature_secret,
@@ -16,6 +16,7 @@ from src.com.damon.ming.encryption.globals import (
 from src.com.damon.ming.encryption.key_management import KeyManager
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware import AuthMiddleware, EncryptionMiddleware
+from src.com.damon.ming.router.account import account_router
 from src.com.damon.ming.router.chat import chat_router
 from src.com.damon.ming.router.encryption import encryption_router
 from src.com.damon.ming.router.upload import upload_router
@@ -126,6 +127,7 @@ app.add_middleware(EncryptionMiddleware)
 
 # ---- 路由 --------------------------------------------------------------
 
+app.include_router(account_router.router)
 app.include_router(encryption_router.router)
 app.include_router(upload_router.router)
 app.include_router(chat_router.router)

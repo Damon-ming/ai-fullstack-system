@@ -1,3 +1,4 @@
+// web-app/src/packages/features/chat/src/ui/ChatPage.tsx
 import { ChatDrawer } from "@ming/features-chat-drawer";
 import { ChatChatroom } from "@ming/features-chat-chatroom";
 import React, { useMemo } from "react";
