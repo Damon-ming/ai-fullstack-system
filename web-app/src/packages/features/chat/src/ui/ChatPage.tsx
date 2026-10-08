@@ -3,9 +3,7 @@ import { ChatDrawer } from "@ming/features-chat-drawer";
 import { ChatChatroom } from "@ming/features-chat-chatroom";
 import React, { useMemo } from "react";
 import { useChatPageHook } from "../hook";
-import { useTranslation } from "@ming/i18n";
-import { i18n } from "@ming/i18n";
-
+import { i18n, useTranslation } from "@ming/i18n";
 export const ChatPage: React.FC = () => {
   const { t } = useTranslation("chat-page");
   const {

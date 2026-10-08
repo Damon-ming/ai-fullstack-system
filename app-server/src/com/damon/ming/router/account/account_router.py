@@ -16,13 +16,13 @@ import secrets
 
 from fastapi import APIRouter
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.middleware.auth_middleware import (
-    add_token,
-    get_token_by_device_id,
-)
 from src.com.damon.ming.router.account.schemas.bean import (
     TokenRequest,
     TokenResponseData,
+)
+from src.com.damon.ming.router.account.token_store import (
+    add_token,
+    get_token_by_device_id,
 )
 from src.com.damon.ming.schemas.response import BaseSuccessResponse
 

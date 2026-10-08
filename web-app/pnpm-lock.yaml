@@ -58,6 +58,15 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(lightningcss@1.32.0)
 
+  src/packages/biz-common/debug:
+    dependencies:
+      '@ming/store':
+        specifier: workspace:*
+        version: link:../../store
+      react:
+        specifier: '>=18.0.0'
+        version: 18.3.1
+
   src/packages/biz-common/net:
     dependencies:
       react:
@@ -282,6 +291,9 @@ importers:
 
   src/packages/store:
     dependencies:
+      '@ming/debug':
+        specifier: workspace:*
+        version: link:../biz-common/debug
       '@ming/features-account-api':
         specifier: workspace:*
         version: link:../features/account-api

@@ -51,7 +51,9 @@ export function useChatPageHook() {
     if (token) return;
     initDeviceToken()
       .then((t) => useAppStore.getState().token.setDeviceToken(t))
-      .catch((err) => console.error("[ChatPageHook] 获取设备 Token 失败:", err));
+      .catch((err) =>
+        console.error("[ChatPageHook] 获取设备 Token 失败:", err),
+      );
   }, []);
 
   useEffect(() => {

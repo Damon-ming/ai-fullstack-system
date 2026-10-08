@@ -203,4 +203,3 @@ export class BizHttp implements INetClient {
   }
 }
 
-export const bizHttp = new BizHttp();
