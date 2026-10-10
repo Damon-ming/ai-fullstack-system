@@ -5,7 +5,12 @@ import { createLogger } from "@ming/core-log";
 
 const log = createLogger("upload/hook");
 
-function createUploadRequest(files: File[]): UploadRequest {
+export interface UploadMeta {
+  description?: string
+  category?: string
+}
+
+function createUploadRequest(files: File[], meta?: UploadMeta): UploadRequest {
   if (!files.length) throw new Error("至少选择一个文件");
   const allowedTypes = new Set([
     "application/pdf",
@@ -26,17 +31,23 @@ function createUploadRequest(files: File[]): UploadRequest {
   }
   if (files.some((file) => file.size > 10 * 1024 * 1024))
     throw new Error("单个大小不能超过 10MB");
-  return { files };
+  return {
+    files,
+    description: meta?.description,
+    category: meta?.category,
+  };
 }
 
 export async function uploadFiles(
   files: File[],
+  meta?: UploadMeta,
 ): Promise<BizResult<UploadResponse>> {
   log.debug("upload started", {
     fileCount: files.length,
     fileNames: files.map((file) => file.name),
+    hasMeta: !!meta,
   });
-  const result = await requestUploadFile(createUploadRequest(files));
+  const result = await requestUploadFile(createUploadRequest(files, meta));
   log.debug("upload finished", { fileCount: files.length });
   return result;
 }

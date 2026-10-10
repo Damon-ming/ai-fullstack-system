@@ -1,0 +1,17 @@
+# app-server/src/com/damon/ming/encryption/encryption-config.yaml
+# 加密体系配置 —— 纯技术层，不含业务信息
+
+encryption:
+  # 开发环境
+  default:
+    rsa_key_size: 2048
+    session_ttl_hours: 24
+    kek_salt: "ming-ai-key-store-v1"
+    signature_tolerance_minutes: 5
+
+  # 生产环境
+  production:
+    rsa_key_size: 4096
+    session_ttl_hours: 12
+    kek_salt: "ming-ai-key-store-prod-v1"
+    signature_tolerance_minutes: 3

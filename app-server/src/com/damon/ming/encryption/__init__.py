@@ -10,6 +10,7 @@
   - HMAC-SHA256 请求签名（signature）
   - 加密套件枚举（cipher_suite.CipherSuite）
   - 数据库字段加解密（field_encryptor.FieldEncryptor）
+  - 密钥持久化存储后端（key_store/，含 BaseKeyStore / MemoryKeyStore / PgKeyStore）
 
 不提供（它们属于 HTTP 业务层）：
   - 中间件 → 见 middleware/encryption_middleware.py
@@ -23,6 +24,10 @@ from src.com.damon.ming.encryption.crypto_engine import (
     EncryptedPayload,
     RsaEngine,
 )
+from src.com.damon.ming.encryption.encryption_config_loader import (
+    EncryptionConfig,
+    EncryptionConfigLoader,
+)
 from src.com.damon.ming.encryption.field_encryptor import FieldEncryptor
 from src.com.damon.ming.encryption.key_management import KeyManager, SessionKey
 from src.com.damon.ming.encryption.signature import verify_signature
@@ -32,6 +37,8 @@ __all__ = [
     "CipherSuite",
     "CryptoEngine",
     "EncryptedPayload",
+    "EncryptionConfig",
+    "EncryptionConfigLoader",
     "FieldEncryptor",
     "KeyManager",
     "RsaEngine",

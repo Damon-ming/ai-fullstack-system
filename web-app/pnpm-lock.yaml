@@ -32,12 +32,18 @@ importers:
       '@ming/data-layer':
         specifier: workspace:*
         version: link:../../packages/data-layer
+      '@ming/debug':
+        specifier: workspace:*
+        version: link:../../packages/biz-common/debug
       '@ming/features-chat':
         specifier: workspace:*
         version: link:../../packages/features/chat
       '@ming/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@ming/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       i18next:
         specifier: ^26.4.2
         version: 26.4.2(typescript@5.9.3)
@@ -82,6 +88,9 @@ importers:
       '@ming/core-network':
         specifier: workspace:*
         version: link:../../core/network
+      '@ming/store':
+        specifier: workspace:*
+        version: link:../../store
       axios:
         specifier: ^1.7.7
         version: 1.19.0(debug@4.4.3)
@@ -125,6 +134,12 @@ importers:
 
   src/packages/features/account:
     dependencies:
+      '@ming/biz-common-net-api':
+        specifier: workspace:*
+        version: link:../../biz-common/net-api
+      '@ming/core-log':
+        specifier: workspace:*
+        version: link:../../core/log
       react:
         specifier: ^18.2.0
         version: 18.3.1

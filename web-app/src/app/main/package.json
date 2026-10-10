@@ -4,8 +4,10 @@
   "dependencies": {
     "@ming/biz-common-net-api": "workspace:*",
     "@ming/data-layer": "workspace:*",
+    "@ming/debug": "workspace:*",
     "@ming/features-chat": "workspace:*",
     "@ming/i18n": "workspace:*",
+    "@ming/store": "workspace:*",
     "i18next": "^26.4.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

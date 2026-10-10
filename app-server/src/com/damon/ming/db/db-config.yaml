@@ -1,0 +1,27 @@
+# app-server/src/com/damon/ming/db/db-config.yaml
+# 数据库连接配置 —— 纯技术层，不含业务信息
+
+db:
+  # 开发环境：本地 PostgreSQL
+  default:
+    host: localhost
+    port: 5432
+    dbname: ming_ai
+    user: postgres
+    password: ""
+    pool_min: 1
+    pool_max: 5
+    connect_timeout: 10
+    retry: 3
+
+  # 生产环境：通过环境变量覆盖（DB_CONNECTION 优先级更高）
+  production:
+    host: localhost
+    port: 5432
+    dbname: ming_ai_prod
+    user: postgres
+    password: ""
+    pool_min: 2
+    pool_max: 10
+    connect_timeout: 15
+    retry: 3

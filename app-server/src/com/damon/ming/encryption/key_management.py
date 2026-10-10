@@ -5,22 +5,43 @@
 职责：
   - 启动时生成 RSA-2048 密钥对（公钥用于分发，私钥驻留内存）
   - 维护 AES 会话密钥表（客户端注册后分配的对称密钥）
+  - 可选持久化到外部存储后端（PostgreSQL / 其他 BaseKeyStore 实现）
   - 提供密钥过期清理
+
+用法：
+  # 纯内存（向后兼容）
+  km = KeyManager()
+  km.initialize()
+
+  # 持久化到 PostgreSQL
+  from src.com.damon.ming.encryption.key_store import PgKeyStore, derive_kek
+  store = PgKeyStore("postgresql://user:pass@host/db")
+  kek = derive_kek()  # 从 MASTER_KEY 环境变量派生
+  km = KeyManager(key_store=store, kek=kek)
+  km.initialize()
 
 安全要点：
   - 私钥永不出内存，接口只暴露公钥 PEM
   - 会话 keyId 使用 secrets.token_urlsafe，不可预测
   - 会话有过期时间，过期后客户端需重新注册
+  - 持久化时 AES 密钥经 KEK 加密后落盘，DB 泄露不暴露密钥
 """
 
 import secrets
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+
+# BaseKeyStore 类型提示用（避免运行时导入，保持可选依赖）
+from typing import TYPE_CHECKING
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from src.com.damon.ming.encryption.crypto_engine import AesGcmEngine
+
+if TYPE_CHECKING:
+    from src.com.damon.ming.encryption.key_store.base_key_store import BaseKeyStore
 
 # ---------------------------------------------------------------------------
 # 数据模型
@@ -70,13 +91,31 @@ class KeyManager:
         session = km.get_session(session.key_id)
     """
 
-    def __init__(self, rsa_key_size: int = 2048):
+    def __init__(
+        self,
+        rsa_key_size: int = 2048,
+        key_store: "BaseKeyStore | None" = None,
+        kek: bytes | None = None,
+    ):
+        """
+        参数：
+          rsa_key_size: RSA 密钥位数
+          key_store:    可选的持久化存储后端。
+                        传入时，会话密钥会同步写入 store（AES 密钥经 KEK 加密后落盘）。
+                        为 None 时保持纯内存行为（向后兼容）。
+          kek:          Key Encryption Key，用于加密存储到 DB 的 AES 会话密钥。
+                        当 key_store 不为 None 时必须提供。
+        """
         self._rsa_key_size = rsa_key_size
         self._private_key: rsa.RSAPrivateKey | None = None
         self._public_key: rsa.RSAPublicKey | None = None
         self._public_key_pem: bytes | None = None
 
-        # 会话表：key_id -> SessionKey
+        # 持久化存储后端（可选）
+        self._key_store = key_store
+        self._kek = kek
+
+        # 会话表：key_id -> SessionKey（内存缓存，加速读取）
         self._sessions: dict[str, SessionKey] = {}
         self._lock = threading.RLock()
 
@@ -91,7 +130,7 @@ class KeyManager:
     # ---- 生命周期 -------------------------------------------------------
 
     def initialize(self) -> None:
-        """生成 RSA 密钥对和数据密钥。应用启动时调用一次。"""
+        """生成 RSA 密钥对和数据密钥，初始化存储后端。应用启动时调用一次。"""
         self._private_key = rsa.generate_private_key(
             public_exponent=65537,
             key_size=self._rsa_key_size,
@@ -110,6 +149,11 @@ class KeyManager:
         # 初始化盲索引密钥
         self._index_key = secrets.token_bytes(32)
 
+        # 初始化持久化存储后端
+        if self._key_store is not None:
+            self._key_store.initialize()
+            self._key_store.cleanup_expired()
+
     # ---- 公钥分发 -------------------------------------------------------
 
     def get_public_key_pem(self) -> bytes:
@@ -120,12 +164,17 @@ class KeyManager:
 
     # ---- 会话注册 -------------------------------------------------------
 
-    def register_session(self, encrypted_aes_key: bytes) -> SessionKey:
+    def register_session(
+        self,
+        encrypted_aes_key: bytes,
+        device_id: str = "",
+    ) -> SessionKey:
         """
         客户端使用 RSA 公钥加密 AES-256 密钥后，调用此方法注册会话。
 
         参数：
           encrypted_aes_key: 经 RSA-OAEP 加密的 32 字节 AES 密钥
+          device_id:         客户端设备标识（可选，用于持久化时绑定用户）
 
         返回：
           SessionKey（含 key_id，客户端后续请求需带上）
@@ -150,25 +199,75 @@ class KeyManager:
             self._cleanup_expired_unlocked()
             self._sessions[key_id] = session
 
+        # 3. 持久化到存储后端（如果配置了）
+        if self._key_store is not None and self._kek is not None:
+            from src.com.damon.ming.encryption.key_store import StoredSession, wrap_key
+
+            expires_at = datetime.now(tz=UTC) + timedelta(seconds=session.ttl_seconds)
+            stored = StoredSession(
+                key_id=key_id,
+                aes_key_enc=wrap_key(aes_key, self._kek),
+                device_id=device_id,
+                created_at=datetime.now(tz=UTC),
+                expires_at=expires_at,
+            )
+            try:
+                self._key_store.save_session(stored)
+            except Exception:
+                # 持久化失败不阻塞会话注册（降级为纯内存）
+                import logging
+
+                logging.getLogger("KeyManager").warning(
+                    "会话持久化失败，降级为纯内存 | key_id=%s", key_id
+                )
+
         return session
 
     # ---- 会话查找 -------------------------------------------------------
 
     def get_session(self, key_id: str) -> SessionKey | None:
-        """按 key_id 查找会话，同时做过期清理。找不到或已过期返回 None。"""
+        """按 key_id 查找会话。
+
+        查找顺序：内存缓存 → 持久化存储 → None。
+        从 store 加载成功后自动回填内存缓存。
+        """
         with self._lock:
             session = self._sessions.get(key_id)
-            if session is None:
-                return None
-            if session.is_expired:
-                del self._sessions[key_id]
-                return None
-            session.touch()
-            return session
+            if session is not None:
+                if session.is_expired:
+                    del self._sessions[key_id]
+                    return None
+                session.touch()
+                return session
+
+        # 内存 miss —— 尝试从 store 加载
+        if self._key_store is not None and self._kek is not None:
+            from src.com.damon.ming.encryption.key_store import (
+                unwrap_key,
+            )
+
+            stored = self._key_store.get_session(key_id)
+            if stored is not None:
+                try:
+                    aes_key = unwrap_key(stored.aes_key_enc, self._kek)
+                except Exception:
+                    return None
+                session = SessionKey(
+                    key_id=stored.key_id,
+                    aes_key=aes_key,
+                    created_at=stored.created_at.timestamp(),
+                )
+                with self._lock:
+                    self._sessions[key_id] = session
+                return session
+
+        return None
 
     def remove_session(self, key_id: str) -> None:
         with self._lock:
             self._sessions.pop(key_id, None)
+        if self._key_store is not None:
+            self._key_store.remove_session(key_id)
 
     # ---- 内部清理 -------------------------------------------------------
 

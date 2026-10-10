@@ -5,5 +5,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "@ming/biz-common-net-api": "workspace:*",
+    "@ming/core-log": "workspace:*"
+  },
   "peerDependencies": { "react": "^18.2.0" }
 }

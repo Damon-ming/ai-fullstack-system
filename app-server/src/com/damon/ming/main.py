@@ -1,5 +1,6 @@
 # app-server/src/com/damon/ming/main.py
 
+import os
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -42,12 +43,82 @@ async def lifespan(app: FastAPI):
 
     UploadService.init_sha_cache()
 
+    # ========== 数据库连接池初始化 ==========
+    # 优先级：DB_CONNECTION 环境变量 > YAML 配置文件 > 不启用
+    _db_conn = None
+    db_url = os.environ.get("DB_CONNECTION", "")
+    if db_url:
+        # 方式一：环境变量直接指定连接字符串
+        try:
+            from src.com.damon.ming.db import DbConfig, DbConnection, set_default_db
+
+            _db_config = DbConfig(connection_string=db_url)
+            _db_conn = DbConnection(_db_config)
+            _db_conn.initialize(min_conn=1, max_conn=5)
+            set_default_db(_db_conn)
+            logger.info("数据库连接池初始化完成（环境变量 DB_CONNECTION）")
+        except Exception as e:
+            logger.warning("数据库连接池初始化失败: %s", e)
+            _db_conn = None
+    else:
+        # 方式二：从 YAML 配置文件加载
+        try:
+            from src.com.damon.ming.db import DbConfigLoader, DbConnection, set_default_db
+
+            _loader = DbConfigLoader()
+            _db_config = _loader.load(profile="default" if IS_DEBUG else "production")
+            _db_conn = DbConnection(_db_config)
+            _pool = _loader.get_pool_settings(profile="default" if IS_DEBUG else "production")
+            _db_conn.initialize(**_pool)
+            set_default_db(_db_conn)
+            logger.info("数据库连接池初始化完成（YAML 配置）")
+        except FileNotFoundError:
+            logger.info("数据库配置文件不存在，跳过数据库初始化")
+        except Exception as e:
+            logger.warning("数据库连接池初始化失败: %s", e)
+            _db_conn = None
+
     # ========== 加密体系初始化 ==========
-    logger.info("正在生成 RSA 密钥对...")
-    key_manager = KeyManager(rsa_key_size=2048)
+    logger.info("正在初始化加密体系...")
+    _enc_config = None
+    try:
+        from src.com.damon.ming.encryption import EncryptionConfigLoader
+        _enc_config = EncryptionConfigLoader().load(
+            profile="default" if IS_DEBUG else "production"
+        )
+        logger.info(
+            "加密配置加载完成 | rsa=%d | ttl=%dh",
+            _enc_config.rsa_key_size,
+            _enc_config.session_ttl_hours,
+        )
+    except FileNotFoundError:
+        logger.info("加密配置文件不存在，使用默认参数")
+    except Exception as e:
+        logger.warning("加密配置加载失败，使用默认参数: %s", e)
+
+    _key_store = None
+    _kek = None
+    if _db_conn is not None:
+        try:
+            from src.com.damon.ming.encryption.key_store import (
+                PgKeyStore,
+                derive_kek,
+            )
+            _key_store = PgKeyStore(_db_conn)
+            _kek = derive_kek()
+            logger.info("密钥持久化存储已启用（PostgreSQL）")
+        except Exception as e:
+            logger.warning("密钥持久化存储初始化失败，降级为纯内存: %s", e)
+            _key_store = None
+            _kek = None
+    else:
+        logger.info("密钥持久化存储未配置（纯内存模式，重启后会话丢失）")
+
+    _rsa_size = _enc_config.rsa_key_size if _enc_config else 2048
+    key_manager = KeyManager(rsa_key_size=_rsa_size, key_store=_key_store, kek=_kek)
     key_manager.initialize()
     set_key_manager(key_manager)
-    logger.info("RSA-2048 密钥对生成完成")
+    logger.info("加密体系初始化完成 | rsa=%d", _rsa_size)
 
     # 签名密钥（与环境变量保持一致，与前端共享）
     sig_secret = os.environ.get(
@@ -73,6 +144,9 @@ async def lifespan(app: FastAPI):
     yield
     # ========== 应用关闭时 ==========
     logger.info("lifespan shutdown，释放资源")
+    if _db_conn is not None:
+        _db_conn.close()
+        logger.info("数据库连接池已关闭")
 
 
 # ---------------------------------------------------------------------------

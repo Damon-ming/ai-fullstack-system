@@ -1,13 +1,14 @@
+// web-app/src/packages/features/chat/src/hook/ChatPageHook.ts
 import { useEffect } from "react";
 import {
   useChatUiStore,
   useChatUploadStore,
   useChatMessageStore,
   useAccountStore,
+  useHistoryStore,
+  useSearchStore,
+  useAppStore,
 } from "@ming/store";
-import { useSearchStore } from "@ming/store";
-import { useHistoryStore } from "@ming/store";
-import { useAppStore } from "@ming/store";
 import { useHistory } from "@ming/features-history-api";
 import { searchHistory } from "@ming/features-search-api";
 import { useAccount, initDeviceToken } from "@ming/features-account-api";
@@ -35,6 +36,7 @@ export function useChatPageHook() {
   const setMessages = useChatMessageStore((state) => state.setMessages);
   const accountOpen = useAccountStore((state) => state.dialogOpen);
   const draftName = useAccountStore((state) => state.draftName);
+  const setDraftName = useAccountStore((state) => state.setDraftName);
   const closeAccount = useAccountStore((state) => state.closeDialog);
   const setAccountProfile = useAccountStore((state) => state.setProfile);
   const searchOpen = useSearchStore((state) => state.open);
