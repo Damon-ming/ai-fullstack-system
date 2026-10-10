@@ -1,5 +1,6 @@
 // web-app/src/packages/biz-common/net/src/restful/biz-rest-client.ts
 import type { HttpManager, RequestConfig } from "@ming/core-network";
+import { createLogger } from "@ming/core-log";
 import { BizCodeRange, getBizCodeCategory } from "../error-code";
 import type {
   BizApiSuccessResponse,
@@ -11,6 +12,7 @@ import {
   formatAxiosException,
 } from "../shared/error-mapper";
 
+const log = createLogger("net/restful");
 const DEFAULT_TIMEOUT = 10000;
 
 export class BizRestClient {
@@ -81,20 +83,20 @@ export class BizRestClient {
       try {
         onFailed?.(errRes);
       } catch (error) {
-        console.error("[BizRestClient] onFailed callback error:", error);
+        log.error("onFailed callback error", error);
       }
     } else if (successRes) {
       try {
         onSuccess?.(successRes);
       } catch (error) {
-        console.error("[BizRestClient] onSuccess callback error:", error);
+        log.error("onSuccess callback error", error);
       }
     }
 
     try {
       onFinally?.();
     } catch (error) {
-      console.error("[BizRestClient] onFinally callback error:", error);
+      log.error("onFinally callback error", error);
     }
     return [errRes, successRes];
   }

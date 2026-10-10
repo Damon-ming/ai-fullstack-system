@@ -29,6 +29,9 @@ importers:
       '@ming/biz-common-net-api':
         specifier: workspace:*
         version: link:../../packages/biz-common/net-api
+      '@ming/core-log':
+        specifier: workspace:*
+        version: link:../../packages/core/log
       '@ming/data-layer':
         specifier: workspace:*
         version: link:../../packages/data-layer
@@ -64,14 +67,7 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(lightningcss@1.32.0)
 
-  src/packages/biz-common/debug:
-    dependencies:
-      '@ming/store':
-        specifier: workspace:*
-        version: link:../../store
-      react:
-        specifier: '>=18.0.0'
-        version: 18.3.1
+  src/packages/biz-common/debug: {}
 
   src/packages/biz-common/net:
     dependencies:
@@ -85,6 +81,9 @@ importers:
       '@ming/core-encryption':
         specifier: workspace:*
         version: link:../../core/encryption
+      '@ming/core-log':
+        specifier: workspace:*
+        version: link:../../core/log
       '@ming/core-network':
         specifier: workspace:*
         version: link:../../core/network

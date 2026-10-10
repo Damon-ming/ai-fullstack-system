@@ -1,4 +1,7 @@
 import React, { Component, ReactNode } from "react";
+import { createLogger } from "@ming/core-log";
+
+const log = createLogger("drawer/error-boundary");
 
 interface Props {
   children: ReactNode;
@@ -17,7 +20,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("[Drawer ErrorBoundary]", error, errorInfo);
+    log.error("Drawer ErrorBoundary caught an error", error, {
+      componentStack: errorInfo.componentStack ?? "",
+    });
   }
 
   render() {

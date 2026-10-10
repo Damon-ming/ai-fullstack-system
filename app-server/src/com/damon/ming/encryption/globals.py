@@ -12,6 +12,7 @@
 """
 
 from src.com.damon.ming.encryption.key_management import KeyManager
+from src.com.damon.ming.exception import EncryptionError
 
 _key_manager: KeyManager | None = None
 _signature_secret: str = ""
@@ -20,7 +21,7 @@ _signature_secret: str = ""
 def get_key_manager() -> KeyManager:
     """获取全局 KeyManager 实例。"""
     if _key_manager is None:
-        raise RuntimeError(
+        raise EncryptionError(
             "KeyManager not initialized. Call set_key_manager() in lifespan."
         )
     return _key_manager

@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/encryption/key_store/pg_key_store.py
+# app-server/src/com/damon/ming/router/encryption/pg_key_store.py
 """
 PostgreSQL 密钥存储实现 —— 会话密钥持久化到数据库。
 
@@ -161,9 +161,7 @@ class PgKeyStore(BaseKeyStore):
         )
 
     def get_session_by_device(self, device_id: str) -> StoredSession | None:
-        rows = self._db.execute(
-            _GET_BY_DEVICE, (device_id,), commit=False, fetch=True
-        )
+        rows = self._db.execute(_GET_BY_DEVICE, (device_id,), commit=False, fetch=True)
         if not rows:
             return None
         row = rows[0]

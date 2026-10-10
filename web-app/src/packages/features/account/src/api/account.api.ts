@@ -2,8 +2,11 @@
 import { netClient } from "@ming/biz-common-net-api";
 import type { BizResult } from "@ming/biz-common-net-api";
 import { createLogger } from "@ming/core-log";
-import type { DeviceTokenRequest, DeviceTokenResponse } from "./types";
-import type { AccountProfile } from "./types";
+import type {
+  DeviceTokenRequest,
+  DeviceTokenResponse,
+  AccountProfile,
+} from "./types";
 
 const log = createLogger("account/api");
 
@@ -38,7 +41,11 @@ function getOrCreateDeviceId(): string {
 // ---------------------------------------------------------------------------
 
 const key = "ming-ai-account";
-const fallback: AccountProfile = { id: "murphy", name: "Murphy", avatarText: "M" };
+const fallback: AccountProfile = {
+  id: "murphy",
+  name: "Murphy",
+  avatarText: "M",
+};
 
 export const accountStore = {
   current(): AccountProfile {
@@ -83,7 +90,9 @@ export async function initDeviceToken(): Promise<string> {
   const [err, resp] = await requestDeviceToken({ device_id: deviceId });
 
   if (err || !resp?.data?.token) {
-    throw new Error(`设备 Token 签发失败: ${err?.data?.error_msg || "未知错误"}`);
+    throw new Error(
+      `设备 Token 签发失败: ${err?.data?.error_msg || "未知错误"}`,
+    );
   }
 
   localStorage.setItem(TOKEN_KEY, resp.data.token);

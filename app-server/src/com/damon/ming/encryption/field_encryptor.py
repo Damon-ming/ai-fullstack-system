@@ -60,6 +60,9 @@ def _pack_ciphertext(key_id: str, nonce: bytes, ciphertext: bytes) -> str:
         raise ValueError(f"key_id too long: {len(key_id_bytes)} bytes (max 255)")
 
     packed = (
+        # 把 Python 的数字，打包成固定格式的二进制字节；或者把二进制字节解析回数字。
+        # - `!`：**大端序（网络字节序）**，跨平台解析不会乱（Windows/Linux 解析一致）
+        # - `B`：unsigned char，**1 字节无符号整数，范围 0~255**
         struct.pack("!B", FORMAT_VERSION)
         + struct.pack("!B", len(key_id_bytes))
         + key_id_bytes
@@ -72,6 +75,8 @@ def _pack_ciphertext(key_id: str, nonce: bytes, ciphertext: bytes) -> str:
 def _unpack_ciphertext(packed_b64: str) -> tuple[str, bytes, bytes]:
     """从 base64 字符串解包出 (key_id, nonce, ciphertext)。"""
     raw = base64.b64decode(packed_b64)
+    # 二进制是一整块连续流，没有分隔符。
+    # 靠 offset 记录**当前读到哪里**，一段一段依次截取：版本 → key_id 长度 → key_id → nonce → 密文。
     offset = 0
 
     version = raw[offset]

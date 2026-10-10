@@ -1,5 +1,6 @@
 // web-app/src/packages/features/chat/src/hook/ChatPageHook.ts
 import { useEffect } from "react";
+import { createLogger } from "@ming/core-log";
 import {
   useChatUiStore,
   useChatUploadStore,
@@ -12,6 +13,8 @@ import {
 import { useHistory } from "@ming/features-history-api";
 import { searchHistory } from "@ming/features-search-api";
 import { useAccount, initDeviceToken } from "@ming/features-account-api";
+
+const log = createLogger("chat/page");
 
 export function useChatPageHook() {
   const drawerOpen = useChatUiStore((state) => state.drawerOpen);
@@ -54,7 +57,7 @@ export function useChatPageHook() {
     initDeviceToken()
       .then((t) => useAppStore.getState().token.setDeviceToken(t))
       .catch((err) =>
-        console.error("[ChatPageHook] 获取设备 Token 失败:", err),
+        log.error("获取设备 Token 失败", err),
       );
   }, []);
 

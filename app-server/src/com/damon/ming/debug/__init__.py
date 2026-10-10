@@ -27,7 +27,7 @@ logger = pin("ming.debug")
 
 
 def is_debug() -> bool:
-    """当前是否为 debug 环境（读取 APP_ENV 环境变量，默认 release）。"""
+    """当前是否为 debug 环境（读取 APP_ENV 环境变量，默认 release"""
     return os.environ.get("APP_ENV", "release").lower() == "debug"
 
 
@@ -65,9 +65,7 @@ class RuntimeConfig:
     def set(self, key: str, value: Any) -> None:
         """设置运行时开关（仅 debug 环境允许修改）。"""
         if not is_debug():
-            logger.warning(
-                "release 环境不允许修改运行时开关: %s", key
-            )
+            logger.warning("release 环境不允许修改运行时开关: %s", key)
             return
         self._debug_overrides[key] = value
         logger.info("调试开关已设置: %s = %s", key, value)

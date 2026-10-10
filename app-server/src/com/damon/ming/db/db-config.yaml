@@ -6,7 +6,7 @@ db:
   default:
     host: localhost
     port: 5432
-    dbname: ming_ai
+    dbname: damon_dev
     user: postgres
     password: ""
     pool_min: 1
@@ -18,7 +18,7 @@ db:
   production:
     host: localhost
     port: 5432
-    dbname: ming_ai_prod
+    dbname: damon_prod
     user: postgres
     password: ""
     pool_min: 2

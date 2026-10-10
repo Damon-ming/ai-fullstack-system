@@ -1,23 +1,27 @@
 // src/app/main/src/bootstrap.ts
 import { initNetApi } from "@ming/biz-common-net-api";
+import { createLogger } from "@ming/core-log";
 import { isDebug } from "@ming/debug";
 import { i18n } from "@ming/i18n";
 import { useAppStore } from "@ming/store";
+
+const log = createLogger("app/bootstrap");
 
 /**
  * 应用最早期执行的全局初始化函数
  * 必须在 ReactDOM.render / createRoot 之前调用并 await 完成
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function bootstrap(): Promise<void> {
-  console.log("[App] Starting initialization...");
+  log.info("Starting initialization...");
 
   // 1. 最高优先级：初始化网络层
   initGlobalNetwork();
 
   // 2. 初始化 i18n
-  console.log(`[App] i18n initialized, language: ${i18n.language}`);
+  log.info(`i18n initialized, language: ${i18n.language}`);
 
-  console.log("[App] Initialization complete.");
+  log.info("Initialization complete.");
 }
 
 /**
@@ -43,7 +47,7 @@ function initGlobalNetwork() {
     signatureSecret: import.meta.env.VITE_SIGNATURE_SECRET ?? "",
   });
 
-  console.log(
-    `[App] 网络层初始化完成 | debug=${isDebug} | 加密: ${!isDebug ? "开" : "关"} | 认证: ${!isDebug ? "开" : "关"} | 日志: ${isDebug ? "开" : "关"}`,
+  log.info(
+    `网络层初始化完成 | debug=${isDebug} | 加密: ${!isDebug ? "开" : "关"} | 认证: ${!isDebug ? "开" : "关"} | 日志: ${isDebug ? "开" : "关"}`,
   );
 }

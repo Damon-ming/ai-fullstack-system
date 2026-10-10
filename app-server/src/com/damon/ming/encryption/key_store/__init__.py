@@ -1,17 +1,18 @@
 # app-server/src/com/damon/ming/encryption/key_store/__init__.py
 """
-密钥存储后端 —— AES 会话密钥的持久化层。
+密钥存储后端 —— AES 会话密钥的持久化层（纯技术，可移植）。
 
 提供：
   - BaseKeyStore:        存储后端抽象接口
   - StoredSession:       会话记录数据模型
   - MemoryKeyStore:      内存实现（开发 / fallback）
-  - PgKeyStore:          PostgreSQL 实现（生产持久化）
   - derive_kek / wrap_key / unwrap_key: KEK 派生与密钥加解密工具
 
+DB 后端实现位于业务层 router/encryption/pg_key_store.py。
+
 使用方式：
-  # 选择后端
-  store: BaseKeyStore = PgKeyStore(conn_string)  # 或 MemoryKeyStore()
+  # 纯内存（默认）
+  store: BaseKeyStore = MemoryKeyStore()
   store.initialize()
 
   # 保存会话（AES 密钥先用 wrap_key 加密）
@@ -39,16 +40,9 @@ from src.com.damon.ming.encryption.key_store.kek_provider import (
 )
 from src.com.damon.ming.encryption.key_store.memory_key_store import MemoryKeyStore
 
-# PgKeyStore 延迟导入 —— 避免未安装 psycopg2 时崩溃
-try:
-    from src.com.damon.ming.encryption.key_store.pg_key_store import PgKeyStore
-except ImportError:
-    PgKeyStore = None  # type: ignore[assignment,misc]
-
 __all__ = [
     "BaseKeyStore",
     "MemoryKeyStore",
-    "PgKeyStore",
     "StoredSession",
     "derive_kek",
     "unwrap_key",

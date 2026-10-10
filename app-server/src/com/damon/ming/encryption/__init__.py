@@ -10,9 +10,10 @@
   - HMAC-SHA256 请求签名（signature）
   - 加密套件枚举（cipher_suite.CipherSuite）
   - 数据库字段加解密（field_encryptor.FieldEncryptor）
-  - 密钥持久化存储后端（key_store/，含 BaseKeyStore / MemoryKeyStore / PgKeyStore）
+  - 密钥存储后端抽象（key_store/，含 BaseKeyStore / MemoryKeyStore）
 
 不提供（它们属于 HTTP 业务层）：
+  - PostgreSQL 存储实现 → 见 router/encryption/pg_key_store.py
   - 中间件 → 见 middleware/encryption_middleware.py
   - 路由 → 见 router/encryption/encryption_router.py
 """

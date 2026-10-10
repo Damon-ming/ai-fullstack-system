@@ -26,6 +26,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 
 
+# `frozen=True`：**把这个 dataclass 实例变成【不可变对象】，实例创建之后，不能修改它的属性**。
 @dataclass(frozen=True)
 class StoredSession:
     """一条已持久化的 AES 会话密钥记录。
@@ -46,6 +47,7 @@ class StoredSession:
 
     @property
     def is_expired(self) -> bool:
+        # `tzinfo` 是读取这个 datetime 对象身上已经绑定好的时区实例，不是去 “获取 / 查询” 新时区。
         return datetime.now(tz=self.expires_at.tzinfo) > self.expires_at
 
 
@@ -58,8 +60,8 @@ class BaseKeyStore(ABC):
     """密钥存储后端抽象类。
 
     用法：
-        store = PgKeyStore(conn_string, kek_provider)
-        store.initialize()  # 建表
+        store = MemoryKeyStore()
+        store.initialize()
 
         store.save_session(session)
         record = store.get_session(key_id)

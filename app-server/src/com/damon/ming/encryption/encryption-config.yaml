@@ -6,12 +6,14 @@ encryption:
   default:
     rsa_key_size: 2048
     session_ttl_hours: 24
-    kek_salt: "ming-ai-key-store-v1"
+    kek_salt: "damon-common-key-store-v1"
     signature_tolerance_minutes: 5
+    signature_secret: "damon-common-signature-secret"  # 开发环境可直接写死，生产环境必须通过环境变量注入
 
   # 生产环境
   production:
     rsa_key_size: 4096
     session_ttl_hours: 12
-    kek_salt: "ming-ai-key-store-prod-v1"
+    kek_salt: "damon-common-key-store-prod-v1"
     signature_tolerance_minutes: 3
+    signature_secret: ""  # 生产环境必须通过环境变量 SIGNATURE_SECRET 注入

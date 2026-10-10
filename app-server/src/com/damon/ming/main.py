@@ -1,171 +1,94 @@
 # app-server/src/com/damon/ming/main.py
+"""
+应用入口 —— FastAPI 装配 + 子系统挂载 + 全局中间件。
+
+══════════════════════════════════════════════════════════════════════
+环境变量清单
+══════════════════════════════════════════════════════════════════════
+
+【必须设置（否则启动失败）】
+  SIGNATURE_SECRET        HMAC-SHA256 签名密钥（前后端共享，必须一致）
+
+【生产环境必须设置（开发环境可自动生成）】
+  MASTER_KEY              加密主密钥（≥32 字符），开发环境未设置时自动生成
+
+【可选（有默认值或降级）】
+  APP_ENV                 环境标志：debug / release（默认 debug）
+  LOG_LEVEL               日志级别：DEBUG / INFO / WARNING / ERROR（默认 INFO）
+  DB_CONNECTION           数据库连接串（未设置则跳过数据库初始化）
+  DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD  DB 分项配置
+  DB_CONFIG_PATH          DB YAML 配置文件路径（默认 db/db-config.yaml）
+  ENCRYPTION_CONFIG_PATH  加密 YAML 配置文件路径（默认 encryption/encryption-config.yaml）
+  CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
+
+【配置文件（YAML）】
+  db/db-config.yaml       数据库连接池配置（多剖面：default / production）
+  encryption/encryption-config.yaml  加密参数配置（RSA 密钥大小、会话 TTL、KEK salt 等）
+══════════════════════════════════════════════════════════════════════
+"""
 
 import os
-from contextlib import asynccontextmanager
+import sys
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.com.damon.ming.ai.inference.config import InferenceConfig
-from src.com.damon.ming.ai.rag_tool import get_rag_container
-from src.com.damon.ming.ai.registry.inference_registry import register_all_inferences
+from src.com.damon.ming.app import AppInitializer, create_lifespan
 from src.com.damon.ming.debug import is_debug
-from src.com.damon.ming.encryption.globals import (
-    set_key_manager,
-    set_signature_secret,
-)
-from src.com.damon.ming.encryption.key_management import KeyManager
+from src.com.damon.ming.exception import register_exception_handler
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware import AuthMiddleware, EncryptionMiddleware
+from src.com.damon.ming.precheck import run_precheck
 from src.com.damon.ming.router.account import account_router
 from src.com.damon.ming.router.chat import chat_router
 from src.com.damon.ming.router.encryption import encryption_router
 from src.com.damon.ming.router.upload import upload_router
-from src.com.damon.ming.router.upload.service.upload_service import UploadService
 
 logger = pin("app.main")
 
+
 # ---------------------------------------------------------------------------
-# 环境判断（来自全局 debug 模块）
+# 环境判断
 # ---------------------------------------------------------------------------
+
+# 调试阶段：默认注入 debug 环境（上线前删除或注释此行）
+os.environ.setdefault("APP_ENV", "DEBUG")
 
 IS_DEBUG = is_debug()
 
+# ---------------------------------------------------------------------------
+# 启动前校验 —— 缺少关键配置时立即终止，避免运行时才发现
+# ---------------------------------------------------------------------------
+
+_precheck_errors = run_precheck(is_debug=IS_DEBUG)
+if _precheck_errors:
+    if IS_DEBUG:
+        logger.warning("开发环境跳过校验缺失，启动继续")
+    else:
+        logger.error("启动失败，请检查上述环境变量/配置")
+        sys.exit(1)
 
 # ---------------------------------------------------------------------------
-# Lifespan
+# 初始化器（封装所有子系统的启动/关闭）
 # ---------------------------------------------------------------------------
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("lifespan startup begin | debug=%s", IS_DEBUG)
-
-    UploadService.init_sha_cache()
-
-    # ========== 数据库连接池初始化 ==========
-    # 优先级：DB_CONNECTION 环境变量 > YAML 配置文件 > 不启用
-    _db_conn = None
-    db_url = os.environ.get("DB_CONNECTION", "")
-    if db_url:
-        # 方式一：环境变量直接指定连接字符串
-        try:
-            from src.com.damon.ming.db import DbConfig, DbConnection, set_default_db
-
-            _db_config = DbConfig(connection_string=db_url)
-            _db_conn = DbConnection(_db_config)
-            _db_conn.initialize(min_conn=1, max_conn=5)
-            set_default_db(_db_conn)
-            logger.info("数据库连接池初始化完成（环境变量 DB_CONNECTION）")
-        except Exception as e:
-            logger.warning("数据库连接池初始化失败: %s", e)
-            _db_conn = None
-    else:
-        # 方式二：从 YAML 配置文件加载
-        try:
-            from src.com.damon.ming.db import DbConfigLoader, DbConnection, set_default_db
-
-            _loader = DbConfigLoader()
-            _db_config = _loader.load(profile="default" if IS_DEBUG else "production")
-            _db_conn = DbConnection(_db_config)
-            _pool = _loader.get_pool_settings(profile="default" if IS_DEBUG else "production")
-            _db_conn.initialize(**_pool)
-            set_default_db(_db_conn)
-            logger.info("数据库连接池初始化完成（YAML 配置）")
-        except FileNotFoundError:
-            logger.info("数据库配置文件不存在，跳过数据库初始化")
-        except Exception as e:
-            logger.warning("数据库连接池初始化失败: %s", e)
-            _db_conn = None
-
-    # ========== 加密体系初始化 ==========
-    logger.info("正在初始化加密体系...")
-    _enc_config = None
-    try:
-        from src.com.damon.ming.encryption import EncryptionConfigLoader
-        _enc_config = EncryptionConfigLoader().load(
-            profile="default" if IS_DEBUG else "production"
-        )
-        logger.info(
-            "加密配置加载完成 | rsa=%d | ttl=%dh",
-            _enc_config.rsa_key_size,
-            _enc_config.session_ttl_hours,
-        )
-    except FileNotFoundError:
-        logger.info("加密配置文件不存在，使用默认参数")
-    except Exception as e:
-        logger.warning("加密配置加载失败，使用默认参数: %s", e)
-
-    _key_store = None
-    _kek = None
-    if _db_conn is not None:
-        try:
-            from src.com.damon.ming.encryption.key_store import (
-                PgKeyStore,
-                derive_kek,
-            )
-            _key_store = PgKeyStore(_db_conn)
-            _kek = derive_kek()
-            logger.info("密钥持久化存储已启用（PostgreSQL）")
-        except Exception as e:
-            logger.warning("密钥持久化存储初始化失败，降级为纯内存: %s", e)
-            _key_store = None
-            _kek = None
-    else:
-        logger.info("密钥持久化存储未配置（纯内存模式，重启后会话丢失）")
-
-    _rsa_size = _enc_config.rsa_key_size if _enc_config else 2048
-    key_manager = KeyManager(rsa_key_size=_rsa_size, key_store=_key_store, kek=_kek)
-    key_manager.initialize()
-    set_key_manager(key_manager)
-    logger.info("加密体系初始化完成 | rsa=%d", _rsa_size)
-
-    # 签名密钥（与环境变量保持一致，与前端共享）
-    sig_secret = os.environ.get(
-        "SIGNATURE_SECRET", "your-shared-secret-key-change-in-production"
-    )
-    set_signature_secret(sig_secret)
-    logger.info("签名密钥已设置")
-
-    register_all_inferences()
-    rag_app = get_rag_container()
-
-    infer_config = InferenceConfig()
-    infer_profile = "default"
-    infer_service = infer_config.create_infer_client(profile=infer_profile)
-    llm_model_name = infer_config.get_llm_model_name(infer_profile)
-
-    # 挂载到app.state，所有路由访问
-    app.state.rag_app = rag_app
-    app.state.infer_service = infer_service
-    app.state.llm_model_name = llm_model_name
-
-    logger.info("RAG、LLM客户端初始化完成")
-    yield
-    # ========== 应用关闭时 ==========
-    logger.info("lifespan shutdown，释放资源")
-    if _db_conn is not None:
-        _db_conn.close()
-        logger.info("数据库连接池已关闭")
-
+initializer = AppInitializer(is_debug=IS_DEBUG)
 
 # ---------------------------------------------------------------------------
 # App 装配
 # ---------------------------------------------------------------------------
 
-
-app = FastAPI(title="我的多功能应用", lifespan=lifespan, debug=IS_DEBUG)
+app = FastAPI(
+    title="我的多功能应用",
+    lifespan=create_lifespan(initializer),
+    debug=IS_DEBUG,
+)
 
 # ---- CORS ---------------------------------------------------------------
-# debug: 允许所有来源（前端 dev server 端口任意）
-# release: 限制为具体域名，allow_credentials 才能安全地设为 True
-# 注意：allow_origins=["*"] 与 allow_credentials=True 冲突（浏览器安全策略），
-#       release 环境必须指定具体 origins。
-
 if IS_DEBUG:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # debug 放行所有
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -180,15 +103,11 @@ else:
         allow_origins=[o.strip() for o in release_origins if o.strip()],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-        allow_headers=["Authorization", "Content-Type", "X-*"],  # 允许自定义头
+        allow_headers=["Authorization", "Content-Type", "X-*"],
     )
     logger.info("CORS: release 模式，允许来源: %s", release_origins)
 
 # ---- 认证中间件 ---------------------------------------------------------
-# debug: 不启用认证（开发方便）
-# release: 启用，校验 device_auth_token
-# 注意：认证中间件在 CORS 之后，这样 CORS 预检请求（OPTIONS）不需要认证
-
 if not IS_DEBUG:
     app.add_middleware(AuthMiddleware)
     logger.info("认证中间件已启用（release 模式）")
@@ -196,17 +115,26 @@ else:
     logger.info("认证中间件已禁用（debug 模式）")
 
 # ---- 加密中间件 ---------------------------------------------------------
-
 app.add_middleware(EncryptionMiddleware)
 
 # ---- 路由 --------------------------------------------------------------
-
 app.include_router(account_router.router)
 app.include_router(encryption_router.router)
 app.include_router(upload_router.router)
 app.include_router(chat_router.router)
 logger.info("应用路由初始化完成")
 
+# ---- 挂载 AI 子系统到 app.state ----------------------------------------
+app.state.rag_app = initializer.rag_app
+app.state.infer_service = initializer.infer_service
+app.state.llm_model_name = initializer.llm_model_name
+
+# ---- 全局异常处理器 ---------------------------------------------------
+register_exception_handler(app)
+
+# ---------------------------------------------------------------------------
+# 入口
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     logger.info("启动 FastAPI 服务 | host=0.0.0.0 | port=8000 | debug=%s", IS_DEBUG)
@@ -215,5 +143,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         workers=1,  # GPU项目必须保持1个worker，不能多
-        limit_concurrency=50,  # 第一层防护：最多50个请求进入FastAPI，超过直接503
+        limit_concurrency=50,
     )

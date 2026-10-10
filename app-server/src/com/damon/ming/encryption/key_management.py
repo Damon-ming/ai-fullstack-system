@@ -13,9 +13,10 @@
   km = KeyManager()
   km.initialize()
 
-  # 持久化到 PostgreSQL
-  from src.com.damon.ming.encryption.key_store import PgKeyStore, derive_kek
-  store = PgKeyStore("postgresql://user:pass@host/db")
+  # 持久化到 PostgreSQL（PgKeyStore 在业务层 router/encryption/）
+  from src.com.damon.ming.router.encryption.pg_key_store import PgKeyStore
+  from src.com.damon.ming.encryption.key_store import derive_kek
+  store = PgKeyStore.from_connection_string("postgresql://user:pass@host/db")
   kek = derive_kek()  # 从 MASTER_KEY 环境变量派生
   km = KeyManager(key_store=store, kek=kek)
   km.initialize()
@@ -31,6 +32,8 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass, field
+
+from src.com.damon.ming.exception import EncryptionError
 from datetime import UTC, datetime, timedelta
 
 # BaseKeyStore 类型提示用（避免运行时导入，保持可选依赖）
@@ -64,6 +67,7 @@ class SessionKey:
     def is_expired(self) -> bool:
         return (time.time() - self.created_at) > self.ttl_seconds
 
+    # 更新最后使用时间
     def touch(self) -> None:
         self.last_used_at = time.time()
 
@@ -96,6 +100,7 @@ class KeyManager:
         rsa_key_size: int = 2048,
         key_store: "BaseKeyStore | None" = None,
         kek: bytes | None = None,
+        session_ttl_seconds: int = 60 * 60 * 24,
     ):
         """
         参数：
@@ -105,8 +110,10 @@ class KeyManager:
                         为 None 时保持纯内存行为（向后兼容）。
           kek:          Key Encryption Key，用于加密存储到 DB 的 AES 会话密钥。
                         当 key_store 不为 None 时必须提供。
+          session_ttl_seconds: 会话密钥过期秒数（默认 24 小时）。
         """
         self._rsa_key_size = rsa_key_size
+        self._session_ttl_seconds = session_ttl_seconds
         self._private_key: rsa.RSAPrivateKey | None = None
         self._public_key: rsa.RSAPublicKey | None = None
         self._public_key_pem: bytes | None = None
@@ -136,6 +143,7 @@ class KeyManager:
             key_size=self._rsa_key_size,
         )
         self._public_key = self._private_key.public_key()
+        # 把公钥导出成 **PEM 格式字节串**
         self._public_key_pem = self._public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -159,7 +167,7 @@ class KeyManager:
     def get_public_key_pem(self) -> bytes:
         """返回 RSA 公钥 PEM 格式（可安全分发给客户端）。"""
         if self._public_key_pem is None:
-            raise RuntimeError("KeyManager not initialized. Call initialize() first.")
+            raise EncryptionError("KeyManager not initialized. Call initialize() first.")
         return self._public_key_pem
 
     # ---- 会话注册 -------------------------------------------------------
@@ -194,7 +202,9 @@ class KeyManager:
         # 2. 生成不可预测的 keyId
         key_id = secrets.token_urlsafe(24)  # ~32 字符
 
-        session = SessionKey(key_id=key_id, aes_key=aes_key)
+        session = SessionKey(
+            key_id=key_id, aes_key=aes_key, ttl_seconds=self._session_ttl_seconds
+        )
         with self._lock:
             self._cleanup_expired_unlocked()
             self._sessions[key_id] = session
@@ -317,5 +327,5 @@ class KeyManager:
     def get_index_key(self) -> bytes:
         """获取盲索引密钥。"""
         if not self._index_key:
-            raise RuntimeError("KeyManager not initialized. Call initialize() first.")
+            raise EncryptionError("KeyManager not initialized. Call initialize() first.")
         return self._index_key

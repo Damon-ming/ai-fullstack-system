@@ -16,42 +16,9 @@
  */
 
 import type { InterceptorConfig } from "@ming/core-network";
+import { createLogger, formatBody, formatTime } from "@ming/core-log";
 
-// ---------------------------------------------------------------------------
-// 格式化工具
-// ---------------------------------------------------------------------------
-
-function formatBody(body: unknown): string {
-  if (body === undefined || body === null) return "-";
-  if (body instanceof FormData) {
-    const entries: string[] = [];
-    body.forEach((value, key) => {
-      if (value instanceof File) {
-        entries.push(`${key}=<File:${value.name}(${value.size}B)>`);
-      } else {
-        entries.push(`${key}=${String(value).slice(0, 100)}`);
-      }
-    });
-    return `[FormData] ${entries.join(", ")}`;
-  }
-  if (body instanceof Blob) {
-    return `<Blob:${body.size}B>`;
-  }
-  if (typeof body === "object") {
-    try {
-      const json = JSON.stringify(body);
-      return json.length > 500 ? json.slice(0, 500) + "..." : json;
-    } catch {
-      return String(body);
-    }
-  }
-  return String(body).slice(0, 200);
-}
-
-function formatTime(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
+const log = createLogger("net");
 
 // ---------------------------------------------------------------------------
 // 拦截器工厂
@@ -64,14 +31,11 @@ export function createLoggingInterceptors(): {
   const requestLog: InterceptorConfig = {
     onFulfilled: (request) => {
       const { method, url, params, data } = request;
-      const timestamp = new Date().toLocaleTimeString();
 
-      console.log(
-        `%c[Net] ➡️  ${timestamp} ${method?.toUpperCase()} ${url}\n` +
-          `    params: ${formatBody(params)}\n` +
-          `    body:   ${formatBody(data)}`,
-        "color: #2196F3; font-weight: bold;",
-      );
+      log.info(`${method?.toUpperCase()} ${url}`, {
+        params: formatBody(params),
+        body: formatBody(data),
+      });
 
       // 在请求对象上挂载起始时间，供响应拦截器计算耗时
       (request as any).__netStartTime = Date.now();
@@ -85,19 +49,17 @@ export function createLoggingInterceptors(): {
       const { status, data, config } = response;
       const startTime = (config as any).__netStartTime ?? Date.now();
       const elapsed = Date.now() - startTime;
-      const timestamp = new Date().toLocaleTimeString();
 
-      const statusColor =
+      const level =
         status >= 200 && status < 300
-          ? "color: #4CAF50;"
+          ? "info"
           : status >= 400
-            ? "color: #F44336;"
-            : "color: #FF9800;";
+            ? "error"
+            : "warn";
 
-      console.log(
-        `%c[Net] ⬅️  ${timestamp} ${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})\n` +
-          `    body: ${formatBody(data)}`,
-        `${statusColor} font-weight: bold;`,
+      log[level](
+        `${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`,
+        { body: formatBody(data) },
       );
 
       return response;
@@ -106,12 +68,10 @@ export function createLoggingInterceptors(): {
       const config = error?.config ?? error?.response?.config ?? {};
       const startTime = (config as any).__netStartTime ?? Date.now();
       const elapsed = Date.now() - startTime;
-      const timestamp = new Date().toLocaleTimeString();
 
-      console.log(
-        `%c[Net] ❌ ${timestamp} ${config?.method?.toUpperCase()} ${config?.url} → ${error?.status || "NETWORK_ERROR"} (${formatTime(elapsed)})\n` +
-          `    error: ${error?.message || String(error)}`,
-        "color: #F44336; font-weight: bold;",
+      log.error(
+        `${config?.method?.toUpperCase()} ${config?.url} → ${error?.status || "NETWORK_ERROR"} (${formatTime(elapsed)})`,
+        error,
       );
 
       return Promise.reject(error);

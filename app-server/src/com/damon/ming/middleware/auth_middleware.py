@@ -17,7 +17,6 @@ from src.com.damon.ming.router.account.token_store import is_token_valid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.types import ASGIApp
 
 logger = pin("middleware.auth")
 
@@ -29,9 +28,6 @@ PUBLIC_PATH_PREFIXES = (
     "/api/encryption",
     "/api/account",
     "/health",
-    "/docs",
-    "/openapi.json",
-    "/favicon.ico",
 )
 
 

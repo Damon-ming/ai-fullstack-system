@@ -4,11 +4,5 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
-  },
-  "dependencies": {
-    "@ming/store": "workspace:*"
-  },
-  "peerDependencies": {
-    "react": ">=18.0.0"
   }
 }

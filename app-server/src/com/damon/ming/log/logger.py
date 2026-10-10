@@ -4,7 +4,6 @@ import logging
 import os
 import sys
 
-
 _LOG_LEVELS = {
     "DEBUG": logging.DEBUG,
     "INFO": logging.INFO,
@@ -38,3 +37,12 @@ def get_logger(name: str) -> logging.Logger:
 def pin(tag: str) -> logging.Logger:
     """兼容旧代码的日志入口，保留 pin(name) 调用方式。"""
     return get_logger(tag)
+
+
+def security_warn(message: str) -> None:
+    """发出安全配置警告（弱密钥、不安全配置等）。
+
+    统一通过日志模块输出，WARNING 级别，命名空间为 security。
+    替代直接使用标准库 warnings.warn，便于统一管理和过滤。
+    """
+    get_logger("security").warning(message)

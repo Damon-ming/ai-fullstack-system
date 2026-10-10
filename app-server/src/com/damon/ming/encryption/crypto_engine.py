@@ -78,6 +78,7 @@ class AesGcmEngine:
         """生成新的 AES-256 随机密钥。"""
         return AESGCM.generate_key(bit_length=256)
 
+    # AAD：**不加密，明文传输 / 存储**，但是会参与 GCM 的 tag 计算
     @staticmethod
     def encrypt(
         plaintext: bytes, aes_key: bytes, aad: bytes | None = None
@@ -117,6 +118,10 @@ class AesGcmEngine:
         cls, json_str: str, aes_key: bytes, key_id: str
     ) -> EncryptedPayload:
         """将 JSON 字符串加密为 EncryptedPayload。"""
+        # - `@classmethod`：类方法，不需要先 new 对象，直接 `AesGcmEngine.encrypt_json()` 调用
+        # - `cls` = `AesGcmEngine` 这个类
+        # - `cls.encrypt(...)` 等价于 `AesGcmEngine.encrypt(...)`
+        # > `self` 是实例方法（对象）；`cls` 是类方法（类本身）。
         nonce, ciphertext = cls.encrypt(json_str.encode("utf-8"), aes_key)
         return EncryptedPayload(
             encrypted=base64.b64encode(ciphertext).decode("ascii"),
@@ -146,6 +151,10 @@ class RsaEngine:
         """使用 PEM 格式公钥加密（客户端侧模拟，服务端实际用私钥解密）。"""
         from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
+        # 最优非对称加密填充**，RSA 加密时用的填充算法。
+        # RSA 原始裸加密（无填充）非常不安全，有很多攻击。
+        # OAEP 是现代标准填充方案，用来解决裸 RSA 的安全缺陷。
+        # 你代码里：`padding.OAEP(...)`，就是 RSA-OAEP。
         pub_key = load_pem_public_key(public_key_pem)
         return pub_key.encrypt(
             plaintext,

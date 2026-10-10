@@ -26,7 +26,7 @@
 
 from src.com.damon.ming.db.db_config import DbConfig
 from src.com.damon.ming.db.db_config_loader import DbConfigLoader
-from src.com.damon.ming.db.db_connection import DbConnection, query, execute
+from src.com.damon.ming.db.db_connection import DbConnection, execute, query
 from src.com.damon.ming.db.db_migration import DbMigration
 
 __all__ = [
@@ -34,6 +34,6 @@ __all__ = [
     "DbConfigLoader",
     "DbConnection",
     "DbMigration",
-    "query",
     "execute",
+    "query",
 ]

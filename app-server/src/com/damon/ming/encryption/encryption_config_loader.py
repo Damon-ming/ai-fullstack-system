@@ -25,6 +25,7 @@ class EncryptionConfig:
         self.signature_tolerance_minutes: int = int(
             raw.get("signature_tolerance_minutes", 5)
         )
+        self.signature_secret: str = str(raw.get("signature_secret", ""))
 
     @property
     def session_ttl_seconds(self) -> int:
@@ -58,7 +59,7 @@ class EncryptionConfigLoader:
         with open(self._config_path, "r", encoding="utf-8") as f:
             raw_cfg = yaml.safe_load(f)
         if raw_cfg is None or "encryption" not in raw_cfg:
-            raise ValueError(f"加密配置文件格式错误：缺少 'encryption' 根节点")
+            raise ValueError("加密配置文件格式错误：缺少 'encryption' 根节点")
         section = raw_cfg["encryption"].get(profile, {})
         if not section:
             raise ValueError(f"加密配置文件中未找到剖面: {profile}")

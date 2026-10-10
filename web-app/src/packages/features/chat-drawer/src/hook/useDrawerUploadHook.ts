@@ -17,9 +17,7 @@ export function useDrawerUploadHook() {
       case "error":
         return t("upload.error");
       case "success": {
-        const allIndexed =
-          upload.files.length === 0 ||
-          upload.files.every((f) => f.indexed || f.duplicate);
+        const allIndexed = upload.files.every((f) => f.indexed || f.duplicate);
         return allIndexed
           ? t("upload.success_allIndexed")
           : t("upload.success_partial");

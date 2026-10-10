@@ -1,7 +1,8 @@
 // web-app/src/packages/core/log/src/index.ts
-// 第一个类型参数 K：对象的键（key）的类型
-// 第二个类型参数 T：对象的值（value）的类型
-export type LogContext = Record<string, unknown>;
+export type LogContext = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
 
 export interface Logger {
   debug(message: string, context?: LogContext): void;
@@ -10,11 +11,11 @@ export interface Logger {
   error(message: string, error?: unknown, context?: LogContext): void;
 }
 
-const format = (namespace: string, message: string, context?: LogContext) =>
-  context
-    ? // ``:模板字符串
-      [`[${namespace}] ${message}`, context]
-    : [`[${namespace}] ${message}`];
+const format = (namespace: string, message: string, context?: LogContext) => {
+  const ts = new Date().toISOString().slice(0, 23); // YYYY-MM-DDTHH:MM:SS.mmm
+  const prefix = `[${ts}] [${namespace}]`;
+  return context ? [`${prefix} ${message}`, context] : [`${prefix} ${message}`];
+};
 
 export function createLogger(namespace: string): Logger {
   return {
@@ -25,8 +26,16 @@ export function createLogger(namespace: string): Logger {
     warn: (message, context) =>
       console.warn(...format(namespace, message, context)),
     error: (message, error, context) =>
-      console.error(...format(namespace, message, { ...context, error })),
+      console.error(
+        ...format(namespace, message, {
+          ...context,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      ),
   };
 }
 
 export const logger = createLogger("app");
+
+// ---- 格式化工具 ----
+export { formatBody, formatTime } from "./format-utils";

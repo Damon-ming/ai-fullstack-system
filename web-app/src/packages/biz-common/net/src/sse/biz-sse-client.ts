@@ -1,5 +1,6 @@
 // web-app/src/packages/biz-common/net/src/sse/biz-sse-client.ts
 import type { HttpManager } from "@ming/core-network";
+import { createLogger } from "@ming/core-log";
 import type { BizHttpClientConfig, BizApiErrorResponse } from "../shared/types";
 import type {
   SseFinalState,
@@ -13,6 +14,8 @@ import type {
 import { ClientErrorCode } from "../error-code";
 import { buildHttpCodeError, formatSseException } from "../shared/error-mapper";
 import { SseParser } from "./sse-parser";
+
+const log = createLogger("net/sse-client");
 
 export class BizSseClient {
   private responseHeadersInterceptors: SseResponseHeadersInterceptor[] = [];
@@ -175,7 +178,7 @@ export class BizSseClient {
     try {
       callbacks.onStatus?.(status);
     } catch (error) {
-      console.warn("[BizSseClient] onStatus callback error:", error);
+      log.warn("onStatus callback error", error);
     }
   }
 
@@ -183,7 +186,7 @@ export class BizSseClient {
     try {
       callbacks.onError?.(error);
     } catch (callbackError) {
-      console.error("[BizSseClient] onError callback error:", callbackError);
+      log.error("onError callback error", callbackError);
     }
   }
 }

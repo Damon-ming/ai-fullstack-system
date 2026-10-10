@@ -41,6 +41,7 @@ def verify_signature(
         return False, f"Timestamp expired: {timestamp} vs {now}"
 
     # 2. 排序并拼接业务参数
+    # 参数顺序必须固定！如果不排序，`a=1&b=2` 和 `b=2&a=1` 会算出不同签名。
     sorted_keys = sorted(k for k in params if k not in SIGN_EXCLUDE_KEYS)
     parts = []
     for key in sorted_keys:

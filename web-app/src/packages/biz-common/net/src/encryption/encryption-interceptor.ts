@@ -17,6 +17,7 @@
  */
 
 import type { InterceptorConfig } from "@ming/core-network";
+import { createLogger } from "@ming/core-log";
 import {
   generateAesKey,
   importRsaPublicKey,
@@ -32,6 +33,8 @@ import type {
   PublicKeyResponse,
   SessionResponse,
 } from "@ming/core-encryption";
+
+const log = createLogger("net/encryption");
 
 // ---------------------------------------------------------------------------
 // netClient 函数签名
@@ -162,14 +165,16 @@ export function createEncryptionInterceptors(
           data: JSON.parse(decryptedStr),
         };
       } catch (error) {
-        console.warn("[Encryption] 响应解密失败，返回原始数据:", error);
+        log.warn("响应解密失败，返回原始数据", {
+          error: error instanceof Error ? error.message : String(error),
+        });
         return response;
       }
     },
     onRejected: async (error) => {
       const status = error?.status || error?.response?.status;
       if (status === 40101 || status === 401) {
-        console.info("[Encryption] 会话过期，刷新中...");
+        log.info("会话过期，刷新中...");
         currentSession = null;
         sessionPromise = null;
       }
@@ -208,7 +213,9 @@ export function createEncryptionInterceptors(
         },
       };
     } catch (error) {
-      console.warn("[Encryption] JSON 加密失败，降级为明文:", error);
+      log.warn("JSON 加密失败，降级为明文", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return request;
     }
   }
@@ -264,7 +271,9 @@ export function createEncryptionInterceptors(
         },
       };
     } catch (error) {
-      console.warn("[Encryption] FormData 加密失败，降级为明文:", error);
+      log.warn("FormData 加密失败，降级为明文", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return request;
     }
   }

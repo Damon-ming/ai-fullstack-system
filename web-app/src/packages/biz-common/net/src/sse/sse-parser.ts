@@ -1,4 +1,5 @@
 // web-app/src/packages/biz-common/net/src/sse/sse-parser.ts
+import { createLogger } from "@ming/core-log";
 import type { BizApiErrorResponse } from "../shared/types";
 import { getBizCodeCategory } from "../error-code";
 import type {
@@ -7,6 +8,8 @@ import type {
   SseFinalState,
   SseMessageInterceptor,
 } from "./types";
+
+const log = createLogger("net/sse-parser");
 
 /**
  * 默认业务校验：仅当 payload 含有 number 类型的 code 时，
@@ -245,7 +248,7 @@ export class SseParser<T = any> {
     try {
       this.callbacks.onMessage?.(payload, meta);
     } catch (error) {
-      console.error("[SseParser] onMessage callback error:", error);
+      log.error("onMessage callback error", error);
     }
   };
 
@@ -253,7 +256,7 @@ export class SseParser<T = any> {
     try {
       this.callbacks.onError?.(error);
     } catch (callbackError) {
-      console.error("[SseParser] onError callback error:", callbackError);
+      log.error("onError callback error", callbackError);
     }
   };
 
@@ -264,7 +267,7 @@ export class SseParser<T = any> {
     try {
       this.callbacks.onMessageError?.(error, rawPayload);
     } catch (callbackError) {
-      console.warn("[SseParser] onMessageError callback error:", callbackError);
+      log.warn("onMessageError callback error", callbackError);
     }
   };
 
@@ -272,7 +275,7 @@ export class SseParser<T = any> {
     try {
       this.callbacks.onComplete?.();
     } catch (error) {
-      console.error("[SseParser] onComplete callback error:", error);
+      log.error("onComplete callback error", error);
     }
   };
 
@@ -280,7 +283,7 @@ export class SseParser<T = any> {
     try {
       this.callbacks.onStatus?.(status);
     } catch (error) {
-      console.warn("[SseParser] onStatus callback error:", error);
+      log.warn("onStatus callback error", error);
     }
   };
 }
