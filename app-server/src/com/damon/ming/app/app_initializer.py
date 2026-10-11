@@ -166,7 +166,7 @@ class AppInitializer:
         )
 
         from src.com.damon.ming.encryption.globals import set_key_manager
-        from src.com.damon.ming.encryption.key_management import KeyManager
+        from src.com.damon.ming.encryption.v1.key_management import KeyManager
 
         self.key_manager = KeyManager(
             rsa_key_size=rsa_size,
@@ -229,7 +229,7 @@ class AppInitializer:
         from src.com.damon.ming.encryption.globals import set_signature_secret
         from src.com.damon.ming.log.logger import security_warn
 
-        # 优先级：环境变量 > YAML 配置
+        # 签名密钥 — 优先级：环境变量 > YAML 配置
         sig_secret = os.environ.get("SIGNATURE_SECRET", "")
         if not sig_secret and self._enc_config:
             sig_secret = self._enc_config.signature_secret

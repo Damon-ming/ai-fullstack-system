@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from src.com.damon.ming.encryption.crypto_engine import AesGcmEngine
+from src.com.damon.ming.encryption.v1.crypto_engine import AesGcmEngine
 from src.com.damon.ming.exception import EncryptionError
 
 if TYPE_CHECKING:
@@ -59,8 +59,7 @@ class SessionKey:
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
 
-    # 默认 24 小时过期；可根据业务调整
-    ttl_seconds: int = 60 * 60 * 24
+    ttl_seconds: int = 60 * 60 * 24  # 默认 24h，由 KeyManager 构造参数覆盖
 
     @property
     def is_expired(self) -> bool:
@@ -173,17 +172,12 @@ class KeyManager:
 
     # ---- 会话注册 -------------------------------------------------------
 
-    def register_session(
-        self,
-        encrypted_aes_key: bytes,
-        device_id: str = "",
-    ) -> SessionKey:
+    def register_session(self, encrypted_aes_key: bytes) -> SessionKey:
         """
         客户端使用 RSA 公钥加密 AES-256 密钥后，调用此方法注册会话。
 
         参数：
           encrypted_aes_key: 经 RSA-OAEP 加密的 32 字节 AES 密钥
-          device_id:         客户端设备标识（可选，用于持久化时绑定用户）
 
         返回：
           SessionKey（含 key_id，客户端后续请求需带上）
@@ -223,7 +217,6 @@ class KeyManager:
             stored = StoredSession(
                 key_id=key_id,
                 aes_key_enc=wrap_key(aes_key, self._kek),
-                device_id=device_id,
                 created_at=datetime.now(tz=UTC),
                 expires_at=expires_at,
             )

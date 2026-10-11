@@ -38,8 +38,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # 固定 salt —— 确保同一 MASTER_KEY 始终派生同一 KEK
 # 生产环境可以改为从环境变量读取，但固定值更便于运维
-# 字节类型（bytes）
-KEK_SALT = b"damon-common-key-store-v1"
+KEK_SALT = b"encryption-key-store-v1"
 # `info` 是**上下文 / 标识信息，用来区分不同用途的密钥**。
 # - 同样的 master_key + salt，如果`info`不一样，**派生出来的密钥完全不一样**
 # - 语义上标记：**这个派生出来的密钥，专门用来做「会话密钥封装」**

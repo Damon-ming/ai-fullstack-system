@@ -2,20 +2,19 @@
 """
 PostgreSQL 密钥存储实现 —— 会话密钥持久化到数据库。
 
-依赖 db 模块（src.com.damon.ming.db）处理连接管理和 SQL 执行，
-本文件只定义"加密_sessions"表的表结构和 SQL 语句。
+本文件属于业务层（router/encryption/），在纯存储接口之上扩展了设备维度索引。
 
 表结构：
   encryption_sessions (
     key_id       VARCHAR(64)  PRIMARY KEY,
     aes_key_enc  TEXT         NOT NULL,  -- KEK 加密后的 AES 密钥 (base64)
-    device_id    VARCHAR(128) NOT NULL DEFAULT '',
+    device_id    VARCHAR(128) NOT NULL DEFAULT '',  -- 业务字段：设备标识
     created_at   TIMESTAMP    NOT NULL,
     expires_at   TIMESTAMP    NOT NULL
   )
 
 索引：
-  - idx_enc_sessions_device_id: 按设备查找
+  - idx_enc_sessions_device_id: 按设备查找（业务维度）
   - idx_enc_sessions_expires:   过期清理
 
 安全说明：
@@ -69,14 +68,6 @@ FROM encryption_sessions
 WHERE key_id = %s AND expires_at > NOW();
 """
 
-_GET_BY_DEVICE = """
-SELECT key_id, aes_key_enc, device_id, created_at, expires_at
-FROM encryption_sessions
-WHERE device_id = %s AND expires_at > NOW()
-ORDER BY created_at DESC
-LIMIT 1;
-"""
-
 _DELETE_BY_KEY = """
 DELETE FROM encryption_sessions WHERE key_id = %s;
 """
@@ -97,7 +88,7 @@ SELECT COUNT(*) FROM encryption_sessions;
 class PgKeyStore(BaseKeyStore):
     """PostgreSQL 密钥存储后端。
 
-    接受一个已初始化的 DbConnection，或使用 DbConfig 自动创建。
+    在 BaseKeyStore 纯 key_id 接口之上，扩展了设备维度索引（业务需求）。
 
     用法：
         # 方式一：传入 DbConnection（与项目其他模块共享连接池）
@@ -135,13 +126,14 @@ class PgKeyStore(BaseKeyStore):
         """建表 + 建索引（幂等）。"""
         self._migration.apply_all()
 
-    def save_session(self, session: StoredSession) -> None:
+    def save_session(self, session: StoredSession, device_id: str = "") -> None:
+        """保存会话记录。device_id 为业务层扩展字段。"""
         self._db.execute(
             _SAVE_OR_UPDATE,
             (
                 session.key_id,
                 session.aes_key_enc,
-                session.device_id,
+                device_id,
                 session.created_at,
                 session.expires_at,
             ),
@@ -155,20 +147,6 @@ class PgKeyStore(BaseKeyStore):
         return StoredSession(
             key_id=row[0],
             aes_key_enc=row[1],
-            device_id=row[2],
-            created_at=row[3],
-            expires_at=row[4],
-        )
-
-    def get_session_by_device(self, device_id: str) -> StoredSession | None:
-        rows = self._db.execute(_GET_BY_DEVICE, (device_id,), commit=False, fetch=True)
-        if not rows:
-            return None
-        row = rows[0]
-        return StoredSession(
-            key_id=row[0],
-            aes_key_enc=row[1],
-            device_id=row[2],
             created_at=row[3],
             expires_at=row[4],
         )
@@ -177,6 +155,7 @@ class PgKeyStore(BaseKeyStore):
         self._db.execute(_DELETE_BY_KEY, (key_id,))
 
     def remove_by_device(self, device_id: str) -> None:
+        """按设备删除所有会话（业务层扩展方法）。"""
         self._db.execute(_DELETE_BY_DEVICE, (device_id,))
 
     def cleanup_expired(self) -> int:

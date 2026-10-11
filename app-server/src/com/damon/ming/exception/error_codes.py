@@ -73,6 +73,7 @@ class _Encryption:
     META_DECRYPT_FAILED = 2001005  # Meta 解密失败
     SESSION_INVALID = 2001006  # 会话无效/过期
     SIGNATURE_FAILED = 2001007  # 签名验证失败
+    UNSUPPORTED_SIGNATURE_VERSION = 2001008  # 不支持的签名协议版本
 
 
 class _Auth:

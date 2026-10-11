@@ -1,15 +1,42 @@
-llama-index
-tiktoken
-pymupdf4llm
-chromadb
-sentence-transformers
-ollama
-rank-bm25
-transformers
-torch
-psycopg2-binary
-pyyaml
-fastapi
-uvicorn
-python-multipart
-sse-starlette
+# ============================================================
+# AI Fullstack System — Server Dependencies
+# Python 3.11+
+# ============================================================
+# 安装命令: pip install -r requirements.txt
+
+# ── Web Framework ────────────────────────────────────────────
+fastapi==0.128.0
+uvicorn==0.40.0
+starlette==0.50.0
+python-multipart==0.0.32
+sse-starlette==3.5.0
+
+# ── Data Validation ──────────────────────────────────────────
+pydantic==2.12.5
+
+# ── AI / LLM ─────────────────────────────────────────────────
+llama-index==0.14.13
+ollama==0.6.1
+openai==2.16.0
+tiktoken==0.12.0
+
+# ── ML / Embedding ───────────────────────────────────────────
+torch==2.8.0
+transformers==4.57.1
+sentence-transformers==5.1.2
+
+# ── Vector DB & Retrieval ────────────────────────────────────
+chromadb==1.5.9
+rank-bm25==0.2.2
+
+# ── Document Processing ──────────────────────────────────────
+pymupdf4llm==1.28.2
+
+# ── Database ─────────────────────────────────────────────────
+psycopg2-binary==2.9.13
+
+# ── Security / Encryption ────────────────────────────────────
+cryptography==44.0.1
+
+# ── Config / Utils ───────────────────────────────────────────
+PyYAML==6.0.2

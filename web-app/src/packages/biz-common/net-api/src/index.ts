@@ -12,6 +12,10 @@ export type {
   BaseRequest,
   BizRequestConfig,
   BizRequestCallbacks,
+  EncryptionSession,
+  PublicKeyResponse,
+  SessionResponse,
+  VersionedEncryptedPayload,
   SseStreamOptions,
   SseStreamCallbacks,
   SseFinalState,
@@ -19,6 +23,13 @@ export type {
 } from "@ming/biz-common-net";
 // SseRequestOptions 来自 core-network，需要单独导出
 export type { SseRequestOptions } from "@ming/core-network";
+
+// 加密 & 签名协议版本
+export {
+  ENCRYPTION_VERSION,
+  SIGNATURE_VERSION,
+  SYSTEM_VERSION,
+} from "@ming/biz-common-net";
 
 // 错误码 —— 与后端 error_codes.py / server_error.py 对齐
 export {

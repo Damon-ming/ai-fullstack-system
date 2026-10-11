@@ -33,8 +33,8 @@
 import base64
 import struct
 
-from src.com.damon.ming.encryption.cipher_suite import CipherSuite
-from src.com.damon.ming.encryption.crypto_engine import (
+from src.com.damon.ming.encryption.v1.cipher_suite import CipherSuite
+from src.com.damon.ming.encryption.v1.crypto_engine import (
     CryptoEngine,
     EncryptedPayload,
 )
@@ -91,7 +91,7 @@ def _unpack_ciphertext(packed_b64: str) -> tuple[str, bytes, bytes]:
     offset += key_id_len
 
     # nonce 固定 12 字节（AES-GCM）
-    from src.com.damon.ming.encryption.crypto_engine import AES_NONCE_SIZE
+    from src.com.damon.ming.encryption.v1.crypto_engine import AES_NONCE_SIZE
 
     nonce = raw[offset : offset + AES_NONCE_SIZE]
     offset += AES_NONCE_SIZE

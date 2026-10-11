@@ -6,9 +6,10 @@
  *   1. JSON: 整体签名 → 整体加密
  *   2. FormData (文件上传): 提取 meta_json → 签名 + 加密 meta → 重新组装 FormData
  *
- * 请求头：
+ * 请求头（加密协议层）：
  *   X-Encrypt-Enabled: 1       → 服务端对响应也加密
- *   X-Encrypt-Version: v1      → 客户端加密协议版本（服务端据此分发/兼容）
+ *   X-Encrypt-Version: v1      → 客户端加密协议版本
+ *   X-Signature-Version: v1    → 客户端签名协议版本
  *   X-Signature: <hex>         → 请求签名
  *   X-Timestamp: <ms>          → 签名时间戳
  *   X-Nonce: <hex>             → 签名随机数
@@ -37,7 +38,7 @@ import type {
   SessionResponse,
 } from "./encryption-types";
 
-import { ENCRYPTION_VERSION } from "./encryption-types";
+import { ENCRYPTION_VERSION, SIGNATURE_VERSION } from "./encryption-types";
 
 const log = createLogger("net/encryption");
 
@@ -218,6 +219,7 @@ export function createEncryptionInterceptors(
           ...request.headers,
           "x-encrypt-enabled": "1",
           "x-encrypt-version": ENCRYPTION_VERSION,
+          "x-signature-version": SIGNATURE_VERSION,
         },
       };
     } catch (error) {
@@ -282,6 +284,7 @@ export function createEncryptionInterceptors(
           ...request.headers,
           "x-encrypt-enabled": "1",
           "x-encrypt-version": ENCRYPTION_VERSION,
+          "x-signature-version": SIGNATURE_VERSION,
         },
       };
     } catch (error) {

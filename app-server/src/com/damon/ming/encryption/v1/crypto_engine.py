@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from src.com.damon.ming.encryption.cipher_suite import CipherSuite
+from src.com.damon.ming.encryption.v1.cipher_suite import CipherSuite
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -46,8 +46,6 @@ AES_KEY_SIZE = 32  # AES-256
 # ---------------------------------------------------------------------------
 
 ENCRYPTION_VERSION = "v1"  # 当前加密协议版本
-
-SUPPORTED_ENCRYPTION_VERSIONS = frozenset({"v1"})  # 服务端支持的版本集合
 
 
 # ---------------------------------------------------------------------------

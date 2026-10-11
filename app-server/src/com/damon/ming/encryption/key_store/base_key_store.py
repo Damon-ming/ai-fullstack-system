@@ -3,7 +3,7 @@
 密钥存储抽象接口 —— 纯技术定义，无业务逻辑。
 
 职责：
-  - 定义 AES 会话密钥的持久化契约
+  - 定义 AES 会话密钥的持久化契约（key_id 索引）
   - 与具体存储后端解耦（内存 / PostgreSQL / SQLite / Redis 均可实现）
 
 安全模型：
@@ -15,6 +15,9 @@
   - 纯 ABC + dataclass，零外部依赖
   - 不依赖 cryptography / psycopg2 / 任何 HTTP 框架
   - 可被独立移植到任何 Python 项目
+
+业务扩展（如按设备索引、按用户索引）由业务层存储实现自行管理，
+本层只提供 key_id 维度的读写契约。
 """
 
 from abc import ABC, abstractmethod
@@ -26,7 +29,6 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 
 
-# `frozen=True`：**把这个 dataclass 实例变成【不可变对象】，实例创建之后，不能修改它的属性**。
 @dataclass(frozen=True)
 class StoredSession:
     """一条已持久化的 AES 会话密钥记录。
@@ -34,20 +36,17 @@ class StoredSession:
     字段说明：
       key_id:        会话标识（明文，由 KeyManager 生成）
       aes_key_enc:   KEK 加密后的 AES-256 密钥（base64 编码）
-      device_id:    绑定的设备/用户标识（可选，用于用户级密钥管理）
       created_at:    创建时间
       expires_at:    过期时间
     """
 
     key_id: str
     aes_key_enc: str  # base64(KEK_encrypted_aes_key)
-    device_id: str
     created_at: datetime
     expires_at: datetime
 
     @property
     def is_expired(self) -> bool:
-        # `tzinfo` 是读取这个 datetime 对象身上已经绑定好的时区实例，不是去 “获取 / 查询” 新时区。
         return datetime.now(tz=self.expires_at.tzinfo) > self.expires_at
 
 
@@ -57,7 +56,7 @@ class StoredSession:
 
 
 class BaseKeyStore(ABC):
-    """密钥存储后端抽象类。
+    """密钥存储后端抽象类（纯 key_id 索引，无业务维度）。
 
     用法：
         store = MemoryKeyStore()
@@ -85,18 +84,8 @@ class BaseKeyStore(ABC):
         ...
 
     @abstractmethod
-    def get_session_by_device(self, device_id: str) -> StoredSession | None:
-        """按 device_id 查找活跃会话（每个设备最多一条）。"""
-        ...
-
-    @abstractmethod
     def remove_session(self, key_id: str) -> None:
         """删除指定会话。不存在时静默忽略。"""
-        ...
-
-    @abstractmethod
-    def remove_by_device(self, device_id: str) -> None:
-        """删除指定设备的所有会话。"""
         ...
 
     @abstractmethod

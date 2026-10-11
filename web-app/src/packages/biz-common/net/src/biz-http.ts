@@ -18,6 +18,7 @@ import type {
 import type { INetClient } from "./interface";
 import { BizRestClient } from "./restful/biz-rest-client";
 import { BizSseClient } from "./sse/biz-sse-client";
+import { createCommonHeaderInterceptor } from "./header/common-header-interceptor";
 import { createTokenInterceptor } from "./auth/token-interceptor";
 import { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
 import { createLoggingInterceptors } from "./logging/logging-interceptor";
@@ -56,16 +57,8 @@ export class BizHttp implements INetClient {
       sseMessageInterceptors,
     });
 
-    // 环境头：所有请求携带 X-Client-Env，服务端可据此区分 debug/release 行为
-    client.addRequestInterceptor({
-      onFulfilled: (request) => ({
-        ...request,
-        headers: {
-          ...request.headers,
-          "X-Client-Env": import.meta.env.DEV ? "debug" : "release",
-        },
-      }),
-    });
+    // 公共请求头：每次请求必须携带（系统版本 + 环境标志）
+    client.addRequestInterceptor(createCommonHeaderInterceptor());
 
     // 加密 + 签名拦截器：OkHttp 风格，一个开关注册/不注册
     if (enableEncryption && signatureSecret) {

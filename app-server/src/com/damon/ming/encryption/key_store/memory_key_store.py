@@ -9,7 +9,7 @@
 
 安全说明：
   - 重启后所有会话丢失，客户端需重新注册
-  - 不绑定用户，纯 key_id 索引
+  - 纯 key_id 索引，无业务维度
 """
 
 import threading
@@ -44,24 +44,9 @@ class MemoryKeyStore(BaseKeyStore):
                 return None
             return session
 
-    def get_session_by_device(self, device_id: str) -> StoredSession | None:
-        with self._lock:
-            for session in self._sessions.values():
-                if session.device_id == device_id and not session.is_expired:
-                    return session
-            return None
-
     def remove_session(self, key_id: str) -> None:
         with self._lock:
             self._sessions.pop(key_id, None)
-
-    def remove_by_device(self, device_id: str) -> None:
-        with self._lock:
-            to_remove = [
-                k for k, v in self._sessions.items() if v.device_id == device_id
-            ]
-            for k in to_remove:
-                del self._sessions[k]
 
     def cleanup_expired(self) -> int:
         with self._lock:

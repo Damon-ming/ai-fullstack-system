@@ -11,11 +11,17 @@
 上层（main.py / middleware / router）通过本模块的函数来读写，不直接触碰变量。
 """
 
-from src.com.damon.ming.encryption.key_management import KeyManager
+from src.com.damon.ming.encryption.v1.key_management import KeyManager
 from src.com.damon.ming.exception import EncryptionError
 
 _key_manager: KeyManager | None = None
 _signature_secret: str = ""
+
+# 服务端支持的加密协议版本集合（中间件校验 X-Encrypt-Version header）
+SUPPORTED_ENCRYPTION_VERSIONS = frozenset({"v1"})
+
+# 服务端支持的签名协议版本集合（中间件校验 X-Signature-Version header）
+SUPPORTED_SIGNATURE_VERSIONS = frozenset({"v1"})
 
 
 def get_key_manager() -> KeyManager:

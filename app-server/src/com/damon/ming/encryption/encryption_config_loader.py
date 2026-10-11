@@ -21,10 +21,6 @@ class EncryptionConfig:
     def __init__(self, raw: dict):
         self.rsa_key_size: int = int(raw.get("rsa_key_size", 2048))
         self.session_ttl_hours: int = int(raw.get("session_ttl_hours", 24))
-        self.kek_salt: str = str(raw.get("kek_salt", "ming-ai-key-store-v1"))
-        self.signature_tolerance_minutes: int = int(
-            raw.get("signature_tolerance_minutes", 5)
-        )
         self.signature_secret: str = str(raw.get("signature_secret", ""))
 
     @property

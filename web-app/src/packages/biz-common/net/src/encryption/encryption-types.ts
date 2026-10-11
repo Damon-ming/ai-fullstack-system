@@ -19,8 +19,14 @@
  */
 export const ENCRYPTION_VERSION = "v1";
 
-/** 支持的加密协议版本集合（服务端侧用于校验） */
-export const SUPPORTED_ENCRYPTION_VERSIONS = new Set(["v1"]);
+/**
+ * 签名协议版本号 — 当前签名算法版本
+ *
+ * 签名方案变更时递增（如 HMAC 算法升级、签名内容格式变更），
+ * 客户端在建立会话后调用 GET /api/encryption/signature/v1 获取服务端版本，
+ * 与本地版本比对，不一致时提示升级。
+ */
+export const SIGNATURE_VERSION = "v1";
 
 // ---------------------------------------------------------------------------
 // 协议 DTO

@@ -15,6 +15,7 @@ FastAPI 加密 + 签名中间件
 
 签名头：
   X-Timestamp, X-Nonce, X-Signature  → 或从 FormData 字段读取
+  X-Signature-Version               → 客户端签名协议版本
 
 错误码（统一 ErrorCode 分段码，详见 exception/error_codes.py）：
   200103: 客户端加密协议版本不受支持（X-Encrypt-Version header）
@@ -22,11 +23,12 @@ FastAPI 加密 + 签名中间件
   200105: FormData meta 解密失败
   200106: 会话过期 / 无效
   200107: 签名验证失败
+  200108: 客户端签名协议版本不受支持（X-Signature-Version header）
 
 版本校验：
-  客户端通过 X-Encrypt-Version header 告知服务端加密版本。
-  服务端在中间件层（不解密即可拒绝）校验，
-  不支持的版本返回 200103。无 header 时跳过（向后兼容老客户端）。
+  加密版本：客户端必须通过 X-Encrypt-Version header 告知服务端，缺失或不支持返回 200103。
+  签名版本：客户端必须通过 X-Signature-Version header 告知服务端，缺失或不支持返回 200108。
+  两者均在中间件层（不解密即可拒绝）校验。
 
 设计说明：
   本文件位于 middleware/ 而非 encryption/，因为它属于 HTTP 业务逻辑层。
@@ -38,19 +40,27 @@ import json
 from collections.abc import Callable
 
 from fastapi import Request
-from src.com.damon.ming.encryption.crypto_engine import (
-    SUPPORTED_ENCRYPTION_VERSIONS,
-    AesGcmEngine,
-    EncryptedPayload,
-)
 from src.com.damon.ming.encryption.globals import (
+    SUPPORTED_ENCRYPTION_VERSIONS,
+    SUPPORTED_SIGNATURE_VERSIONS,
     get_key_manager,
     get_signature_secret,
 )
-from src.com.damon.ming.encryption.key_management import KeyManager, SessionKey
-from src.com.damon.ming.encryption.signature import verify_signature
+from src.com.damon.ming.encryption.v1.crypto_engine import (
+    AesGcmEngine,
+    EncryptedPayload,
+)
+from src.com.damon.ming.encryption.v1.key_management import KeyManager, SessionKey
+from src.com.damon.ming.encryption.v1.signature import verify_signature
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.middleware.header_constants import (
+    CLIENT_ENV,
+    ENCRYPT_ENABLED,
+    ENCRYPT_VERSION,
+    SIGNATURE_VERSION,
+    SYSTEM_VERSION,
+)
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
@@ -68,15 +78,33 @@ def _check_version_header(request: Request) -> str | None:
     检查 X-Encrypt-Version header 是否受支持。
 
     返回 None 表示通过，否则返回错误消息。
-    无 header 时跳过（向后兼容老客户端）。
+    缺失 header 视为不合规，拒绝请求。
     """
-    client_version = request.headers.get("x-encrypt-version")
+    client_version = request.headers.get(ENCRYPT_VERSION)
     if client_version is None:
-        return None  # 老客户端不发 header，跳过
+        return "Missing X-Encrypt-Version header"
     if client_version not in SUPPORTED_ENCRYPTION_VERSIONS:
         return (
             f"Unsupported encryption version: {client_version}, "
             f"supported: {sorted(SUPPORTED_ENCRYPTION_VERSIONS)}"
+        )
+    return None
+
+
+def _check_signature_version_header(request: Request) -> str | None:
+    """
+    检查 X-Signature-Version header 是否受支持。
+
+    返回 None 表示通过，否则返回错误消息。
+    缺失 header 视为不合规，拒绝请求。
+    """
+    client_version = request.headers.get(SIGNATURE_VERSION)
+    if client_version is None:
+        return "Missing X-Signature-Version header"
+    if client_version not in SUPPORTED_SIGNATURE_VERSIONS:
+        return (
+            f"Unsupported signature version: {client_version}, "
+            f"supported: {sorted(SUPPORTED_SIGNATURE_VERSIONS)}"
         )
     return None
 
@@ -89,20 +117,35 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         km = get_key_manager()
-        encrypt_response = request.headers.get("x-encrypt-enabled") == "1"
+        encrypt_response = request.headers.get(ENCRYPT_ENABLED) == "1"
         session: SessionKey | None = None
 
         # ---- 0. 版本校验（header 层级，不解密即可拒绝）-----------
         version_error = _check_version_header(request)
         if version_error is not None:
             logger.warning(
-                "版本校验失败: %s | path=%s", version_error, request.url.path
+                "加密版本校验失败: %s | path=%s", version_error, request.url.path
             )
             return JSONResponse(
                 status_code=400,
                 content={
                     "code": ErrorCode.ENCRYPT.UNSUPPORTED_VERSION,
                     "data": {"error_msg": version_error},
+                },
+            )
+
+        sig_version_error = _check_signature_version_header(request)
+        if sig_version_error is not None:
+            logger.warning(
+                "签名版本校验失败: %s | path=%s",
+                sig_version_error,
+                request.url.path,
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "code": ErrorCode.ENCRYPT.UNSUPPORTED_SIGNATURE_VERSION,
+                    "data": {"error_msg": sig_version_error},
                 },
             )
 
@@ -191,13 +234,14 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         )
         decrypted_json = json.loads(decrypted_str)
 
-        # 验证签名
+        # 验证签名（业务层约定：signature/timestamp/nonce 不参与签名）
         sig_ok, sig_reason = verify_signature(
             params=decrypted_json,
             secret=get_signature_secret(),
             signature=decrypted_json.get("signature", ""),
             timestamp=decrypted_json.get("timestamp", 0),
             nonce=decrypted_json.get("nonce", ""),
+            exclude_keys={"signature", "timestamp", "nonce"},
         )
         if not sig_ok:
             logger.warning("JSON 签名验证失败: %s", sig_reason)
@@ -239,13 +283,14 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         )
         meta = json.loads(meta_str)
 
-        # 验证签名
+        # 验证签名（业务层约定：signature/timestamp/nonce 不参与签名）
         sig_ok, sig_reason = verify_signature(
             params=meta,
             secret=get_signature_secret(),
             signature=signature,
             timestamp=timestamp,
             nonce=nonce,
+            exclude_keys={"signature", "timestamp", "nonce"},
         )
         if not sig_ok:
             logger.warning("FormData 签名验证失败: %s", sig_reason)

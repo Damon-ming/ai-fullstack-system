@@ -1,7 +1,9 @@
 // src/packages/biz-common/net/src/index.ts
 export { BizHttp } from "./biz-http";
+export { SYSTEM_VERSION } from "./version";
+export { createCommonHeaderInterceptor } from "./header/common-header-interceptor";
 export { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
-export { ENCRYPTION_VERSION, SUPPORTED_ENCRYPTION_VERSIONS } from "./encryption/encryption-types";
+export { ENCRYPTION_VERSION, SIGNATURE_VERSION } from "./encryption/encryption-types";
 export type {
   EncryptionSession,
   PublicKeyResponse,

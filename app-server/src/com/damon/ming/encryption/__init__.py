@@ -18,28 +18,29 @@
   - 路由 → 见 router/encryption/encryption_router.py
 """
 
-from src.com.damon.ming.encryption.cipher_suite import CipherSuite
-from src.com.damon.ming.encryption.crypto_engine import (
-    AesGcmEngine,
-    CryptoEngine,
-    ENCRYPTION_VERSION,
-    EncryptedPayload,
-    RsaEngine,
-    SUPPORTED_ENCRYPTION_VERSIONS,
-)
 from src.com.damon.ming.encryption.encryption_config_loader import (
     EncryptionConfig,
     EncryptionConfigLoader,
 )
-from src.com.damon.ming.encryption.field_encryptor import FieldEncryptor
-from src.com.damon.ming.encryption.key_management import KeyManager, SessionKey
-from src.com.damon.ming.encryption.signature import verify_signature
+from src.com.damon.ming.encryption.globals import SUPPORTED_ENCRYPTION_VERSIONS
+from src.com.damon.ming.encryption.v1 import (
+    ENCRYPTION_VERSION,
+    AesGcmEngine,
+    CryptoEngine,
+    EncryptedPayload,
+    FieldEncryptor,
+    KeyManager,
+    RsaEngine,
+    SessionKey,
+    verify_signature,
+)
 
 __all__ = [
+    "ENCRYPTION_VERSION",
+    "SUPPORTED_ENCRYPTION_VERSIONS",
     "AesGcmEngine",
     "CipherSuite",
     "CryptoEngine",
-    "ENCRYPTION_VERSION",
     "EncryptedPayload",
     "EncryptionConfig",
     "EncryptionConfigLoader",
@@ -47,6 +48,5 @@ __all__ = [
     "KeyManager",
     "RsaEngine",
     "SessionKey",
-    "SUPPORTED_ENCRYPTION_VERSIONS",
     "verify_signature",
 ]
