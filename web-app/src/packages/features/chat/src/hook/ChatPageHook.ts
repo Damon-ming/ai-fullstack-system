@@ -8,11 +8,10 @@ import {
   useAccountStore,
   useHistoryStore,
   useSearchStore,
-  useAppStore,
 } from "@ming/store";
 import { useHistory } from "@ming/features-history-api";
 import { searchHistory } from "@ming/features-search-api";
-import { useAccount, initDeviceToken } from "@ming/features-account-api";
+import { useAccount } from "@ming/features-account-api";
 
 const log = createLogger("chat/page");
 
@@ -49,17 +48,6 @@ export function useChatPageHook() {
   const searchResults = searchHistory(searchKeyword);
   const upload = useChatUploadStore((state) => state.upload);
   const closeUpload = useChatUploadStore((state) => state.closeUpload);
-
-  // 进入页面时获取设备 Token，存入全局 store，后续拦截器自动携带
-  useEffect(() => {
-    const token = useAppStore.getState().token.deviceToken;
-    if (token) return;
-    initDeviceToken()
-      .then((t) => useAppStore.getState().token.setDeviceToken(t))
-      .catch((err) =>
-        log.error("获取设备 Token 失败", err),
-      );
-  }, []);
 
   useEffect(() => {
     if (historyLoading) {

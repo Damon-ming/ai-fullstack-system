@@ -6,9 +6,6 @@ export { createEncryptionInterceptors } from "./encryption/encryption-intercepto
 export { ENCRYPTION_VERSION, SIGNATURE_VERSION } from "./encryption/encryption-types";
 export type {
   EncryptionSession,
-  PublicKeyResponse,
-  SessionResponse,
-  VersionedEncryptedPayload,
 } from "./encryption/encryption-types";
 export { encryptJson, decryptPayload } from "./encryption/encryption-crypto";
 export { computeSignature } from "./encryption/signature";

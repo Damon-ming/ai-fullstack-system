@@ -11,7 +11,7 @@
  * 纯 HMAC 原语在 @ming/core-encryption，这里只负责协议组装。
  */
 
-import { hmacSha256 } from "@ming/core-encryption";
+import { generateNonce, hmacSha256 } from "@ming/core-encryption";
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -58,6 +58,29 @@ export async function computeSignature(
 
   // 3. HMAC-SHA256
   return hmacSha256(secret, signContent);
+}
+
+/**
+ * 对请求参数进行签名，返回附加了 timestamp/nonce/signature 的参数对象。
+ *
+ * 协议：
+ *   1. 生成 timestamp + nonce
+ *   2. 调用 computeSignature 计算签名
+ *   3. 将 timestamp/nonce/signature 附加到原参数中返回
+ */
+export async function signParams(
+  params: Record<string, unknown>,
+  signatureSecret: string,
+): Promise<Record<string, unknown>> {
+  const timestamp = Date.now();
+  const nonce = generateNonce();
+  const signature = await computeSignature(
+    params,
+    signatureSecret,
+    timestamp,
+    nonce,
+  );
+  return { ...params, timestamp, nonce, signature };
 }
 
 // ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ export {
   aesDecrypt,
   importRsaPublicKey,
   rsaEncrypt,
+  bytesToBase64,
 } from "./crypto-engine";
 
 export {

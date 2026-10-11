@@ -40,30 +40,6 @@ export interface EncryptedResult {
 }
 
 /**
- * 带版本号的加密载荷 — 协议层扩展。
- * EncryptedResult 不含 version，由协议层在发送前附加。
- */
-export interface VersionedEncryptedPayload extends EncryptedResult {
-  version: string;
-}
-
-/**
- * 服务端返回的公钥信息
- */
-export interface PublicKeyResponse {
-  publicKey: string; // PEM 格式
-  algorithm: string; // "RSA-OAEP-256"
-}
-
-/**
- * 会话注册响应
- */
-export interface SessionResponse {
-  keyId: string;
-  expiresIn: number; // 秒
-}
-
-/**
  * 加密会话状态（前端内存中持有）
  */
 export interface EncryptionSession {

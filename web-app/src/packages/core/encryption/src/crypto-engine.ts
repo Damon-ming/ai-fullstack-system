@@ -147,7 +147,7 @@ export async function rsaEncrypt(
 }
 
 // ---------------------------------------------------------------------------
-// Base64 工具（RSA 公钥 PEM 解码需要）
+// Base64 工具
 // ---------------------------------------------------------------------------
 
 function _base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -158,4 +158,13 @@ function _base64ToArrayBuffer(base64: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+/** Uint8Array → base64 字符串 */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }

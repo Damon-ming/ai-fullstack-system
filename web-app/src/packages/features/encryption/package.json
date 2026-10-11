@@ -1,0 +1,13 @@
+{
+  "name": "@ming/features-encryption",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ming/core-log": "workspace:*",
+    "@ming/core-encryption": "workspace:*",
+    "@ming/biz-common-net-api": "workspace:*"
+  }
+}

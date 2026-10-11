@@ -1,6 +1,9 @@
 // web-app/src/packages/biz-common/net/src/encryption/encryption-interceptor.ts
 /**
- * 加密 + 签名拦截器装配 — 属于 biz-common/net 层
+ * 加密 + 签名拦截器 — 纯加解密，不感知密钥交换。
+ *
+ * 密钥交换在 bootstrap 阶段由 features-encryption-api 完成，
+ * 会话从 app-state 读取。
  *
  * 支持两种请求类型：
  *   1. JSON: 整体签名 → 整体加密
@@ -22,126 +25,62 @@
 
 import type { InterceptorConfig } from "@ming/core-network";
 import { createLogger } from "@ming/core-log";
-import {
-  generateAesKey,
-  importRsaPublicKey,
-  rsaEncrypt,
-  generateNonce,
-} from "@ming/core-encryption";
+import { generateNonce } from "@ming/core-encryption";
+import { useAppStore } from "@ming/store";
 import { encryptJson, decryptPayload } from "./encryption-crypto";
-import { computeSignature } from "./signature";
-import type {
-  EncryptedResult,
-  VersionedEncryptedPayload,
-  EncryptionSession,
-  PublicKeyResponse,
-  SessionResponse,
-} from "./encryption-types";
-
+import { computeSignature, signParams } from "./signature";
+import type { EncryptedResult, EncryptionSession } from "./encryption-types";
 import { ENCRYPTION_VERSION, SIGNATURE_VERSION } from "./encryption-types";
 
 const log = createLogger("net/encryption");
 
 // ---------------------------------------------------------------------------
-// netClient 函数签名
-// ---------------------------------------------------------------------------
-
-type GetFn = <T = unknown>(
-  url: string,
-) => Promise<[unknown, { data?: T } | null]>;
-
-type PostFn = <T = unknown>(
-  url: string,
-  data?: unknown,
-) => Promise<[unknown, { data?: T } | null]>;
-
-// ---------------------------------------------------------------------------
 // 工厂函数
 // ---------------------------------------------------------------------------
 
-export function createEncryptionInterceptors(
-  get: GetFn,
-  post: PostFn,
-  signatureSecret: string,
-): {
+export function createEncryptionInterceptors(signatureSecret: string): {
   requestEncrypt: InterceptorConfig;
   responseDecrypt: InterceptorConfig;
 } {
-  let currentSession: EncryptionSession | null = null;
-  let sessionPromise: Promise<EncryptionSession> | null = null;
+  // ---- 从 app-state 获取会话 -------------------------------------------
 
-  // ---- 密钥交换 -------------------------------------------------------
-
-  async function getSession(): Promise<EncryptionSession> {
-    if (currentSession && Date.now() < currentSession.expiresAt) {
-      return currentSession;
+  function getSession(): EncryptionSession | null {
+    const session = useAppStore.getState().encryption.session;
+    if (!session) return null;
+    if (Date.now() >= session.expiresAt) {
+      useAppStore.getState().encryption.setSession(null);
+      return null;
     }
-    if (!sessionPromise) {
-      sessionPromise = (async () => {
-        try {
-          const publicKey = await fetchPublicKey();
-          const session = await createSession(publicKey);
-          currentSession = session;
-          return session;
-        } finally {
-          sessionPromise = null;
-        }
-      })();
-    }
-    return sessionPromise;
-  }
-
-  async function fetchPublicKey(): Promise<string> {
-    const [err, res] = await get<PublicKeyResponse>("/api/encryption/key/v1");
-    if (err || !res?.data?.publicKey) {
-      throw new Error("Failed to fetch public key");
-    }
-    return res.data.publicKey;
-  }
-
-  async function createSession(
-    publicKeyPem: string,
-  ): Promise<EncryptionSession> {
-    const { rawKeyBytes, cryptoKey } = await generateAesKey();
-    const rsaKey = await importRsaPublicKey(publicKeyPem);
-    const encryptedAesKey = await rsaEncrypt(rawKeyBytes, rsaKey);
-    const encryptedKeyB64 = bytesToBase64(encryptedAesKey);
-
-    const [err, res] = await post<SessionResponse>(
-      "/api/encryption/session/v1",
-      { encryptedAesKey: encryptedKeyB64 },
-    );
-    if (err || !res?.data?.keyId) {
-      throw new Error("Session registration failed");
-    }
-
-    return {
-      keyId: res.data.keyId,
-      aesKey: cryptoKey,
-      publicKeyPem,
-      expiresAt: Date.now() + (res.data.expiresIn - 300) * 1000,
-    };
+    return session;
   }
 
   // ---- 请求拦截器：签名 + 加密 ---------------------------------------
 
   const requestEncrypt: InterceptorConfig = {
     onFulfilled: async (request) => {
-      if (request.url?.includes("/api/encryption/v1")) return request;
+      const session = getSession();
+      if (!session) {
+        throw new Error("加密会话不可用，请求中止");
+      }
 
       // FormData：文件上传场景
       if (request.data instanceof FormData) {
-        return handleFormData(request);
+        return handleFormData(request, session, signatureSecret);
       }
 
       // JSON 请求
       const contentType = request.headers["content-type"] || "";
-      if (!contentType.includes("application/json")) return request;
-      if (typeof request.data !== "object" || request.data === null)
-        return request;
-      if (isEncryptedPayload(request.data)) return request;
+      if (!contentType.includes("application/json")) {
+        throw new Error(`不支持加密的内容类型: ${contentType}`);
+      }
+      if (typeof request.data !== "object" || request.data === null) {
+        throw new Error("请求体格式异常，无法加密");
+      }
+      if (isEncryptedPayload(request.data)) {
+        throw new Error("请求体已加密，重复加密");
+      }
 
-      return handleJson(request);
+      return handleJson(request, session, signatureSecret);
     },
   };
 
@@ -153,173 +92,107 @@ export function createEncryptionInterceptors(
         return response;
       }
 
-      const url = response.config?.url || "";
-      if (url.includes("/api/encryption/v1")) {
-        return response;
-      }
-
       if (!isEncryptedPayload(response.data)) return response;
 
-      try {
-        const session = await getSession();
-        const decryptedStr = await decryptPayload(
-          response.data as EncryptedResult,
-          session.aesKey,
-        );
-        return {
-          ...response,
-          data: JSON.parse(decryptedStr),
-        };
-      } catch (error) {
-        log.warn("响应解密失败，返回原始数据", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return response;
+      const session = getSession();
+      if (!session) {
+        throw new Error("加密会话不可用，无法解密响应");
       }
-    },
-    onRejected: (error) => {
-      const status = error?.status || error?.response?.status;
-      if (status === 40101 || status === 401) {
-        log.info("会话过期，刷新中...");
-        currentSession = null;
-        sessionPromise = null;
-      }
-      throw error;
+
+      const decryptedStr = await decryptPayload(
+        response.data as EncryptedResult,
+        session.aesKey,
+      );
+      return {
+        ...response,
+        data: JSON.parse(decryptedStr),
+      };
     },
   };
 
   return { requestEncrypt, responseDecrypt };
+}
 
-  // ==== 私有 ==========================================================
+// ==== 私有 ==========================================================
 
-  /** 处理 JSON 请求：签名 + 加密 */
-  async function handleJson(request: {
+/** 处理 JSON 请求：签名 + 加密 */
+async function handleJson(
+  request: {
     data: unknown;
     headers: Record<string, string>;
     [key: string]: unknown;
-  }): Promise<unknown> {
-    try {
-      const signedData = await signParams(
-        request.data as Record<string, unknown>,
-      );
-      const session = await getSession();
-      const jsonStr = JSON.stringify(signedData);
-      const encrypted = await encryptJson(jsonStr, session);
+  },
+  session: EncryptionSession,
+  signatureSecret: string,
+): Promise<unknown> {
+  const signedData = await signParams(
+    request.data as Record<string, unknown>,
+    signatureSecret,
+  );
+  const jsonStr = JSON.stringify(signedData);
+  const encrypted = await encryptJson(jsonStr, session);
 
-      // 协议层附加版本号（core/encryption 不负责版本）
-      const payload: VersionedEncryptedPayload = {
-        ...encrypted,
-        version: ENCRYPTION_VERSION,
-      };
+  return {
+    ...request,
+    data: encrypted,
+    headers: {
+      ...request.headers,
+      "x-encrypt-enabled": "1",
+      "x-encrypt-version": ENCRYPTION_VERSION,
+      "x-signature-version": SIGNATURE_VERSION,
+    },
+  };
+}
 
-      return {
-        ...request,
-        data: payload,
-        headers: {
-          ...request.headers,
-          "x-encrypt-enabled": "1",
-          "x-encrypt-version": ENCRYPTION_VERSION,
-          "x-signature-version": SIGNATURE_VERSION,
-        },
-      };
-    } catch (error) {
-      log.warn("JSON 加密失败，降级为明文", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return request;
-    }
-  }
-
-  /** 处理 FormData 请求：加密 meta_json + 添加签名字段到 FormData */
-  async function handleFormData(request: {
+/** 处理 FormData 请求：加密 meta_json + 添加签名字段到 FormData */
+async function handleFormData(
+  request: {
     data: FormData;
     headers: Record<string, string>;
     [key: string]: unknown;
-  }): Promise<unknown> {
-    try {
-      const formData = request.data as FormData;
-      const metaJson = formData.get("meta_json") as string | null;
-      const meta = metaJson ? JSON.parse(metaJson) : {};
+  },
+  session: EncryptionSession,
+  signatureSecret: string,
+): Promise<unknown> {
+  const formData = request.data as FormData;
+  const metaJson = formData.get("meta_json") as string | null;
+  const meta = metaJson ? JSON.parse(metaJson) : {};
 
-      // 签名
-      const timestamp = Date.now();
-      const nonce = generateNonce();
-      const signature = await computeSignature(
-        meta,
-        signatureSecret,
-        timestamp,
-        nonce,
-      );
+  // 签名
+  const timestamp = Date.now();
+  const nonce = generateNonce();
+  const signature = await computeSignature(
+    meta,
+    signatureSecret,
+    timestamp,
+    nonce,
+  );
 
-      // 加密 meta_json
-      const session = await getSession();
-      const encrypted = await encryptJson(JSON.stringify(meta), session);
+  // 加密 meta_json
+  const encrypted = await encryptJson(JSON.stringify(meta), session);
 
-      // 协议层附加版本号（core/encryption 不负责版本）
-      const versionedEncrypted: VersionedEncryptedPayload = {
-        ...encrypted,
-        version: ENCRYPTION_VERSION,
-      };
-
-      // 重新组装 FormData：替换 meta_json 为加密版本，添加签名
-      const newFormData = new FormData();
-      // 复制所有文件
-      formData.forEach((value, key) => {
-        if (key !== "meta_json") {
-          newFormData.append(key, value);
-        }
-      });
-      newFormData.set(
-        "meta_json_encrypted",
-        JSON.stringify(versionedEncrypted),
-      );
-      newFormData.set("timestamp", String(timestamp));
-      newFormData.set("nonce", nonce);
-      newFormData.set("signature", signature);
-
-      return {
-        ...request,
-        data: newFormData,
-        headers: {
-          ...request.headers,
-          "x-encrypt-enabled": "1",
-          "x-encrypt-version": ENCRYPTION_VERSION,
-          "x-signature-version": SIGNATURE_VERSION,
-        },
-      };
-    } catch (error) {
-      log.warn("FormData 加密失败，降级为明文", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return request;
+  // 重新组装 FormData：替换 meta_json 为加密版本，添加签名
+  const newFormData = new FormData();
+  formData.forEach((value, key) => {
+    if (key !== "meta_json") {
+      newFormData.append(key, value);
     }
-  }
+  });
+  newFormData.set("meta_json_encrypted", JSON.stringify(encrypted));
+  newFormData.set("timestamp", String(timestamp));
+  newFormData.set("nonce", nonce);
+  newFormData.set("signature", signature);
 
-  async function signParams(
-    params: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
-    const timestamp = Date.now();
-    const nonce = generateNonce();
-    const signature = await computeSignature(
-      params,
-      signatureSecret,
-      timestamp,
-      nonce,
-    );
-    return { ...params, timestamp, nonce, signature };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 工具函数
-// ---------------------------------------------------------------------------
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  return {
+    ...request,
+    data: newFormData,
+    headers: {
+      ...request.headers,
+      "x-encrypt-enabled": "1",
+      "x-encrypt-version": ENCRYPTION_VERSION,
+      "x-signature-version": SIGNATURE_VERSION,
+    },
+  };
 }
 
 function isEncryptedPayload(data: unknown): data is EncryptedResult {

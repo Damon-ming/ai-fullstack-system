@@ -38,9 +38,15 @@ importers:
       '@ming/debug':
         specifier: workspace:*
         version: link:../../packages/biz-common/debug
+      '@ming/features-account-api':
+        specifier: workspace:*
+        version: link:../../packages/features/account-api
       '@ming/features-chat':
         specifier: workspace:*
         version: link:../../packages/features/chat
+      '@ming/features-encryption-api':
+        specifier: workspace:*
+        version: link:../../packages/features/encryption-api
       '@ming/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -233,6 +239,24 @@ importers:
         specifier: ^18.0.0
         version: 18.3.1
 
+  src/packages/features/encryption:
+    dependencies:
+      '@ming/biz-common-net-api':
+        specifier: workspace:*
+        version: link:../../biz-common/net-api
+      '@ming/core-encryption':
+        specifier: workspace:*
+        version: link:../../core/encryption
+      '@ming/core-log':
+        specifier: workspace:*
+        version: link:../../core/log
+
+  src/packages/features/encryption-api:
+    dependencies:
+      '@ming/features-encryption':
+        specifier: workspace:*
+        version: link:../encryption
+
   src/packages/features/history:
     dependencies:
       '@ming/core-util':
@@ -305,6 +329,9 @@ importers:
 
   src/packages/store:
     dependencies:
+      '@ming/biz-common-net-api':
+        specifier: workspace:*
+        version: link:../biz-common/net-api
       '@ming/debug':
         specifier: workspace:*
         version: link:../biz-common/debug
