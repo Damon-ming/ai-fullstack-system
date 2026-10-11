@@ -154,6 +154,9 @@ importers:
 
   src/packages/features/chat:
     dependencies:
+      '@ming/core-log':
+        specifier: workspace:*
+        version: link:../../core/log
       '@ming/features-account-api':
         specifier: workspace:*
         version: link:../account-api
@@ -316,16 +319,6 @@ importers:
       react-i18next:
         specifier: ^15.1.0
         version: 15.7.4(i18next@23.16.8)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
-    devDependencies:
-      '@ming/features-chat':
-        specifier: workspace:*
-        version: link:../features/chat
-      '@ming/features-chat-chatroom':
-        specifier: workspace:*
-        version: link:../features/chat-chatroom
-      '@ming/features-chat-drawer':
-        specifier: workspace:*
-        version: link:../features/chat-drawer
 
   src/packages/store:
     dependencies:

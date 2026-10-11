@@ -9,6 +9,7 @@
     "./locales/zh.json": "./src/locales/zh.json"
   },
   "dependencies": {
+    "@ming/core-log": "workspace:*",
     "@ming/store": "workspace:*",
     "@ming/features-chat-drawer": "workspace:*",
     "@ming/features-chat-chatroom": "workspace:*",
