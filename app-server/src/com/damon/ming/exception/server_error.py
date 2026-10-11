@@ -5,7 +5,7 @@
 不暴露内部实现细节（堆栈、SQL、密钥信息等）。
 
 错误码分段: A BBB CCC — 详见 error_codes.py
-子系统错误使用 2010xxx 段 (FAILURE + System.DATABASE)。
+子系统错误使用 2006xxx 段 (FAILURE + System.DATABASE)。
 """
 
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -36,17 +36,17 @@ class EncryptionError(Exception):
 
 
 class ServerSubSystem:
-    """子系统错误码（2010xx）—— 用于指示错误来源分类。
+    """子系统错误码（2006xx）—— 用于指示错误来源分类。
 
     使用 ErrorCode.SYSTEM 命名空间，保持与统一码表一致。
     """
 
-    DATABASE = ErrorCode.SYSTEM.DATABASE_FAILURE  # 201001 数据库操作失败
-    ENCRYPTION = ErrorCode.SYSTEM.ENCRYPTION_FAILURE  # 201002 加密/解密失败
-    UPLOAD = ErrorCode.SYSTEM.UPLOAD_FAILURE  # 201003 上传处理失败
-    AI = ErrorCode.SYSTEM.AI_FAILURE  # 201004 AI 推理失败
-    AUTH = ErrorCode.SYSTEM.AUTH_FAILURE  # 201005 认证/鉴权失败
-    UNKNOWN = ErrorCode.SYSTEM.UNKNOWN  # 201099 未知子系统异常
+    DATABASE = ErrorCode.SYSTEM.DATABASE_FAILURE  # 2006001 数据库操作失败
+    ENCRYPTION = ErrorCode.SYSTEM.ENCRYPTION_FAILURE  # 2006002 加密/解密失败
+    UPLOAD = ErrorCode.SYSTEM.UPLOAD_FAILURE  # 2006003 上传处理失败
+    AI = ErrorCode.SYSTEM.AI_FAILURE  # 2006004 AI 推理失败
+    AUTH = ErrorCode.SYSTEM.AUTH_FAILURE  # 2006005 认证/鉴权失败
+    UNKNOWN = ErrorCode.SYSTEM.UNKNOWN  # 200699 未知子系统异常
 
 
 # 异常类型 → 子系统码映射
