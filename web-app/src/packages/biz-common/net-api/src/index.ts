@@ -2,6 +2,13 @@
 
 export { initNetApi } from "./init";
 export { netClient } from "./net-client";
+
+// 内部提供者 setter —— bootstrap 注入 store 回调
+export {
+  setDebugGetter,
+  setEncryptionSessionGetter,
+  setTokenGetter,
+} from "@ming/biz-common-net";
 export type { INetClient } from "@ming/biz-common-net"; // re-export 接口
 
 // 网络层类型继续从这里导出（这一层本来就是类型门面）

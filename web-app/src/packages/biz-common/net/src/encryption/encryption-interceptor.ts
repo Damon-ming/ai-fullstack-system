@@ -26,7 +26,7 @@
 import type { InterceptorConfig } from "@ming/core-network";
 import { createLogger } from "@ming/core-log";
 import { generateNonce } from "@ming/core-encryption";
-import { useAppStore } from "@ming/store";
+import { getEncryptionSession } from "../internal-providers";
 import { encryptJson, decryptPayload } from "./encryption-crypto";
 import { computeSignature, signParams } from "./signature";
 import type { EncryptedResult, EncryptionSession } from "./encryption-types";
@@ -42,23 +42,12 @@ export function createEncryptionInterceptors(signatureSecret: string): {
   requestEncrypt: InterceptorConfig;
   responseDecrypt: InterceptorConfig;
 } {
-  // ---- 从 app-state 获取会话 -------------------------------------------
-
-  function getSession(): EncryptionSession | null {
-    const session = useAppStore.getState().encryption.session;
-    if (!session) return null;
-    if (Date.now() >= session.expiresAt) {
-      useAppStore.getState().encryption.setSession(null);
-      return null;
-    }
-    return session;
-  }
 
   // ---- 请求拦截器：签名 + 加密 ---------------------------------------
 
   const requestEncrypt: InterceptorConfig = {
     onFulfilled: async (request) => {
-      const session = getSession();
+      const session = getEncryptionSession();
       if (!session) {
         throw new Error("加密会话不可用，请求中止");
       }
@@ -94,7 +83,7 @@ export function createEncryptionInterceptors(signatureSecret: string): {
 
       if (!isEncryptedPayload(response.data)) return response;
 
-      const session = getSession();
+      const session = getEncryptionSession();
       if (!session) {
         throw new Error("加密会话不可用，无法解密响应");
       }

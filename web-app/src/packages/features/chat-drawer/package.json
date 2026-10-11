@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ming/store": "workspace:*",
+    "@ming/core-log": "workspace:*",
     "@ming/features-history-api": "workspace:*",
     "@ming/features-search-api": "workspace:*",
     "@ming/features-account-api": "workspace:*",
@@ -17,5 +18,7 @@
     "@ming/core-util": "workspace:*",
     "@ming/i18n": "workspace:*"
   },
-  "peerDependencies": { "react": "^18.0.0" }
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
 }

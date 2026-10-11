@@ -1,5 +1,10 @@
 // src/app/main/src/bootstrap.ts
-import { initNetApi } from "@ming/biz-common-net-api";
+import {
+  initNetApi,
+  setDebugGetter,
+  setEncryptionSessionGetter,
+  setTokenGetter,
+} from "@ming/biz-common-net-api";
 import { createLogger } from "@ming/core-log";
 import { isDebug } from "@ming/debug";
 import { i18n } from "@ming/i18n";
@@ -40,6 +45,19 @@ async function initGlobalNetwork(): Promise<void> {
   //todo: 这里可以考虑在 debug 模式下，允许通过 query string 或 localStorage 来覆盖 isDebug，以便测试加密/认证/日志开关
   const signatureSecret = import.meta.env.VITE_SIGNATURE_SECRET ?? "";
 
+  // 注入 store 回调到 biz-common/net 内部提供者（解除反向依赖）
+  setDebugGetter(() => useAppStore.getState().debug.isDebug);
+  setTokenGetter(() => useAppStore.getState().token.deviceToken);
+  setEncryptionSessionGetter(() => {
+    const session = useAppStore.getState().encryption.session;
+    if (!session) return null;
+    if (Date.now() >= session.expiresAt) {
+      useAppStore.getState().encryption.setSession(null);
+      return null;
+    }
+    return session;
+  });
+
   initNetApi({
     baseURL: "",
     timeout: 15000,
@@ -59,7 +77,7 @@ async function initGlobalNetwork(): Promise<void> {
     if (!signatureSecret) {
       throw new Error("signatureSecret 未配置，无法启用加密通信");
     }
-    
+
     const session = await exchangeKeys();
     useAppStore.getState().encryption.setSession(session);
     log.info("加密会话初始化完成", { key_id: session.keyId });

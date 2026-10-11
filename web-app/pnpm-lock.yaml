@@ -93,9 +93,6 @@ importers:
       '@ming/core-network':
         specifier: workspace:*
         version: link:../../core/network
-      '@ming/store':
-        specifier: workspace:*
-        version: link:../../store
       axios:
         specifier: ^1.7.7
         version: 1.19.0(debug@4.4.3)
@@ -214,6 +211,9 @@ importers:
 
   src/packages/features/chat-drawer:
     dependencies:
+      '@ming/core-log':
+        specifier: workspace:*
+        version: link:../../core/log
       '@ming/core-util':
         specifier: workspace:*
         version: link:../../core/util

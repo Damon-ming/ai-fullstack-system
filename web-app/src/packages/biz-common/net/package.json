@@ -8,7 +8,6 @@
   "devDependencies": {
     "@ming/core-encryption": "workspace:*",
     "@ming/core-network": "workspace:*",
-    "@ming/store": "workspace:*",
     "@ming/core-log": "workspace:*",
     "axios": "^1.7.7"
   },

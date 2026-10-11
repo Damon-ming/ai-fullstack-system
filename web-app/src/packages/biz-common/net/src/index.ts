@@ -11,6 +11,13 @@ export { encryptJson, decryptPayload } from "./encryption/encryption-crypto";
 export { computeSignature } from "./encryption/signature";
 export { generateNonce } from "@ming/core-encryption";
 export type { EncryptedResult } from "./encryption/encryption-types";
+
+// 内部提供者 —— bootstrap 注入 store 回调，解除 biz-common/net 对 store 的依赖
+export {
+  setEncryptionSessionGetter,
+  setTokenGetter,
+  setDebugGetter,
+} from "./internal-providers";
 export * from "./shared/types";
 export * from "./sse/types";
 export * from "./restful/types";
