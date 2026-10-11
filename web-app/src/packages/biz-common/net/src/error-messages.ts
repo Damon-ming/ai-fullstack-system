@@ -1,18 +1,23 @@
 // src/packages/biz-common/net/src/error-messages.ts
 
-import { ClientErrorCode } from "./error-code";
+import { ClientErrorCode, ServerSubSystem, getSystem } from "./error-code";
 
-/** 开发环境专用的英文错误映射表 */
-export const ERROR_MESSAGES = {
-  // 客户端错误码映射
+// ---------------------------------------------------------------------------
+// 客户端错误码映射 —— 开发环境专用
+// ---------------------------------------------------------------------------
+
+export const ERROR_MESSAGES: Record<number | string, string> = {
   [ClientErrorCode.NET_TIMEOUT]:
     "CLIENT:Network request timeout, please check network connection.",
   [ClientErrorCode.CONFIG_ERR]: "CLIENT:Request configuration error.",
   [ClientErrorCode.CONFIG_CANCEL]: "CLIENT:Request was canceled.",
   unknownError: "CLIENT:Unknown network or execution error.",
-} as const;
+};
 
-/** HTTP Status 状态码解析辅助工具 */
+// ---------------------------------------------------------------------------
+// HTTP 状态码映射 —— 仅用于构造 clientData.message，不参与逻辑分支
+// ---------------------------------------------------------------------------
+
 export const HTTP_STATUS_MESSAGES: Record<number, string> = {
   301: "CLIENT:301 Moved Permanently",
   302: "CLIENT:302 Found / Moved Temporarily",
@@ -29,7 +34,7 @@ export const HTTP_STATUS_MESSAGES: Record<number, string> = {
   504: "CLIENT:504 Gateway Timeout",
 };
 
-/** 获取 HTTP 状态码的描述（仅用于构造 clientData.message，不参与逻辑分支） */
+/** 获取 HTTP 状态码的描述 */
 export function getHttpStatusMessage(
   httpCode: number,
   defaultMsg?: string,
@@ -38,4 +43,67 @@ export function getHttpStatusMessage(
     return HTTP_STATUS_MESSAGES[httpCode];
   }
   return defaultMsg || `CLIENT:HTTP ${httpCode}`;
+}
+
+// ---------------------------------------------------------------------------
+// 服务端安全错误描述 —— 与后端 server_error.py get_safe_message() 对齐
+// 不含内部细节（堆栈、SQL、密钥信息等），仅提示用户操作
+// ---------------------------------------------------------------------------
+
+const _SAFE_MESSAGES: Record<number, string> = {
+  [ServerSubSystem.DATABASE]: "数据服务暂不可用，请稍后重试",
+  [ServerSubSystem.ENCRYPTION]: "安全服务异常，请重新建立会话",
+  [ServerSubSystem.UPLOAD]: "文件处理失败，请重试",
+  [ServerSubSystem.AI]: "AI 服务暂不可用，请稍后重试",
+  [ServerSubSystem.AUTH]: "认证失败，请重新登录",
+  [ServerSubSystem.UNKNOWN]: "服务暂不可用，请稍后重试",
+};
+
+const _DEFAULT_SAFE_MESSAGE = "服务暂不可用，请稍后重试";
+
+/**
+ * 根据子系统分类码返回给客户端的安全错误描述。
+ * 用于服务端未返回具体 error_msg 时的兜底文案。
+ */
+export function getServerSafeMessage(subsystemCode: number): string {
+  return _SAFE_MESSAGES[subsystemCode] || _DEFAULT_SAFE_MESSAGE;
+}
+
+/**
+ * 从服务端错误响应中提取用户可见的错误信息。
+ * 优先使用服务端返回的 error_msg（已脱敏），否则用子系统分类兜底。
+ *
+ * @param errorCode  完整错误码 (如 2001001)
+ * @param errorMsg   服务端返回的 data.error_msg
+ */
+export function getErrorMessage(
+  errorCode: number,
+  errorMsg?: string,
+): string {
+  if (errorMsg) return errorMsg;
+  // 根据错误码系统位匹配子系统
+  const systemCode = _getSubSystemByErrorCode(errorCode);
+  return getServerSafeMessage(systemCode);
+}
+
+// ---------------------------------------------------------------------------
+// 错误码 → 子系统分类映射（用于兜底文案）
+// ---------------------------------------------------------------------------
+
+function _getSubSystemByErrorCode(errorCode: number): number {
+  const system = getSystem(errorCode); // 使用统一的系统位提取（正确处理 A BBB CCC 格式）
+  switch (system) {
+    case 1: // 001 加密
+      return ServerSubSystem.ENCRYPTION;
+    case 2: // 002 认证
+      return ServerSubSystem.AUTH;
+    case 4: // 004 AI/Chat
+      return ServerSubSystem.AI;
+    case 5: // 005 上传
+      return ServerSubSystem.UPLOAD;
+    case 6: // 006 数据库/基础设施
+      return ServerSubSystem.DATABASE;
+    default:
+      return ServerSubSystem.UNKNOWN;
+  }
 }

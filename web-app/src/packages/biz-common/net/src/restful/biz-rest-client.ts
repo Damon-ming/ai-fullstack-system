@@ -1,7 +1,7 @@
 // web-app/src/packages/biz-common/net/src/restful/biz-rest-client.ts
 import type { HttpManager, RequestConfig } from "@ming/core-network";
 import { createLogger } from "@ming/core-log";
-import { BizCodeRange, getBizCodeCategory } from "../error-code";
+import { ErrorCode, isSuccess } from "../error-code";
 import type {
   BizApiSuccessResponse,
   BizApiErrorResponse,
@@ -43,15 +43,8 @@ export class BizRestClient {
     try {
       const { code: httpCode, data: bizBody } = await requestPromise;
 
-      // HTTP 204 → 无内容，兜底为统一成功码
-      if (httpCode === 204) {
-        successRes = {
-          code: BizCodeRange.SUCCESS_NO_CONTENT,
-          data: undefined as unknown as T,
-        };
-      }
       // HTTP 非 2xx → 走错误构造（内部判断服务端是否有结构化 body）
-      else if (httpCode < 200 || httpCode >= 300) {
+      if (httpCode < 200 || httpCode >= 300) {
         errRes = buildHttpCodeError<F>(
           httpCode,
           bizBody as Record<string, any>,
@@ -60,18 +53,17 @@ export class BizRestClient {
       // HTTP 2xx + 有 body → 拆包业务码
       else if (bizBody && typeof bizBody.code === "number") {
         const { code, data } = bizBody;
-        const category = getBizCodeCategory(code);
-        if (category === "success") {
+        if (isSuccess(code)) {
           successRes = { code, data: data as T };
         } else {
-          // fail 或 unknown server code → 都交给错误处理
+          // 失败码及其他服务端码 → 错误处理
           errRes = { code, data: data as F };
         }
       }
-      // HTTP 2xx + 空 body → 返回 HTTP 200 作为成功码（无业务数据）
+      // HTTP 204 或 2xx + 空 body → 成功（无业务数据）
       else {
         successRes = {
-          code: httpCode,
+          code: ErrorCode.OK,
           data: undefined as unknown as T,
         };
       }

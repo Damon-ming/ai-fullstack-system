@@ -1,7 +1,8 @@
 // web-app/src/packages/biz-common/net/src/sse/sse-parser.ts
 import { createLogger } from "@ming/core-log";
 import type { BizApiErrorResponse } from "../shared/types";
-import { getBizCodeCategory } from "../error-code";
+import { isFailure, ErrorCode } from "../error-code";
+import { buildSseErrorPayload } from "../shared/error-mapper";
 import type {
   SseStreamCallbacks,
   SseStreamStatus,
@@ -13,15 +14,15 @@ const log = createLogger("net/sse-parser");
 
 /**
  * 默认业务校验：仅当 payload 含有 number 类型的 code 时，
- * 按 bizCode 范围判断成功/失败。无 code 的流式消息（如 chat delta）直接放行。
+ * 按结果位判断成功/失败。无 code 的流式消息（如 chat delta）直接放行。
  */
 function defaultValidateMessage<T>(payload: T): { isError: boolean; error?: BizApiErrorResponse } {
   if (payload && typeof payload === "object" && typeof (payload as any).code === "number") {
     const code = (payload as any).code as number;
-    if (getBizCodeCategory(code) === "fail") {
+    if (isFailure(code)) {
       return {
         isError: true,
-        error: { code, data: (payload as any).data },
+        error: buildSseErrorPayload(payload as any),
       };
     }
   }
@@ -105,7 +106,7 @@ export class SseParser<T = any> {
         this.safeOnComplete();
         return { status: "complete" };
       }
-      return { status: "error", error: this.errorPayload ?? { code: 300003 } };
+      return { status: "error", error: this.errorPayload ?? { code: ErrorCode.SYSTEM.UNKNOWN } };
     } finally {
       reader.releaseLock();
     }
@@ -179,10 +180,9 @@ export class SseParser<T = any> {
         this.hasError = true;
         if (!this.sentOnError) {
           this.emitStatus("business-error");
-          this.errorPayload = {
-            code: (payload as { code?: number })?.code ?? 300003,
-            data: (payload as { data?: unknown })?.data,
-          };
+          this.errorPayload = buildSseErrorPayload(
+            payload as { code?: number; data?: unknown },
+          );
           this.safeOnError(this.errorPayload);
           this.sentOnError = true;
         }

@@ -35,9 +35,12 @@ export interface ChatStartData {
 export interface ChatDeltaData {
   content: string;
 }
+/**
+ * SSE 错误事件数据 —— 与后端 BaseFailedResponse.data 对齐
+ * 后端格式: { error_msg: string }
+ */
 export interface ChatSseErrorData {
   error_msg: string;
-  error_code?: string;
 }
 /**
  * SSE 消息体 —— JSON payload 解析结果。

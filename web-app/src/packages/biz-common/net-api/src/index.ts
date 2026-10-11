@@ -3,6 +3,7 @@
 export { initNetApi } from "./init";
 export { netClient } from "./net-client";
 export type { INetClient } from "@ming/biz-common-net"; // re-export 接口
+
 // 网络层类型继续从这里导出（这一层本来就是类型门面）
 export type {
   BizApiSuccessResponse,
@@ -12,9 +13,28 @@ export type {
   BizRequestConfig,
   BizRequestCallbacks,
   SseStreamOptions,
-  SseRequestOptions,
   SseStreamCallbacks,
   SseFinalState,
   SseStreamStatus,
 } from "@ming/biz-common-net";
-export { ClientErrorCode, BizCodeRange } from "@ming/biz-common-net";
+// SseRequestOptions 来自 core-network，需要单独导出
+export type { SseRequestOptions } from "@ming/core-network";
+
+// 错误码 —— 与后端 error_codes.py / server_error.py 对齐
+export {
+  ErrorCode,
+  ClientErrorCode,
+  ServerSubSystem,
+  System,
+  SUCCESS,
+  FAILURE,
+  isSuccess,
+  isFailure,
+  isServerCode,
+  getServerCodeCategory,
+  getServerSafeMessage,
+  getErrorMessage,
+} from "@ming/biz-common-net";
+
+// 兼容旧名（过渡期保留）
+export { BizCodeRange, getBizCodeCategory } from "@ming/biz-common-net";

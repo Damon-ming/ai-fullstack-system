@@ -1,7 +1,24 @@
 // src/packages/biz-common/net/src/shared/error-mapper.ts
-import { ClientErrorCode, isServerCode } from "../error-code";
-import { ERROR_MESSAGES, getHttpStatusMessage } from "../error-messages";
+import { ClientErrorCode, isServerCode, ErrorCode } from "../error-code";
+import {
+  ERROR_MESSAGES,
+  getHttpStatusMessage,
+  getServerSafeMessage,
+} from "../error-messages";
 import type { BizApiErrorResponse } from "../shared/types";
+
+/**
+ * 从服务端原始错误响应中提取 error_msg。
+ * 后端 BaseFailedResponse 格式: { code: number, data: { error_msg: string } }
+ */
+function _extractErrorMsg(rawRes?: Record<string, any>): string | undefined {
+  if (!rawRes) return undefined;
+  // 从 data.error_msg 提取（后端标准失败响应格式）
+  if (rawRes.data && typeof rawRes.data === "object" && rawRes.data.error_msg) {
+    return rawRes.data.error_msg;
+  }
+  return undefined;
+}
 
 /**
  * 非 2xx HTTP 响应的错误构造
@@ -16,20 +33,25 @@ export function buildHttpCodeError<F = any>(
 ): BizApiErrorResponse<F> {
   // 服务端返回了结构化的业务错误体 {code, data, message}
   if (rawRes && typeof rawRes.code === "number" && isServerCode(rawRes.code)) {
+    const errorMsg = _extractErrorMsg(rawRes);
     return {
       code: rawRes.code,
       data: (rawRes.data ?? undefined) as F | undefined,
       clientData: {
-        message: rawRes.message || rawRes.msg || getHttpStatusMessage(httpCode),
+        message:
+          errorMsg ||
+          getServerSafeMessage(rawRes.code) ||
+          getHttpStatusMessage(httpCode),
       },
     };
   }
 
   // 服务端未返回结构化错误 → 直接透传 HTTP 状态码
+  const errorMsg = _extractErrorMsg(rawRes);
   return {
     code: httpCode,
     clientData: {
-      message: rawRes?.message || rawRes?.msg || getHttpStatusMessage(httpCode),
+      message: errorMsg || getHttpStatusMessage(httpCode),
     },
   };
 }
@@ -37,7 +59,9 @@ export function buildHttpCodeError<F = any>(
 /**
  * axios 异常格式化 —— 纯客户端场景（无 HTTP 响应）
  */
-export function formatAxiosException<F = any>(err: any): BizApiErrorResponse<F> {
+export function formatAxiosException<F = any>(
+  err: any,
+): BizApiErrorResponse<F> {
   // 请求被取消
   if (
     err.message?.includes("canceled") ||
@@ -109,5 +133,31 @@ export function formatSseException(err: any): BizApiErrorResponse {
     clientData: {
       message: err?.message || ERROR_MESSAGES.unknownError,
     },
+  };
+}
+
+/**
+ * SSE 错误事件 payload 构造
+ *
+ * 服务端通过 event: error 通知异常终止时，payload 格式为:
+ * { code: number, data: { error_msg: string } }
+ *
+ * 转换为统一的 BizApiErrorResponse
+ */
+export function buildSseErrorPayload(payload: {
+  code?: number;
+  data?: unknown;
+}): BizApiErrorResponse {
+  const code = payload.code ?? ErrorCode.SYSTEM.UNKNOWN;
+  const errorMsg: string =
+    payload.data &&
+    typeof payload.data === "object" &&
+    (payload.data as { error_msg?: string }).error_msg
+      ? (payload.data as { error_msg?: string }).error_msg!
+      : getServerSafeMessage(code);
+  return {
+    code,
+    data: payload.data,
+    clientData: { message: errorMsg },
   };
 }
