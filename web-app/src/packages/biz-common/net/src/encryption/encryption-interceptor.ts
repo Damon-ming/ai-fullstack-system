@@ -8,9 +8,12 @@
  *
  * 请求头：
  *   X-Encrypt-Enabled: 1       → 服务端对响应也加密
+ *   X-Encrypt-Version: v1      → 客户端加密协议版本（服务端据此分发/兼容）
  *   X-Signature: <hex>         → 请求签名
  *   X-Timestamp: <ms>          → 签名时间戳
  *   X-Nonce: <hex>             → 签名随机数
+ *
+ * 加密 payload 内也携带 version 字段（防篡改，认证后验证）
  *
  * 响应流程：
  *   收到密文 → 解密 → 明文 JSON
@@ -22,17 +25,19 @@ import {
   generateAesKey,
   importRsaPublicKey,
   rsaEncrypt,
-  encryptJson,
-  decryptPayload,
   generateNonce,
-  computeSignature,
 } from "@ming/core-encryption";
+import { encryptJson, decryptPayload } from "./encryption-crypto";
+import { computeSignature } from "./signature";
 import type {
-  EncryptedPayload,
+  EncryptedResult,
+  VersionedEncryptedPayload,
   EncryptionSession,
   PublicKeyResponse,
   SessionResponse,
-} from "@ming/core-encryption";
+} from "./encryption-types";
+
+import { ENCRYPTION_VERSION } from "./encryption-types";
 
 const log = createLogger("net/encryption");
 
@@ -157,7 +162,7 @@ export function createEncryptionInterceptors(
       try {
         const session = await getSession();
         const decryptedStr = await decryptPayload(
-          response.data as EncryptedPayload,
+          response.data as EncryptedResult,
           session.aesKey,
         );
         return {
@@ -171,7 +176,7 @@ export function createEncryptionInterceptors(
         return response;
       }
     },
-    onRejected: async (error) => {
+    onRejected: (error) => {
       const status = error?.status || error?.response?.status;
       if (status === 40101 || status === 401) {
         log.info("会话过期，刷新中...");
@@ -198,18 +203,21 @@ export function createEncryptionInterceptors(
       );
       const session = await getSession();
       const jsonStr = JSON.stringify(signedData);
-      const encrypted = await encryptJson(
-        jsonStr,
-        session.aesKey,
-        session.keyId,
-      );
+      const encrypted = await encryptJson(jsonStr, session);
+
+      // 协议层附加版本号（core/encryption 不负责版本）
+      const payload: VersionedEncryptedPayload = {
+        ...encrypted,
+        version: ENCRYPTION_VERSION,
+      };
 
       return {
         ...request,
-        data: encrypted,
+        data: payload,
         headers: {
           ...request.headers,
           "x-encrypt-enabled": "1",
+          "x-encrypt-version": ENCRYPTION_VERSION,
         },
       };
     } catch (error) {
@@ -243,11 +251,13 @@ export function createEncryptionInterceptors(
 
       // 加密 meta_json
       const session = await getSession();
-      const encrypted = await encryptJson(
-        JSON.stringify(meta),
-        session.aesKey,
-        session.keyId,
-      );
+      const encrypted = await encryptJson(JSON.stringify(meta), session);
+
+      // 协议层附加版本号（core/encryption 不负责版本）
+      const versionedEncrypted: VersionedEncryptedPayload = {
+        ...encrypted,
+        version: ENCRYPTION_VERSION,
+      };
 
       // 重新组装 FormData：替换 meta_json 为加密版本，添加签名
       const newFormData = new FormData();
@@ -257,7 +267,10 @@ export function createEncryptionInterceptors(
           newFormData.append(key, value);
         }
       });
-      newFormData.set("meta_json_encrypted", JSON.stringify(encrypted));
+      newFormData.set(
+        "meta_json_encrypted",
+        JSON.stringify(versionedEncrypted),
+      );
       newFormData.set("timestamp", String(timestamp));
       newFormData.set("nonce", nonce);
       newFormData.set("signature", signature);
@@ -268,6 +281,7 @@ export function createEncryptionInterceptors(
         headers: {
           ...request.headers,
           "x-encrypt-enabled": "1",
+          "x-encrypt-version": ENCRYPTION_VERSION,
         },
       };
     } catch (error) {
@@ -305,12 +319,12 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function isEncryptedPayload(data: unknown): data is EncryptedPayload {
+function isEncryptedPayload(data: unknown): data is EncryptedResult {
   return (
     typeof data === "object" &&
     data !== null &&
-    typeof (data as EncryptedPayload).encrypted === "string" &&
-    typeof (data as EncryptedPayload).nonce === "string" &&
-    typeof (data as EncryptedPayload).keyId === "string"
+    typeof (data as EncryptedResult).encrypted === "string" &&
+    typeof (data as EncryptedResult).nonce === "string" &&
+    typeof (data as EncryptedResult).keyId === "string"
   );
 }

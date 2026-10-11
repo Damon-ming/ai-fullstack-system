@@ -1,30 +1,23 @@
 // web-app/src/packages/core/encryption/src/crypto-engine.ts
 /**
- * WebCrypto 底层封装
+ * WebCrypto 底层加密原语 — 纯算法，零业务逻辑。
  *
  * - AES-GCM 加解密（浏览器原生 SubtleCrypto）
  * - RSA-OAEP 加密（仅用于加密 AES 密钥发给服务端）
+ *
+ * 不含 JSON 序列化、base64 编码、keyId 等协议/业务概念。
+ * 可直接移植到任何需要 AES-GCM / RSA-OAEP 的项目。
  *
  * 注意：TypeScript 5.7+ 的 DOM lib 对 BufferSource 做了严格区分，
  * Uint8Array<ArrayBufferLike> 不再自动赋值给 BufferSource，
  * 需要通过 buffer 切片确保类型为 ArrayBuffer 后端。
  */
 
-import type { EncryptedPayload } from "./types";
-
 // ---------------------------------------------------------------------------
-// 常量
+// 内部工具：确保 Uint8Array 基于 ArrayBuffer（兼容 TS 5.7 严格 BufferSource）
 // ---------------------------------------------------------------------------
 
-const AES_NONCE_SIZE = 12; // GCM 推荐 96 bit
-
-// ---------------------------------------------------------------------------
-// 类型工具：确保 Uint8Array 基于 ArrayBuffer（兼容 TS 5.7 严格 BufferSource）
-// ---------------------------------------------------------------------------
-
-/** 将 Uint8Array 转为 BufferSource 兼容格式（强制 ArrayBuffer 后端） */
 function toBufferSource(data: Uint8Array): ArrayBuffer {
-  // 创建副本确保 buffer 是纯 ArrayBuffer（不是 SharedArrayBuffer）
   return data.buffer.slice(
     data.byteOffset,
     data.byteOffset + data.byteLength,
@@ -79,7 +72,7 @@ export async function aesEncrypt(
   cryptoKey: CryptoKey,
   aad?: Uint8Array,
 ): Promise<{ nonce: Uint8Array; ciphertext: Uint8Array }> {
-  const nonce = crypto.getRandomValues(new Uint8Array(AES_NONCE_SIZE));
+  const nonce = crypto.getRandomValues(new Uint8Array(12)); // GCM 推荐 96 bit
   const algo: AesGcmParams = { name: "AES-GCM", iv: toBufferSource(nonce) };
   if (aad) algo.additionalData = toBufferSource(aad);
 
@@ -127,7 +120,7 @@ export async function importRsaPublicKey(pem: string): Promise<CryptoKey> {
     .replace(/-----BEGIN PUBLIC KEY-----/, "")
     .replace(/-----END PUBLIC KEY-----/, "")
     .replace(/\s/g, "");
-  const binaryDer = base64ToArrayBuffer(pemBody);
+  const binaryDer = _base64ToArrayBuffer(pemBody);
 
   return crypto.subtle.importKey(
     "spki",
@@ -154,53 +147,10 @@ export async function rsaEncrypt(
 }
 
 // ---------------------------------------------------------------------------
-// 高层封装：JSON 字符串 ↔ EncryptedPayload
+// Base64 工具（RSA 公钥 PEM 解码需要）
 // ---------------------------------------------------------------------------
 
-/**
- * 将明文字符串加密为 EncryptedPayload。
- */
-export async function encryptJson(
-  jsonStr: string,
-  cryptoKey: CryptoKey,
-  keyId: string,
-): Promise<EncryptedPayload> {
-  const plaintext = new TextEncoder().encode(jsonStr);
-  const { nonce, ciphertext } = await aesEncrypt(plaintext, cryptoKey);
-  return {
-    encrypted: arrayBufferToBase64(ciphertext),
-    nonce: arrayBufferToBase64(nonce),
-    keyId,
-  };
-}
-
-/**
- * 将 EncryptedPayload 解密为明文字符串。
- */
-export async function decryptPayload(
-  payload: EncryptedPayload,
-  cryptoKey: CryptoKey,
-): Promise<string> {
-  const nonce = new Uint8Array(base64ToArrayBuffer(payload.nonce));
-  const ciphertext = new Uint8Array(base64ToArrayBuffer(payload.encrypted));
-  const plaintext = await aesDecrypt(nonce, ciphertext, cryptoKey);
-  return new TextDecoder().decode(plaintext);
-}
-
-// ---------------------------------------------------------------------------
-// Base64 工具
-// ---------------------------------------------------------------------------
-
-function arrayBufferToBase64(buffer: Uint8Array): string {
-  let binary = "";
-  const len = buffer.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(buffer[i]);
-  }
-  return btoa(binary);
-}
-
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
+function _base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);
   const len = binary.length;
   const bytes = new Uint8Array(len);
