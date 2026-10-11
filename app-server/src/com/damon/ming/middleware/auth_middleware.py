@@ -12,6 +12,7 @@
   - debug 环境判断（由 main.py 控制是否注册此中间件）
 """
 
+from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.account.token_store import is_token_valid
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -50,7 +51,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=401,
                 content={
-                    "code": 40301,
+                    "code": ErrorCode.AUTH.MISSING_TOKEN,
                     "data": {"error_msg": "Missing authentication token"},
                 },
             )
@@ -65,7 +66,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=401,
                 content={
-                    "code": 40302,
+                    "code": ErrorCode.AUTH.INVALID_TOKEN,
                     "data": {"error_msg": "Invalid or expired token"},
                 },
             )

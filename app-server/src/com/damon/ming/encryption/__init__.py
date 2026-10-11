@@ -22,8 +22,10 @@ from src.com.damon.ming.encryption.cipher_suite import CipherSuite
 from src.com.damon.ming.encryption.crypto_engine import (
     AesGcmEngine,
     CryptoEngine,
+    ENCRYPTION_VERSION,
     EncryptedPayload,
     RsaEngine,
+    SUPPORTED_ENCRYPTION_VERSIONS,
 )
 from src.com.damon.ming.encryption.encryption_config_loader import (
     EncryptionConfig,
@@ -37,6 +39,7 @@ __all__ = [
     "AesGcmEngine",
     "CipherSuite",
     "CryptoEngine",
+    "ENCRYPTION_VERSION",
     "EncryptedPayload",
     "EncryptionConfig",
     "EncryptionConfigLoader",
@@ -44,5 +47,6 @@ __all__ = [
     "KeyManager",
     "RsaEngine",
     "SessionKey",
+    "SUPPORTED_ENCRYPTION_VERSIONS",
     "verify_signature",
 ]

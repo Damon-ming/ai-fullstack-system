@@ -19,6 +19,7 @@ from src.com.damon.ming.ai.schemas.response import (
     ChatStartData,
     StreamMessage,
 )
+from src.com.damon.ming.exception.error_codes import ErrorCode
 
 
 class SseMessageFactory:
@@ -39,7 +40,7 @@ class SseMessageFactory:
     def start(data: ChatStartData) -> str:
         """构造 start 事件消息 —— 携带本次回答的元信息"""
         msg = StreamMessage[ChatStartData](
-            code=100000,
+            code=ErrorCode.OK,
             data=data,
         )
         return json.dumps(msg.model_dump(mode="json"), ensure_ascii=False)
@@ -48,7 +49,7 @@ class SseMessageFactory:
     def delta(data: ChatDeltaData) -> str:
         """构造 delta 事件消息 —— 增量分片"""
         msg = StreamMessage[ChatDeltaData](
-            code=100000,
+            code=ErrorCode.OK,
             data=data,
         )
         return json.dumps(msg.model_dump(mode="json"), ensure_ascii=False)
@@ -57,7 +58,7 @@ class SseMessageFactory:
     def done() -> str:
         """构造 done 事件消息 —— 流结束"""
         msg = StreamMessage[ChatDoneData](
-            code=100000,
+            code=ErrorCode.OK,
             data=ChatDoneData(),
         )
         return json.dumps(msg.model_dump(mode="json"), ensure_ascii=False)

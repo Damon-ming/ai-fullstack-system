@@ -41,6 +41,20 @@ AES_KEY_SIZE = 32  # AES-256
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# 加密协议版本
+# ---------------------------------------------------------------------------
+
+ENCRYPTION_VERSION = "v1"  # 当前加密协议版本
+
+SUPPORTED_ENCRYPTION_VERSIONS = frozenset({"v1"})  # 服务端支持的版本集合
+
+
+# ---------------------------------------------------------------------------
+# 数据结构
+# ---------------------------------------------------------------------------
+
+
 @dataclass(frozen=True)
 class EncryptedPayload:
     """加密后的载荷结构"""
@@ -48,12 +62,14 @@ class EncryptedPayload:
     encrypted: str  # base64
     nonce: str  # base64
     key_id: str
+    version: str = ENCRYPTION_VERSION  # 加密协议版本，默认当前版本
 
     def to_dict(self) -> dict:
         return {
             "encrypted": self.encrypted,
             "nonce": self.nonce,
             "keyId": self.key_id,
+            "version": self.version,
         }
 
     def to_json(self) -> str:

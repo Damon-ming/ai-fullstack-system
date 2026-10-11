@@ -62,9 +62,11 @@ def derive_kek(master_key: str | None = None) -> bytes:
 
     if not master_key:
         from src.com.damon.ming.exception import EncryptionError
+        from src.com.damon.ming.exception.error_codes import ErrorCode
 
         raise EncryptionError(
-            "MASTER_KEY 环境变量未设置。请设置一个至少 32 字符的随机密钥。"
+            "MASTER_KEY 环境变量未设置。请设置一个至少 32 字符的随机密钥。",
+            biz_code=ErrorCode.SYSTEM.ENCRYPTION_FAILURE,
         )
 
     if len(master_key) < 16:

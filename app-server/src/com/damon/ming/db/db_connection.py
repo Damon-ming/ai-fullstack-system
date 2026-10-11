@@ -12,8 +12,8 @@ import threading
 import time
 
 from src.com.damon.ming.db.db_config import DbConfig
-from src.com.damon.ming.log import pin
 from src.com.damon.ming.exception import DatabaseError
+from src.com.damon.ming.log import pin
 
 logger = pin("db.connection")
 
@@ -54,7 +54,12 @@ class DbConnection:
                 max_conn,
             )
         except ImportError:
-            raise DatabaseError("psycopg2 未安装：pip install psycopg2-binary")
+            from src.com.damon.ming.exception.error_codes import ErrorCode
+
+            raise DatabaseError(
+                "psycopg2 未安装：pip install psycopg2-binary",
+                biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
+            )
         except Exception as e:
             logger.error("数据库连接池初始化失败: %s", e)
             raise
@@ -62,7 +67,12 @@ class DbConnection:
     def _get_conn(self):
         """从连接池获取连接。"""
         if self._pool is None:
-            raise DatabaseError("DbConnection 未初始化。请先调用 initialize()。")
+            from src.com.damon.ming.exception.error_codes import ErrorCode
+
+            raise DatabaseError(
+                "DbConnection 未初始化。请先调用 initialize()。",
+                biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
+            )
         return self._pool.getconn()
 
     def _return_conn(self, conn) -> None:
@@ -209,7 +219,12 @@ _default_db_lock = threading.Lock()
 def get_default_db() -> DbConnection:
     """获取全局默认数据库连接。"""
     if _default_db is None:
-        raise DatabaseError("默认数据库未初始化。请先调用 set_default_db()。")
+        from src.com.damon.ming.exception.error_codes import ErrorCode
+
+        raise DatabaseError(
+            "默认数据库未初始化。请先调用 set_default_db()。",
+            biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
+        )
     return _default_db
 
 

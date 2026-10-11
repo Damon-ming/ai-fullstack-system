@@ -78,6 +78,7 @@ class AppInitializer:
             from src.com.damon.ming.exception import (
                 DatabaseError,
                 EncryptionError,
+                ErrorCode,
                 ServerSubSystem,
                 register_exception,
             )
@@ -93,7 +94,14 @@ class AppInitializer:
             except ImportError:
                 pass
 
-            logger.info("异常类型注册完成（Database / Encryption）")
+            # 上传进行中（资料库锁定）
+            from src.com.damon.ming.router.upload.schemas.bean import (
+                UploadInProgressError,
+            )
+
+            register_exception(UploadInProgressError, ErrorCode.UPLOAD.IN_PROGRESS)
+
+            logger.info("异常类型注册完成（Database / Encryption / UploadInProgress）")
         except Exception as e:
             logger.warning("异常类型注册失败: %s", e)
 

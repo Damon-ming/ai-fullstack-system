@@ -11,6 +11,7 @@ from src.com.damon.ming.ai.schemas.response import (
     BaseLLMSuccessResponse,
     ChatDeltaData,
 )
+from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
 from src.com.damon.ming.router.chat.sse import SseEmitter, SseMessageFactory
@@ -88,12 +89,12 @@ async def chat(req: Request, body: ChatRequest):
             logger.info("同步聊天请求完成")
             # 外层统一返回
             return BaseLLMSuccessResponse[BaseLLMSuccessData](
-                code=100000, data=BaseLLMSuccessData(data=resp_inner)
+                code=ErrorCode.OK, data=BaseLLMSuccessData(data=resp_inner)
             )
     except TimeoutError as e:
         logger.warning("同步聊天请求超时")
         return BaseLLMFailedResponse[BaseLLMFailedData](
-            code=300001,
+            code=ErrorCode.CHAT.TIMEOUT,
             data=BaseLLMFailedData(error_msg=str(e)),
         )
     except asyncio.CancelledError:
@@ -102,7 +103,7 @@ async def chat(req: Request, body: ChatRequest):
     except Exception as e:
         logger.exception("同步聊天请求未知异常")
         return BaseLLMFailedResponse[BaseLLMFailedData](
-            code=300002,
+            code=ErrorCode.CHAT.UNKNOWN,
             data=BaseLLMFailedData(error_msg=str(e)),
         )
 
@@ -171,7 +172,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
                 yield emitter.emit(
                     "error",
                     SseMessageFactory.error(
-                        300001, BaseLLMFailedData(error_msg=str(e))
+                        ErrorCode.CHAT.TIMEOUT, BaseLLMFailedData(error_msg=str(e))
                     ),
                 )
                 return
@@ -187,5 +188,5 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
         logger.exception("流式聊天请求失败")
         yield emitter.emit(
             "error",
-            SseMessageFactory.error(300003, BaseLLMFailedData(error_msg=str(e))),
+            SseMessageFactory.error(ErrorCode.CHAT.UNKNOWN, BaseLLMFailedData(error_msg=str(e))),
         )

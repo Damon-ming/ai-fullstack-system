@@ -21,8 +21,11 @@ _signature_secret: str = ""
 def get_key_manager() -> KeyManager:
     """获取全局 KeyManager 实例。"""
     if _key_manager is None:
+        from src.com.damon.ming.exception.error_codes import ErrorCode
+
         raise EncryptionError(
-            "KeyManager not initialized. Call set_key_manager() in lifespan."
+            "KeyManager not initialized. Call set_key_manager() in lifespan.",
+            biz_code=ErrorCode.SYSTEM.ENCRYPTION_FAILURE,
         )
     return _key_manager
 

@@ -13,6 +13,7 @@ import base64
 
 from fastapi import APIRouter, Body
 from src.com.damon.ming.encryption.globals import get_key_manager
+from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.schemas.response import (
     BaseFailedResponse,
@@ -20,13 +21,6 @@ from src.com.damon.ming.schemas.response import (
 )
 
 logger = pin("encryption.router")
-
-
-class EncryptionErrorCode:
-    """加密体系业务错误码（40000-40099）"""
-
-    INVALID_KEY_FORMAT = 40001  # AES 密钥格式错误
-    SESSION_REG_FAILED = 40002  # 会话注册失败（内部异常）
 
 
 router = APIRouter(prefix="/api/encryption", tags=["加密体系"])
@@ -43,7 +37,7 @@ async def get_public_key():
     km = get_key_manager()
     pem = km.get_public_key_pem()
     return BaseSuccessResponse(
-        code=10000,
+        code=ErrorCode.OK,
         data={
             "publicKey": pem.decode("utf-8"),
             "algorithm": "RSA-OAEP-256",
@@ -67,7 +61,7 @@ async def register_session(
         session = km.register_session(encrypted_aes_key)
         logger.info("新加密会话注册 | key_id=%s", session.key_id)
         return BaseSuccessResponse(
-            code=10000,
+            code=ErrorCode.OK,
             data={
                 "keyId": session.key_id,
                 "expiresIn": session.ttl_seconds,
@@ -76,12 +70,12 @@ async def register_session(
     except ValueError as e:
         logger.warning("会话注册失败（密钥格式错误）: %s", e)
         return BaseFailedResponse(
-            code=EncryptionErrorCode.INVALID_KEY_FORMAT,
+            code=ErrorCode.ENCRYPT.INVALID_KEY_FORMAT,
             data={"error_msg": "Invalid AES key format"},
         )
     except Exception:
         logger.exception("会话注册失败")
         return BaseFailedResponse(
-            code=EncryptionErrorCode.SESSION_REG_FAILED,
+            code=ErrorCode.ENCRYPT.SESSION_REG_FAILED,
             data={"error_msg": "Session registration failed"},
         )

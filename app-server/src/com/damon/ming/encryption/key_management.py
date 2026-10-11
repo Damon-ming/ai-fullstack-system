@@ -32,8 +32,6 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass, field
-
-from src.com.damon.ming.exception import EncryptionError
 from datetime import UTC, datetime, timedelta
 
 # BaseKeyStore 类型提示用（避免运行时导入，保持可选依赖）
@@ -42,6 +40,7 @@ from typing import TYPE_CHECKING
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from src.com.damon.ming.encryption.crypto_engine import AesGcmEngine
+from src.com.damon.ming.exception import EncryptionError
 
 if TYPE_CHECKING:
     from src.com.damon.ming.encryption.key_store.base_key_store import BaseKeyStore
@@ -167,7 +166,9 @@ class KeyManager:
     def get_public_key_pem(self) -> bytes:
         """返回 RSA 公钥 PEM 格式（可安全分发给客户端）。"""
         if self._public_key_pem is None:
-            raise EncryptionError("KeyManager not initialized. Call initialize() first.")
+            raise EncryptionError(
+                "KeyManager not initialized. Call initialize() first."
+            )
         return self._public_key_pem
 
     # ---- 会话注册 -------------------------------------------------------
@@ -197,7 +198,12 @@ class KeyManager:
             ),
         )
         if len(aes_key) not in (16, 24, 32):
-            raise ValueError(f"Invalid AES key length: {len(aes_key)} bytes")
+            from src.com.damon.ming.exception.error_codes import ErrorCode
+
+            raise EncryptionError(
+                f"Invalid AES key length: {len(aes_key)} bytes",
+                biz_code=ErrorCode.ENCRYPT.INVALID_KEY_FORMAT,
+            )
 
         # 2. 生成不可预测的 keyId
         key_id = secrets.token_urlsafe(24)  # ~32 字符
@@ -302,7 +308,12 @@ class KeyManager:
                 key_id = self._current_data_key_id
             key = self._data_keys.get(key_id)
             if key is None:
-                raise KeyError(f"Data key not found: {key_id}")
+                from src.com.damon.ming.exception.error_codes import ErrorCode
+
+                raise EncryptionError(
+                    f"Data key not found: {key_id}",
+                    biz_code=ErrorCode.ENCRYPT.SESSION_INVALID,
+                )
             return key
 
     def rotate_data_key(self, new_key_id: str) -> None:
@@ -327,5 +338,7 @@ class KeyManager:
     def get_index_key(self) -> bytes:
         """获取盲索引密钥。"""
         if not self._index_key:
-            raise EncryptionError("KeyManager not initialized. Call initialize() first.")
+            raise EncryptionError(
+                "KeyManager not initialized. Call initialize() first."
+            )
         return self._index_key

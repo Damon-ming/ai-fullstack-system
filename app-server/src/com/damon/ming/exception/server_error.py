@@ -3,8 +3,12 @@
 
 服务端记录完整堆栈，客户端只收到"哪类子系统出错"的提示，
 不暴露内部实现细节（堆栈、SQL、密钥信息等）。
+
+错误码分段: A BBB CCC — 详见 error_codes.py
+子系统错误使用 2010xxx 段 (FAILURE + System.DATABASE)。
 """
 
+from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 
 logger = pin("app.error")
@@ -18,20 +22,31 @@ logger = pin("app.error")
 class DatabaseError(Exception):
     """数据库子系统异常基类。"""
 
+    def __init__(self, message: str, biz_code: int | None = None):
+        super().__init__(message)
+        self.biz_code = biz_code
+
 
 class EncryptionError(Exception):
     """加密子系统异常基类。"""
 
+    def __init__(self, message: str, biz_code: int | None = None):
+        super().__init__(message)
+        self.biz_code = biz_code
+
 
 class ServerSubSystem:
-    """子系统错误码（40100-40199）—— 用于指示错误来源分类。"""
+    """子系统错误码（2010xx）—— 用于指示错误来源分类。
 
-    DATABASE = 40101  # 数据库操作失败
-    ENCRYPTION = 40102  # 加密/解密失败
-    UPLOAD = 40103  # 上传处理失败
-    AI = 40104  # AI 推理失败
-    AUTH = 40105  # 认证/鉴权失败
-    UNKNOWN = 40199  # 未知子系统异常
+    使用 ErrorCode.SYSTEM 命名空间，保持与统一码表一致。
+    """
+
+    DATABASE = ErrorCode.SYSTEM.DATABASE_FAILURE  # 201001 数据库操作失败
+    ENCRYPTION = ErrorCode.SYSTEM.ENCRYPTION_FAILURE  # 201002 加密/解密失败
+    UPLOAD = ErrorCode.SYSTEM.UPLOAD_FAILURE  # 201003 上传处理失败
+    AI = ErrorCode.SYSTEM.AI_FAILURE  # 201004 AI 推理失败
+    AUTH = ErrorCode.SYSTEM.AUTH_FAILURE  # 201005 认证/鉴权失败
+    UNKNOWN = ErrorCode.SYSTEM.UNKNOWN  # 201099 未知子系统异常
 
 
 # 异常类型 → 子系统码映射

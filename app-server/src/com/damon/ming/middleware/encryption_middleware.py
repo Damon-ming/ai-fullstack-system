@@ -16,11 +16,17 @@ FastAPI 加密 + 签名中间件
 签名头：
   X-Timestamp, X-Nonce, X-Signature  → 或从 FormData 字段读取
 
-错误码：
-  40001: JSON 解密失败
-  40002: FormData meta 解密失败
-  40101: 会话过期 / 无效
-  40102: 签名验证失败
+错误码（统一 ErrorCode 分段码，详见 exception/error_codes.py）：
+  200103: 客户端加密协议版本不受支持（X-Encrypt-Version header）
+  200104: JSON 解密失败
+  200105: FormData meta 解密失败
+  200106: 会话过期 / 无效
+  200107: 签名验证失败
+
+版本校验：
+  客户端通过 X-Encrypt-Version header 告知服务端加密版本。
+  服务端在中间件层（不解密即可拒绝）校验，
+  不支持的版本返回 200103。无 header 时跳过（向后兼容老客户端）。
 
 设计说明：
   本文件位于 middleware/ 而非 encryption/，因为它属于 HTTP 业务逻辑层。
@@ -32,19 +38,47 @@ import json
 from collections.abc import Callable
 
 from fastapi import Request
-from src.com.damon.ming.encryption.crypto_engine import AesGcmEngine, EncryptedPayload
+from src.com.damon.ming.encryption.crypto_engine import (
+    SUPPORTED_ENCRYPTION_VERSIONS,
+    AesGcmEngine,
+    EncryptedPayload,
+)
 from src.com.damon.ming.encryption.globals import (
     get_key_manager,
     get_signature_secret,
 )
 from src.com.damon.ming.encryption.key_management import KeyManager, SessionKey
 from src.com.damon.ming.encryption.signature import verify_signature
+from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
 logger = pin("middleware.encryption")
+
+
+# ---------------------------------------------------------------------------
+# 工具函数
+# ---------------------------------------------------------------------------
+
+
+def _check_version_header(request: Request) -> str | None:
+    """
+    检查 X-Encrypt-Version header 是否受支持。
+
+    返回 None 表示通过，否则返回错误消息。
+    无 header 时跳过（向后兼容老客户端）。
+    """
+    client_version = request.headers.get("x-encrypt-version")
+    if client_version is None:
+        return None  # 老客户端不发 header，跳过
+    if client_version not in SUPPORTED_ENCRYPTION_VERSIONS:
+        return (
+            f"Unsupported encryption version: {client_version}, "
+            f"supported: {sorted(SUPPORTED_ENCRYPTION_VERSIONS)}"
+        )
+    return None
 
 
 class EncryptionMiddleware(BaseHTTPMiddleware):
@@ -57,6 +91,20 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         km = get_key_manager()
         encrypt_response = request.headers.get("x-encrypt-enabled") == "1"
         session: SessionKey | None = None
+
+        # ---- 0. 版本校验（header 层级，不解密即可拒绝）-----------
+        version_error = _check_version_header(request)
+        if version_error is not None:
+            logger.warning(
+                "版本校验失败: %s | path=%s", version_error, request.url.path
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "code": ErrorCode.ENCRYPT.UNSUPPORTED_VERSION,
+                    "data": {"error_msg": version_error},
+                },
+            )
 
         content_type = request.headers.get("content-type", "")
 
@@ -74,7 +122,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                             return JSONResponse(
                                 status_code=401,
                                 content={
-                                    "code": 40101,
+                                    "code": ErrorCode.ENCRYPT.SESSION_INVALID,
                                     "data": {
                                         "error_msg": "Invalid session or bad signature"
                                     },
@@ -85,7 +133,10 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 logger.warning("JSON 解密失败: %s", e)
                 return JSONResponse(
                     status_code=400,
-                    content={"code": 40001, "data": {"error_msg": "Decryption failed"}},
+                    content={
+                        "code": ErrorCode.ENCRYPT.DECRYPTION_FAILED,
+                        "data": {"error_msg": "Decryption failed"},
+                    },
                 )
 
         # ---- 2. FormData 加密请求：解密 meta + 验证签名 ----------------
@@ -96,7 +147,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                     return JSONResponse(
                         status_code=401,
                         content={
-                            "code": 40101,
+                            "code": ErrorCode.ENCRYPT.SESSION_INVALID,
                             "data": {"error_msg": "Invalid session or bad signature"},
                         },
                     )
@@ -106,7 +157,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=400,
                     content={
-                        "code": 40002,
+                        "code": ErrorCode.ENCRYPT.META_DECRYPT_FAILED,
                         "data": {"error_msg": "Meta decryption failed"},
                     },
                 )

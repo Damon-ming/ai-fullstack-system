@@ -15,6 +15,7 @@ TODO: 后期 device_id 替换为手机号，接入账号系统
 import secrets
 
 from fastapi import APIRouter
+from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.account.schemas.bean import (
     TokenRequest,
@@ -50,7 +51,7 @@ async def generate_token(body: TokenRequest):
             existing_token[:8] + "...",
         )
         return BaseSuccessResponse(
-            code=10000,
+            code=ErrorCode.OK,
             data=TokenResponseData(token=existing_token),
         )
 
@@ -65,6 +66,6 @@ async def generate_token(body: TokenRequest):
     )
 
     return BaseSuccessResponse(
-        code=10000,
+        code=ErrorCode.OK,
         data=TokenResponseData(token=token),
     )
