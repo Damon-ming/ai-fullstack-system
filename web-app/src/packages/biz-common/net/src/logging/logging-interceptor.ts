@@ -50,16 +50,18 @@ export function createLoggingInterceptors(): {
       const startTime = (config as any).__netStartTime ?? Date.now();
       const elapsed = Date.now() - startTime;
 
-      // 4xx/5xx 服务端错误用 SERVER: 前缀，2xx 用普通 info
       if (status >= 400) {
         log.serverError(
           `${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`,
           { body: formatBody(data) },
         );
       } else {
-        log.info(`${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`, {
-          body: formatBody(data),
-        });
+        log.info(
+          `${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`,
+          {
+            body: formatBody(data),
+          },
+        );
       }
 
       return response;
@@ -78,7 +80,7 @@ export function createLoggingInterceptors(): {
         );
       } else {
         log.error(
-          `${config?.method?.toUpperCase()} ${config?.url} → ${status || "NETWORK_ERROR"} (${formatTime(elapsed)})`,
+          `${config?.method?.toUpperCase()} ${config?.url} → ${status || "CLIENT: NETWORK_ERROR"} (${formatTime(elapsed)})`,
           error,
         );
       }

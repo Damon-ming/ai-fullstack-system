@@ -73,7 +73,9 @@ export async function initDeviceToken(): Promise<string> {
 
   if (err || !resp?.data?.token) {
     throw log.serverThrow(
-      new Error(`Token 签发失败: ${err?.data?.error_msg || "未知错误"}`),
+      new Error(
+        `Token 签发失败: ${err?.data?.error_msg || "CLIENT: 未知错误"}`,
+      ),
     );
   }
 
@@ -108,4 +110,3 @@ export function useAccount() {
   };
   return { profile, update };
 }
-

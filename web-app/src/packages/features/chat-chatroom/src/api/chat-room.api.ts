@@ -1,5 +1,5 @@
 // web-app/src/packages/features/chat-chatroom/src/api/chat-room.api.ts
-import { dataApi, QueryFactory } from "@ming/data-layer";
+import { dataApi } from "@ming/data-layer";
 import { netClient } from "@ming/biz-common-net-api";
 import type {
   ChatRoomApiResponse,
@@ -12,6 +12,8 @@ import type {
   SseStreamOptions,
   SseFinalState,
 } from "@ming/biz-common-net-api";
+
+// 注：TanStack Mutation Hook 已移至 hook/useChatRoomMutation.ts
 
 const log = createLogger("chat-chatroom/api");
 
@@ -34,14 +36,6 @@ export const sendChatRoomMessageFn = (
       throw error;
     });
 };
-
-// TanStack Mutation Hook（需要缓存/状态管理的地方走 data-layer）
-export const useSendChatRoomMessage = QueryFactory.genMutationHook(
-  sendChatRoomMessageFn,
-  {
-    retry: 0, // 发送聊天消息默认不重试，收敛在此处
-  },
-);
 
 /**
  * SSE 流式请求 — 不走 TanStack，直接调 biz-common-net

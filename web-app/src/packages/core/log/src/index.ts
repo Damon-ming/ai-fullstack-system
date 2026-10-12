@@ -17,7 +17,7 @@ export interface Logger {
 
   /**
    * 服务端返回的错误日志 —— 服务端响应中携带的错误信息。
-   * 前缀: SERVER: [ts] [namespace]
+   * 前缀: [ts] [namespace]
    */
   serverError(message: string, error?: unknown, context?: LogContext): void;
 
@@ -29,7 +29,7 @@ export interface Logger {
 
   /**
    * 服务端错误日志 + 抛异常 —— 用于将服务端错误向上层抛出。
-   * 打印 SERVER: 前缀日志，然后抛出原始 Error。
+   * 打印 前缀日志，然后抛出原始 Error。
    */
   serverThrow(error: Error, context?: LogContext): never;
 }
@@ -134,7 +134,7 @@ function formatServerError(
 ): unknown[] {
   const ts = new Date().toISOString().slice(0, 23);
   const output: unknown[] = [
-    `SERVER: [${ts}] [${namespace}] ${message}: ${errorDetail(error)}`,
+    `[${ts}] [${namespace}] ${message}: ${errorDetail(error)}`,
   ];
   if (error instanceof Error && error.stack) {
     output.push(`\n${error.stack}`);

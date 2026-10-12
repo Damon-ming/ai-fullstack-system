@@ -20,7 +20,7 @@ export async function fetchPublicKey(): Promise<PublicKeyResponse> {
   );
   if (err || !resp?.data) {
     throw log.serverThrow(
-      new Error(`获取公钥失败: ${err?.data?.error_msg || "未知错误"}`),
+      new Error(`获取公钥失败: ${err?.data?.error_msg || "CLIENT: 未知错误"}`),
     );
   }
   return resp.data;
@@ -37,7 +37,7 @@ export async function registerSession(
   );
   if (err || !resp?.data) {
     throw log.serverThrow(
-      new Error(`会话注册失败: ${err?.data?.error_msg || "未知错误"}`),
+      new Error(`会话注册失败: ${err?.data?.error_msg || "CLIENT: 未知错误"}`),
     );
   }
   return resp.data;
