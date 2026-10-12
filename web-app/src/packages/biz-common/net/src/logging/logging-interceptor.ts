@@ -50,17 +50,17 @@ export function createLoggingInterceptors(): {
       const startTime = (config as any).__netStartTime ?? Date.now();
       const elapsed = Date.now() - startTime;
 
-      const level =
-        status >= 200 && status < 300
-          ? "info"
-          : status >= 400
-            ? "error"
-            : "warn";
-
-      log[level](
-        `${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`,
-        { body: formatBody(data) },
-      );
+      // 4xx/5xx 服务端错误用 SERVER: 前缀，2xx 用普通 info
+      if (status >= 400) {
+        log.serverError(
+          `${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`,
+          { body: formatBody(data) },
+        );
+      } else {
+        log.info(`${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`, {
+          body: formatBody(data),
+        });
+      }
 
       return response;
     },
@@ -69,10 +69,19 @@ export function createLoggingInterceptors(): {
       const startTime = (config as any).__netStartTime ?? Date.now();
       const elapsed = Date.now() - startTime;
 
-      log.error(
-        `${config?.method?.toUpperCase()} ${config?.url} → ${error?.status || "NETWORK_ERROR"} (${formatTime(elapsed)})`,
-        error,
-      );
+      // 网络层错误（无响应）标记为 CLIENT: 兜底日志
+      const status = error?.response?.status;
+      if (status && status >= 400) {
+        log.serverError(
+          `${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`,
+          error,
+        );
+      } else {
+        log.error(
+          `${config?.method?.toUpperCase()} ${config?.url} → ${status || "NETWORK_ERROR"} (${formatTime(elapsed)})`,
+          error,
+        );
+      }
 
       return Promise.reject(error);
     },

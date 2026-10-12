@@ -49,7 +49,7 @@ export function createEncryptionInterceptors(signatureSecret: string): {
     onFulfilled: async (request) => {
       const session = getEncryptionSession();
       if (!session) {
-        throw new Error("加密会话不可用，请求中止");
+        throw log.throw(new Error("加密会话不可用，请求中止"));
       }
 
       // FormData：文件上传场景
@@ -60,13 +60,13 @@ export function createEncryptionInterceptors(signatureSecret: string): {
       // JSON 请求
       const contentType = request.headers["content-type"] || "";
       if (!contentType.includes("application/json")) {
-        throw new Error(`不支持加密的内容类型: ${contentType}`);
+        throw log.throw(new Error(`不支持加密的内容类型: ${contentType}`));
       }
       if (typeof request.data !== "object" || request.data === null) {
-        throw new Error("请求体格式异常，无法加密");
+        throw log.throw(new Error("请求体格式异常，无法加密"));
       }
       if (isEncryptedPayload(request.data)) {
-        throw new Error("请求体已加密，重复加密");
+        throw log.throw(new Error("请求体已加密，重复加密"));
       }
 
       return handleJson(request, session, signatureSecret);
@@ -85,7 +85,7 @@ export function createEncryptionInterceptors(signatureSecret: string): {
 
       const session = getEncryptionSession();
       if (!session) {
-        throw new Error("加密会话不可用，无法解密响应");
+        throw log.throw(new Error("加密会话不可用，无法解密响应"));
       }
 
       const decryptedStr = await decryptPayload(

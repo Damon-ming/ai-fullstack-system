@@ -77,7 +77,9 @@ async function initGlobalNetwork(): Promise<void> {
   if (!isDebug) {
     // 加密会话 → 写入 app-state，加密拦截器自动加解密
     if (!signatureSecret) {
-      throw new Error("signatureSecret 未配置，无法启用加密通信");
+      throw log.throw(
+        new Error("signatureSecret 未配置，无法启用加密通信"),
+      );
     }
 
     const session = await exchangeKeys();

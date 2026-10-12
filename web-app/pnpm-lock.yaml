@@ -126,6 +126,9 @@ importers:
 
   src/packages/core/network:
     dependencies:
+      '@ming/core-log':
+        specifier: workspace:*
+        version: link:../log
       react:
         specifier: ^18.2.0
         version: 18.3.1

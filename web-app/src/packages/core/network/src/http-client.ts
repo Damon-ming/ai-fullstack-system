@@ -11,6 +11,9 @@ import { InterceptorPipeline } from "./shared/interceptor-pipeline";
 import { RestfulClient } from "./restful/restful-client";
 import { SseTransport } from "./sse/sse-transport";
 import type { SseRequestOptions } from "./sse/sse-transport";
+import { createLogger } from "@ming/core-log";
+
+const log = createLogger("core/network");
 
 /** Public facade combining REST and SSE transports without mixing their implementations. */
 export class HttpClient {
@@ -20,7 +23,7 @@ export class HttpClient {
 
   constructor(private readonly config: HttpClientConfig) {
     if (typeof config.baseURL !== "string")
-      throw new Error("HttpClientConfig.baseURL must be string");
+      throw log.throw(new Error("HttpClientConfig.baseURL must be string"));
     this.pipeline = new InterceptorPipeline(config.interceptors);
     this.restful = new RestfulClient(config, this.pipeline);
     this.sseTransport = new SseTransport(config, this.pipeline);

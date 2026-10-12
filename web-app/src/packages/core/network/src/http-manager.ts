@@ -8,6 +8,9 @@ import {
   InterceptorConfig,
   NormalizedRequest,
 } from "./shared/types";
+import { createLogger } from "@ming/core-log";
+
+const log = createLogger("core/network");
 
 export class HttpManager {
   // 私有默认客户端，外部无法直接修改
@@ -38,8 +41,10 @@ export class HttpManager {
   /** 获取全局默认客户端 */
   getDefaultClient(): HttpClient {
     if (!this.defaultClient) {
-      throw new Error(
-        "Default HttpClient not initialized, please setDefaultClient first",
+      throw log.throw(
+        new Error(
+          "Default HttpClient not initialized, please setDefaultClient first",
+        ),
       );
     }
     return this.defaultClient;

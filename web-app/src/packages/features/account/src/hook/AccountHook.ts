@@ -72,7 +72,9 @@ export async function initDeviceToken(): Promise<string> {
   const [err, resp] = await requestDeviceToken({ phone: SIMULATED_PHONE });
 
   if (err || !resp?.data?.token) {
-    throw new Error(`Token 签发失败: ${err?.data?.error_msg || "未知错误"}`);
+    throw log.serverThrow(
+      new Error(`Token 签发失败: ${err?.data?.error_msg || "未知错误"}`),
+    );
   }
 
   // 缓存 token + device_id 到 localStorage

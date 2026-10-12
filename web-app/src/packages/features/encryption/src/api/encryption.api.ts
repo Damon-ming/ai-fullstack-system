@@ -19,7 +19,9 @@ export async function fetchPublicKey(): Promise<PublicKeyResponse> {
     "/api/encryption/key/v1",
   );
   if (err || !resp?.data) {
-    throw new Error(`获取公钥失败: ${err?.data?.error_msg || "未知错误"}`);
+    throw log.serverThrow(
+      new Error(`获取公钥失败: ${err?.data?.error_msg || "未知错误"}`),
+    );
   }
   return resp.data;
 }
@@ -34,7 +36,9 @@ export async function registerSession(
     { encryptedAesKey: encryptedKeyB64 },
   );
   if (err || !resp?.data) {
-    throw new Error(`会话注册失败: ${err?.data?.error_msg || "未知错误"}`);
+    throw log.serverThrow(
+      new Error(`会话注册失败: ${err?.data?.error_msg || "未知错误"}`),
+    );
   }
   return resp.data;
 }

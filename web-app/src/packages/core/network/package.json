@@ -5,6 +5,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "@ming/core-log": "workspace:*"
+  },
   "devDependencies": {
     "axios": "^1.7.7"
   },
