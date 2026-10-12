@@ -1,8 +1,7 @@
+// web-app/src/packages/features/account-api/src/index.ts
 export {
-  getCurrentAccount,
-  updateAccount,
-  getDeviceToken,
+  useAccount,
   initDeviceToken,
-} from "./api/account-api.api"
-export { useAccount } from "./api/account-api.api"
-export type { AccountProfile } from "./api/account-api.api"
+  refreshDeviceToken,
+} from "./api/account-api.api";
+export type { AccountProfile } from "./api/account-api.api";

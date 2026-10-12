@@ -8,6 +8,7 @@ import {
 import { createLogger } from "@ming/core-log";
 import { isDebug } from "@ming/debug";
 import { i18n } from "@ming/i18n";
+import { getDeviceToken } from "@ming/biz-common-util";
 import { initDeviceToken } from "@ming/features-account-api";
 import { exchangeKeys } from "@ming/features-encryption-api";
 import { useAppStore } from "@ming/store";
@@ -27,6 +28,9 @@ export async function bootstrap(): Promise<void> {
   // 2. 初始化 i18n
   log.info(`i18n initialized, language: ${i18n.language}`);
 
+  // 3. 初始化设备 Token（hook 层已处理 localStorage 写入）
+  await initDeviceToken();
+
   log.info("Initialization complete.");
 }
 
@@ -41,13 +45,15 @@ export async function bootstrap(): Promise<void> {
  */
 async function initGlobalNetwork(): Promise<void> {
   // 将环境标志写入全局 app-state
+  //TODO: 上线记得删除这个写法，改为从服务端获取
   useAppStore.setState({ debug: { isDebug } });
-  //todo: 这里可以考虑在 debug 模式下，允许通过 query string 或 localStorage 来覆盖 isDebug，以便测试加密/认证/日志开关
-  const signatureSecret = import.meta.env.VITE_SIGNATURE_SECRET ?? "";
+  // const signatureSecret = import.meta.env.VITE_SIGNATURE_SECRET ?? "";
+  //TODO: 生产环境下，signatureSecret 应该从服务端获取，而不是写死在前端代码里
+  const signatureSecret = "signature-secret";
 
   // 注入 store 回调到 biz-common/net 内部提供者（解除反向依赖）
   setDebugGetter(() => useAppStore.getState().debug.isDebug);
-  setTokenGetter(() => useAppStore.getState().token.deviceToken);
+  setTokenGetter(() => getDeviceToken()); // 直接读 localStorage，不经过 app-state
   setEncryptionSessionGetter(() => {
     const session = useAppStore.getState().encryption.session;
     if (!session) return null;
@@ -69,10 +75,6 @@ async function initGlobalNetwork(): Promise<void> {
 
   // release 模式时，token 初始化和密钥交换必须成功
   if (!isDebug) {
-    // 设备 token → 写入 app-state，token 拦截器自动携带
-    const token = await initDeviceToken();
-    useAppStore.getState().token.setDeviceToken(token);
-
     // 加密会话 → 写入 app-state，加密拦截器自动加解密
     if (!signatureSecret) {
       throw new Error("signatureSecret 未配置，无法启用加密通信");

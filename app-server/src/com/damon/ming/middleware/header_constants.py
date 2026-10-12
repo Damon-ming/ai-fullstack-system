@@ -17,3 +17,9 @@ SYSTEM_VERSION = "x-system-version"
 
 # 环境头
 CLIENT_ENV = "x-client-env"
+
+# 设备 ID 头（服务端下发给客户端，客户端回传用于校验）
+DEVICE_ID = "x-device-id"
+
+# 客户端 UA 头（浏览器环境摘要）
+CLIENT_UA = "x-client-ua"

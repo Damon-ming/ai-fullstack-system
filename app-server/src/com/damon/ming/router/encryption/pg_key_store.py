@@ -49,6 +49,21 @@ CREATE INDEX IF NOT EXISTS idx_enc_sessions_expires ON encryption_sessions (expi
 """
 
 # ---------------------------------------------------------------------------
+# 设备表迁移
+# ---------------------------------------------------------------------------
+
+_MIGRATION_ID_DEVICES = "002_devices"
+_MIGRATION_DDL_DEVICES = """
+CREATE TABLE IF NOT EXISTS devices (
+    device_id    VARCHAR(64)  PRIMARY KEY,
+    phone        VARCHAR(32)  NOT NULL,
+    ua_hash      VARCHAR(64)  NOT NULL,
+    created_at   TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_devices_phone ON devices (phone);
+"""
+
+# ---------------------------------------------------------------------------
 # SQL 语句
 # ---------------------------------------------------------------------------
 
@@ -82,6 +97,10 @@ DELETE FROM encryption_sessions WHERE expires_at <= NOW();
 
 _COUNT = """
 SELECT COUNT(*) FROM encryption_sessions;
+"""
+
+_GET_BINDING = """
+SELECT device_id FROM encryption_sessions WHERE key_id = %s;
 """
 
 
@@ -124,6 +143,7 @@ class PgKeyStore(BaseKeyStore):
 
     def initialize(self) -> None:
         """建表 + 建索引（幂等）。"""
+        self._migration.register(_MIGRATION_ID_DEVICES, _MIGRATION_DDL_DEVICES)
         self._migration.apply_all()
 
     def save_session(self, session: StoredSession, device_id: str = "") -> None:
@@ -172,3 +192,29 @@ class PgKeyStore(BaseKeyStore):
     def count(self) -> int:
         rows = self._db.execute(_COUNT, commit=False, fetch=True)
         return rows[0][0] if rows else 0
+
+    # ---------------------------------------------------------------------------
+    # 业务层绑定接口（加密模块不感知，由业务层调用）
+    # ---------------------------------------------------------------------------
+
+    def bind_session(self, key_id: str, device_id: str) -> None:
+        """
+        将加密会话绑定到设备。
+
+        由业务层在 register_session 成功后调用，加密模块不感知此方法。
+        device_id 在此仅是 opaque string，不解析其含义。
+        """
+        # device_id 列已在 save_session 中初始化为空串，此处更新
+        self._db.execute(
+            "UPDATE encryption_sessions SET device_id = %s WHERE key_id = %s",
+            (device_id, key_id),
+            commit=True,
+        )
+
+    def get_binding_id(self, key_id: str) -> str | None:
+        """查询加密会话绑定的业务标识。无绑定返回空串。"""
+        rows = self._db.execute(_GET_BINDING, (key_id,), commit=False, fetch=True)
+        if not rows:
+            return None
+        result = rows[0][0]
+        return result if result else None

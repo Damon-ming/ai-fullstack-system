@@ -26,9 +26,15 @@ importers:
 
   src/app/main:
     dependencies:
+      '@ming/biz-common-net':
+        specifier: workspace:*
+        version: link:../../packages/biz-common/net
       '@ming/biz-common-net-api':
         specifier: workspace:*
         version: link:../../packages/biz-common/net-api
+      '@ming/biz-common-util':
+        specifier: workspace:*
+        version: link:../../packages/biz-common/util
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../packages/core/log
@@ -77,11 +83,14 @@ importers:
 
   src/packages/biz-common/net:
     dependencies:
+      '@ming/biz-common-util':
+        specifier: workspace:*
+        version: link:../util
       react:
-        specifier: ^18.2.0
+        specifier: ^18.0.0
         version: 18.3.1
       react-dom:
-        specifier: ^18.2.0
+        specifier: ^18.0.0
         version: 18.3.1(react@18.3.1)
     devDependencies:
       '@ming/core-encryption':
@@ -93,6 +102,9 @@ importers:
       '@ming/core-network':
         specifier: workspace:*
         version: link:../../core/network
+      '@ming/core-util':
+        specifier: workspace:*
+        version: link:../../core/util
       axios:
         specifier: ^1.7.7
         version: 1.19.0(debug@4.4.3)
@@ -105,6 +117,8 @@ importers:
       '@ming/core-network':
         specifier: workspace:*
         version: link:../../core/network
+
+  src/packages/biz-common/util: {}
 
   src/packages/core/encryption: {}
 
@@ -139,6 +153,9 @@ importers:
       '@ming/biz-common-net-api':
         specifier: workspace:*
         version: link:../../biz-common/net-api
+      '@ming/biz-common-util':
+        specifier: workspace:*
+        version: link:../../biz-common/util
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
@@ -151,6 +168,9 @@ importers:
       '@ming/features-account':
         specifier: workspace:*
         version: link:../account
+      react:
+        specifier: '>=18.0.0'
+        version: 18.3.1
 
   src/packages/features/chat:
     dependencies:
@@ -325,6 +345,9 @@ importers:
       '@ming/biz-common-net-api':
         specifier: workspace:*
         version: link:../biz-common/net-api
+      '@ming/biz-common-util':
+        specifier: workspace:*
+        version: link:../biz-common/util
       '@ming/debug':
         specifier: workspace:*
         version: link:../biz-common/debug

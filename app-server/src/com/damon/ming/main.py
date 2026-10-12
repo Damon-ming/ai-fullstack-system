@@ -38,6 +38,7 @@ from src.com.damon.ming.debug import is_debug
 from src.com.damon.ming.exception import register_exception_handler
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware import AuthMiddleware, EncryptionMiddleware
+from src.com.damon.ming.middleware.context_middleware import ContextMiddleware
 from src.com.damon.ming.precheck import run_precheck
 from src.com.damon.ming.router.account import account_router
 from src.com.damon.ming.router.chat import chat_router
@@ -106,6 +107,11 @@ else:
         allow_headers=["Authorization", "Content-Type", "X-*"],
     )
     logger.info("CORS: release 模式，允许来源: %s", release_origins)
+
+# ---- 请求上下文（必须在 auth / encryption 之前执行，因此先添加）------
+# ContextMiddleware 一次性解析所有头部 → request.state.ctx
+# 后续所有中间件和路由通过 ctx 读取，不再直接访问 request.headers
+app.add_middleware(ContextMiddleware)
 
 # ---- 认证中间件 ---------------------------------------------------------
 if not IS_DEBUG:

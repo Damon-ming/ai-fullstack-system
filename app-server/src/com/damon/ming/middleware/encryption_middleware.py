@@ -54,13 +54,6 @@ from src.com.damon.ming.encryption.v1.key_management import KeyManager, SessionK
 from src.com.damon.ming.encryption.v1.signature import verify_signature
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.middleware.header_constants import (
-    CLIENT_ENV,
-    ENCRYPT_ENABLED,
-    ENCRYPT_VERSION,
-    SIGNATURE_VERSION,
-    SYSTEM_VERSION,
-)
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
@@ -73,15 +66,14 @@ logger = pin("middleware.encryption")
 # ---------------------------------------------------------------------------
 
 
-def _check_version_header(request: Request) -> str | None:
+def _check_version_header(client_version: str) -> str | None:
     """
-    检查 X-Encrypt-Version header 是否受支持。
+    检查加密版本是否受支持。
 
     返回 None 表示通过，否则返回错误消息。
-    缺失 header 视为不合规，拒绝请求。
+    缺失版本视为不合规，拒绝请求。
     """
-    client_version = request.headers.get(ENCRYPT_VERSION)
-    if client_version is None:
+    if not client_version:
         return "Missing X-Encrypt-Version header"
     if client_version not in SUPPORTED_ENCRYPTION_VERSIONS:
         return (
@@ -91,15 +83,14 @@ def _check_version_header(request: Request) -> str | None:
     return None
 
 
-def _check_signature_version_header(request: Request) -> str | None:
+def _check_signature_version_header(client_version: str) -> str | None:
     """
-    检查 X-Signature-Version header 是否受支持。
+    检查签名版本是否受支持。
 
     返回 None 表示通过，否则返回错误消息。
-    缺失 header 视为不合规，拒绝请求。
+    缺失版本视为不合规，拒绝请求。
     """
-    client_version = request.headers.get(SIGNATURE_VERSION)
-    if client_version is None:
+    if not client_version:
         return "Missing X-Signature-Version header"
     if client_version not in SUPPORTED_SIGNATURE_VERSIONS:
         return (
@@ -117,11 +108,12 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         km = get_key_manager()
-        encrypt_response = request.headers.get(ENCRYPT_ENABLED) == "1"
+        ctx = request.state.ctx
+        encrypt_response = ctx.encrypt_enabled
         session: SessionKey | None = None
 
         # ---- 0. 版本校验（header 层级，不解密即可拒绝）-----------
-        version_error = _check_version_header(request)
+        version_error = _check_version_header(ctx.encrypt_version)
         if version_error is not None:
             logger.warning(
                 "加密版本校验失败: %s | path=%s", version_error, request.url.path
@@ -134,7 +126,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        sig_version_error = _check_signature_version_header(request)
+        sig_version_error = _check_signature_version_header(ctx.signature_version)
         if sig_version_error is not None:
             logger.warning(
                 "签名版本校验失败: %s | path=%s",
@@ -149,7 +141,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        content_type = request.headers.get("content-type", "")
+        content_type = ctx.content_type
 
         # ---- 1. JSON 加密请求：解密 + 验证签名 -----------------------
         if "application/json" in content_type:

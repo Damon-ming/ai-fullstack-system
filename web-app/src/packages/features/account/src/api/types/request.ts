@@ -1,6 +1,9 @@
 export interface UpdateAccountRequest { name: string }
 
 export interface DeviceTokenRequest {
-  /** 设备唯一标识。TODO: 后期替换为手机号 */
-  device_id: string
+  /**
+   * 用户手机号（含区号）。
+   * TODO: 当前模拟为随机字符串，后期替换为用户真实输入的手机号 + 验证码
+   */
+  phone: string
 }

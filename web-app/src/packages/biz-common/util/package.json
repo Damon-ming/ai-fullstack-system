@@ -1,0 +1,10 @@
+{
+  "name": "@ming/biz-common-util",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./device-id-store": "./src/device-id-store.ts",
+    "./token-store": "./src/token-store.ts"
+  }
+}

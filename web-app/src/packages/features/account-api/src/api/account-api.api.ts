@@ -1,14 +1,10 @@
-import {
-  useAccount,
-  accountActions,
-  getDeviceToken as getStoredToken,
-  initDeviceToken as fetchAndStoreToken,
-} from "@ming/features-account"
+// web-app/src/packages/features/account-api/src/api/account-api.api.ts
+/**
+ * 账号模块对外 API —— 仅做 re-export，不包含实现。
+ */
 
-export { useAccount } from "@ming/features-account"
-export type { AccountProfile } from "@ming/features-account"
+export { useAccount } from "@ming/features-account";
+export type { AccountProfile } from "@ming/features-account";
 
-export const getCurrentAccount = () => accountActions.current()
-export const updateAccount = (name: string) => accountActions.update(name)
-export const getDeviceToken = () => getStoredToken()
-export const initDeviceToken = () => fetchAndStoreToken()
+// ---- Token 编排（来自 hook 层） ----
+export { initDeviceToken, refreshDeviceToken } from "@ming/features-account";

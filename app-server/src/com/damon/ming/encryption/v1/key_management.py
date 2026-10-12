@@ -181,6 +181,11 @@ class KeyManager:
 
         返回：
           SessionKey（含 key_id，客户端后续请求需带上）
+
+        注意：
+          本方法只做密钥注册，不感知任何业务绑定（用户/设备/会话归属等）。
+          业务层如需关联会话与业务实体，请在注册后通过 key_store 的
+          bind_session() 方法自行建立关联。
         """
         # 1. RSA 解密拿到原始 AES 密钥
         aes_key = self._private_key.decrypt(

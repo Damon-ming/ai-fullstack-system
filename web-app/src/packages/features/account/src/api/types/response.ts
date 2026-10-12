@@ -5,5 +5,8 @@ export interface AccountProfile {
 }
 
 export interface DeviceTokenResponse {
-  token: string;
+  /** 用户身份令牌 */
+  token: string
+  /** 服务端根据 UA 计算的设备唯一标识 */
+  device_id: string
 }

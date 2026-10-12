@@ -1,1 +1,8 @@
-{"name":"@ming/features-account-api","version":"0.0.1","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@ming/features-account":"workspace:*"}}
+{
+  "name": "@ming/features-account-api",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@ming/features-account": "workspace:*" },
+  "peerDependencies": { "react": ">=18.0.0" }
+}

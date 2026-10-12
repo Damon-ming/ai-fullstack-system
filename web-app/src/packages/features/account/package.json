@@ -7,7 +7,10 @@
   },
   "dependencies": {
     "@ming/biz-common-net-api": "workspace:*",
+    "@ming/biz-common-util": "workspace:*",
     "@ming/core-log": "workspace:*"
   },
-  "peerDependencies": { "react": "^18.2.0" }
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
 }

@@ -3,7 +3,9 @@
   "private": true,
   "dependencies": {
     "@ming/biz-common-net-api": "workspace:*",
+    "@ming/biz-common-util": "workspace:*",
     "@ming/data-layer": "workspace:*",
+    "@ming/biz-common-net": "workspace:*",
     "@ming/debug": "workspace:*",
     "@ming/features-chat": "workspace:*",
     "@ming/features-account-api": "workspace:*",

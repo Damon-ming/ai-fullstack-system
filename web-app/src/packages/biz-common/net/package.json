@@ -5,14 +5,18 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "@ming/biz-common-util": "workspace:*"
+  },
   "devDependencies": {
     "@ming/core-encryption": "workspace:*",
-    "@ming/core-network": "workspace:*",
     "@ming/core-log": "workspace:*",
+    "@ming/core-network": "workspace:*",
+    "@ming/core-util": "workspace:*",
     "axios": "^1.7.7"
   },
   "peerDependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
   }
 }
