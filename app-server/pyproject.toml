@@ -1,0 +1,3 @@
+[project]
+name = "my-service"
+version = "1.4.0"  # 产品版本，合同/交付文档以此为准

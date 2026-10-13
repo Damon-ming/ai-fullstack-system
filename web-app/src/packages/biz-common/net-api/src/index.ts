@@ -32,7 +32,7 @@ export type { SseRequestOptions } from "@ming/core-network";
 export {
   ENCRYPTION_VERSION,
   SIGNATURE_VERSION,
-  SYSTEM_VERSION,
+  VERSION,
 } from "@ming/biz-common-net";
 
 // 错误码 —— 与后端 error_codes.py / server_error.py 对齐

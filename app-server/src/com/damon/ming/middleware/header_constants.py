@@ -13,7 +13,7 @@ ENCRYPT_VERSION = "x-encrypt-version"
 SIGNATURE_VERSION = "x-signature-version"
 
 # 系统版本头
-SYSTEM_VERSION = "x-system-version"
+APP_VERSION = "x-App-version"
 
 # 环境头
 CLIENT_ENV = "x-client-env"

@@ -3,7 +3,7 @@
  * 公共请求头拦截器 —— 每次请求必须携带的 header。
  *
  * 当前注入：
- *   - X-System-Version : 系统版本号
+ *   - X-APP-Version : 系统版本号
  *   - X-Client-Env     : 运行环境（debug / release）
  *   - X-Client-UA      : 浏览器环境摘要
  *   - X-Device-ID      : 设备标识（独立存储，设备生命周期）
@@ -14,7 +14,7 @@ import type { NormalizedRequest } from "@ming/core-network";
 import { collectClientUA, encodeClientUA } from "@ming/core-util";
 import { getSessionContext, getDeviceId } from "@ming/biz-common-util";
 import { isDebugMode } from "../internal-providers";
-import { SYSTEM_VERSION } from "../version";
+import { VERSION } from "../../../../../version";
 
 export function createCommonHeaderInterceptor() {
   const clientUA = encodeClientUA(collectClientUA());
@@ -23,7 +23,7 @@ export function createCommonHeaderInterceptor() {
     onFulfilled: (request: NormalizedRequest): NormalizedRequest => {
       const headers: Record<string, string> = {
         ...request.headers,
-        "X-System-Version": SYSTEM_VERSION,
+        "X-App-Version": VERSION.productVersion,
         "X-Client-Env": isDebugMode() ? "debug" : "release",
         "X-Client-UA": clientUA,
       };

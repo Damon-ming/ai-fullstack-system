@@ -1,12 +1,13 @@
 // src/packages/biz-common/net/src/index.ts
 export { BizHttp } from "./biz-http";
-export { SYSTEM_VERSION } from "./version";
+export { VERSION } from "../../../../version";
 export { createCommonHeaderInterceptor } from "./header/common-header-interceptor";
 export { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
-export { ENCRYPTION_VERSION, SIGNATURE_VERSION } from "./encryption/encryption-types";
-export type {
-  EncryptionSession,
+export {
+  ENCRYPTION_VERSION,
+  SIGNATURE_VERSION,
 } from "./encryption/encryption-types";
+export type { EncryptionSession } from "./encryption/encryption-types";
 export { encryptJson, decryptPayload } from "./encryption/encryption-crypto";
 export { computeSignature } from "./encryption/signature";
 export { generateNonce } from "@ming/core-encryption";

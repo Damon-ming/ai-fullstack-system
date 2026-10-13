@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
 from src.com.damon.ming.middleware.header_constants import (
+    APP_VERSION,
     CLIENT_ENV,
     CLIENT_UA,
     DEVICE_ID,
@@ -22,7 +23,6 @@ from src.com.damon.ming.middleware.header_constants import (
     ENCRYPT_VERSION,
     SESSION_ID,
     SIGNATURE_VERSION,
-    SYSTEM_VERSION,
 )
 from src.com.damon.ming.middleware.ua_fingerprint import parse_ua_header
 
@@ -57,7 +57,7 @@ class RequestContext:
     signature_version: str = ""
 
     # ---- 系统 ----
-    system_version: str = ""
+    app_version: str = ""
     client_env: str = ""
 
     # ---- 标准头 ----
@@ -85,7 +85,7 @@ def build_request_context(request: "Request") -> RequestContext:
     session_id = headers.get(SESSION_ID, "")
 
     # 系统
-    system_version = headers.get(SYSTEM_VERSION, "")
+    app_version = headers.get(APP_VERSION, "")
     client_env = headers.get(CLIENT_ENV, "")
 
     # 标准头
@@ -103,7 +103,7 @@ def build_request_context(request: "Request") -> RequestContext:
         encrypt_enabled=encrypt_enabled,
         encrypt_version=encrypt_version,
         signature_version=signature_version,
-        system_version=system_version,
+        app_version=app_version,
         client_env=client_env,
         content_type=content_type,
     )
