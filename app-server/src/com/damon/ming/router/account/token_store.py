@@ -12,22 +12,26 @@
   device_id ──独立注册           （设备身份，不绑定用户）
   (token, device_id) ──1:1── session_id  （每次 token 签发产生一个会话）
 
-设计：
-  - 当前用内存 dict 存储（TODO: 后期迁移到 DB）
-  - 纯数据管理，不涉及 HTTP 逻辑
-  - 可被 account_router、auth_middleware、encryption_router 共同依赖
+存储：全部通过 PostgreSQL 持久化，服务重启后数据不丢失。
+SQL 语句在 sql/ 子目录各表对应文件，本文件只负责业务逻辑和调用。
 """
 
-import threading
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+
+from src.com.damon.ming.db.db_connection import get_default_db
+from src.com.damon.ming.log import pin
+from src.com.damon.ming.router.account.sql import devices_sql, sessions_sql, users_sql
+
+logger = pin("account.store")
 
 # ---------------------------------------------------------------------------
 # 常量
 # ---------------------------------------------------------------------------
 
 SESSION_TTL = timedelta(days=30)  # 会话有效期
+
 
 # ---------------------------------------------------------------------------
 # 数据模型
@@ -39,8 +43,13 @@ class DeviceRecord:
     """一台已注册设备的信息。"""
 
     device_id: str
-    ua_hash: str  # 注册时的完整 UA 哈希
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    ua_hash: str
+    raw_ua: str = ""
+    platform: str = ""
+    screen: str = ""
+    lang: str = ""
+    tz: str = ""
+    created_at: datetime | None = None
 
 
 @dataclass
@@ -50,31 +59,47 @@ class SessionRecord:
     session_id: str
     token: str
     device_id: str
-    ua_hash: str  # 签发时的 UA 哈希
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    expires_at: datetime = field(default_factory=lambda: datetime.utcnow() + SESSION_TTL)
+    ua_hash: str
+    created_at: datetime | None = None
+    expires_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
-# 存储
+# 内部工具
 # ---------------------------------------------------------------------------
 
-_lock = threading.RLock()
 
-# phone → token（用户身份层）
-_phone_token_map: dict[str, str] = {}
+def _db():
+    """获取默认数据库连接。"""
+    return get_default_db()
 
-# token → phone（反向查询）
-_token_phone_map: dict[str, str] = {}
 
-# device_id → DeviceRecord（设备层，独立注册）
-_devices: dict[str, DeviceRecord] = {}
+def _now() -> datetime:
+    return datetime.now(UTC)
 
-# session_id → SessionRecord（会话层）
-_sessions: dict[str, SessionRecord] = {}
 
-# (token, device_id) → session_id（快速查找活跃会话）
-_session_lookup: dict[tuple[str, str], str] = {}
+def _session_row_to_record(row: tuple) -> SessionRecord:
+    return SessionRecord(
+        session_id=row[0],
+        token=row[1],
+        device_id=row[2],
+        ua_hash=row[3],
+        created_at=row[4],
+        expires_at=row[5],
+    )
+
+
+def _device_row_to_record(row: tuple) -> DeviceRecord:
+    return DeviceRecord(
+        device_id=row[0],
+        ua_hash=row[1],
+        raw_ua=row[2],
+        platform=row[3],
+        screen=row[4],
+        lang=row[5],
+        tz=row[6],
+        created_at=row[7],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -84,35 +109,31 @@ _session_lookup: dict[tuple[str, str], str] = {}
 
 def get_token_by_phone(phone: str) -> str | None:
     """根据手机号查询已签发的 token。"""
-    with _lock:
-        return _phone_token_map.get(phone)
+    rows = _db().execute(
+        users_sql.GET_TOKEN_BY_PHONE, (phone,), commit=False, fetch=True
+    )
+    return rows[0][0] if rows else None
 
 
 def get_phone_by_token(token: str) -> str | None:
     """根据 token 查询对应的手机号。"""
-    with _lock:
-        return _token_phone_map.get(token)
+    rows = _db().execute(
+        users_sql.GET_PHONE_BY_TOKEN, (token,), commit=False, fetch=True
+    )
+    return rows[0][0] if rows else None
 
 
 def is_token_valid(token: str) -> bool:
     """检查 token 是否存在。"""
-    with _lock:
-        return token in _token_phone_map
+    rows = _db().execute(
+        users_sql.GET_PHONE_BY_TOKEN, (token,), commit=False, fetch=True
+    )
+    return len(rows or []) > 0
 
 
 def bind_token(phone: str, token: str) -> None:
-    """
-    绑定 phone → token 映射（幂等，同 phone 覆盖旧 token）。
-
-    注意：不清理设备和会话。设备独立存在，会话通过独立机制管理。
-    """
-    with _lock:
-        old_token = _phone_token_map.get(phone)
-        if old_token and old_token != token:
-            _token_phone_map.pop(old_token, None)
-
-        _phone_token_map[phone] = token
-        _token_phone_map[token] = phone
+    """绑定 phone → token 映射（幂等）。"""
+    _db().execute(users_sql.INSERT, (token, phone, _now()), commit=True)
 
 
 # ---------------------------------------------------------------------------
@@ -120,40 +141,42 @@ def bind_token(phone: str, token: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def register_device(device_id: str, ua_hash: str) -> None:
-    """
-    注册一台设备。设备身份独立存在，不归属任何用户。
+def register_device(
+    device_id: str,
+    ua_hash: str,
+    raw_ua: str = "",
+    platform: str = "",
+    screen: str = "",
+    lang: str = "",
+    tz: str = "",
+) -> None:
+    """注册一台设备。设备身份独立存在，不归属任何用户。
 
-    如果 device_id 已存在，更新 UA hash（设备信息可能变化）。
-    不再检查 phone 归属——同一个设备可以服务多个用户。
+    如果 device_id 已存在，更新 UA 信息。
     """
-    with _lock:
-        _devices[device_id] = DeviceRecord(
-            device_id=device_id,
-            ua_hash=ua_hash,
-        )
+    _db().execute(
+        devices_sql.UPSERT,
+        (device_id, ua_hash, raw_ua, platform, screen, lang, tz, _now()),
+        commit=True,
+    )
 
 
 def get_device(device_id: str) -> DeviceRecord | None:
     """查询设备记录。"""
-    with _lock:
-        return _devices.get(device_id)
+    rows = _db().execute(devices_sql.GET, (device_id,), commit=False, fetch=True)
+    return _device_row_to_record(rows[0]) if rows else None
 
 
 def is_device_registered(device_id: str) -> bool:
     """检查设备是否已注册。"""
-    with _lock:
-        return device_id in _devices
+    rows = _db().execute(devices_sql.GET, (device_id,), commit=False, fetch=True)
+    return len(rows or []) > 0
 
 
 def remove_device(device_id: str) -> None:
-    """删除设备记录（同时清理该设备的所有会话）。"""
-    with _lock:
-        _devices.pop(device_id, None)
-        for sid, rec in list(_sessions.items()):
-            if rec.device_id == device_id:
-                _session_lookup.pop((rec.token, rec.device_id), None)
-                del _sessions[sid]
+    """删除设备记录（同时逻辑过期该设备的所有会话）。"""
+    _db().execute(sessions_sql.REVOKE_BY_DEVICE, (device_id,), commit=True)
+    _db().execute(devices_sql.DELETE, (device_id,), commit=True)
 
 
 # ---------------------------------------------------------------------------
@@ -161,80 +184,74 @@ def remove_device(device_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def create_session(token: str, device_id: str, ua_hash: str) -> str:
-    """
-    为 (token, device_id) 创建一个新会话。
+def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
+    """为 (token, device_id) 创建一个新会话。
 
     同一组合的旧会话立即过期（确保每个 token+device 只有一条活跃会话）。
     返回新 session_id。
     """
-    with _lock:
-        # 立即过期该组合的旧会话
-        key = (token, device_id)
-        old_sid = _session_lookup.get(key)
-        if old_sid and old_sid in _sessions:
-            _sessions[old_sid].expires_at = datetime.utcnow()
+    now = _now()
+    session_id = str(uuid.uuid4())
+    expires_at = now + SESSION_TTL
 
-        session_id = str(uuid.uuid4())
-        now = datetime.utcnow()
-        record = SessionRecord(
-            session_id=session_id,
-            token=token,
-            device_id=device_id,
-            ua_hash=ua_hash,
-            created_at=now,
-            expires_at=now + SESSION_TTL,
+    with _db().transaction() as conn, conn.cursor() as cur:
+        cur.execute(sessions_sql.EXPIRE_OLD, (now, token, device_id, now))
+        cur.execute(
+            sessions_sql.INSERT,
+            (session_id, token, device_id, ua_hash, now, expires_at),
         )
-        _sessions[session_id] = record
-        _session_lookup[key] = session_id
-        return session_id
+
+    return session_id
 
 
 def get_session(session_id: str) -> SessionRecord | None:
     """查询有效会话（未过期）。"""
-    with _lock:
-        rec = _sessions.get(session_id)
-        if rec is None:
-            return None
-        if rec.expires_at <= datetime.utcnow():
-            # 过期清理
-            _session_lookup.pop((rec.token, rec.device_id), None)
-            del _sessions[session_id]
-            return None
-        return rec
+    rows = _db().execute(
+        sessions_sql.GET,
+        (session_id, _now()),
+        commit=False,
+        fetch=True,
+    )
+    return _session_row_to_record(rows[0]) if rows else None
 
 
 def get_active_session(token: str, device_id: str) -> SessionRecord | None:
     """查询某 (token, device_id) 的活跃会话。"""
-    with _lock:
-        sid = _session_lookup.get((token, device_id))
-        if sid:
-            return get_session(sid)  # 内部检查过期
-        return None
+    rows = _db().execute(
+        sessions_sql.GET_ACTIVE,
+        (token, device_id, _now()),
+        commit=False,
+        fetch=True,
+    )
+    return _session_row_to_record(rows[0]) if rows else None
 
 
 def revoke_sessions_by_token(token: str) -> int:
-    """注销某 token 的所有会话（用户退出所有设备）。返回注销数量。"""
-    with _lock:
-        count = 0
-        for sid, rec in list(_sessions.items()):
-            if rec.token == token:
-                _session_lookup.pop((rec.token, rec.device_id), None)
-                del _sessions[sid]
-                count += 1
+    """注销某 token 的所有会话。返回注销数量。"""
+    now = _now()
+    conn = _db()._get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sessions_sql.REVOKE_BY_TOKEN, (now, token, now))
+            count = cur.rowcount
+        conn.commit()
         return count
+    finally:
+        _db()._return_conn(conn)
 
 
 def revoke_sessions_by_device(device_id: str) -> int:
-    """注销某设备的所有会话（设备被踢出所有用户）。返回注销数量。"""
-    with _lock:
-        count = 0
-        for sid, rec in list(_sessions.items()):
-            if rec.device_id == device_id:
-                _session_lookup.pop((rec.token, rec.device_id), None)
-                del _sessions[sid]
-                count += 1
+    """注销某设备的所有会话。返回注销数量。"""
+    now = _now()
+    conn = _db()._get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sessions_sql.REVOKE_BY_DEVICE, (now, device_id, now))
+            count = cur.rowcount
+        conn.commit()
         return count
+    finally:
+        _db()._return_conn(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -244,23 +261,33 @@ def revoke_sessions_by_device(device_id: str) -> int:
 
 def get_all_devices() -> list[DeviceRecord]:
     """获取所有设备记录副本（调试用）。"""
-    with _lock:
-        return list(_devices.values())
+    rows = _db().execute(devices_sql.GET_ALL, commit=False, fetch=True)
+    return [_device_row_to_record(r) for r in (rows or [])]
 
 
 def get_all_sessions() -> list[SessionRecord]:
     """获取所有有效会话副本（调试用）。"""
-    with _lock:
-        now = datetime.utcnow()
-        return [rec for rec in _sessions.values() if rec.expires_at > now]
+    rows = _db().execute(
+        sessions_sql.GET_ALL,
+        (_now(),),
+        commit=False,
+        fetch=True,
+    )
+    return [_session_row_to_record(r) for r in (rows or [])]
 
 
 def get_stats() -> dict:
     """获取统计信息。"""
-    with _lock:
-        now = datetime.utcnow()
-        return {
-            "users": len(_phone_token_map),
-            "devices": len(_devices),
-            "sessions": sum(1 for s in _sessions.values() if s.expires_at > now),
-        }
+    user_rows = _db().execute(users_sql.COUNT, commit=False, fetch=True)
+    device_rows = _db().execute(devices_sql.COUNT, commit=False, fetch=True)
+    session_rows = _db().execute(
+        sessions_sql.COUNT,
+        (_now(),),
+        commit=False,
+        fetch=True,
+    )
+    return {
+        "users": user_rows[0][0] if user_rows else 0,
+        "devices": device_rows[0][0] if device_rows else 0,
+        "sessions": session_rows[0][0] if session_rows else 0,
+    }

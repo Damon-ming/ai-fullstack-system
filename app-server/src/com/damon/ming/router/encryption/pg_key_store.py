@@ -4,101 +4,30 @@ PostgreSQL 密钥存储实现 —— 会话密钥持久化到数据库。
 
 本文件属于业务层（router/encryption/），在纯存储接口之上扩展了业务维度索引。
 
-表结构：
-  encryption_sessions (
-    key_id       VARCHAR(64)  PRIMARY KEY,
-    aes_key_enc  TEXT         NOT NULL,  -- KEK 加密后的 AES 密钥 (base64)
-    session_id   VARCHAR(128) NOT NULL DEFAULT '',  -- 业务字段：会话标识（token + device 的组合）
-    created_at   TIMESTAMP    NOT NULL,
-    expires_at   TIMESTAMP    NOT NULL
-  )
+关联：
+  devices 表由 account_schema.py 管理，本模块不再重复建表。
+  encryption_sessions 通过 session_id 与 sessions 表关联。
 
-索引：
-  - idx_enc_sessions_session_id: 按会话查找（业务维度）
-  - idx_enc_sessions_expires:   过期清理
-
-安全说明：
-  - aes_key_enc 是 KEK 加密后的密文，DB 泄露不会直接暴露 AES 密钥
-  - KEK 从 MASTER_KEY 环境变量派生，不落盘
+SQL 语句在 encryption_sql.py，本文件只负责业务逻辑和调用。
 """
 
 from src.com.damon.ming.db.db_config import DbConfig
 from src.com.damon.ming.db.db_connection import DbConnection
-from src.com.damon.ming.db.db_migration import DbMigration
 from src.com.damon.ming.encryption.key_store.base_key_store import (
     BaseKeyStore,
     StoredSession,
 )
-
-# ---------------------------------------------------------------------------
-# 迁移定义（由 DbMigration 执行）
-# ---------------------------------------------------------------------------
-
-_MIGRATION_ID = "001_encryption_sessions"
-_MIGRATION_DDL = """
-CREATE TABLE IF NOT EXISTS encryption_sessions (
-    key_id       VARCHAR(64)  PRIMARY KEY,
-    aes_key_enc  TEXT         NOT NULL,
-    session_id   VARCHAR(128) NOT NULL DEFAULT '',
-    created_at   TIMESTAMP    NOT NULL,
-    expires_at   TIMESTAMP    NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_enc_sessions_session_id ON encryption_sessions (session_id);
-CREATE INDEX IF NOT EXISTS idx_enc_sessions_expires ON encryption_sessions (expires_at);
-"""
-
-# ---------------------------------------------------------------------------
-# 设备表迁移
-# ---------------------------------------------------------------------------
-
-_MIGRATION_ID_DEVICES = "002_devices"
-_MIGRATION_DDL_DEVICES = """
-CREATE TABLE IF NOT EXISTS devices (
-    device_id    VARCHAR(64)  PRIMARY KEY,
-    ua_hash      VARCHAR(64)  NOT NULL,
-    created_at   TIMESTAMP    NOT NULL DEFAULT NOW()
-);
-"""
-
-# ---------------------------------------------------------------------------
-# SQL 语句
-# ---------------------------------------------------------------------------
-
-_SAVE_OR_UPDATE = """
-INSERT INTO encryption_sessions (key_id, aes_key_enc, session_id, created_at, expires_at)
-VALUES (%s, %s, %s, %s, %s)
-ON CONFLICT (key_id) DO UPDATE SET
-    aes_key_enc = EXCLUDED.aes_key_enc,
-    session_id  = EXCLUDED.session_id,
-    created_at  = EXCLUDED.created_at,
-    expires_at  = EXCLUDED.expires_at;
-"""
-
-_GET_BY_KEY = """
-SELECT key_id, aes_key_enc, session_id, created_at, expires_at
-FROM encryption_sessions
-WHERE key_id = %s AND expires_at > NOW();
-"""
-
-_DELETE_BY_KEY = """
-DELETE FROM encryption_sessions WHERE key_id = %s;
-"""
-
-_DELETE_BY_SESSION = """
-DELETE FROM encryption_sessions WHERE session_id = %s;
-"""
-
-_CLEANUP_EXPIRED = """
-DELETE FROM encryption_sessions WHERE expires_at <= NOW();
-"""
-
-_COUNT = """
-SELECT COUNT(*) FROM encryption_sessions;
-"""
-
-_GET_BINDING = """
-SELECT session_id FROM encryption_sessions WHERE key_id = %s;
-"""
+from src.com.damon.ming.router.encryption.encryption_sql import (
+    BIND_SESSION,
+    CLEANUP_EXPIRED,
+    COUNT,
+    DDL_ENCRYPTION_SESSIONS,
+    DELETE_BY_KEY,
+    DELETE_BY_SESSION,
+    GET_BINDING,
+    GET_BY_KEY,
+    SAVE_OR_UPDATE,
+)
 
 
 class PgKeyStore(BaseKeyStore):
@@ -120,8 +49,6 @@ class PgKeyStore(BaseKeyStore):
 
     def __init__(self, db_connection: DbConnection) -> None:
         self._db = db_connection
-        self._migration = DbMigration(db_connection)
-        self._migration.register(_MIGRATION_ID, _MIGRATION_DDL)
 
     @staticmethod
     def from_connection_string(conn_string: str) -> "PgKeyStore":
@@ -140,13 +67,12 @@ class PgKeyStore(BaseKeyStore):
 
     def initialize(self) -> None:
         """建表 + 建索引（幂等）。"""
-        self._migration.register(_MIGRATION_ID_DEVICES, _MIGRATION_DDL_DEVICES)
-        self._migration.apply_all()
+        self._db.execute(DDL_ENCRYPTION_SESSIONS, commit=True)
 
     def save_session(self, session: StoredSession, session_id: str = "") -> None:
         """保存会话记录。session_id 为业务层扩展字段。"""
         self._db.execute(
-            _SAVE_OR_UPDATE,
+            SAVE_OR_UPDATE,
             (
                 session.key_id,
                 session.aes_key_enc,
@@ -157,7 +83,7 @@ class PgKeyStore(BaseKeyStore):
         )
 
     def get_session(self, key_id: str) -> StoredSession | None:
-        rows = self._db.execute(_GET_BY_KEY, (key_id,), commit=False, fetch=True)
+        rows = self._db.execute(GET_BY_KEY, (key_id,), commit=False, fetch=True)
         if not rows:
             return None
         row = rows[0]
@@ -169,17 +95,17 @@ class PgKeyStore(BaseKeyStore):
         )
 
     def remove_session(self, key_id: str) -> None:
-        self._db.execute(_DELETE_BY_KEY, (key_id,))
+        self._db.execute(DELETE_BY_KEY, (key_id,))
 
     def remove_by_session(self, session_id: str) -> None:
         """按会话删除所有加密记录（业务层扩展方法）。"""
-        self._db.execute(_DELETE_BY_SESSION, (session_id,))
+        self._db.execute(DELETE_BY_SESSION, (session_id,))
 
     def cleanup_expired(self) -> int:
         conn = self._db._get_conn()
         try:
             with conn.cursor() as cur:
-                cur.execute(_CLEANUP_EXPIRED)
+                cur.execute(CLEANUP_EXPIRED)
                 count = cur.rowcount
             conn.commit()
             return count
@@ -187,7 +113,7 @@ class PgKeyStore(BaseKeyStore):
             self._db._return_conn(conn)
 
     def count(self) -> int:
-        rows = self._db.execute(_COUNT, commit=False, fetch=True)
+        rows = self._db.execute(COUNT, commit=False, fetch=True)
         return rows[0][0] if rows else 0
 
     # ---------------------------------------------------------------------------
@@ -201,15 +127,11 @@ class PgKeyStore(BaseKeyStore):
         由业务层在 register_session 成功后调用，加密模块不感知此方法。
         session_id 在此仅是 opaque string，不解析其含义。
         """
-        self._db.execute(
-            "UPDATE encryption_sessions SET session_id = %s WHERE key_id = %s",
-            (session_id, key_id),
-            commit=True,
-        )
+        self._db.execute(BIND_SESSION, (session_id, key_id), commit=True)
 
     def get_binding_id(self, key_id: str) -> str | None:
         """查询加密会话绑定的业务会话标识。无绑定返回空串。"""
-        rows = self._db.execute(_GET_BINDING, (key_id,), commit=False, fetch=True)
+        rows = self._db.execute(GET_BINDING, (key_id,), commit=False, fetch=True)
         if not rows:
             return None
         result = rows[0][0]

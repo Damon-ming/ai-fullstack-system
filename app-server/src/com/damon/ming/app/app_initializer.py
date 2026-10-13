@@ -129,6 +129,7 @@ class AppInitializer:
             self.db_conn = DbConnection(DbConfig(connection_string=db_url))
             self.db_conn.initialize(min_conn=1, max_conn=5)
             set_default_db(self.db_conn)
+            self._create_account_tables()
             logger.info("数据库连接池初始化完成（环境变量 DB_CONNECTION）")
         except Exception as e:
             logger.warning("数据库连接池初始化失败: %s", e)
@@ -149,12 +150,25 @@ class AppInitializer:
             pool = loader.get_pool_settings(profile=self._profile)
             self.db_conn.initialize(**pool)
             set_default_db(self.db_conn)
+            self._create_account_tables()
             logger.info("数据库连接池初始化完成（YAML 配置）")
         except FileNotFoundError:
             logger.info("数据库配置文件不存在，跳过数据库初始化")
         except Exception as e:
             logger.warning("数据库连接池初始化失败: %s", e)
             self.db_conn = None
+
+    def _create_account_tables(self) -> None:
+        """创建账号体系表（users / devices / sessions）。"""
+        try:
+            from src.com.damon.ming.router.account.account_schema import (
+                create_account_tables,
+            )
+
+            create_account_tables(self.db_conn)
+            logger.info("账号体系表创建完成")
+        except Exception as e:
+            logger.warning("账号体系表创建失败: %s", e)
 
     def _init_encryption(self) -> None:
         """加密体系：配置加载 > KeyManager > 可选 PgKeyStore。"""

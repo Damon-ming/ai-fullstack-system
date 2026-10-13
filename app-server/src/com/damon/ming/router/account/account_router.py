@@ -62,8 +62,16 @@ async def generate_token(body: TokenRequest, request: Request):
     ua_hash = compute_ua_hash(ua_profile)
 
     # 2. 注册设备（设备身份独立，不绑定 phone）
-    if device_id:
-        register_device(device_id, ua_hash)
+    if device_id and ua_profile:
+        register_device(
+            device_id=device_id,
+            ua_hash=ua_hash,
+            raw_ua=ua_profile.raw_ua,
+            platform=ua_profile.platform,
+            screen=ua_profile.screen,
+            lang=ua_profile.lang,
+            tz=ua_profile.tz,
+        )
 
     # 3. 检查该 phone 是否已有 token（幂等）
     existing_token = get_token_by_phone(body.phone)
