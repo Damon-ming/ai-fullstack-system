@@ -8,7 +8,7 @@
   - 新增头部字段只需在此处扩展 + 在 ContextMiddleware 中解析一次
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -20,6 +20,7 @@ from src.com.damon.ming.middleware.header_constants import (
     DEVICE_ID,
     ENCRYPT_ENABLED,
     ENCRYPT_VERSION,
+    SESSION_ID,
     SIGNATURE_VERSION,
     SYSTEM_VERSION,
 )
@@ -46,6 +47,9 @@ class RequestContext:
     device_id: str = ""
     client_ua: str = ""
     ua_profile: object | None = None  # UAProfile，懒解析
+
+    # ---- 会话（token + device 的唯一组合）----
+    session_id: str = ""
 
     # ---- 加密 ----
     encrypt_enabled: bool = False
@@ -77,6 +81,9 @@ def build_request_context(request: "Request") -> RequestContext:
     device_id = headers.get(DEVICE_ID, "")
     client_ua = headers.get(CLIENT_UA, "")
 
+    # 会话
+    session_id = headers.get(SESSION_ID, "")
+
     # 系统
     system_version = headers.get(SYSTEM_VERSION, "")
     client_env = headers.get(CLIENT_ENV, "")
@@ -92,6 +99,7 @@ def build_request_context(request: "Request") -> RequestContext:
         device_id=device_id,
         client_ua=client_ua,
         ua_profile=None,  # 懒解析，需要时调用 parse_ua_header
+        session_id=session_id,
         encrypt_enabled=encrypt_enabled,
         encrypt_version=encrypt_version,
         signature_version=signature_version,

@@ -44,7 +44,9 @@ export interface EncryptedResult {
  */
 export interface EncryptionSession {
   keyId: string;
-  aesKey: CryptoKey; // WebCrypto AES-GCM key 对象
+  aesKey: CryptoKey; // WebCrypto AES-GCM key 对象（派生后的加密密钥）
+  /** 签名密钥原始字节（HKDF 从 AES 主密钥派生），hex 编码后传给 hmacSha256 */
+  signatureKeyHex: string;
   publicKeyPem: string; // 服务端 RSA 公钥 PEM
   expiresAt: number; // 时间戳 (ms)
 }

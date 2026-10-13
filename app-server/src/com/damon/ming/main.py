@@ -6,9 +6,6 @@
 环境变量清单
 ══════════════════════════════════════════════════════════════════════
 
-【必须设置（否则启动失败）】
-  SIGNATURE_SECRET        HMAC-SHA256 签名密钥（前后端共享，必须一致）
-
 【生产环境必须设置（开发环境可自动生成）】
   MASTER_KEY              加密主密钥（≥32 字符），开发环境未设置时自动生成
 
@@ -23,7 +20,7 @@
 
 【配置文件（YAML）】
   db/db-config.yaml       数据库连接池配置（多剖面：default / production）
-  encryption/encryption-config.yaml  加密参数配置（RSA 密钥大小、会话 TTL、KEK salt 等）
+  app/config/encryption-config.yaml  加密业务配置（RSA 密钥大小、会话 TTL、sign_context 等，由 app 层注入 encryption 模块）
 ══════════════════════════════════════════════════════════════════════
 """
 

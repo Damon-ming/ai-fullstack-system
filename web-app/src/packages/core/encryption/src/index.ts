@@ -12,12 +12,11 @@ export {
   importAesKey,
   aesEncrypt,
   aesDecrypt,
+  deriveKeyMaterial,
   importRsaPublicKey,
   rsaEncrypt,
   bytesToBase64,
+  bytesToHex,
 } from "./crypto-engine";
 
-export {
-  generateNonce,
-  hmacSha256,
-} from "./signature";
+export { generateNonce, hmacSha256 } from "./signature";

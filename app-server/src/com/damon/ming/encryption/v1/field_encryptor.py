@@ -121,7 +121,7 @@ class FieldEncryptor:
         suite: CipherSuite = CipherSuite.DATABASE_AES_GCM,
         *,
         key: bytes | None = None,
-        key_id: str = "data-key-v1",
+        key_id: str = "",
         index_key: bytes | None = None,
     ) -> str:
         """

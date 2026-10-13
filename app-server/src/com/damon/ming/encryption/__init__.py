@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/encryption/__init__.py
 """
-纯加密原语模块 —— 零 HTTP 依赖，可独立移植。
+纯加密原语模块 —— 零 HTTP 依赖，零配置文件，可独立移植。
 
 提供：
   - AES-256-GCM 对称加密（crypto_engine.AesGcmEngine）
@@ -11,17 +11,15 @@
   - 加密套件枚举（cipher_suite.CipherSuite）
   - 数据库字段加解密（field_encryptor.FieldEncryptor）
   - 密钥存储后端抽象（key_store/，含 BaseKeyStore / MemoryKeyStore）
+  - 全局注入点（globals.py：set_key_manager / set_sign_context 等）
 
-不提供（它们属于 HTTP 业务层）：
+不提供（它们属于业务层 app/）：
+  - 配置加载 → 见 app/config/encryption_config_loader.py
   - PostgreSQL 存储实现 → 见 router/encryption/pg_key_store.py
   - 中间件 → 见 middleware/encryption_middleware.py
   - 路由 → 见 router/encryption/encryption_router.py
 """
 
-from src.com.damon.ming.encryption.encryption_config_loader import (
-    EncryptionConfig,
-    EncryptionConfigLoader,
-)
 from src.com.damon.ming.encryption.globals import SUPPORTED_ENCRYPTION_VERSIONS
 from src.com.damon.ming.encryption.v1 import (
     ENCRYPTION_VERSION,
@@ -42,8 +40,6 @@ __all__ = [
     "CipherSuite",
     "CryptoEngine",
     "EncryptedPayload",
-    "EncryptionConfig",
-    "EncryptionConfigLoader",
     "FieldEncryptor",
     "KeyManager",
     "RsaEngine",

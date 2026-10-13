@@ -38,11 +38,10 @@ const log = createLogger("net/encryption");
 // 工厂函数
 // ---------------------------------------------------------------------------
 
-export function createEncryptionInterceptors(signatureSecret: string): {
+export function createEncryptionInterceptors(): {
   requestEncrypt: InterceptorConfig;
   responseDecrypt: InterceptorConfig;
 } {
-
   // ---- 请求拦截器：签名 + 加密 ---------------------------------------
 
   const requestEncrypt: InterceptorConfig = {
@@ -54,7 +53,7 @@ export function createEncryptionInterceptors(signatureSecret: string): {
 
       // FormData：文件上传场景
       if (request.data instanceof FormData) {
-        return handleFormData(request, session, signatureSecret);
+        return handleFormData(request, session);
       }
 
       // JSON 请求
@@ -69,7 +68,7 @@ export function createEncryptionInterceptors(signatureSecret: string): {
         throw log.throw(new Error("请求体已加密，重复加密"));
       }
 
-      return handleJson(request, session, signatureSecret);
+      return handleJson(request, session);
     },
   };
 
@@ -112,11 +111,10 @@ async function handleJson(
     [key: string]: unknown;
   },
   session: EncryptionSession,
-  signatureSecret: string,
 ): Promise<unknown> {
   const signedData = await signParams(
     request.data as Record<string, unknown>,
-    signatureSecret,
+    session.signatureKeyHex,
   );
   const jsonStr = JSON.stringify(signedData);
   const encrypted = await encryptJson(jsonStr, session);
@@ -141,7 +139,6 @@ async function handleFormData(
     [key: string]: unknown;
   },
   session: EncryptionSession,
-  signatureSecret: string,
 ): Promise<unknown> {
   const formData = request.data as FormData;
   const metaJson = formData.get("meta_json") as string | null;
@@ -152,7 +149,7 @@ async function handleFormData(
   const nonce = generateNonce();
   const signature = await computeSignature(
     meta,
-    signatureSecret,
+    session.signatureKeyHex,
     timestamp,
     nonce,
   );

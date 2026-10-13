@@ -2,25 +2,24 @@
 """
 PostgreSQL 密钥存储实现 —— 会话密钥持久化到数据库。
 
-本文件属于业务层（router/encryption/），在纯存储接口之上扩展了设备维度索引。
+本文件属于业务层（router/encryption/），在纯存储接口之上扩展了业务维度索引。
 
 表结构：
   encryption_sessions (
     key_id       VARCHAR(64)  PRIMARY KEY,
     aes_key_enc  TEXT         NOT NULL,  -- KEK 加密后的 AES 密钥 (base64)
-    device_id    VARCHAR(128) NOT NULL DEFAULT '',  -- 业务字段：设备标识
+    session_id   VARCHAR(128) NOT NULL DEFAULT '',  -- 业务字段：会话标识（token + device 的组合）
     created_at   TIMESTAMP    NOT NULL,
     expires_at   TIMESTAMP    NOT NULL
   )
 
 索引：
-  - idx_enc_sessions_device_id: 按设备查找（业务维度）
+  - idx_enc_sessions_session_id: 按会话查找（业务维度）
   - idx_enc_sessions_expires:   过期清理
 
 安全说明：
   - aes_key_enc 是 KEK 加密后的密文，DB 泄露不会直接暴露 AES 密钥
   - KEK 从 MASTER_KEY 环境变量派生，不落盘
-  - 设备再次注册时覆盖旧记录（一个设备一条活跃会话）
 """
 
 from src.com.damon.ming.db.db_config import DbConfig
@@ -40,11 +39,11 @@ _MIGRATION_DDL = """
 CREATE TABLE IF NOT EXISTS encryption_sessions (
     key_id       VARCHAR(64)  PRIMARY KEY,
     aes_key_enc  TEXT         NOT NULL,
-    device_id    VARCHAR(128) NOT NULL DEFAULT '',
+    session_id   VARCHAR(128) NOT NULL DEFAULT '',
     created_at   TIMESTAMP    NOT NULL,
     expires_at   TIMESTAMP    NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_enc_sessions_device_id ON encryption_sessions (device_id);
+CREATE INDEX IF NOT EXISTS idx_enc_sessions_session_id ON encryption_sessions (session_id);
 CREATE INDEX IF NOT EXISTS idx_enc_sessions_expires ON encryption_sessions (expires_at);
 """
 
@@ -56,11 +55,9 @@ _MIGRATION_ID_DEVICES = "002_devices"
 _MIGRATION_DDL_DEVICES = """
 CREATE TABLE IF NOT EXISTS devices (
     device_id    VARCHAR(64)  PRIMARY KEY,
-    phone        VARCHAR(32)  NOT NULL,
     ua_hash      VARCHAR(64)  NOT NULL,
     created_at   TIMESTAMP    NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_devices_phone ON devices (phone);
 """
 
 # ---------------------------------------------------------------------------
@@ -68,17 +65,17 @@ CREATE INDEX IF NOT EXISTS idx_devices_phone ON devices (phone);
 # ---------------------------------------------------------------------------
 
 _SAVE_OR_UPDATE = """
-INSERT INTO encryption_sessions (key_id, aes_key_enc, device_id, created_at, expires_at)
+INSERT INTO encryption_sessions (key_id, aes_key_enc, session_id, created_at, expires_at)
 VALUES (%s, %s, %s, %s, %s)
 ON CONFLICT (key_id) DO UPDATE SET
     aes_key_enc = EXCLUDED.aes_key_enc,
-    device_id   = EXCLUDED.device_id,
+    session_id  = EXCLUDED.session_id,
     created_at  = EXCLUDED.created_at,
     expires_at  = EXCLUDED.expires_at;
 """
 
 _GET_BY_KEY = """
-SELECT key_id, aes_key_enc, device_id, created_at, expires_at
+SELECT key_id, aes_key_enc, session_id, created_at, expires_at
 FROM encryption_sessions
 WHERE key_id = %s AND expires_at > NOW();
 """
@@ -87,8 +84,8 @@ _DELETE_BY_KEY = """
 DELETE FROM encryption_sessions WHERE key_id = %s;
 """
 
-_DELETE_BY_DEVICE = """
-DELETE FROM encryption_sessions WHERE device_id = %s;
+_DELETE_BY_SESSION = """
+DELETE FROM encryption_sessions WHERE session_id = %s;
 """
 
 _CLEANUP_EXPIRED = """
@@ -100,14 +97,14 @@ SELECT COUNT(*) FROM encryption_sessions;
 """
 
 _GET_BINDING = """
-SELECT device_id FROM encryption_sessions WHERE key_id = %s;
+SELECT session_id FROM encryption_sessions WHERE key_id = %s;
 """
 
 
 class PgKeyStore(BaseKeyStore):
     """PostgreSQL 密钥存储后端。
 
-    在 BaseKeyStore 纯 key_id 接口之上，扩展了设备维度索引（业务需求）。
+    在 BaseKeyStore 纯 key_id 接口之上，扩展了会话维度索引（业务需求）。
 
     用法：
         # 方式一：传入 DbConnection（与项目其他模块共享连接池）
@@ -146,14 +143,14 @@ class PgKeyStore(BaseKeyStore):
         self._migration.register(_MIGRATION_ID_DEVICES, _MIGRATION_DDL_DEVICES)
         self._migration.apply_all()
 
-    def save_session(self, session: StoredSession, device_id: str = "") -> None:
-        """保存会话记录。device_id 为业务层扩展字段。"""
+    def save_session(self, session: StoredSession, session_id: str = "") -> None:
+        """保存会话记录。session_id 为业务层扩展字段。"""
         self._db.execute(
             _SAVE_OR_UPDATE,
             (
                 session.key_id,
                 session.aes_key_enc,
-                device_id,
+                session_id,
                 session.created_at,
                 session.expires_at,
             ),
@@ -174,9 +171,9 @@ class PgKeyStore(BaseKeyStore):
     def remove_session(self, key_id: str) -> None:
         self._db.execute(_DELETE_BY_KEY, (key_id,))
 
-    def remove_by_device(self, device_id: str) -> None:
-        """按设备删除所有会话（业务层扩展方法）。"""
-        self._db.execute(_DELETE_BY_DEVICE, (device_id,))
+    def remove_by_session(self, session_id: str) -> None:
+        """按会话删除所有加密记录（业务层扩展方法）。"""
+        self._db.execute(_DELETE_BY_SESSION, (session_id,))
 
     def cleanup_expired(self) -> int:
         conn = self._db._get_conn()
@@ -197,22 +194,21 @@ class PgKeyStore(BaseKeyStore):
     # 业务层绑定接口（加密模块不感知，由业务层调用）
     # ---------------------------------------------------------------------------
 
-    def bind_session(self, key_id: str, device_id: str) -> None:
+    def bind_session(self, key_id: str, session_id: str) -> None:
         """
-        将加密会话绑定到设备。
+        将加密会话绑定到业务会话。
 
         由业务层在 register_session 成功后调用，加密模块不感知此方法。
-        device_id 在此仅是 opaque string，不解析其含义。
+        session_id 在此仅是 opaque string，不解析其含义。
         """
-        # device_id 列已在 save_session 中初始化为空串，此处更新
         self._db.execute(
-            "UPDATE encryption_sessions SET device_id = %s WHERE key_id = %s",
-            (device_id, key_id),
+            "UPDATE encryption_sessions SET session_id = %s WHERE key_id = %s",
+            (session_id, key_id),
             commit=True,
         )
 
     def get_binding_id(self, key_id: str) -> str | None:
-        """查询加密会话绑定的业务标识。无绑定返回空串。"""
+        """查询加密会话绑定的业务会话标识。无绑定返回空串。"""
         rows = self._db.execute(_GET_BINDING, (key_id,), commit=False, fetch=True)
         if not rows:
             return None

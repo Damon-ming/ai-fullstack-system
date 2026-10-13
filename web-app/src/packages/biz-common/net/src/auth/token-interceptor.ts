@@ -1,6 +1,6 @@
 // web-app/src/packages/biz-common/net/src/auth/token-interceptor.ts
 /**
- * 全局 Token 拦截器 —— 通过内部提供者获取 token，注入 Cookie 头。
+ * 全局 Token 拦截器 —— 从会话上下文读取 token，注入 Cookie 头。
  *
  * 不直接依赖 store，token 来源由 bootstrap 通过 setTokenGetter 注入。
  */

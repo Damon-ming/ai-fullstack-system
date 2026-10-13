@@ -5,36 +5,45 @@
  * 当前注入：
  *   - X-System-Version : 系统版本号
  *   - X-Client-Env     : 运行环境（debug / release）
- *   - X-Client-UA      : 浏览器环境摘要（UA + 语言 + 平台 + 分辨率 + 时区）
- *
- * 注：加密协议相关 header（X-Encrypt-Version / X-Signature-Version）
- * 由 encryption-interceptor 管理，仅在加密启用时注入。
+ *   - X-Client-UA      : 浏览器环境摘要
+ *   - X-Device-ID      : 设备标识（独立存储，设备生命周期）
+ *   - X-Session-ID     : 会话标识（从会话上下文读取）
  */
 
 import type { NormalizedRequest } from "@ming/core-network";
 import { collectClientUA, encodeClientUA } from "@ming/core-util";
-import { getDeviceId } from "@ming/biz-common-util";
+import { getSessionContext, getDeviceId } from "@ming/biz-common-util";
 import { isDebugMode } from "../internal-providers";
 import { SYSTEM_VERSION } from "../version";
 
-// ---------------------------------------------------------------------------
-// 拦截器
-// ---------------------------------------------------------------------------
-
 export function createCommonHeaderInterceptor() {
-  // 浏览器信息在启动时一次性采集（不会变化），避免每次请求重复序列化
   const clientUA = encodeClientUA(collectClientUA());
 
   return {
-    onFulfilled: (request: NormalizedRequest): NormalizedRequest => ({
-      ...request,
-      headers: {
+    onFulfilled: (request: NormalizedRequest): NormalizedRequest => {
+      const headers: Record<string, string> = {
         ...request.headers,
         "X-System-Version": SYSTEM_VERSION,
         "X-Client-Env": isDebugMode() ? "debug" : "release",
         "X-Client-UA": clientUA,
-        ...(getDeviceId() ? { "X-Device-ID": getDeviceId()! } : {}),
-      },
-    }),
+      };
+
+      // device_id：独立存储，设备生命周期（登出后仍存在）
+      const deviceId = getDeviceId();
+      if (deviceId) {
+        headers["X-Device-ID"] = deviceId;
+      }
+
+      // session_id：会话上下文，跟随登录状态
+      const ctx = getSessionContext();
+      if (ctx?.sessionId) {
+        headers["X-Session-ID"] = ctx.sessionId;
+      }
+
+      return {
+        ...request,
+        headers,
+      };
+    },
   };
 }

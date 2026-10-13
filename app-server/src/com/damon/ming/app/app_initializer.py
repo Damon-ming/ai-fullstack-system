@@ -56,7 +56,7 @@ class AppInitializer:
         self._init_upload_service()
         self._init_database()
         self._init_encryption()
-        self._init_signature()
+        self._init_sign_context()
         self._init_ai()
 
         logger.info("应用启动完成")
@@ -165,6 +165,9 @@ class AppInitializer:
             self._enc_config.session_ttl_seconds if self._enc_config else 60 * 60 * 24
         )
 
+        # 数据密钥 ID 从业务配置读取（encryption 模块不包含此常量）
+        data_key_id = self._enc_config.data_key_id if self._enc_config else ""
+
         from src.com.damon.ming.encryption.globals import set_key_manager
         from src.com.damon.ming.encryption.v1.key_management import KeyManager
 
@@ -173,6 +176,7 @@ class AppInitializer:
             key_store=key_store,
             kek=kek,
             session_ttl_seconds=ttl_seconds,
+            data_key_id=data_key_id,
         )
         self.key_manager.initialize()
         set_key_manager(self.key_manager)
@@ -183,7 +187,7 @@ class AppInitializer:
     def _load_encryption_config(self):
         """加载加密配置（可选，失败用默认值）。"""
         try:
-            from src.com.damon.ming.encryption import EncryptionConfigLoader
+            from src.com.damon.ming.app.config import EncryptionConfigLoader
 
             config = EncryptionConfigLoader().load(profile=self._profile)
             logger.info(
@@ -199,7 +203,10 @@ class AppInitializer:
         return None
 
     def _create_key_store(self):
-        """创建密钥存储后端（有数据库用 PgKeyStore，否则纯内存）。"""
+        """创建密钥存储后端（有数据库用 PgKeyStore，否则纯内存）。
+
+        KEK 派生参数（salt / info）从业务配置注入，encryption 模块不包含这些常量。
+        """
         if self.db_conn is None:
             logger.info("密钥持久化存储未配置（纯内存模式，重启后会话丢失）")
             return None, None
@@ -216,30 +223,41 @@ class AppInitializer:
                 key = inject_to_env()
                 logger.warning("开发环境自动生成 MASTER_KEY（长度: %d）", len(key))
 
+            # KEK 派生参数从业务配置读取（encryption 模块不包含这些协议常量）
+            kek_salt = b""
+            kek_info = b""
+            if self._enc_config:
+                kek_salt = (
+                    self._enc_config.kek_salt.encode("utf-8")
+                    if self._enc_config.kek_salt
+                    else b""
+                )
+                kek_info = (
+                    self._enc_config.kek_info.encode("utf-8")
+                    if self._enc_config.kek_info
+                    else b""
+                )
+
             store = PgKeyStore(self.db_conn)
-            kek = derive_kek()
+            kek = derive_kek(kek_salt=kek_salt, kek_info=kek_info)
             logger.info("密钥持久化存储已启用（PostgreSQL）")
             return store, kek
         except Exception as e:
             logger.warning("密钥持久化存储初始化失败，降级为纯内存: %s", e)
             return None, None
 
-    def _init_signature(self) -> None:
-        """签名密钥：环境变量 > YAML 配置，与前端共享。"""
-        from src.com.damon.ming.encryption.globals import set_signature_secret
-        from src.com.damon.ming.log.logger import security_warn
+    def _init_sign_context(self) -> None:
+        """HKDF 签名密钥派生 context：从 YAML 配置注入 encryption 模块。
 
-        # 签名密钥 — 优先级：环境变量 > YAML 配置
-        sig_secret = os.environ.get("SIGNATURE_SECRET", "")
-        if not sig_secret and self._enc_config:
-            sig_secret = self._enc_config.signature_secret
+        encryption 模块不包含此常量，由业务层配置提供。
+        """
+        from src.com.damon.ming.encryption.globals import set_sign_context
 
-        if not sig_secret:
-            security_warn("SIGNATURE_SECRET 未设置，使用不安全的默认值")
-            sig_secret = "your-shared-secret-key-change-in-production"
-
-        set_signature_secret(sig_secret)
-        logger.info("签名密钥已设置")
+        if self._enc_config and self._enc_config.sign_context:
+            set_sign_context(self._enc_config.sign_context.encode("utf-8"))
+            logger.info("HKDF sign_context 已从配置注入")
+        else:
+            logger.warning("sign_context 未配置，签名密钥派生将使用空 context")
 
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""

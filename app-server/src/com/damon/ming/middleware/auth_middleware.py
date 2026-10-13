@@ -1,16 +1,16 @@
 # app-server/src/com/damon/ming/middleware/auth_middleware.py
 """
-认证中间件 —— Token + 设备 + UA 校验。
+认证中间件 —— Token + Session + UA 校验。
 
 职责：
-  - 从 request.state.ctx 获取已解析的 token / device_id / UA
+  - 从 request.state.ctx 获取已解析的 token / session_id / UA
   - 校验 token → 得到对应 phone
-  - 校验 device_id 属于该 phone
+  - 校验 session_id 有效且属于该 token（替代旧的 device 归属校验）
   - 校验 UA 是否与签发时一致（可选的安全加固）
 
 不负责：
   - 解析头部（由 ContextMiddleware 统一处理）
-  - token 白名单管理（由 router/account/token_store.py 负责）
+  - token/session 管理（由 router/account/token_store.py 负责）
 """
 
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -18,8 +18,8 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.request_context import get_ua_profile
 from src.com.damon.ming.middleware.ua_fingerprint import has_ua_changed_significantly
 from src.com.damon.ming.router.account.token_store import (
-    get_device,
     get_phone_by_token,
+    get_session,
     is_token_valid,
 )
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -37,7 +37,7 @@ PUBLIC_PATH_PREFIXES = (
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Token + 设备 + UA 校验中间件。"""
+    """Token + Session + UA 校验中间件。"""
 
     async def dispatch(self, request: Request, call_next) -> JSONResponse:
         ctx = request.state.ctx
@@ -77,48 +77,52 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         phone = get_phone_by_token(ctx.token)
 
-        # 3. 校验 device_id 属于该用户
-        if ctx.device_id:
-            device = get_device(ctx.device_id)
-            if device is None:
+        # 3. 校验 session_id
+        if ctx.session_id:
+            session = get_session(ctx.session_id)
+            if session is None:
                 logger.warning(
-                    "认证失败: 未注册设备 | path=%s phone_prefix=%s device_id=%s",
+                    "认证失败: 无效会话 | path=%s phone_prefix=%s session_id=%s",
                     request.url.path,
                     phone[:3] + "***" if phone else "unknown",
-                    ctx.device_id[:12] + "...",
+                    ctx.session_id[:8] + "...",
                 )
                 return JSONResponse(
                     status_code=401,
                     content={
-                        "code": ErrorCode.AUTH.UNREGISTERED_DEVICE,
-                        "data": {"error_msg": "Device not registered"},
+                        "code": ErrorCode.AUTH.INVALID_SESSION,
+                        "data": {"error_msg": "Invalid or expired session"},
                     },
                 )
-            if device.phone != phone:
+            if session.token != ctx.token:
                 logger.warning(
-                    "认证失败: 设备归属不一致 | path=%s token_phone=%s device_phone=%s",
+                    "认证失败: 会话归属不匹配 | path=%s token_phone=%s session_token_phone=%s",
                     request.url.path,
                     phone[:3] + "***" if phone else "unknown",
-                    device.phone[:3] + "***" if device.phone else "unknown",
+                    get_phone_by_token(session.token)[:3] + "***"
+                    if session.token
+                    else "unknown",
                 )
                 return JSONResponse(
                     status_code=401,
                     content={
-                        "code": ErrorCode.AUTH.DEVICE_MISMATCH,
-                        "data": {"error_msg": "Device does not belong to this user"},
+                        "code": ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
+                        "data": {"error_msg": "Session does not belong to this token"},
                     },
                 )
 
-        # 4. UA 一致性校验
-        if ctx.client_ua and ctx.device_id:
-            device = get_device(ctx.device_id)
-            if device:
+        # 4. UA 一致性校验（基于 session 签发时的 UA）
+        if ctx.client_ua and ctx.session_id:
+            session = get_session(ctx.session_id)
+            if session:
                 ua_profile = get_ua_profile(ctx)
-                if ua_profile and has_ua_changed_significantly(device.ua_hash, ua_profile):
+                if ua_profile and has_ua_changed_significantly(
+                    session.ua_hash, ua_profile
+                ):
                     logger.info(
-                        "UA 发生变化 | phone=%s device_id=%s",
+                        "UA 发生变化 | phone=%s session_id=%s",
                         phone[:3] + "***" if phone else "unknown",
-                        ctx.device_id[:12] + "...",
+                        ctx.session_id[:8] + "...",
                     )
                     # 当前策略：仅记录，不阻断（宽松模式）
 
@@ -126,6 +130,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.device_token = ctx.token
         request.state.phone = phone
         request.state.device_id = ctx.device_id
+        request.state.session_id = ctx.session_id
         return await call_next(request)
 
 

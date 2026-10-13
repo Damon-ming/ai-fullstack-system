@@ -36,25 +36,28 @@ import os
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-# 固定 salt —— 确保同一 MASTER_KEY 始终派生同一 KEK
-# 生产环境可以改为从环境变量读取，但固定值更便于运维
-KEK_SALT = b"encryption-key-store-v1"
-# `info` 是**上下文 / 标识信息，用来区分不同用途的密钥**。
-# - 同样的 master_key + salt，如果`info`不一样，**派生出来的密钥完全不一样**
-# - 语义上标记：**这个派生出来的密钥，专门用来做「会话密钥封装」**
-# info**不需要保密**，是明文业务标记。
-KEK_INFO = b"encryption-session-key-wrap"
-KEK_LENGTH = 32  # AES-256
+# KEK 派生密钥长度（纯技术参数，非业务常量）
+_KEK_LENGTH = 32  # AES-256
 
 
-def derive_kek(master_key: str | None = None) -> bytes:
+def derive_kek(
+    kek_salt: bytes,
+    kek_info: bytes,
+    master_key: str | None = None,
+) -> bytes:
     """从 MASTER_KEY 环境变量派生 KEK。
 
     参数：
-      master_key: 主密钥。为 None 时从 MASTER_KEY 环境变量读取。
+      kek_salt:    HKDF salt（业务层配置，确保同一 MASTER_KEY 始终派生同一 KEK）
+      kek_info:    HKDF info（业务层配置，标记密钥用途）
+      master_key:  主密钥。为 None 时从 MASTER_KEY 环境变量读取。
 
     返回：
       32 字节 AES-256 密钥
+
+    说明：
+      kek_salt / kek_info 属于业务协议标识，由外部配置注入。
+      encryption 模块不包含这些常量。
     """
     if master_key is None:
         master_key = os.environ.get("MASTER_KEY", "")
@@ -75,9 +78,9 @@ def derive_kek(master_key: str | None = None) -> bytes:
 
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
-        length=KEK_LENGTH,
-        salt=KEK_SALT,
-        info=KEK_INFO,
+        length=_KEK_LENGTH,
+        salt=kek_salt,
+        info=kek_info,
     )
     return hkdf.derive(master_key.encode("utf-8"))
 

@@ -109,6 +109,50 @@ export async function aesDecrypt(
 }
 
 // ---------------------------------------------------------------------------
+// HKDF 密钥派生
+// ---------------------------------------------------------------------------
+
+/**
+ * 使用 HKDF-SHA256 从主密钥派生出指定长度的原始密钥材料。
+ *
+ * 纯算法原语，不含业务语义。可用于派生签名密钥、封装密钥等任意用途。
+ * context 由调用方传入（业务层协议常量），core/encryption 不包含该常量。
+ *
+ * 参数：
+ *   masterKeyBytes: 主密钥原始字节（如 AES-256 密钥）
+ *   context:        HKDF info 参数（标识密钥用途的协议常量）
+ *   lengthBits:     派生输出长度（位），默认 256
+ *
+ * 返回：派生出的原始密钥字节
+ */
+export async function deriveKeyMaterial(
+  masterKeyBytes: Uint8Array,
+  context: string,
+  lengthBits: number = 256,
+): Promise<Uint8Array> {
+  const masterCryptoKey = await crypto.subtle.importKey(
+    "raw",
+    toBufferSource(masterKeyBytes),
+    { name: "HKDF" },
+    false,
+    ["deriveKey", "deriveBits"],
+  );
+
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0), // 无 salt
+      info: new TextEncoder().encode(context),
+    },
+    masterCryptoKey,
+    lengthBits,
+  );
+
+  return new Uint8Array(bits);
+}
+
+// ---------------------------------------------------------------------------
 // RSA-OAEP 操作（仅用于加密 AES 密钥）
 // ---------------------------------------------------------------------------
 
@@ -167,4 +211,13 @@ export function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
+}
+
+/** Uint8Array → hex 字符串 */
+export function bytesToHex(bytes: Uint8Array): string {
+  let hex = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    hex += bytes[i].toString(16).padStart(2, "0");
+  }
+  return hex;
 }

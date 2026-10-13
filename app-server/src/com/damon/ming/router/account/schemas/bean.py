@@ -17,3 +17,4 @@ class TokenResponseData(BaseModel):
 
     token: str = Field(..., description="服务端生成的用户身份令牌")
     device_id: str = Field(..., description="服务端根据 UA 计算的设备唯一标识")
+    session_id: str = Field(..., description="本次 token + device 组合的会话标识")

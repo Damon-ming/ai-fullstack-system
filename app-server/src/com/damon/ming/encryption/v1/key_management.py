@@ -17,7 +17,7 @@
   from src.com.damon.ming.router.encryption.pg_key_store import PgKeyStore
   from src.com.damon.ming.encryption.key_store import derive_kek
   store = PgKeyStore.from_connection_string("postgresql://user:pass@host/db")
-  kek = derive_kek()  # 从 MASTER_KEY 环境变量派生
+  kek = derive_kek(kek_salt=b"...", kek_info=b"...")  # salt/info 由业务配置注入
   km = KeyManager(key_store=store, kek=kek)
   km.initialize()
 
@@ -99,6 +99,7 @@ class KeyManager:
         key_store: "BaseKeyStore | None" = None,
         kek: bytes | None = None,
         session_ttl_seconds: int = 60 * 60 * 24,
+        data_key_id: str = "",
     ):
         """
         参数：
@@ -109,9 +110,11 @@ class KeyManager:
           kek:          Key Encryption Key，用于加密存储到 DB 的 AES 会话密钥。
                         当 key_store 不为 None 时必须提供。
           session_ttl_seconds: 会话密钥过期秒数（默认 24 小时）。
+          data_key_id:  默认数据加密密钥 ID（业务层配置注入，encryption 不包含此常量）。
         """
         self._rsa_key_size = rsa_key_size
         self._session_ttl_seconds = session_ttl_seconds
+        self._default_data_key_id = data_key_id
         self._private_key: rsa.RSAPrivateKey | None = None
         self._public_key: rsa.RSAPublicKey | None = None
         self._public_key_pem: bytes | None = None
@@ -147,10 +150,9 @@ class KeyManager:
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
 
-        # 初始化默认数据密钥
-        default_key_id = "data-key-v1"
-        self._data_keys[default_key_id] = AesGcmEngine.generate_key()
-        self._current_data_key_id = default_key_id
+        # 初始化默认数据密钥（ID 由业务层配置注入）
+        self._data_keys[self._default_data_key_id] = AesGcmEngine.generate_key()
+        self._current_data_key_id = self._default_data_key_id
 
         # 初始化盲索引密钥
         self._index_key = secrets.token_bytes(32)

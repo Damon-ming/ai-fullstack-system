@@ -42,7 +42,6 @@ export class BizHttp implements INetClient {
       enableAuth = false,
       enableEncryption = false,
       enableLogging = false,
-      signatureSecret = "",
       axiosConfig,
       ...restConfig
     } = config;
@@ -61,8 +60,9 @@ export class BizHttp implements INetClient {
     client.addRequestInterceptor(createCommonHeaderInterceptor());
 
     // 加密 + 签名拦截器：OkHttp 风格，一个开关注册/不注册
-    if (enableEncryption && signatureSecret) {
-      const encryption = createEncryptionInterceptors(signatureSecret);
+    // 签名密钥从每个 session 的 AES 密钥 HKDF 派生，不再依赖全局配置
+    if (enableEncryption) {
+      const encryption = createEncryptionInterceptors();
       client.addRequestInterceptor(encryption.requestEncrypt);
       client.addResponseInterceptor(encryption.responseDecrypt);
     }

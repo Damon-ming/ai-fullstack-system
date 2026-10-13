@@ -81,6 +81,9 @@ class _Auth:
 
     MISSING_TOKEN = 2002001  # 缺少认证 Token
     INVALID_TOKEN = 2002002  # Token 无效/过期
+    MISSING_SESSION = 2002003  # 缺少会话 ID
+    INVALID_SESSION = 2002004  # 会话无效/过期
+    SESSION_TOKEN_MISMATCH = 2002005  # 会话不属于该 Token
 
 
 class _Chat:

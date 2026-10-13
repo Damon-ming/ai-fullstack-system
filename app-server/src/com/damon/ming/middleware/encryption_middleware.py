@@ -44,14 +44,17 @@ from src.com.damon.ming.encryption.globals import (
     SUPPORTED_ENCRYPTION_VERSIONS,
     SUPPORTED_SIGNATURE_VERSIONS,
     get_key_manager,
-    get_signature_secret,
+    get_sign_context,
 )
 from src.com.damon.ming.encryption.v1.crypto_engine import (
     AesGcmEngine,
     EncryptedPayload,
 )
 from src.com.damon.ming.encryption.v1.key_management import KeyManager, SessionKey
-from src.com.damon.ming.encryption.v1.signature import verify_signature
+from src.com.damon.ming.encryption.v1.signature import (
+    derive_signing_key,
+    verify_signature,
+)
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -227,9 +230,11 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         decrypted_json = json.loads(decrypted_str)
 
         # 验证签名（业务层约定：signature/timestamp/nonce 不参与签名）
+        # 签名密钥从会话 AES 密钥派生（每个会话独立）
+        signing_key = derive_signing_key(session.aes_key, get_sign_context())
         sig_ok, sig_reason = verify_signature(
             params=decrypted_json,
-            secret=get_signature_secret(),
+            secret=signing_key.hex(),
             signature=decrypted_json.get("signature", ""),
             timestamp=decrypted_json.get("timestamp", 0),
             nonce=decrypted_json.get("nonce", ""),
@@ -276,9 +281,11 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         meta = json.loads(meta_str)
 
         # 验证签名（业务层约定：signature/timestamp/nonce 不参与签名）
+        # 签名密钥从会话 AES 密钥派生（每个会话独立）
+        signing_key = derive_signing_key(session.aes_key, get_sign_context())
         sig_ok, sig_reason = verify_signature(
             params=meta,
-            secret=get_signature_secret(),
+            secret=signing_key.hex(),
             signature=signature,
             timestamp=timestamp,
             nonce=nonce,

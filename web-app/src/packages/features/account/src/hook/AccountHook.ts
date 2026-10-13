@@ -1,11 +1,10 @@
 // web-app/src/packages/features/account/src/hook/AccountHook.ts
 /**
- * 账号 Hook 层 —— 业务编排 + 本地状态管理。
+ * 账号 Hook 层 — 业务编排 + 本地状态管理。
  *
  * 职责：
  *   - 用户资料状态（accountStore）
- *   - Token 生命周期编排（读缓存 → 调 API → 写缓存）
- *   - device_id 缓存（API 返回后写入 localStorage）
+ *   - 会话上下文编排（token + device_id + session_id 原子读写）
  *
  * API 层只负责 HTTP + 打印，不包含任何业务逻辑。
  */
@@ -13,10 +12,9 @@
 import { useState } from "react";
 import { createLogger } from "@ming/core-log";
 import {
-  getDeviceToken,
-  setDeviceToken,
-  clearDeviceToken,
-  getDeviceId,
+  getSessionContext,
+  setSessionContext,
+  clearSessionContext,
   setDeviceId,
 } from "@ming/biz-common-util";
 import { requestDeviceToken, SIMULATED_PHONE } from "../api";
@@ -61,13 +59,13 @@ export const accountStore = {
 };
 
 // ---------------------------------------------------------------------------
-// Token 编排（检查缓存 → 调 API → 写缓存）
+// 会话上下文编排（读缓存 → 调 API → 原子写缓存）
 // ---------------------------------------------------------------------------
 
 /** 申请 token，已有则跳过。 */
 export async function initDeviceToken(): Promise<string> {
-  const existing = getDeviceToken();
-  if (existing) return existing;
+  const existing = getSessionContext();
+  if (existing?.token) return existing.token;
 
   const [err, resp] = await requestDeviceToken({ phone: SIMULATED_PHONE });
 
@@ -79,21 +77,27 @@ export async function initDeviceToken(): Promise<string> {
     );
   }
 
-  // 缓存 token + device_id 到 localStorage
-  setDeviceToken(resp.data.token);
+  // 设备身份独立存储（设备生命周期，不随 token 清除）
   if (resp.data.device_id) {
     setDeviceId(resp.data.device_id);
   }
 
+  // 会话上下文原子写入：token + session_id 同时生效
+  setSessionContext({
+    token: resp.data.token,
+    sessionId: resp.data.session_id,
+  });
+
   log.info("Token 已签发", {
     device_id: resp.data.device_id?.slice(0, 12) + "...",
+    session_id: resp.data.session_id?.slice(0, 8) + "...",
   });
   return resp.data.token;
 }
 
 /** 重新签发 token（清除缓存后重新申请）。 */
 export async function refreshDeviceToken(): Promise<string> {
-  clearDeviceToken();
+  clearSessionContext();
   return initDeviceToken();
 }
 

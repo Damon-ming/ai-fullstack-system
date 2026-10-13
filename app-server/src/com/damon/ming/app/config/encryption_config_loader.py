@@ -1,6 +1,9 @@
-# app-server/src/com/damon/ming/encryption/encryption_config_loader.py
+# app-server/src/com/damon/ming/app/config/encryption_config_loader.py
 """
-加密体系配置加载器 —— 从 YAML 文件读取加密参数。
+加密体系配置加载器 —— 从 YAML 文件读取加密业务参数。
+
+本模块属于 app/ 业务层，不属于 encryption/ 模块。
+encryption/ 模块通过 setter 接收参数，不感知配置来源。
 
 加载优先级：
   1. 显式传入的 config_path
@@ -21,7 +24,10 @@ class EncryptionConfig:
     def __init__(self, raw: dict):
         self.rsa_key_size: int = int(raw.get("rsa_key_size", 2048))
         self.session_ttl_hours: int = int(raw.get("session_ttl_hours", 24))
-        self.signature_secret: str = str(raw.get("signature_secret", ""))
+        self.sign_context: str = str(raw.get("sign_context", ""))
+        self.kek_salt: str = str(raw.get("kek_salt", ""))
+        self.kek_info: str = str(raw.get("kek_info", ""))
+        self.data_key_id: str = str(raw.get("data_key_id", ""))
 
     @property
     def session_ttl_seconds(self) -> int:

@@ -8,8 +8,7 @@
  *   - encryption  加密会话（密钥交换后由 bootstrap 写入，拦截器读取）
  *
  * 不包含：
- *   - token 存储 → localStorage（biz-common/util/token-store），拦截器直接读取
- *   - device_id   → localStorage（biz-common/util/device-id-store），拦截器直接读取
+ *   - token / device_id / session_id 存储 → localStorage（session-context-store），拦截器直接读取
  *   - 加密/认证开关 → 由 bootstrap 初始化时通过拦截器注入，逻辑锁死在 biz-common/net
  *   - 业务状态 → 在 biz/ 目录下（chat、upload 等）
  *
@@ -17,7 +16,7 @@
  */
 
 import type { EncryptionSession } from "@ming/biz-common-net-api";
-import { clearDeviceToken } from "@ming/biz-common-util";
+import { clearSessionContext } from "@ming/biz-common-util";
 import { createAppStore } from "./app-store";
 
 export interface AppState {
@@ -42,8 +41,8 @@ export const useAppStore = createAppStore<AppState>((set) => ({
   },
   token: {
     clearToken: () => {
-      // 清除 localStorage 中的 token，拦截器不再携带
-      clearDeviceToken();
+      // 原子清除：token + device_id + session_id 同时失效，拦截器不再携带
+      clearSessionContext();
       // TODO: 后期可在此触发重新登录流程（事件发布等）
     },
   },

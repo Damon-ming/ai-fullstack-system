@@ -9,4 +9,6 @@ export interface DeviceTokenResponse {
   token: string
   /** 服务端根据 UA 计算的设备唯一标识 */
   device_id: string
+  /** token + device_id 组合的会话标识（加密绑定粒度） */
+  session_id: string
 }

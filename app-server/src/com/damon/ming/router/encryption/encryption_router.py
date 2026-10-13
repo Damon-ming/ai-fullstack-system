@@ -8,8 +8,9 @@
 
 安全加固：
   - session 注册要求携带有效 token（Cookie / Authorization）
-  - 注册时把 token 对应的 device_id 绑定到加密会话
-  - 请求时解密中间件可校验 session 归属（需配合 binding_id 查询）
+  - 注册时校验 session_id 有效且属于该 token
+  - 注册时把 session_id 绑定到加密会话
+  - 注册前撤销该 session_id 的旧加密会话（防止僵尸密钥）
 """
 
 import base64
@@ -18,14 +19,13 @@ from fastapi import APIRouter, Body, Request
 from src.com.damon.ming.encryption.globals import get_key_manager
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.router.account.token_store import get_device, is_token_valid
+from src.com.damon.ming.router.account.token_store import get_session, is_token_valid
 from src.com.damon.ming.schemas.response import (
     BaseFailedResponse,
     BaseSuccessResponse,
 )
 
 logger = pin("encryption.router")
-
 
 router = APIRouter(prefix="/api/encryption", tags=["加密体系"])
 
@@ -61,38 +61,55 @@ async def register_session(
     服务端用 RSA 私钥解密，存储会话，返回 keyId。
 
     安全要求：
-      - 请求需携带有效 token（通过 auth_middleware 或此处校验）
-      - X-Device-ID header 必须存在且已注册
-      - 会话将绑定到该 device_id，解密时校验归属
+      - 请求需携带有效 token
+      - X-Session-ID header 必须存在且有效（session 属于该 token）
+      - 会话将绑定到该 session_id，注册前撤销该 session 的旧密钥
     """
     km = get_key_manager()
     ctx = request.state.ctx
 
-    # 1. 校验 token + device_id（加密端点本身在 PUBLIC_PATH 中跳过 auth_middleware，
-    #    所以这里手动从 ctx 获取并校验）
+    # 1. 校验 token
     if not ctx.token or not is_token_valid(ctx.token):
         return BaseFailedResponse(
             code=ErrorCode.AUTH.INVALID_TOKEN,
             data={"error_msg": "Valid token required for session registration"},
         )
 
-    if not ctx.device_id:
+    # 2. 校验 session_id
+    if not ctx.session_id:
         return BaseFailedResponse(
-            code=ErrorCode.AUTH.MISSING_TOKEN,
-            data={"error_msg": "Missing X-Device-ID header"},
+            code=ErrorCode.AUTH.MISSING_SESSION,
+            data={"error_msg": "Missing X-Session-ID header"},
         )
 
-    device = get_device(ctx.device_id)
-    if device is None:
+    session = get_session(ctx.session_id)
+    if session is None:
         return BaseFailedResponse(
-            code=ErrorCode.AUTH.UNREGISTERED_DEVICE,
-            data={"error_msg": "Device not registered, please obtain token first"},
+            code=ErrorCode.AUTH.INVALID_SESSION,
+            data={"error_msg": "Session not found or expired, please obtain token first"},
         )
 
-    # 2. 注册加密会话（纯密钥操作，不感知业务绑定）
+    # 3. 防伪造：session 必须属于该 token
+    if session.token != ctx.token:
+        logger.warning(
+            "Session 归属不匹配 | session_token=%s request_token=%s",
+            session.token[:8] + "...",
+            ctx.token[:8] + "...",
+        )
+        return BaseFailedResponse(
+            code=ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
+            data={"error_msg": "Session does not belong to this token"},
+        )
+
+    # 4. 撤销该 session_id 的旧加密会话（防止僵尸密钥）
+    key_store = getattr(km, "_key_store", None)
+    if key_store is not None and hasattr(key_store, "remove_by_session"):
+        key_store.remove_by_session(ctx.session_id)
+
+    # 5. 注册加密会话（纯密钥操作，不感知业务绑定）
     try:
         encrypted_aes_key = base64.b64decode(encryptedAesKey)
-        session = km.register_session(encrypted_aes_key)
+        enc_session = km.register_session(encrypted_aes_key)
     except ValueError as e:
         logger.warning("会话注册失败（密钥格式错误）: %s", e)
         return BaseFailedResponse(
@@ -106,22 +123,19 @@ async def register_session(
             data={"error_msg": "Session registration failed"},
         )
 
-    # 3. 业务层关联：将加密会话绑定到设备（加密模块不感知此逻辑）
-    key_store = getattr(km, "_key_store", None)
+    # 6. 业务层关联：将加密会话绑定到 session_id
     if key_store is not None and hasattr(key_store, "bind_session"):
-        key_store.bind_session(session.key_id, ctx.device_id)
+        key_store.bind_session(enc_session.key_id, ctx.session_id)
 
     logger.info(
-        "加密会话注册 | key_id=%s device_id=%s",
-        session.key_id[:12] + "...",
-        ctx.device_id[:12] + "...",
+        "加密会话注册 | key_id=%s session_id=%s",
+        enc_session.key_id[:12] + "...",
+        ctx.session_id[:8] + "...",
     )
     return BaseSuccessResponse(
         code=ErrorCode.OK,
         data={
-            "keyId": session.key_id,
-            "expiresIn": session.ttl_seconds,
+            "keyId": enc_session.key_id,
+            "expiresIn": enc_session.ttl_seconds,
         },
     )
-
-

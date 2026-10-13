@@ -8,7 +8,7 @@ import {
 import { createLogger } from "@ming/core-log";
 import { isDebug } from "@ming/debug";
 import { i18n } from "@ming/i18n";
-import { getDeviceToken } from "@ming/biz-common-util";
+import { getToken } from "@ming/biz-common-util";
 import { initDeviceToken } from "@ming/features-account-api";
 import { exchangeKeys } from "@ming/features-encryption-api";
 import { useAppStore } from "@ming/store";
@@ -47,13 +47,9 @@ async function initGlobalNetwork(): Promise<void> {
   // 将环境标志写入全局 app-state
   //TODO: 上线记得删除这个写法，改为从服务端获取
   useAppStore.setState({ debug: { isDebug } });
-  // const signatureSecret = import.meta.env.VITE_SIGNATURE_SECRET ?? "";
-  //TODO: 生产环境下，signatureSecret 应该从服务端获取，而不是写死在前端代码里
-  const signatureSecret = "signature-secret";
-
   // 注入 store 回调到 biz-common/net 内部提供者（解除反向依赖）
   setDebugGetter(() => useAppStore.getState().debug.isDebug);
-  setTokenGetter(() => getDeviceToken()); // 直接读 localStorage，不经过 app-state
+  setTokenGetter(() => getToken()); // 从会话上下文读取，不经过 app-state
   setEncryptionSessionGetter(() => {
     const session = useAppStore.getState().encryption.session;
     if (!session) return null;
@@ -70,17 +66,12 @@ async function initGlobalNetwork(): Promise<void> {
     enableEncryption: !isDebug,
     enableAuth: !isDebug,
     enableLogging: isDebug,
-    signatureSecret,
   });
 
   // release 模式时，token 初始化和密钥交换必须成功
   if (!isDebug) {
     // 加密会话 → 写入 app-state，加密拦截器自动加解密
-    if (!signatureSecret) {
-      throw log.throw(
-        new Error("signatureSecret 未配置，无法启用加密通信"),
-      );
-    }
+    // 签名密钥已在 exchangeKeys 内部通过 HKDF 派生，存储在 session.signatureKeyHex
 
     const session = await exchangeKeys();
     useAppStore.getState().encryption.setSession(session);

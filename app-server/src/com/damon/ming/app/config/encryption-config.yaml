@@ -1,0 +1,22 @@
+# app-server/src/com/damon/ming/app/config/encryption-config.yaml
+# 加密体系业务配置 —— 由 app_initializer 读取，注入 encryption 模块。
+# encryption 模块本身不包含任何配置文件，纯参数化调用。
+
+encryption:
+  # 开发环境
+  default:
+    rsa_key_size: 2048
+    session_ttl_hours: 24
+    sign_context: "ai-fullstack-signature-v1"
+    kek_salt: "encryption-key-store-v1"
+    kek_info: "encryption-session-key-wrap"
+    data_key_id: "data-key-v1"
+
+  # 生产环境
+  production:
+    rsa_key_size: 4096
+    session_ttl_hours: 12
+    sign_context: "ai-fullstack-signature-v1"
+    kek_salt: "encryption-key-store-v1"
+    kek_info: "encryption-session-key-wrap"
+    data_key_id: "data-key-v1"
