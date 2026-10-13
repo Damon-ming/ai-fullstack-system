@@ -22,8 +22,10 @@ export class HttpClient {
   private readonly sseTransport: SseTransport;
 
   constructor(private readonly config: HttpClientConfig) {
-    if (typeof config.baseURL !== "string")
-      throw log.throw(new Error("HttpClientConfig.baseURL must be string"));
+    if (typeof config.baseURL !== "string") {
+      log.error("HttpClientConfig.baseURL must be string");
+      throw new Error("HttpClientConfig.baseURL must be string");
+    }
     this.pipeline = new InterceptorPipeline(config.interceptors);
     this.restful = new RestfulClient(config, this.pipeline);
     this.sseTransport = new SseTransport(config, this.pipeline);

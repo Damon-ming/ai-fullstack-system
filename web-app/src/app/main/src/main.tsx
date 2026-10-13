@@ -16,8 +16,10 @@ async function startApp() {
 
     // 2. 网络等基础层就绪后，挂载 React App
     const rootElement = document.getElementById("root");
-    if (!rootElement)
-      throw log.throw(new Error("Root element #root not found"));
+    if (!rootElement) {
+      log.error("Root element #root not found");
+      throw new Error("Root element #root not found");
+    }
 
     ReactDOM.createRoot(rootElement).render(
       <React.StrictMode>

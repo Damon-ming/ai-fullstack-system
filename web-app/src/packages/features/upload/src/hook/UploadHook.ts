@@ -12,7 +12,7 @@ export interface UploadMeta {
 }
 
 function createUploadRequest(files: File[], meta?: UploadMeta): UploadRequest {
-  if (!files.length) throw log.throw(new Error("至少选择一个文件"));
+  if (!files.length) throw new Error("至少选择一个文件");
   const allowedTypes = new Set([
     "application/pdf",
     "application/vnd.ms-excel",
@@ -28,12 +28,10 @@ function createUploadRequest(files: File[], meta?: UploadMeta): UploadRequest {
         !allowedTypes.has(file.type) && !allowedExtensions.test(file.name),
     )
   ) {
-    throw log.throw(
-      new Error("仅支持 PDF、Excel、PNG、JPEG、CSV 文件"),
-    );
+    throw new Error("仅支持 PDF、Excel、PNG、JPEG、CSV 文件");
   }
   if (files.some((file) => file.size > 10 * 1024 * 1024))
-    throw log.throw(new Error("单个大小不能超过 10MB"));
+    throw new Error("单个大小不能超过 10MB");
   return {
     files,
     description: meta?.description,

@@ -50,7 +50,6 @@ export function useChatSendNormalHook() {
         );
       }
     } catch (e) {
-      log.error("sendNormal failed", e);
       const errMsg = e instanceof Error ? e.message : t("error.sendFailed");
       setMessages((prev) =>
         prev.map((msg) =>

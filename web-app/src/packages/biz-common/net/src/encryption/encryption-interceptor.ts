@@ -48,7 +48,8 @@ export function createEncryptionInterceptors(): {
     onFulfilled: async (request) => {
       const session = getEncryptionSession();
       if (!session) {
-        throw log.throw(new Error("加密会话不可用，请求中止"));
+        log.error("加密会话不可用，请求中止");
+        throw new Error("加密会话不可用，请求中止");
       }
 
       // FormData：文件上传场景
@@ -59,13 +60,16 @@ export function createEncryptionInterceptors(): {
       // JSON 请求
       const contentType = request.headers["content-type"] || "";
       if (!contentType.includes("application/json")) {
-        throw log.throw(new Error(`不支持加密的内容类型: ${contentType}`));
+        log.error("不支持加密的内容类型: %s", contentType);
+        throw new Error(`不支持加密的内容类型: ${contentType}`);
       }
       if (typeof request.data !== "object" || request.data === null) {
-        throw log.throw(new Error("请求体格式异常，无法加密"));
+        log.error("请求体格式异常，无法加密");
+        throw new Error("请求体格式异常，无法加密");
       }
       if (isEncryptedPayload(request.data)) {
-        throw log.throw(new Error("请求体已加密，重复加密"));
+        log.error("请求体已加密，重复加密");
+        throw new Error("请求体已加密，重复加密");
       }
 
       return handleJson(request, session);
@@ -84,7 +88,8 @@ export function createEncryptionInterceptors(): {
 
       const session = getEncryptionSession();
       if (!session) {
-        throw log.throw(new Error("加密会话不可用，无法解密响应"));
+        log.error("加密会话不可用，无法解密响应");
+        throw new Error("加密会话不可用，无法解密响应");
       }
 
       const decryptedStr = await decryptPayload(

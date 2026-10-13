@@ -41,10 +41,9 @@ export class HttpManager {
   /** 获取全局默认客户端 */
   getDefaultClient(): HttpClient {
     if (!this.defaultClient) {
-      throw log.throw(
-        new Error(
-          "Default HttpClient not initialized, please setDefaultClient first",
-        ),
+      log.error("Default HttpClient not initialized, please setDefaultClient first");
+      throw new Error(
+        "Default HttpClient not initialized, please setDefaultClient first",
       );
     }
     return this.defaultClient;

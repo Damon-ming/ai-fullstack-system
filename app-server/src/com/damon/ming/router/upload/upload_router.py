@@ -47,6 +47,6 @@ async def save_files(
         return BaseSuccessResponse(code=ErrorCode.OK, data=success_data)
 
     except Exception as e:  # noqa: BLE001
-        logger.warning("文件上传请求失败")
+        logger.exception("文件上传请求失败 | error=%s", e)
         fail_data = FileUploadFailedData(error_msg=str(e))
         return BaseFailedResponse(code=ErrorCode.UPLOAD.UPLOAD_FAILED, data=fail_data)

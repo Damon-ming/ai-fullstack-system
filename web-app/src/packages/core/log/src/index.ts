@@ -22,14 +22,14 @@ export interface Logger {
   serverError(message: string, error?: unknown, context?: LogContext): void;
 
   /**
-   * 客户端兜底日志 + 抛异常 —— 用于客户端自身 throw 点。
-   * 打印 CLIENT: 前缀日志，然后抛出原始 Error。
+   * 纯抛异常 —— 不打印日志，由调用方或拦截器统一记录。
+   * 保持 throw 语义，便于在调用链中传播错误。
    */
   throw(error: Error, context?: LogContext): never;
 
   /**
-   * 服务端错误日志 + 抛异常 —— 用于将服务端错误向上层抛出。
-   * 打印 前缀日志，然后抛出原始 Error。
+   * 纯抛异常（服务端错误透传） —— 不打印日志，由拦截器统一记录。
+   * 与 throw 行为一致，仅语义上标识错误来源于服务端。
    */
   serverThrow(error: Error, context?: LogContext): never;
 }
@@ -169,21 +169,10 @@ export function createLogger(namespace: string): Logger {
     serverError: (message, error, context) => {
       console.error(...formatServerError(namespace, message, error, context));
     },
-    throw: (error, context) => {
-      console.error(
-        ...formatClientError(namespace, "Client exception", error, context),
-      );
+    throw: (error) => {
       throw error;
     },
-    serverThrow: (error, context) => {
-      console.error(
-        ...formatServerError(
-          namespace,
-          "Server error propagated",
-          error,
-          context,
-        ),
-      );
+    serverThrow: (error) => {
       throw error;
     },
   };

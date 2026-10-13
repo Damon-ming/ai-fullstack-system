@@ -70,10 +70,9 @@ export async function initDeviceToken(): Promise<string> {
   const [err, resp] = await requestDeviceToken({ phone: SIMULATED_PHONE });
 
   if (err || !resp?.data?.token) {
-    throw log.serverThrow(
-      new Error(
-        `Token 签发失败: ${err?.data?.error_msg || "CLIENT: 未知错误"}`,
-      ),
+    // logging-interceptor 已记录完整 HTTP 错误（URL + 状态码 + 响应体），此处不再重复打印
+    throw new Error(
+      `Token 签发失败: ${err?.data?.error_msg || "CLIENT: 未知错误"}`,
     );
   }
 

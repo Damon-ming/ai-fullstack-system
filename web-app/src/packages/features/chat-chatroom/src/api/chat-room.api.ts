@@ -30,10 +30,6 @@ export const sendChatRoomMessageFn = (
     .then((response) => {
       log.debug("send response received");
       return response;
-    })
-    .catch((error) => {
-      log.error("send request failed", error);
-      throw error;
     });
 };
 

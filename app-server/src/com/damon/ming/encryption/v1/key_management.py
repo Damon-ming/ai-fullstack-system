@@ -41,6 +41,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from src.com.damon.ming.encryption.v1.crypto_engine import AesGcmEngine
 from src.com.damon.ming.exception import EncryptionError
+from src.com.damon.ming.log import pin
+
+logger = pin("encryption.key_manager")
 
 if TYPE_CHECKING:
     from src.com.damon.ming.encryption.key_store.base_key_store import BaseKeyStore
@@ -229,13 +232,9 @@ class KeyManager:
             )
             try:
                 self._key_store.save_session(stored)
-            except Exception:
+            except Exception as e:
                 # 持久化失败不阻塞会话注册（降级为纯内存）
-                import logging
-
-                logging.getLogger("KeyManager").warning(
-                    "会话持久化失败，降级为纯内存 | key_id=%s", key_id
-                )
+                logger.warning("会话持久化失败，降级为纯内存 | key_id=%s error=%s", key_id, e)
 
         return session
 
@@ -251,6 +250,7 @@ class KeyManager:
             session = self._sessions.get(key_id)
             if session is not None:
                 if session.is_expired:
+                    logger.debug("会话已过期 | key_id=%s", key_id[:12] + "...")
                     del self._sessions[key_id]
                     return None
                 session.touch()
