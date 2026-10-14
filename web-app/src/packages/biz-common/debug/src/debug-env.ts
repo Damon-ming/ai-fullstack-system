@@ -11,6 +11,8 @@
  *   isDebug() 永远返回 false，localStorage 覆盖无效。
  */
 
+import { get, set, remove } from "@ming/core-storage";
+
 const DEBUG_OVERRIDE_KEY = "__debug_override__";
 
 /** 构建时默认值（不可变底线） */
@@ -35,13 +37,8 @@ export function initDebugEnv(): void {
     cachedDebug = false;
     return;
   }
-  // 服务端渲染兜底
-  if (typeof window === "undefined") {
-    cachedDebug = BUILD_DEFAULT;
-    return;
-  }
-  // 开发构建：读取 localStorage 显式覆盖
-  const raw = localStorage.getItem(DEBUG_OVERRIDE_KEY);
+  // 开发构建：读取 localStorage 显式覆盖（core/storage 已内置 SSR 兜底）
+  const raw = get(DEBUG_OVERRIDE_KEY);
   cachedDebug = raw === null ? BUILD_DEFAULT : raw === "true";
 }
 
@@ -75,14 +72,12 @@ export function clientTypeCode(): number {
 
 export function setDebug(value: boolean): void {
   if (!BUILD_DEFAULT) return;
-  if (typeof window === "undefined") return;
-  localStorage.setItem(DEBUG_OVERRIDE_KEY, String(value));
+  set(DEBUG_OVERRIDE_KEY, String(value));
   cachedDebug = value;
 }
 
 export function clearDebugOverride(): void {
   if (!BUILD_DEFAULT) return;
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(DEBUG_OVERRIDE_KEY);
+  remove(DEBUG_OVERRIDE_KEY);
   cachedDebug = BUILD_DEFAULT;
 }
