@@ -3,14 +3,12 @@
 应用初始化器 —— 统一管理所有子系统的启动/关闭生命周期。
 
 职责：
-  - 数据库连接池（可选，未配置则跳过）
+  - 数据库连接池（从 YAML 配置加载，失败则启动报错）
   - 加密体系（KeyManager + 可选 PgKeyStore）
   - 签名密钥
   - RAG 知识库
   - LLM 推理客户端
   - 上传服务 SHA 缓存
-
-每个子系统独立初始化，失败不影响其他子系统（降级处理）。
 """
 
 import os
@@ -114,48 +112,24 @@ class AppInitializer:
         UploadService.init_sha_cache()
 
     def _init_database(self) -> None:
-        """数据库连接池：环境变量 > YAML 配置 > 跳过。"""
-        db_url = os.environ.get("DB_CONNECTION", "")
-        if db_url:
-            self._init_database_from_url(db_url)
-        else:
-            self._init_database_from_yaml()
+        """数据库连接池：仅从 YAML 配置文件加载。
 
-    def _init_database_from_url(self, db_url: str) -> None:
-        """从环境变量 DB_CONNECTION 初始化数据库。"""
-        try:
-            from src.com.damon.ming.db import DbConfig, DbConnection, set_default_db
+        加载失败（文件不存在、格式错误、连接失败）直接抛出异常，
+        不做静默降级——数据库是核心依赖，启动失败应明确报错。
+        """
+        from src.com.damon.ming.app.config import DbConfigLoader
+        from src.com.damon.ming.db import (
+            DbConnection,
+            set_default_db,
+        )
 
-            self.db_conn = DbConnection(DbConfig(url=db_url, pool_size=5))
-            self.db_conn.initialize()
-            set_default_db(self.db_conn)
-            self._create_account_tables()
-            logger.info("数据库引擎初始化完成（环境变量 DB_CONNECTION）")
-        except Exception as e:
-            logger.warning("数据库引擎初始化失败: %s", e)
-            self.db_conn = None
-
-    def _init_database_from_yaml(self) -> None:
-        """从 YAML 配置文件初始化数据库。"""
-        try:
-            from src.com.damon.ming.app.config import DbConfigLoader
-            from src.com.damon.ming.db import (
-                DbConnection,
-                set_default_db,
-            )
-
-            loader = DbConfigLoader()
-            db_config = loader.load(profile=self._profile)
-            self.db_conn = DbConnection(db_config)
-            self.db_conn.initialize()  # pool 参数从 DbConfig 读取
-            set_default_db(self.db_conn)
-            self._create_account_tables()
-            logger.info("数据库引擎初始化完成（YAML 配置）")
-        except FileNotFoundError:
-            logger.info("数据库配置文件不存在，跳过数据库初始化")
-        except Exception as e:
-            logger.warning("数据库引擎初始化失败: %s", e)
-            self.db_conn = None
+        loader = DbConfigLoader()
+        db_config = loader.load(profile=self._profile)
+        self.db_conn = DbConnection(db_config)
+        self.db_conn.initialize()  # pool 参数从 DbConfig 读取
+        set_default_db(self.db_conn)
+        self._create_account_tables()
+        logger.info("数据库引擎初始化完成（YAML 配置）")
 
     def _create_account_tables(self) -> None:
         """创建账号体系表（users / devices / sessions）。"""
@@ -170,7 +144,7 @@ class AppInitializer:
             logger.warning("账号体系表创建失败: %s", e)
 
     def _init_encryption(self) -> None:
-        """加密体系：配置加载 > KeyManager > 可选 PgKeyStore。"""
+        """加密体系：配置加载 > KeyManager > 可选 PgKeyStore（共享连接池）。"""
         self._enc_config = self._load_encryption_config()
         key_store, kek = self._create_key_store()
         rsa_size = self._enc_config.rsa_key_size if self._enc_config else 2048
@@ -226,7 +200,7 @@ class AppInitializer:
 
         try:
             from src.com.damon.ming.encryption.key_store import derive_kek
-            from src.com.damon.ming.router.encryption.pg_key_store import PgKeyStore
+            from src.com.damon.ming.router.encryption.key_store import PgKeyStore
 
             if self._is_debug and not os.environ.get("MASTER_KEY"):
                 from src.com.damon.ming.encryption.key_store.generate_master_key import (

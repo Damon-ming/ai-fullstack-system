@@ -5,16 +5,14 @@
 本模块属于 app/ 业务层，不属于 db/ 模块。
 db/ 模块通过 DbConfig 数据类接收参数，不感知配置来源。
 
-加载优先级：
-  1. 显式传入的 config_path
-  2. DB_CONFIG_PATH 环境变量
-  3. 默认路径：本目录下的 db-config.yaml
+配置来源：
+  - 仅从 YAML 文件读取，不支持环境变量覆盖
+  - 加载失败（文件不存在、格式错误、剖面缺失）直接抛出异常
 
 支持多剖面（default / production），通过 profile 参数选择。
 """
 
 import os
-from typing import Any
 
 import yaml
 
@@ -30,8 +28,6 @@ class DbConfigLoader:
 
     def __init__(self, config_path: str | None = None):
         if config_path is None:
-            config_path = os.environ.get("DB_CONFIG_PATH", "")
-        if not config_path:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "db-config.yaml")
         self._config_path = config_path
@@ -39,47 +35,25 @@ class DbConfigLoader:
     def load(self, profile: str = "default"):
         """加载指定剖面的配置，返回 DbConfig。
 
-        环境变量覆盖规则：
-          DB_URL / DB_DIALECT / DB_HOST / DB_PORT / DB_NAME /
-          DB_USER / DB_PASSWORD / DB_RETRY / DB_BACKOFF /
-          DB_POOL_SIZE / DB_MAX_OVERFLOW
-          若设置，优先于 YAML 中的值。
+        加载失败时直接抛出异常（FileNotFoundError / ValueError），
+        调用方必须处理，不做静默降级。
         """
         from src.com.damon.ming.db.db_config import DbConfig
 
         raw = self._read_yaml(profile)
 
-        # 如果有完整 URL，直接返回
-        url = self._env_or_value("DB_URL", raw.get("url", ""))
-        if url:
-            return DbConfig(
-                url=url,
-                retry_count=int(self._env_or_value("DB_RETRY", raw.get("retry", 3))),
-                backoff_seconds=float(
-                    self._env_or_value("DB_BACKOFF", raw.get("backoff", 0.1))
-                ),
-                pool_size=int(self._env_or_value("DB_POOL_SIZE", raw.get("pool_size", 5))),
-                max_overflow=int(
-                    self._env_or_value("DB_MAX_OVERFLOW", raw.get("max_overflow", 10))
-                ),
-            )
-
         return DbConfig(
-            host=self._env_or_value("DB_HOST", raw.get("host", "")),
-            port=int(self._env_or_value("DB_PORT", raw.get("port", 5432))),
-            dbname=self._env_or_value("DB_NAME", raw.get("dbname", "")),
-            user=self._env_or_value("DB_USER", raw.get("user", "")),
-            password=self._env_or_value("DB_PASSWORD", raw.get("password", "")),
-            dialect=self._env_or_value("DB_DIALECT", raw.get("dialect", "postgresql")),
+            host=raw.get("host", ""),
+            port=int(raw.get("port", 5432)),
+            dbname=raw.get("dbname", ""),
+            user=raw.get("user", ""),
+            password=raw.get("password", ""),
+            dialect=raw.get("dialect", "postgresql"),
             driver=raw.get("driver", ""),
-            retry_count=int(self._env_or_value("DB_RETRY", raw.get("retry", 3))),
-            backoff_seconds=float(
-                self._env_or_value("DB_BACKOFF", raw.get("backoff", 0.1))
-            ),
-            pool_size=int(self._env_or_value("DB_POOL_SIZE", raw.get("pool_size", 5))),
-            max_overflow=int(
-                self._env_or_value("DB_MAX_OVERFLOW", raw.get("max_overflow", 10))
-            ),
+            retry_count=int(raw.get("retry", 3)),
+            backoff_seconds=float(raw.get("backoff", 0.1)),
+            pool_size=int(raw.get("pool_size", 5)),
+            max_overflow=int(raw.get("max_overflow", 10)),
             engine_kwargs=self._build_engine_kwargs(raw),
         )
 
@@ -96,12 +70,6 @@ class DbConfigLoader:
         if not section:
             raise ValueError(f"DB 配置文件中未找到剖面: {profile}")
         return section
-
-    @staticmethod
-    def _env_or_value(env_key: str, yaml_value: Any) -> str:
-        """环境变量优先，否则用 YAML 值。"""
-        env_val = os.environ.get(env_key, "")
-        return env_val if env_val else str(yaml_value)
 
     @staticmethod
     def _build_engine_kwargs(raw: dict) -> dict:

@@ -12,56 +12,32 @@
   device_id ──独立注册           （设备身份，不绑定用户）
   (token, device_id) ──1:1── session_id  （每次 token 签发产生一个会话）
 
-存储：全部通过 PostgreSQL 持久化，服务重启后数据不丢失。
-SQL 语句在 sql/ 子目录各表对应文件，本文件只负责业务逻辑和调用。
+存储：全部通过共享连接池持久化，服务重启后数据不丢失。
+简单 CRUD 用 SQLAlchemy Core API（router/tables.py），
+复杂语句（ON CONFLICT、事务内多步）仍用 raw SQL。
 """
 
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import text
 from src.com.damon.ming.db.db_connection import get_default_db
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.router.account.sql import devices_sql, sessions_sql, users_sql
+from src.com.damon.ming.router.tables import (
+    DeviceRow,
+    SessionRow,
+    devices,
+    sessions,
+    users,
+)
 
 logger = pin("account.store")
 
 # ---------------------------------------------------------------------------
 # 常量
 # ---------------------------------------------------------------------------
-
+# todo
 SESSION_TTL = timedelta(days=30)  # 会话有效期
-
-
-# ---------------------------------------------------------------------------
-# 数据模型
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class DeviceRecord:
-    """一台已注册设备的信息。"""
-
-    device_id: str
-    ua_hash: str
-    raw_ua: str = ""
-    platform: str = ""
-    screen: str = ""
-    lang: str = ""
-    tz: str = ""
-    created_at: datetime | None = None
-
-
-@dataclass
-class SessionRecord:
-    """一个会话实例（token + device_id 的唯一组合）。"""
-
-    session_id: str
-    token: str
-    device_id: str
-    ua_hash: str
-    created_at: datetime | None = None
-    expires_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -78,30 +54,6 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _session_row_to_record(row: tuple) -> SessionRecord:
-    return SessionRecord(
-        session_id=row[0],
-        token=row[1],
-        device_id=row[2],
-        ua_hash=row[3],
-        created_at=row[4],
-        expires_at=row[5],
-    )
-
-
-def _device_row_to_record(row: tuple) -> DeviceRecord:
-    return DeviceRecord(
-        device_id=row[0],
-        ua_hash=row[1],
-        raw_ua=row[2],
-        platform=row[3],
-        screen=row[4],
-        lang=row[5],
-        tz=row[6],
-        created_at=row[7],
-    )
-
-
 # ---------------------------------------------------------------------------
 # 用户（phone → token）
 # ---------------------------------------------------------------------------
@@ -109,35 +61,39 @@ def _device_row_to_record(row: tuple) -> DeviceRecord:
 
 def get_token_by_phone(phone: str) -> str | None:
     """根据手机号查询已签发的 token。"""
-    rows = _db().execute(
-        users_sql.GET_TOKEN_BY_PHONE, (phone,), commit=False, fetch=True
-    )
-    return rows[0][0] if rows else None
+    with _db().engine.connect() as conn:
+        result = conn.execute(users.select().where(users.c.phone == phone))
+        row = result.fetchone()
+    return row.token if row else None
 
 
 def get_phone_by_token(token: str) -> str | None:
-    """根据 token 查询对应的手机号。"""
-    rows = _db().execute(
-        users_sql.GET_PHONE_BY_TOKEN, (token,), commit=False, fetch=True
-    )
-    return rows[0][0] if rows else None
+    """根据 token 对应的手机号。"""
+    with _db().engine.connect() as conn:
+        result = conn.execute(users.select().where(users.c.token == token))
+        row = result.fetchone()
+    return row.phone if row else None
 
 
 def is_token_valid(token: str) -> bool:
     """检查 token 是否存在。"""
-    rows = _db().execute(
-        users_sql.GET_PHONE_BY_TOKEN, (token,), commit=False, fetch=True
-    )
-    return len(rows or []) > 0
+    with _db().engine.connect() as conn:
+        result = conn.execute(users.select().where(users.c.token == token))
+        return result.fetchone() is not None
 
 
 def bind_token(phone: str, token: str) -> None:
-    """绑定 phone → token 映射（幂等）。"""
-    _db().execute(users_sql.INSERT, (token, phone, _now()), commit=True)
+    """绑定 phone → token 映射（幂等，ON CONFLICT 覆盖）。"""
+    _db().execute(
+        "INSERT INTO users (token, phone, created_at) VALUES (%s, %s, %s) "
+        "ON CONFLICT (token) DO UPDATE SET phone = EXCLUDED.phone",
+        (token, phone, _now()),
+        commit=True,
+    )
 
 
 # ---------------------------------------------------------------------------
-# 设备（device_id → DeviceRecord）
+# 设备（device_id → DeviceRow）
 # ---------------------------------------------------------------------------
 
 
@@ -152,35 +108,61 @@ def register_device(
 ) -> None:
     """注册一台设备。设备身份独立存在，不归属任何用户。
 
-    如果 device_id 已存在，更新 UA 信息。
+    如果 device_id 已存在，更新 UA 信息（UPSERT）。
     """
     _db().execute(
-        devices_sql.UPSERT,
+        "INSERT INTO devices (device_id, ua_hash, raw_ua, platform, screen, lang, tz, created_at) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+        "ON CONFLICT (device_id) DO UPDATE SET "
+        "ua_hash = EXCLUDED.ua_hash, raw_ua = EXCLUDED.raw_ua, "
+        "platform = EXCLUDED.platform, screen = EXCLUDED.screen, "
+        "lang = EXCLUDED.lang, tz = EXCLUDED.tz",
         (device_id, ua_hash, raw_ua, platform, screen, lang, tz, _now()),
         commit=True,
     )
 
 
-def get_device(device_id: str) -> DeviceRecord | None:
+def get_device(device_id: str) -> DeviceRow | None:
     """查询设备记录。"""
-    rows = _db().execute(devices_sql.GET, (device_id,), commit=False, fetch=True)
-    return _device_row_to_record(rows[0]) if rows else None
+    with _db().engine.connect() as conn:
+        result = conn.execute(devices.select().where(devices.c.device_id == device_id))
+        row = result.fetchone()
+    if row is None:
+        return None
+    return DeviceRow(
+        device_id=row.device_id,
+        ua_hash=row.ua_hash,
+        raw_ua=row.raw_ua or "",
+        platform=row.platform or "",
+        screen=row.screen or "",
+        lang=row.lang or "",
+        tz=row.tz or "",
+        created_at=row.created_at,
+    )
 
 
 def is_device_registered(device_id: str) -> bool:
     """检查设备是否已注册。"""
-    rows = _db().execute(devices_sql.GET, (device_id,), commit=False, fetch=True)
-    return len(rows or []) > 0
+    with _db().engine.connect() as conn:
+        result = conn.execute(devices.select().where(devices.c.device_id == device_id))
+        return result.fetchone() is not None
 
 
 def remove_device(device_id: str) -> None:
     """删除设备记录（同时逻辑过期该设备的所有会话）。"""
-    _db().execute(sessions_sql.REVOKE_BY_DEVICE, (device_id,), commit=True)
-    _db().execute(devices_sql.DELETE, (device_id,), commit=True)
+    now = _now()
+    with _db().transaction() as conn:
+        conn.execute(
+            text(
+                "UPDATE sessions SET expires_at = :now WHERE device_id = :did AND expires_at > :now"
+            ),
+            {"now": now, "did": device_id},
+        )
+        conn.execute(devices.delete().where(devices.c.device_id == device_id))
 
 
 # ---------------------------------------------------------------------------
-# 会话（session_id → SessionRecord）
+# 会话（session_id → SessionRow）
 # ---------------------------------------------------------------------------
 
 
@@ -194,62 +176,82 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
     session_id = str(uuid.uuid4())
     expires_at = now + SESSION_TTL
 
-    with _db().transaction() as conn, conn.cursor() as cur:
-        cur.execute(sessions_sql.EXPIRE_OLD, (now, token, device_id, now))
-        cur.execute(
-            sessions_sql.INSERT,
-            (session_id, token, device_id, ua_hash, now, expires_at),
+    with _db().transaction() as conn:
+        # 过期旧会话
+        conn.execute(
+            text(
+                "UPDATE sessions SET expires_at = :now WHERE token = :tok AND device_id = :did AND expires_at > :now"
+            ),
+            {"now": now, "tok": token, "did": device_id},
+        )
+        # 插入新会话
+        conn.execute(
+            sessions.insert().values(
+                session_id=session_id,
+                token=token,
+                device_id=device_id,
+                issued_ua_hash=ua_hash,
+                created_at=now,
+                expires_at=expires_at,
+            )
         )
 
     return session_id
 
 
-def get_session(session_id: str) -> SessionRecord | None:
+def get_session(session_id: str) -> SessionRow | None:
     """查询有效会话（未过期）。"""
-    rows = _db().execute(
-        sessions_sql.GET,
-        (session_id, _now()),
-        commit=False,
-        fetch=True,
-    )
-    return _session_row_to_record(rows[0]) if rows else None
+    now = _now()
+    with _db().engine.connect() as conn:
+        result = conn.execute(
+            sessions.select().where(
+                sessions.c.session_id == session_id,
+                sessions.c.expires_at > now,
+            )
+        )
+        row = result.fetchone()
+    return _session_row(row)
 
 
-def get_active_session(token: str, device_id: str) -> SessionRecord | None:
+def get_active_session(token: str, device_id: str) -> SessionRow | None:
     """查询某 (token, device_id) 的活跃会话。"""
-    rows = _db().execute(
-        sessions_sql.GET_ACTIVE,
-        (token, device_id, _now()),
-        commit=False,
-        fetch=True,
-    )
-    return _session_row_to_record(rows[0]) if rows else None
+    now = _now()
+    with _db().engine.connect() as conn:
+        result = conn.execute(
+            sessions.select().where(
+                sessions.c.token == token,
+                sessions.c.device_id == device_id,
+                sessions.c.expires_at > now,
+            )
+        )
+        row = result.fetchone()
+    return _session_row(row)
 
 
 def revoke_sessions_by_token(token: str) -> int:
     """注销某 token 的所有会话。返回注销数量。"""
     now = _now()
-    from sqlalchemy import text
-    from src.com.damon.ming.db.db_connection import _convert_placeholders
-
     with _db().transaction() as conn:
-        sql, params = _convert_placeholders(sessions_sql.REVOKE_BY_TOKEN, (now, token, now))
-        result = conn.execute(text(sql), params)
-        count = result.rowcount
-    return count
+        result = conn.execute(
+            text(
+                "UPDATE sessions SET expires_at = :now WHERE token = :tok AND expires_at > :now"
+            ),
+            {"now": now, "tok": token},
+        )
+        return result.rowcount
 
 
 def revoke_sessions_by_device(device_id: str) -> int:
     """注销某设备的所有会话。返回注销数量。"""
     now = _now()
-    from sqlalchemy import text
-    from src.com.damon.ming.db.db_connection import _convert_placeholders
-
     with _db().transaction() as conn:
-        sql, params = _convert_placeholders(sessions_sql.REVOKE_BY_DEVICE, (now, device_id, now))
-        result = conn.execute(text(sql), params)
-        count = result.rowcount
-    return count
+        result = conn.execute(
+            text(
+                "UPDATE sessions SET expires_at = :now WHERE device_id = :did AND expires_at > :now"
+            ),
+            {"now": now, "did": device_id},
+        )
+        return result.rowcount
 
 
 # ---------------------------------------------------------------------------
@@ -257,35 +259,69 @@ def revoke_sessions_by_device(device_id: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def get_all_devices() -> list[DeviceRecord]:
+def get_all_devices() -> list[DeviceRow]:
     """获取所有设备记录副本（调试用）。"""
-    rows = _db().execute(devices_sql.GET_ALL, commit=False, fetch=True)
-    return [_device_row_to_record(r) for r in (rows or [])]
+    with _db().engine.connect() as conn:
+        result = conn.execute(devices.select())
+        rows = result.fetchall()
+    return [
+        DeviceRow(
+            device_id=r.device_id,
+            ua_hash=r.ua_hash,
+            raw_ua=r.raw_ua or "",
+            platform=r.platform or "",
+            screen=r.screen or "",
+            lang=r.lang or "",
+            tz=r.tz or "",
+            created_at=r.created_at,
+        )
+        for r in (rows or [])
+    ]
 
 
-def get_all_sessions() -> list[SessionRecord]:
+def get_all_sessions() -> list[SessionRow]:
     """获取所有有效会话副本（调试用）。"""
-    rows = _db().execute(
-        sessions_sql.GET_ALL,
-        (_now(),),
-        commit=False,
-        fetch=True,
-    )
-    return [_session_row_to_record(r) for r in (rows or [])]
+    now = _now()
+    with _db().engine.connect() as conn:
+        result = conn.execute(sessions.select().where(sessions.c.expires_at > now))
+        rows = result.fetchall()
+    return [_session_row(r) for r in (rows or [])]
 
 
 def get_stats() -> dict:
     """获取统计信息。"""
-    user_rows = _db().execute(users_sql.COUNT, commit=False, fetch=True)
-    device_rows = _db().execute(devices_sql.COUNT, commit=False, fetch=True)
-    session_rows = _db().execute(
-        sessions_sql.COUNT,
-        (_now(),),
-        commit=False,
-        fetch=True,
-    )
+    now = _now()
+    with _db().engine.connect() as conn:
+        users_count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0
+        devices_count = conn.execute(text("SELECT COUNT(*) FROM devices")).scalar() or 0
+        sessions_count = (
+            conn.execute(
+                text("SELECT COUNT(*) FROM sessions WHERE expires_at > :now"),
+                {"now": now},
+            ).scalar()
+            or 0
+        )
     return {
-        "users": user_rows[0][0] if user_rows else 0,
-        "devices": device_rows[0][0] if device_rows else 0,
-        "sessions": session_rows[0][0] if session_rows else 0,
+        "users": users_count,
+        "devices": devices_count,
+        "sessions": sessions_count,
     }
+
+
+# ---------------------------------------------------------------------------
+# 行映射工具
+# ---------------------------------------------------------------------------
+
+
+def _session_row(row) -> SessionRow | None:
+    """将查询结果映射为 SessionRow。"""
+    if row is None:
+        return None
+    return SessionRow(
+        session_id=row.session_id,
+        token=row.token,
+        device_id=row.device_id,
+        issued_ua_hash=row.issued_ua_hash or "",
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+    )

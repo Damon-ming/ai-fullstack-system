@@ -13,8 +13,8 @@
   km = KeyManager()
   km.initialize()
 
-  # 持久化到 PostgreSQL（PgKeyStore 在业务层 router/encryption/）
-  from src.com.damon.ming.router.encryption.pg_key_store import PgKeyStore
+  # 持久化到数据库（PgKeyStore 在业务层 router/encryption/）
+  from src.com.damon.ming.router.encryption.key_store import PgKeyStore
   from src.com.damon.ming.encryption.key_store import derive_kek
   kek = derive_kek(kek_salt=b"...", kek_info=b"...")  # salt/info 由业务配置注入
   km = KeyManager(key_store=store, kek=kek)

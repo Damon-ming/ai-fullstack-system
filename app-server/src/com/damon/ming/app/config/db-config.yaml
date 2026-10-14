@@ -1,15 +1,11 @@
 # app-server/src/com/damon/ming/app/config/db-config.yaml
-# 数据库连接配置 —— 由 app_initializer 读取，注入 db 模块。
+# 数据库连接配置 —— 由 DbConfigLoader 读取，注入 db 模块。
 # db 模块本身不包含任何配置文件，纯参数化调用。
 #
-# 支持多数据库后端：
+# 支持多数据库后端，通过拆解字段 + dialect 自动拼装 SQLAlchemy URL：
 #   PostgreSQL:  dialect: postgresql
 #   MySQL:       dialect: mysql  driver: pymysql
-#   SQLite:      dialect: sqlite
-#
-# 也可以直接写 url 覆盖拆解字段：
-#   default:
-#     url: postgresql://user:pass@localhost:5432/mydb
+#   SQLite:      dialect: sqlite  dbname: /path/to/db.sqlite
 
 db:
   # 开发环境：本地 PostgreSQL
@@ -27,7 +23,7 @@ db:
     retry: 3
     backoff: 0.1
 
-  # 生产环境：通过环境变量覆盖（DB_URL 优先级最高）
+  # 生产环境
   production:
     dialect: postgresql
     driver: psycopg2

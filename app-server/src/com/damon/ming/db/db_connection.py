@@ -11,7 +11,6 @@
   - 连接失败自动重试（可配置重试次数和间隔）
 """
 
-import re
 import threading
 import time
 
@@ -29,7 +28,7 @@ class DbConnection:
     上层业务 SQL 无需改动（pgvector 等特殊语法通过 text() 原生执行）。
 
     用法：
-      db = DbConnection(DbConfig.from_env())
+      db = DbConnection(db_config)  # db_config 由上层配置加载器构造
       db.initialize()
 
       rows = db.execute("SELECT * FROM users WHERE id = %s", (user_id,), fetch=True)
@@ -171,7 +170,9 @@ class DbConnection:
             try:
                 with self._engine.connect() as conn:
                     for params in params_list:
-                        converted_sql, converted_params = _convert_placeholders(sql, params)
+                        converted_sql, converted_params = _convert_placeholders(
+                            sql, params
+                        )
                         conn.execute(text(converted_sql), converted_params or {})
                     if commit:
                         conn.commit()
@@ -304,11 +305,9 @@ def _convert_placeholders(
     i = 0
     sql_len = len(sql)
     while i < sql_len:
-        if sql[i] == '%' and i + 1 < sql_len and sql[i + 1] == 's':
+        if sql[i] == "%" and i + 1 < sql_len and sql[i + 1] == "s":
             parts.append(f":p{param_index}")
-            converted_params[f"p{param_index}"] = (
-                params[param_index]  # type: ignore
-            )
+            converted_params[f"p{param_index}"] = params[param_index]  # type: ignore
             param_index += 1
             i += 2
         else:

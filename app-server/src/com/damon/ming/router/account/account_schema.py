@@ -7,13 +7,11 @@
   - devices:  设备指纹（独立于用户存在）
   - sessions: 会话实例（token + device 的唯一组合）
 
-DDL 定义在 sql/ 子目录各表对应文件，本文件只负责执行。
+表定义统一在 router/tables.py，本文件只负责调用建表。
 """
 
 from src.com.damon.ming.db.db_connection import DbConnection
-from src.com.damon.ming.router.account.sql.devices_sql import DDL as DDL_DEVICES
-from src.com.damon.ming.router.account.sql.sessions_sql import DDL as DDL_SESSIONS
-from src.com.damon.ming.router.account.sql.users_sql import DDL as DDL_USERS
+from src.com.damon.ming.router.tables import create_all_tables
 
 
 def create_account_tables(db_conn: DbConnection) -> None:
@@ -24,6 +22,4 @@ def create_account_tables(db_conn: DbConnection) -> None:
         db_conn.initialize()
         create_account_tables(db_conn)
     """
-    db_conn.execute(DDL_USERS, commit=True)
-    db_conn.execute(DDL_DEVICES, commit=True)
-    db_conn.execute(DDL_SESSIONS, commit=True)
+    create_all_tables(db_conn)

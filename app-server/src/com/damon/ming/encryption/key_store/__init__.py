@@ -10,7 +10,7 @@
 
 业务扩展（如按设备索引）由业务层存储实现（router/encryption/）自行管理。
 
-DB 后端实现位于业务层 router/encryption/pg_key_store.py。
+DB 后端实现位于业务层 router/encryption/key_store.py。
 """
 
 from src.com.damon.ming.encryption.key_store.base_key_store import (

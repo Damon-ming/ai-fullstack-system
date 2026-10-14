@@ -12,10 +12,7 @@
 【可选（本地开发用，生产镜像通过 build_info.py 固化）】
   APP_ENV                 环境标志：debug / release（默认 debug）
   LOG_LEVEL               日志级别：DEBUG / INFO / WARNING / ERROR（默认 INFO）
-  DB_CONNECTION           数据库连接串（未设置则跳过数据库初始化）
-  DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD  DB 分项配置
-  DB_RETRY / DB_BACKOFF   重试次数与退避秒数
-  DB_CONFIG_PATH          DB YAML 配置文件路径（默认 app/config/db-config.yaml）
+  DB_CONFIG_PATH          DB YAML 配置文件路径（默认 app/config/db-config.yaml，可选）
   ENCRYPTION_CONFIG_PATH  加密 YAML 配置文件路径（默认 encryption/encryption-config.yaml）
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 

@@ -61,36 +61,25 @@ def _check_encryption_config(is_debug: bool) -> None:
 
 
 def _check_database(is_debug: bool) -> list[str]:
-    """检查数据库配置是否可用。
+    """检查数据库配置是否可用（仅从 YAML 加载）。
 
-    开发环境可降级为纯内存（不报错）。
-    生产环境必须有数据库（环境变量 DB_CONNECTION 或 YAML 配置文件）。
+    缺失直接报错，不做环境变量回退。
     """
-    errors = []
-
-    if is_debug:
-        return errors
-
-    # 环境变量 DB_URL（DB_CONNECTION 兼容）
-    db_url = os.environ.get("DB_URL", "") or os.environ.get("DB_CONNECTION", "")
-    if db_url:
-        return errors
-
-    # YAML 配置文件
     try:
         from src.com.damon.ming.app.config import DbConfigLoader
 
         loader = DbConfigLoader()
-        db_config = loader.load(profile="production")
-        if db_config.url or db_config.host:
-            return errors
-    except Exception:
-        pass
+        db_config = loader.load(profile="default" if is_debug else "production")
+        if not db_config.url and not db_config.host:
+            return [
+                f"数据库配置缺少连接信息（url 或 host），请检查 db-config.yaml 的 {'default' if is_debug else 'production'} 剖面"
+            ]
+    except FileNotFoundError as e:
+        return [f"数据库配置文件不存在：{e}"]
+    except Exception as e:
+        return [f"数据库配置加载失败：{e}"]
 
-    errors.append(
-        "数据库未配置（生产环境必须设置 DB_CONNECTION 环境变量或 app/config/db-config.yaml）"
-    )
-    return errors
+    return []
 
 
 def run_precheck(is_debug: bool) -> list[str]:
