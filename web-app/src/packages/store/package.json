@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "zustand": "^5.0.3",
-    "@ming/debug": "workspace:*",
+    "@ming/biz-common-debug": "workspace:*",
     "@ming/biz-common-net-api": "workspace:*",
     "@ming/biz-common-util": "workspace:*",
-    "@ming/features-account-api": "workspace:*"
+    "@ming/feature-account-api": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18.0.0"

@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@ming/biz-common-util": "workspace:*",
-    "@ming/debug": "workspace:*"
+    "@ming/biz-common-debug": "workspace:*"
   },
   "devDependencies": {
     "@ming/core-encryption": "workspace:*",

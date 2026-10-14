@@ -1,5 +1,5 @@
 {
-  "name": "@ming/features-account",
+  "name": "@ming/feature-account",
   "version": "0.0.1",
   "type": "module",
   "exports": {

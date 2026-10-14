@@ -1,1 +1,1 @@
-{"name":"@ming/features-search","version":"0.0.1","type":"module","exports":{".":"./src/index.ts"},"peerDependencies":{"react":"^18.2.0"}}
+{"name":"@ming/feature-search","version":"0.0.1","type":"module","exports":{".":"./src/index.ts"},"peerDependencies":{"react":"^18.2.0"}}

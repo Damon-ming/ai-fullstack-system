@@ -1,5 +1,5 @@
 {
-  "name": "@ming/features-chat",
+  "name": "@ming/feature-chat",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -11,11 +11,11 @@
   "dependencies": {
     "@ming/core-log": "workspace:*",
     "@ming/store": "workspace:*",
-    "@ming/features-chat-drawer": "workspace:*",
-    "@ming/features-chat-chatroom": "workspace:*",
-    "@ming/features-history-api": "workspace:*",
-    "@ming/features-search-api": "workspace:*",
-    "@ming/features-account-api": "workspace:*",
+    "@ming/feature-chat-drawer": "workspace:*",
+    "@ming/feature-chat-chatroom": "workspace:*",
+    "@ming/feature-history-api": "workspace:*",
+    "@ming/feature-search-api": "workspace:*",
+    "@ming/feature-account-api": "workspace:*",
     "@ming/i18n": "workspace:*"
   },
   "peerDependencies": {

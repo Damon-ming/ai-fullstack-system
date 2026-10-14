@@ -29,6 +29,9 @@ importers:
 
   src/app/main:
     dependencies:
+      '@ming/biz-common-debug':
+        specifier: workspace:*
+        version: link:../../packages/biz-common/debug
       '@ming/biz-common-net':
         specifier: workspace:*
         version: link:../../packages/biz-common/net
@@ -44,16 +47,13 @@ importers:
       '@ming/data-layer':
         specifier: workspace:*
         version: link:../../packages/data-layer
-      '@ming/debug':
-        specifier: workspace:*
-        version: link:../../packages/biz-common/debug
-      '@ming/features-account-api':
+      '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../../packages/features/account-api
-      '@ming/features-chat':
+      '@ming/feature-chat':
         specifier: workspace:*
         version: link:../../packages/features/chat
-      '@ming/features-encryption-api':
+      '@ming/feature-encryption-api':
         specifier: workspace:*
         version: link:../../packages/features/encryption-api
       '@ming/i18n':
@@ -86,12 +86,12 @@ importers:
 
   src/packages/biz-common/net:
     dependencies:
+      '@ming/biz-common-debug':
+        specifier: workspace:*
+        version: link:../debug
       '@ming/biz-common-util':
         specifier: workspace:*
         version: link:../util
-      '@ming/debug':
-        specifier: workspace:*
-        version: link:../debug
       react:
         specifier: ^18.0.0
         version: 18.3.1
@@ -178,7 +178,7 @@ importers:
 
   src/packages/features/account-api:
     dependencies:
-      '@ming/features-account':
+      '@ming/feature-account':
         specifier: workspace:*
         version: link:../account
       react:
@@ -190,19 +190,19 @@ importers:
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
-      '@ming/features-account-api':
+      '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../account-api
-      '@ming/features-chat-chatroom':
+      '@ming/feature-chat-chatroom':
         specifier: workspace:*
         version: link:../chat-chatroom
-      '@ming/features-chat-drawer':
+      '@ming/feature-chat-drawer':
         specifier: workspace:*
         version: link:../chat-drawer
-      '@ming/features-history-api':
+      '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api
-      '@ming/features-search-api':
+      '@ming/feature-search-api':
         specifier: workspace:*
         version: link:../search-api
       '@ming/i18n':
@@ -229,7 +229,7 @@ importers:
       '@ming/data-layer':
         specifier: workspace:*
         version: link:../../data-layer
-      '@ming/features-upload-api':
+      '@ming/feature-upload-api':
         specifier: workspace:*
         version: link:../upload-api
       '@ming/i18n':
@@ -253,16 +253,16 @@ importers:
       '@ming/core-util':
         specifier: workspace:*
         version: link:../../core/util
-      '@ming/features-account-api':
+      '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../account-api
-      '@ming/features-history-api':
+      '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api
-      '@ming/features-search-api':
+      '@ming/feature-search-api':
         specifier: workspace:*
         version: link:../search-api
-      '@ming/features-upload-api':
+      '@ming/feature-upload-api':
         specifier: workspace:*
         version: link:../upload-api
       '@ming/i18n':
@@ -289,7 +289,7 @@ importers:
 
   src/packages/features/encryption-api:
     dependencies:
-      '@ming/features-encryption':
+      '@ming/feature-encryption':
         specifier: workspace:*
         version: link:../encryption
 
@@ -304,7 +304,7 @@ importers:
 
   src/packages/features/history-api:
     dependencies:
-      '@ming/features-history':
+      '@ming/feature-history':
         specifier: workspace:*
         version: link:../history
 
@@ -316,10 +316,10 @@ importers:
 
   src/packages/features/search-api:
     dependencies:
-      '@ming/features-history-api':
+      '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api
-      '@ming/features-search':
+      '@ming/feature-search':
         specifier: workspace:*
         version: link:../search
 
@@ -337,7 +337,7 @@ importers:
 
   src/packages/features/upload-api:
     dependencies:
-      '@ming/features-upload':
+      '@ming/feature-upload':
         specifier: workspace:*
         version: link:../upload
 
@@ -355,16 +355,16 @@ importers:
 
   src/packages/store:
     dependencies:
+      '@ming/biz-common-debug':
+        specifier: workspace:*
+        version: link:../biz-common/debug
       '@ming/biz-common-net-api':
         specifier: workspace:*
         version: link:../biz-common/net-api
       '@ming/biz-common-util':
         specifier: workspace:*
         version: link:../biz-common/util
-      '@ming/debug':
-        specifier: workspace:*
-        version: link:../biz-common/debug
-      '@ming/features-account-api':
+      '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../features/account-api
       react:

@@ -4,6 +4,6 @@
  *
  * store 写入由 bootstrap 完成（与 token 模式一致）。
  */
-import { exchangeKeys as exchangeKeysInFeature } from "@ming/features-encryption";
+import { exchangeKeys as exchangeKeysInFeature } from "@ming/feature-encryption";
 
 export const exchangeKeys = () => exchangeKeysInFeature();

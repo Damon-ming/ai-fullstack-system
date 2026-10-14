@@ -1,4 +1,4 @@
-import { useHistory } from "@ming/features-history-api";
+import { useHistory } from "@ming/feature-history-api";
 import { useChatMessageStore, useChatUiStore } from "@ming/store/biz/chat-state";
 import { useHistoryStore } from "@ming/store/biz/history-state";
 

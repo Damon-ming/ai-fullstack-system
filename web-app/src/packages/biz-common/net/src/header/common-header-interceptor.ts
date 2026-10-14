@@ -13,7 +13,7 @@
 import type { NormalizedRequest } from "@ming/core-network";
 import { collectClientUA, encodeClientUA } from "@ming/core-util";
 import { getSessionContext, getDeviceId } from "@ming/biz-common-util";
-import { envCode, clientTypeCode } from "@ming/debug";
+import { envCode, clientTypeCode } from "@ming/biz-common-debug";
 import { VERSION } from "../../../../../version";
 
 export function createCommonHeaderInterceptor() {

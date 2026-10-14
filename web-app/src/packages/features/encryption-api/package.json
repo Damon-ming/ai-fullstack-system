@@ -1,11 +1,11 @@
 {
-  "name": "@ming/features-encryption-api",
+  "name": "@ming/feature-encryption-api",
   "version": "0.0.1",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@ming/features-encryption": "workspace:*"
+    "@ming/feature-encryption": "workspace:*"
   }
 }

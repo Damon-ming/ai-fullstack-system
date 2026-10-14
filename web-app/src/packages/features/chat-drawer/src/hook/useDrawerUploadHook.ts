@@ -1,5 +1,5 @@
 import { useMemo, useRef, useCallback } from "react";
-import { uploadFiles as uploadFilesFromApi } from "@ming/features-upload-api";
+import { uploadFiles as uploadFilesFromApi } from "@ming/feature-upload-api";
 import { useChatUploadStore } from "@ming/store/biz/upload-state";
 import { useTranslation } from "@ming/i18n";
 import { createLogger } from "@ming/core-log";

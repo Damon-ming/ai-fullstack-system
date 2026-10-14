@@ -1,11 +1,11 @@
 // src/app/main/src/bootstrap.ts
 import { initNetApi } from "@ming/biz-common-net-api";
 import { createLogger } from "@ming/core-log";
-import { isDebug } from "@ming/debug";
+import { isDebug } from "@ming/biz-common-debug";
 import { i18n } from "@ming/i18n";
 import { setEncryptionSession } from "@ming/biz-common-util";
-import { initDeviceToken } from "@ming/features-account-api";
-import { exchangeKeys } from "@ming/features-encryption-api";
+import { initDeviceToken } from "@ming/feature-account-api";
+import { exchangeKeys } from "@ming/feature-encryption-api";
 import { useAppStore } from "@ming/store";
 
 const log = createLogger("app/bootstrap");

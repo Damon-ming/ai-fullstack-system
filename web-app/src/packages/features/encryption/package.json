@@ -1,5 +1,5 @@
 {
-  "name": "@ming/features-encryption",
+  "name": "@ming/feature-encryption",
   "version": "0.0.1",
   "type": "module",
   "exports": {

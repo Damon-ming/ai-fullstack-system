@@ -1,5 +1,5 @@
 {
-  "name": "@ming/features-chat-chatroom",
+  "name": "@ming/feature-chat-chatroom",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -11,7 +11,7 @@
   "dependencies": {
     "@ming/store": "workspace:*",
     "@ming/core-log": "workspace:*",
-    "@ming/features-upload-api": "workspace:*",
+    "@ming/feature-upload-api": "workspace:*",
     "@ming/data-layer": "workspace:*",
     "@ming/biz-common-net-api": "workspace:*",
     "@ming/i18n": "workspace:*",

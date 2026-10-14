@@ -1,5 +1,5 @@
 import { createAppStore } from "../app-store";
-import type { AccountProfile } from "@ming/features-account-api";
+import type { AccountProfile } from "@ming/feature-account-api";
 
 export interface AccountState {
   dialogOpen: boolean;

@@ -9,10 +9,10 @@ import {
   useHistoryStore,
   useSearchStore,
 } from "@ming/store";
-import { useHistory } from "@ming/features-history-api";
-import { searchHistory } from "@ming/features-search-api";
-import { useAccount } from "@ming/features-account-api";
-import { useDrawerUploadHook } from "@ming/features-chat-drawer";
+import { useHistory } from "@ming/feature-history-api";
+import { searchHistory } from "@ming/feature-search-api";
+import { useAccount } from "@ming/feature-account-api";
+import { useDrawerUploadHook } from "@ming/feature-chat-drawer";
 
 const log = createLogger("chat/page");
 

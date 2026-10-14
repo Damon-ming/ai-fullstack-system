@@ -1,1 +1,1 @@
-{"name":"@ming/features-search-api","version":"0.0.1","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@ming/features-search":"workspace:*","@ming/features-history-api":"workspace:*"}}
+{"name":"@ming/feature-search-api","version":"0.0.1","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@ming/feature-search":"workspace:*","@ming/feature-history-api":"workspace:*"}}

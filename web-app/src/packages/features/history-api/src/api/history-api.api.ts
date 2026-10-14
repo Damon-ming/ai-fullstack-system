@@ -1,6 +1,6 @@
-import { historyActions } from "@ming/features-history"
-import type { HistoryMessage } from "@ming/features-history"
-export { useHistory } from "@ming/features-history"
+import { historyActions } from "@ming/feature-history"
+import type { HistoryMessage } from "@ming/feature-history"
+export { useHistory } from "@ming/feature-history"
 
 export const getHistoryList = () => historyActions.list()
 export const addHistory = (title: string) => historyActions.add(title)

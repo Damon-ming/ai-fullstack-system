@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { uploadFiles } from "@ming/features-upload-api";
+import { uploadFiles } from "@ming/feature-upload-api";
 import { useChatUploadStore } from "@ming/store/biz/upload-state";
 
 /**
