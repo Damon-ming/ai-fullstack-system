@@ -110,7 +110,11 @@ function formatClientError(
   const output: unknown[] = [
     `CLIENT: [${ts}] [${namespace}] [${location}] ${message}: ${error.message}`,
   ];
-  if (error.stack) output.push(`\n${error.stack}`);
+  if (error.stack) {
+    // 堆栈第 1 行是 "Error: xxx"（与摘要重复），从第 2 行开始打印
+    const stackLines = error.stack.split("\n").slice(1).join("\n");
+    if (stackLines) output.push(`\n${stackLines}`);
+  }
   return output;
 }
 
@@ -133,11 +137,14 @@ function formatServerError(
   context?: LogContext,
 ): unknown[] {
   const ts = new Date().toISOString().slice(0, 23);
+  const location = ` [${callerLocation()}]`;
   const output: unknown[] = [
-    `[${ts}] [${namespace}] ${message}: ${errorDetail(error)}`,
+    `[${ts}] [${namespace}]${location} ${message}: ${errorDetail(error)}`,
   ];
   if (error instanceof Error && error.stack) {
-    output.push(`\n${error.stack}`);
+    // 堆栈第 1 行是 "Error: xxx"（与摘要重复），从第 2 行开始打印
+    const stackLines = error.stack.split("\n").slice(1).join("\n");
+    if (stackLines) output.push(`\n${stackLines}`);
   }
   return output;
 }

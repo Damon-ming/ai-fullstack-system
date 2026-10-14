@@ -71,14 +71,16 @@ export function createLoggingInterceptors(): {
       const startTime = (config as any).__netStartTime ?? Date.now();
       const elapsed = Date.now() - startTime;
 
-      // 网络层错误（无响应）标记为 CLIENT: 兜底日志
       const status = error?.response?.status;
       if (status && status >= 400) {
-        log.serverError(
+        // 4xx/5xx：仅打一行摘要（warn），避免与 axios 内部 console.error 和
+        // 业务层 catch 的 log.error 重复。URL + 状态码 + 耗时足以定位传输层问题。
+        log.warn(
           `${config?.method?.toUpperCase()} ${config?.url} → ${status} (${formatTime(elapsed)})`,
-          error,
+          { body: formatBody(error?.response?.data) },
         );
       } else {
+        // 网络层错误（无响应/断网/超时）：axios 不会内部打印，此处用 error 完整记录
         log.error(
           `${config?.method?.toUpperCase()} ${config?.url} → ${status || "CLIENT: NETWORK_ERROR"} (${formatTime(elapsed)})`,
           error,

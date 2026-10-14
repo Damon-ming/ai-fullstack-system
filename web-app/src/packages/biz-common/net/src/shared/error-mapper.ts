@@ -40,8 +40,8 @@ export function buildHttpCodeError<F = any>(
       clientData: {
         message:
           errorMsg ||
-          getServerSafeMessage(rawRes.code) ||
-          getHttpStatusMessage(httpCode),
+          getHttpStatusMessage(httpCode) ||
+          getServerSafeMessage(rawRes.code),
       },
     };
   }
@@ -77,6 +77,19 @@ export function formatAxiosException<F = any>(
   // 服务端返回了 HTTP 错误响应（有 response 对象）
   if (err.response) {
     return buildHttpCodeError<F>(err.response.status, err.response.data);
+  }
+
+  // 网络不可达（服务端未启动、DNS 失败、连接被拒）
+  if (
+    err.code === "ECONNREFUSED" ||
+    err.code === "ENOTFOUND" ||
+    err.code === "ECONNRESET" ||
+    err.code === "EHOSTUNREACH"
+  ) {
+    return {
+      code: ClientErrorCode.NET_TIMEOUT,
+      clientData: { message: ERROR_MESSAGES[ClientErrorCode.NET_TIMEOUT] },
+    };
   }
 
   // 网络超时

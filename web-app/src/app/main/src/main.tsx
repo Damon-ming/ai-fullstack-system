@@ -26,7 +26,8 @@ async function startApp() {
         <App />
       </React.StrictMode>,
     );
-  } catch {
+  } catch (error) {
+    log.error("启动失败", error);
     const rootElement = document.getElementById("root");
     if (rootElement) {
       rootElement.innerHTML =

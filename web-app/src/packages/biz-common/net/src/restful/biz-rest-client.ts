@@ -11,6 +11,7 @@ import {
   buildHttpCodeError,
   formatAxiosException,
 } from "../shared/error-mapper";
+import { getServerSafeMessage } from "../error-messages";
 
 const log = createLogger("net/restful");
 const DEFAULT_TIMEOUT = 10000;
@@ -56,8 +57,15 @@ export class BizRestClient {
         if (isSuccess(code)) {
           successRes = { code, data: data as T };
         } else {
-          // 失败码及其他服务端码 → 错误处理
-          errRes = { code, data: data as F };
+          // 服务端业务失败码 → 提取 error_msg 作为 clientData.message
+          // 优先级：data.error_msg（服务端脱敏描述）> getServerSafeMessage（子系统兜底文案）
+          const errorMsg =
+            data &&
+            typeof data === "object" &&
+            typeof (data as Record<string, unknown>).error_msg === "string"
+              ? ((data as Record<string, unknown>).error_msg as string)
+              : getServerSafeMessage(code);
+          errRes = { code, data: data as F, clientData: { message: errorMsg } };
         }
       }
       // HTTP 204 或 2xx + 空 body → 成功（无业务数据）

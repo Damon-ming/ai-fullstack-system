@@ -71,8 +71,9 @@ export async function initDeviceToken(): Promise<string> {
 
   if (err || !resp?.data?.token) {
     // logging-interceptor 已记录完整 HTTP 错误（URL + 状态码 + 响应体），此处不再重复打印
+    // clientData.message 是统一错误信息字段（服务端错误来自 error_msg，客户端错误来自 axios/拦截器）
     throw new Error(
-      `Token 签发失败: ${err?.data?.error_msg || "CLIENT: 未知错误"}`,
+      `Token 签发失败: ${err?.clientData?.message || "未知错误"}`,
     );
   }
 
