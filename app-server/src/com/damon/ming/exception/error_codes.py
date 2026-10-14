@@ -2,24 +2,23 @@
 """
 统一错误码注册中心 — 分段式数字码
 
-格式: A BBB CCC [DD...] (7位起，无上限)
+格式: A BB CCC DDD (9位)
   A    (第1位)    — 结果位: 1=成功, 2=失败, 3-9 预留
-  BBB  (第2-4位)  — 系统位: 000=通用, 001-999=具体子系统
-  CCC  (第5-7位)  — 业务位: 000=通用, 001-999=具体业务
-  DD... (第8位起) — 具体业务码: 无位数限制
+  BB   (第2-3位)  — 系统位: 00=当前服务(默认), 01-99=预留, 拆子系统时启用
+  CCC  (第4-6位)  — 业务模块位: 000=通用, 001=参数校验, 002=加密, 003=认证...
+  DDD  (第7-9位)  — 具体业务码: 同模块内递增
 
 容量:
-  结果: 9 个 (1-9)
-  系统: 999 个 (001-999, 000=通用)
-  业务: 999 个 (001-999, 000=通用)
-  具体码: 无上限
+  结果:   9 个 (1-9)
+  系统:   99 个 (01-99, 00=当前服务)
+  业务:   999 个 (001-999, 000=通用)
+  具体码: 999 个
 
 示例:
-  1000000 = 成功(通用)
-  2001001 = 失败, 加密协议(001), 密钥格式错误(001)
-  2002001 = 失败, 认证鉴权(002), 缺少Token(001)
-  2006001 = 失败, 数据库(006), 数据库故障(001)
-  1001001999999 = 成功, 加密协议(001), 密钥格式错误(001), 具体码(999999)
+  100000000 = 成功(通用)
+  200002001 = 失败, 当前服务, 加密模块(002), AES密钥格式错误(001)
+  200003001 = 失败, 当前服务, 认证模块(003), 缺少Token(001)
+  200005001 = 失败, 当前服务, Chat模块(005), 请求超时(001)
 
 使用方式:
   from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -35,93 +34,124 @@ FAILURE = 2
 
 
 # ---------------------------------------------------------------------------
-# 系统位 (第2-4位) — 每个系统占一段
+# 系统位 (第2-3位) — 当前统一为 00, 拆子系统时启用
 # ---------------------------------------------------------------------------
 
 
 class System:
-    """系统号 (第2-4位)"""
+    """系统位 (第2-3位) — 物理/部署层面的子系统标识
 
-    GENERIC = 0  # 000 通用
-    ENCRYPTION = 1  # 001 加密协议
-    AUTH = 2  # 002 认证鉴权
-    ACCOUNT = 3  # 003 账号体系
-    CHAT = 4  # 004 AI/Chat
-    UPLOAD = 5  # 005 文件上传
-    # 006-099 预留系统
-    DATABASE = 6  # 006 数据库/基础设施
+    当前单体服务统一使用 GENERIC(00), 预留 01-99 等拆子系统时启用:
+      01 = Chat 独立服务
+      02 = Auth 独立服务
+      03 = Account 独立服务
+      ...
+    """
+
+    GENERIC = 0  # 00 当前服务(默认)
 
 
 # ---------------------------------------------------------------------------
-# 具体错误码 (完整7位起)
+# 业务模块位 (CCC, 第4-6位) — 标识业务领域
+# ---------------------------------------------------------------------------
+
+
+class Business:
+    """业务模块位 (第4-6位)"""
+
+    GENERIC = 0  # 000 通用
+    VALIDATION = 1  # 001 参数校验
+    ENCRYPTION = 2  # 002 加密协议
+    AUTH = 3  # 003 认证鉴权
+    ACCOUNT = 4  # 004 账号体系
+    CHAT = 5  # 005 AI/Chat
+    UPLOAD = 6  # 006 文件上传
+    SYSTEM = 7  # 007 系统/基础设施
+
+
+# ---------------------------------------------------------------------------
+# 辅助函数 — 组装完整错误码
+# ---------------------------------------------------------------------------
+
+
+def _build(detail: int, business: int = 0, system: int = 0, result: int = 2) -> int:
+    """组装错误码: result + BB + CCC + DDD"""
+    return int(f"{result}{system:02d}{business:03d}{detail:03d}")
+
+
+# ---------------------------------------------------------------------------
+# 具体错误码 (完整9位)
+# 格式: 2 00 CCC DDD
 # ---------------------------------------------------------------------------
 
 
 class _Success:
     """成功码"""
 
-    OK = 1000000  # 通用成功
-
-
-class _Encryption:
-    """加密协议错误 (2 001 xxx)"""
-
-    INVALID_KEY_FORMAT = 2001001  # AES 密钥格式错误
-    SESSION_REG_FAILED = 2001002  # 会话注册失败
-    UNSUPPORTED_VERSION = 2001003  # 不支持的加密版本
-    DECRYPTION_FAILED = 2001004  # JSON 解密失败
-    META_DECRYPT_FAILED = 2001005  # Meta 解密失败
-    SESSION_INVALID = 2001006  # 会话无效/过期
-    SIGNATURE_FAILED = 2001007  # 签名验证失败
-    UNSUPPORTED_SIGNATURE_VERSION = 2001008  # 不支持的签名协议版本
-
-
-class _Auth:
-    """认证鉴权错误 (2 002 xxx)"""
-
-    MISSING_TOKEN = 2002001  # 缺少认证 Token
-    INVALID_TOKEN = 2002002  # Token 无效/过期
-    MISSING_SESSION = 2002003  # 缺少会话 ID
-    INVALID_SESSION = 2002004  # 会话无效/过期
-    SESSION_TOKEN_MISMATCH = 2002005  # 会话不属于该 Token
-
-
-class _Chat:
-    """AI/Chat 错误 (2 004 xxx)"""
-
-    TIMEOUT = 2004001  # 请求超时
-    UNKNOWN = 2004002  # 未知异常
-
-
-class _Upload:
-    """文件上传错误 (2 005 xxx)"""
-
-    UPLOAD_FAILED = 2005001  # 上传失败
-    IN_PROGRESS = 2005002  # 资料库正在更新中
-
-
-class _System:
-    """系统/基础设施错误 (2 006 xxx)"""
-
-    DATABASE_FAILURE = 2006001  # 数据库故障
-    ENCRYPTION_FAILURE = 2006002  # 加密子系统故障
-    UPLOAD_FAILURE = 2006003  # 上传子系统故障
-    AI_FAILURE = 2006004  # AI 子系统故障
-    AUTH_FAILURE = 2006005  # 认证子系统故障
-    UNKNOWN = 200699  # 未知系统故障
+    OK = 100000000  # 通用成功
 
 
 class _Validation:
-    """参数校验错误 (2 000 xxx)"""
+    """参数校验错误 (2 00 001 xxx)"""
 
-    PARAM_FORMAT = 2000001  # 请求参数格式错误
+    PARAM_FORMAT = _build(detail=1, business=Business.VALIDATION)  # 200001001
 
 
-# ---------------------------------------------------------------------------
-# 兼容旧名（过渡期保留）
-# ---------------------------------------------------------------------------
+class _Encryption:
+    """加密协议错误 (2 00 002 xxx)"""
 
-Module = System
+    INVALID_KEY_FORMAT = _build(detail=1, business=Business.ENCRYPTION)  # 200002001
+    SESSION_REG_FAILED = _build(detail=2, business=Business.ENCRYPTION)  # 200002002
+    UNSUPPORTED_VERSION = _build(detail=3, business=Business.ENCRYPTION)  # 200002003
+    DECRYPTION_FAILED = _build(detail=4, business=Business.ENCRYPTION)  # 200002004
+    META_DECRYPT_FAILED = _build(detail=5, business=Business.ENCRYPTION)  # 200002005
+    SESSION_INVALID = _build(detail=6, business=Business.ENCRYPTION)  # 200002006
+    SIGNATURE_FAILED = _build(detail=7, business=Business.ENCRYPTION)  # 200002007
+    UNSUPPORTED_SIGNATURE_VERSION = _build(
+        detail=8, business=Business.ENCRYPTION
+    )  # 200002008
+
+
+class _Auth:
+    """认证鉴权错误 (2 00 003 xxx)"""
+
+    MISSING_TOKEN = _build(detail=1, business=Business.AUTH)  # 200003001
+    INVALID_TOKEN = _build(detail=2, business=Business.AUTH)  # 200003002
+
+
+class _Account:
+    """账号体系错误 (2 00 004 xxx)"""
+
+    # 预留
+
+
+class _Chat:
+    """AI/Chat 错误 (2 00 005 xxx)"""
+
+    TIMEOUT = _build(detail=1, business=Business.CHAT)  # 200005001
+    UNKNOWN = _build(detail=2, business=Business.CHAT)  # 200005002
+
+
+class _Upload:
+    """文件上传错误 (2 00 006 xxx)"""
+
+    UPLOAD_FAILED = _build(detail=1, business=Business.UPLOAD)  # 200006001
+    IN_PROGRESS = _build(detail=2, business=Business.UPLOAD)  # 200006002
+
+
+class _System:
+    """系统/基础设施错误 (2 00 007 xxx)
+
+    注意: 这类错误描述的是某业务模块的底层设施故障,
+          与具体业务模块的"协议级错误"区分开.
+    """
+
+    DATABASE_FAILURE = _build(detail=1, business=Business.SYSTEM)  # 200007001
+    ENCRYPTION_FAILURE = _build(detail=2, business=Business.SYSTEM)  # 200007002
+    UPLOAD_FAILURE = _build(detail=3, business=Business.SYSTEM)  # 200007003
+    AI_FAILURE = _build(detail=4, business=Business.SYSTEM)  # 200007004
+    AUTH_FAILURE = _build(detail=5, business=Business.SYSTEM)  # 200007005
+    UNKNOWN = _build(detail=99, business=Business.SYSTEM)  # 200007099
 
 
 # ---------------------------------------------------------------------------
@@ -133,13 +163,19 @@ class ErrorCode:
     """统一错误码命名空间"""
 
     # 成功
-    OK = _Success.OK  # 1000000
+    OK = _Success.OK  # 100000000
+
+    # 参数校验
+    VALIDATION = _Validation
 
     # 加密协议
     ENCRYPT = _Encryption
 
     # 认证鉴权
     AUTH = _Auth
+
+    # 账号体系
+    ACCOUNT = _Account
 
     # AI/Chat
     CHAT = _Chat
@@ -150,9 +186,6 @@ class ErrorCode:
     # 系统/基础设施
     SYSTEM = _System
 
-    # 参数校验
-    VALIDATION = _Validation
-
 
 # ---------------------------------------------------------------------------
 # 辅助函数
@@ -160,9 +193,12 @@ class ErrorCode:
 
 
 def _code_segments(code: int) -> tuple[str, str, str, str]:
-    """将错误码拆分为四段字符串: (结果, 系统, 业务, 具体码)"""
-    s = str(code).ljust(7, "0")  # 不足7位右补零
-    return s[0], s[1:4], s[4:7], s[7:]
+    """将错误码拆分为四段字符串: (结果, 系统, 业务模块, 具体码)
+
+    不足9位右补零, 保证老7位码也能兼容解析。
+    """
+    s = str(code).ljust(9, "0")
+    return s[0], s[1:3], s[3:6], s[6:9]
 
 
 def get_category(code: int) -> int:
@@ -171,19 +207,21 @@ def get_category(code: int) -> int:
 
 
 def get_system(code: int) -> int:
-    """获取系统位 (第2-4位, 3位数字)"""
+    """获取系统位 (第2-3位, 2位数字)
+
+    00=当前服务, 01-99=预留(等拆子系统时启用)
+    """
     return int(_code_segments(code)[1])
 
 
 def get_business(code: int) -> int:
-    """获取业务位 (第5-7位, 3位数字)"""
+    """获取业务模块位 (第4-6位, 3位数字)"""
     return int(_code_segments(code)[2])
 
 
 def get_detail(code: int) -> int:
-    """获取具体业务码 (第8位起)，7位码返回 0"""
-    detail_str = _code_segments(code)[3]
-    return int(detail_str) if detail_str else 0
+    """获取具体业务码 (第7-9位, 3位数字)"""
+    return int(_code_segments(code)[3])
 
 
 def is_success(code: int) -> bool:
@@ -196,34 +234,39 @@ def is_failure(code: int) -> bool:
     return get_category(code) == FAILURE
 
 
-# 兼容旧名（过渡期保留）
-get_module = get_system
-
-
 # 系统号 → 名称映射 (用于日志)
 _SYSTEM_NAMES: dict[int, str] = {
-    System.GENERIC: "generic",
-    System.ENCRYPTION: "encryption",
-    System.AUTH: "auth",
-    System.ACCOUNT: "account",
-    System.CHAT: "chat",
-    System.UPLOAD: "upload",
-    System.DATABASE: "database",
+    System.GENERIC: "current-service",
 }
 
 
 def get_system_name(code: int) -> str:
     """获取系统名称 (用于日志)"""
     system = get_system(code)
-    return _SYSTEM_NAMES.get(system, f"unknown({system:03d})")
+    return _SYSTEM_NAMES.get(system, f"unknown({system:02d})")
 
 
-# 兼容旧名（过渡期保留）
-get_module_name = get_system_name
+# 业务模块 → 名称映射 (用于日志)
+_BUSINESS_NAMES: dict[int, str] = {
+    Business.GENERIC: "generic",
+    Business.VALIDATION: "validation",
+    Business.ENCRYPTION: "encryption",
+    Business.AUTH: "auth",
+    Business.ACCOUNT: "account",
+    Business.CHAT: "chat",
+    Business.UPLOAD: "upload",
+    Business.SYSTEM: "system-infra",
+}
+
+
+def get_business_name(code: int) -> str:
+    """获取业务模块名称 (用于日志)"""
+    business = get_business(code)
+    return _BUSINESS_NAMES.get(business, f"unknown({business:03d})")
 
 
 def format_code(code: int) -> str:
-    """格式化错误码为可读字符串，如 '2001001 -> FAILURE:encryption:001'"""
+    """格式化错误码为可读字符串, 如 '200002001 -> FAILURE:current-service:encryption:001'"""
     category = (
         "SUCCESS"
         if is_success(code)
@@ -232,9 +275,6 @@ def format_code(code: int) -> str:
         else f"CAT{get_category(code)}"
     )
     system = get_system_name(code)
-    business = get_business(code)
+    business = get_business_name(code)
     detail = get_detail(code)
-    result = f"{code} -> {category}:{system}:{business:03d}"
-    if detail > 0:
-        result += f":{detail}"
-    return result
+    return f"{code} -> {category}:{system}:{business}:{detail:03d}"

@@ -29,6 +29,7 @@ export {
   ClientErrorCode,
   ServerSubSystem,
   System,
+  Business,
   SUCCESS,
   FAILURE,
   isSuccess,
@@ -57,8 +58,5 @@ export {
   formatSseException,
   buildSseErrorPayload,
 } from "./shared/error-mapper";
-
-// 兼容旧名（过渡期保留）
-export { BizCodeRange, getBizCodeCategory } from "./error-code";
 
 export type { INetClient } from "./interface";

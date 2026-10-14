@@ -41,6 +41,7 @@ export {
   ClientErrorCode,
   ServerSubSystem,
   System,
+  Business,
   SUCCESS,
   FAILURE,
   isSuccess,
@@ -50,6 +51,3 @@ export {
   getServerSafeMessage,
   getErrorMessage,
 } from "@ming/biz-common-net";
-
-// 兼容旧名（过渡期保留）
-export { BizCodeRange, getBizCodeCategory } from "@ming/biz-common-net";

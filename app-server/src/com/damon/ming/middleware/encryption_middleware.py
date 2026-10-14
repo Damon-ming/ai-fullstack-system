@@ -18,16 +18,16 @@ FastAPI 加密 + 签名中间件
   X-Signature-Version               → 客户端签名协议版本
 
 错误码（统一 ErrorCode 分段码，详见 exception/error_codes.py）：
-  200103: 客户端加密协议版本不受支持（X-Encrypt-Version header）
-  200104: JSON 解密失败
-  200105: FormData meta 解密失败
-  200106: 会话过期 / 无效
-  200107: 签名验证失败
-  200108: 客户端签名协议版本不受支持（X-Signature-Version header）
+  200002003: 客户端加密协议版本不受支持（X-Encrypt-Version header）
+  200002004: JSON 解密失败
+  200002005: FormData meta 解密失败
+  200002006: 会话过期 / 无效
+  200002007: 签名验证失败
+  200002008: 客户端签名协议版本不受支持（X-Signature-Version header）
 
 版本校验：
-  加密版本：客户端必须通过 X-Encrypt-Version header 告知服务端，缺失或不支持返回 200103。
-  签名版本：客户端必须通过 X-Signature-Version header 告知服务端，缺失或不支持返回 200108。
+  加密版本：客户端必须通过 X-Encrypt-Version header 告知服务端，缺失或不支持返回 200002003。
+  签名版本：客户端必须通过 X-Signature-Version header 告知服务端，缺失或不支持返回 200002008。
   两者均在中间件层（不解密即可拒绝）校验。
 
 设计说明：

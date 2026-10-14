@@ -1,6 +1,6 @@
 // src/packages/biz-common/net/src/error-messages.ts
 
-import { ClientErrorCode, ServerSubSystem, getSystem } from "./error-code";
+import { ClientErrorCode, ServerSubSystem, getBusiness } from "./error-code";
 
 // ---------------------------------------------------------------------------
 // 客户端错误码映射 —— 开发环境专用
@@ -73,7 +73,7 @@ export function getServerSafeMessage(subsystemCode: number): string {
  * 从服务端错误响应中提取用户可见的错误信息。
  * 优先使用服务端返回的 error_msg（已脱敏），否则用子系统分类兜底。
  *
- * @param errorCode  完整错误码 (如 2001001)
+ * @param errorCode  完整错误码 (如 200002001)
  * @param errorMsg   服务端返回的 data.error_msg
  */
 export function getErrorMessage(
@@ -91,17 +91,18 @@ export function getErrorMessage(
 // ---------------------------------------------------------------------------
 
 function _getSubSystemByErrorCode(errorCode: number): number {
-  const system = getSystem(errorCode); // 使用统一的系统位提取（正确处理 A BBB CCC 格式）
-  switch (system) {
-    case 1: // 001 加密
+  // 新格式: BB=00(预留), CCC=业务模块, 用 CCC 做子系统分类
+  const business = getBusiness(errorCode);
+  switch (business) {
+    case 2: // 002 加密
       return ServerSubSystem.ENCRYPTION;
-    case 2: // 002 认证
+    case 3: // 003 认证
       return ServerSubSystem.AUTH;
-    case 4: // 004 AI/Chat
+    case 5: // 005 AI/Chat
       return ServerSubSystem.AI;
-    case 5: // 005 上传
+    case 6: // 006 上传
       return ServerSubSystem.UPLOAD;
-    case 6: // 006 数据库/基础设施
+    case 7: // 007 数据库/基础设施
       return ServerSubSystem.DATABASE;
     default:
       return ServerSubSystem.UNKNOWN;

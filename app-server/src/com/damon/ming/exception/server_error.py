@@ -1,11 +1,11 @@
 # app-server/src/com/damon/ming/exception/server_error.py
-"""全局异常分类 —— 子系统错误码定义。
+"""全局异常分类 —— 基础设施错误码定义。
 
-服务端记录完整堆栈，客户端只收到"哪类子系统出错"的提示，
+服务端记录完整堆栈，客户端只收到"哪类基础设施出错"的提示，
 不暴露内部实现细节（堆栈、SQL、密钥信息等）。
 
-错误码分段: A BBB CCC — 详见 error_codes.py
-子系统错误使用 2006xxx 段 (FAILURE + System.DATABASE)。
+错误码分段: A BB CCC DDD — 详见 error_codes.py
+基础设施错误使用 200007xxx 段 (FAILURE + 00 + SYSTEM)。
 """
 
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -36,17 +36,17 @@ class EncryptionError(Exception):
 
 
 class ServerSubSystem:
-    """子系统错误码（2006xx）—— 用于指示错误来源分类。
+    """基础设施错误码（200007xxx）—— 用于指示错误来源分类。
 
     使用 ErrorCode.SYSTEM 命名空间，保持与统一码表一致。
     """
 
-    DATABASE = ErrorCode.SYSTEM.DATABASE_FAILURE  # 2006001 数据库操作失败
-    ENCRYPTION = ErrorCode.SYSTEM.ENCRYPTION_FAILURE  # 2006002 加密/解密失败
-    UPLOAD = ErrorCode.SYSTEM.UPLOAD_FAILURE  # 2006003 上传处理失败
-    AI = ErrorCode.SYSTEM.AI_FAILURE  # 2006004 AI 推理失败
-    AUTH = ErrorCode.SYSTEM.AUTH_FAILURE  # 2006005 认证/鉴权失败
-    UNKNOWN = ErrorCode.SYSTEM.UNKNOWN  # 200699 未知子系统异常
+    DATABASE = ErrorCode.SYSTEM.DATABASE_FAILURE  # 200007001 数据库操作失败
+    ENCRYPTION = ErrorCode.SYSTEM.ENCRYPTION_FAILURE  # 200007002 加密/解密失败
+    UPLOAD = ErrorCode.SYSTEM.UPLOAD_FAILURE  # 200007003 上传处理失败
+    AI = ErrorCode.SYSTEM.AI_FAILURE  # 200007004 AI 推理失败
+    AUTH = ErrorCode.SYSTEM.AUTH_FAILURE  # 200007005 认证/鉴权失败
+    UNKNOWN = ErrorCode.SYSTEM.UNKNOWN  # 200007099 未知基础设施异常
 
 
 # 异常类型 → 子系统码映射

@@ -11,18 +11,18 @@ F = TypeVar("F")
 
 # ================= 1. 响应外壳 =================
 # 注意：code 使用统一分段码（详见 exception/error_codes.py）
-# 成功: 1000000, 业务错误: 2xxxxxx
+# 成功: 100000000, 业务错误: 200000000+
 class BaseLLMSuccessResponse(BaseModel, Generic[T]):
-    """全局统一成功响应结构 (code: 1000000)"""
+    """全局统一成功响应结构 (code: 100000000)"""
 
-    code: int = Field(1000000, description="业务状态码")
+    code: int = Field(100000000, description="业务状态码")
     data: T | None = Field(None, description="成功业务数据")
 
 
 class BaseLLMFailedResponse(BaseModel, Generic[F]):
-    """全局统一失败响应结构 (code: 2xxxxxx)"""
+    """全局统一失败响应结构 (code: 200000000+)"""
 
-    code: int = Field(2004002, description="业务状态码（默认 CHAT.UNKNOWN）")
+    code: int = Field(200005002, description="业务状态码（默认 CHAT.UNKNOWN）")
     data: F | None = Field(None, description="失败业务数据")
 
 
