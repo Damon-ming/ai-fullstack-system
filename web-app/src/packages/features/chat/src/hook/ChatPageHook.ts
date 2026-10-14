@@ -34,14 +34,13 @@ export function useChatPageHook() {
     getMessages,
     saveMessages,
   } = useHistory(historyRevision);
-  const { profile: initialAccount, update: updateAccount } = useAccount();
   const messages = useChatMessageStore((state) => state.messages);
   const setMessages = useChatMessageStore((state) => state.setMessages);
   const accountOpen = useAccountStore((state) => state.dialogOpen);
   const draftName = useAccountStore((state) => state.draftName);
   const setDraftName = useAccountStore((state) => state.setDraftName);
   const closeAccount = useAccountStore((state) => state.closeDialog);
-  const setAccountProfile = useAccountStore((state) => state.setProfile);
+  const { update: updateAccount } = useAccount();
   const searchOpen = useSearchStore((state) => state.open);
   const searchKeyword = useSearchStore((state) => state.keyword);
   const closeSearch = useSearchStore((state) => state.closeSearch);
@@ -84,10 +83,6 @@ export function useChatPageHook() {
     clearSkipHistorySave,
   ]);
 
-  useEffect(() => {
-    setAccountProfile(initialAccount);
-  }, [initialAccount, setAccountProfile]);
-
   const loadHistory = (id: string) => {
     const saved = getMessages(id);
     if (saved.length) {
@@ -98,7 +93,7 @@ export function useChatPageHook() {
     }
   };
   const saveAccount = () => {
-    setAccountProfile(updateAccount(draftName));
+    updateAccount(draftName);
     closeAccount();
   };
   return {

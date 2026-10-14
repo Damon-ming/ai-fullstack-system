@@ -16,6 +16,7 @@
     "@ming/feature-history-api": "workspace:*",
     "@ming/feature-search-api": "workspace:*",
     "@ming/feature-account-api": "workspace:*",
+    "@ming/data-layer": "workspace:*",
     "@ming/i18n": "workspace:*"
   },
   "peerDependencies": {

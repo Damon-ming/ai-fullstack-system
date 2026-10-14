@@ -1,11 +1,8 @@
 import { useAccountStore } from "@ming/store/biz/account-state";
+import { useAccount } from "@ming/feature-account-api";
 
 export function useDrawerAccountHook() {
-  const account = useAccountStore((s) => s.profile) ?? {
-    id: "murphy",
-    name: "Murphy",
-    avatarText: "M",
-  };
+  const { profile: account } = useAccount();
   const openAccount = useAccountStore((s) => s.openDialog);
 
   return { account, openAccount };

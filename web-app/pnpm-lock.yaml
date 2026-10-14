@@ -44,9 +44,6 @@ importers:
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../packages/core/log
-      '@ming/data-layer':
-        specifier: workspace:*
-        version: link:../../packages/data-layer
       '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../../packages/features/account-api
@@ -190,6 +187,9 @@ importers:
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
+      '@ming/data-layer':
+        specifier: workspace:*
+        version: link:../../data-layer
       '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../account-api
@@ -355,18 +355,9 @@ importers:
 
   src/packages/store:
     dependencies:
-      '@ming/biz-common-debug':
-        specifier: workspace:*
-        version: link:../biz-common/debug
-      '@ming/biz-common-net-api':
-        specifier: workspace:*
-        version: link:../biz-common/net-api
       '@ming/biz-common-util':
         specifier: workspace:*
         version: link:../biz-common/util
-      '@ming/feature-account-api':
-        specifier: workspace:*
-        version: link:../features/account-api
       react:
         specifier: '>=18.0.0'
         version: 18.3.1

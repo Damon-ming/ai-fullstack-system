@@ -1,6 +1,7 @@
 // web-app/src/packages/features/chat/src/ui/ChatPage.tsx
 import { ChatDrawer } from "@ming/feature-chat-drawer";
 import { ChatChatroom } from "@ming/feature-chat-chatroom";
+import { DataProvider } from "@ming/data-layer";
 import React, { useMemo, useEffect } from "react";
 import { useChatPageHook } from "../hook";
 import { i18n, useTranslation } from "@ming/i18n";
@@ -61,6 +62,7 @@ export const ChatPage: React.FC = () => {
   };
 
   return (
+    <DataProvider>
     <div className="relative flex h-full w-full overflow-hidden font-sans text-gray-800 bg-gray-50">
       {/* 右上角语言切换小图标 */}
       <button
@@ -183,7 +185,7 @@ export const ChatPage: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="upload-title"
-          >
+            >
             <div
               className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-3xl font-extrabold ${
                 upload.status === "uploading"
@@ -264,5 +266,6 @@ export const ChatPage: React.FC = () => {
         </div>
       )}
     </div>
+    </DataProvider>
   );
 };
