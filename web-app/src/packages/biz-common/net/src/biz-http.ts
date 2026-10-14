@@ -56,29 +56,22 @@ export class BizHttp implements INetClient {
       sseMessageInterceptors,
     });
 
+    // 所有拦截器始终注册，内部通过 isDebug() 运行时决定行为
     // 公共请求头：每次请求必须携带（系统版本 + 环境标志）
     client.addRequestInterceptor(createCommonHeaderInterceptor());
 
-    // 加密 + 签名拦截器：OkHttp 风格，一个开关注册/不注册
-    // 签名密钥从每个 session 的 AES 密钥 HKDF 派生，不再依赖全局配置
-    if (enableEncryption) {
-      const encryption = createEncryptionInterceptors();
-      client.addRequestInterceptor(encryption.requestEncrypt);
-      client.addResponseInterceptor(encryption.responseDecrypt);
-    }
+    // 加密 + 签名拦截器：debug 模式下内部 pass through
+    const encryption = createEncryptionInterceptors();
+    client.addRequestInterceptor(encryption.requestEncrypt);
+    client.addResponseInterceptor(encryption.responseDecrypt);
 
-    // 日志拦截器：debug 环境打印请求/响应详情
-    if (enableLogging) {
-      const logging = createLoggingInterceptors();
-      client.addRequestInterceptor(logging.requestLog);
-      client.addResponseInterceptor(logging.responseLog);
-    }
+    // 日志拦截器：debug 模式下内部打印，release 下 pass through
+    const logging = createLoggingInterceptors();
+    client.addRequestInterceptor(logging.requestLog);
+    client.addResponseInterceptor(logging.responseLog);
 
-    // Token 拦截器：自动注入设备 token（从 store 或请求参数）
-    if (enableAuth) {
-      const tokenInterceptor = createTokenInterceptor();
-      client.addRequestInterceptor(tokenInterceptor);
-    }
+    // Token 拦截器：无 token 时自然跳过
+    client.addRequestInterceptor(createTokenInterceptor());
 
     return client;
   }

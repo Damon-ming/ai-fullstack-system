@@ -24,8 +24,8 @@ export function createCommonHeaderInterceptor() {
       const headers: Record<string, string> = {
         ...request.headers,
         "X-App-Version": VERSION.productVersion,
-        "X-Client-Env": String(envCode),
-        "X-Client-Type": String(clientTypeCode),
+        "X-Client-Env": String(envCode()),
+        "X-Client-Type": String(clientTypeCode()),
         "X-Client-UA": clientUA,
       };
 
