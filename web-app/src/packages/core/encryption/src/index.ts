@@ -17,6 +17,7 @@ export {
   rsaEncrypt,
   bytesToBase64,
   bytesToHex,
+  hexToBytes,
 } from "./crypto-engine";
 
 export { generateNonce, hmacSha256 } from "./signature";

@@ -11,7 +11,7 @@
  *   而 biz-common/util 已经是 net 的依赖，打破循环。
  */
 
-import { importAesKey, bytesToHex } from "@ming/core-encryption";
+import { importAesKey, bytesToHex, hexToBytes } from "@ming/core-encryption";
 
 /**
  * 加密会话 —— 本地定义，避免 biz-common-util → biz-common-net-api 的循环依赖。
@@ -23,15 +23,6 @@ export interface EncryptionSession {
   signatureKeyHex: string;
   publicKeyPem: string;
   expiresAt: number;
-}
-
-/** hex 字符串 → Uint8Array（core-encryption 只提供 bytesToHex，反向转换内联在此） */
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
 }
 
 const ENCRYPTION_SESSION_KEY = "__encryption_session__";
