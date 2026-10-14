@@ -1,5 +1,6 @@
-# app-server/src/com/damon/ming/db/db-config.yaml
-# 数据库连接配置 —— 纯技术层，不含业务信息
+# app-server/src/com/damon/ming/app/config/db-config.yaml
+# 数据库连接配置 —— 由 app_initializer 读取，注入 db 模块。
+# db 模块本身不包含任何配置文件，纯参数化调用。
 
 db:
   # 开发环境：本地 PostgreSQL
@@ -13,6 +14,7 @@ db:
     pool_max: 5
     connect_timeout: 10
     retry: 3
+    backoff: 0.1
 
   # 生产环境：通过环境变量覆盖（DB_CONNECTION 优先级更高）
   production:
@@ -24,4 +26,5 @@ db:
     pool_min: 2
     pool_max: 10
     connect_timeout: 15
-    retry: 3
+    retry: 5
+    backoff: 0.5

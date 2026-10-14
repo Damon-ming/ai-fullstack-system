@@ -76,7 +76,7 @@ def _check_database(is_debug: bool) -> list[str]:
 
     # YAML 配置文件
     try:
-        from src.com.damon.ming.db import DbConfigLoader
+        from src.com.damon.ming.app.config import DbConfigLoader
 
         loader = DbConfigLoader()
         db_config = loader.load(profile="production")
@@ -86,7 +86,7 @@ def _check_database(is_debug: bool) -> list[str]:
         pass
 
     errors.append(
-        "数据库未配置（生产环境必须设置 DB_CONNECTION 环境变量或 db/db-config.yaml）"
+        "数据库未配置（生产环境必须设置 DB_CONNECTION 环境变量或 app/config/db-config.yaml）"
     )
     return errors
 

@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════════════════════════════════
+# 根目录 docker-compose.yaml —— 一键部署入口
+#
+# 各子服务的构建/运行配置下沉到各自的 docker-compose.yaml 中。
+# 后期项目拆分时，只需删除对应 include 行，子项目无需改动。
+#
+# ═══════════════════════════════════════════════════════════════════
+# 可直接执行的 Linux 命令（复制粘贴即可）
+# ═══════════════════════════════════════════════════════════════════
+#
+# ── 生产部署（默认不设定环境 → 前后端均锁定 release，不可切换）──────
+#
+#   docker compose up -d --build
+#
+# ── 开发部署（设定环境 → 前后端均可切换）──────────────────────────
+#
+#   SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 docker compose up -d --build
+#
+# ── 启动后切换后端环境（仅构建时 SERVER_BUILD_ENV=1 才生效）────────
+#
+#   APP_ENV=release docker compose up -d        # 切到 release
+#   APP_ENV=debug docker compose up -d           # 切到 debug（默认）
+#
+# ── 停止 ─────────────────────────────────────────────────────────
+#
+#   docker compose down
+# ═══════════════════════════════════════════════════════════════════
+
+include:
+  - app-server/docker-compose.yaml
+  - web-app/docker-compose.yaml

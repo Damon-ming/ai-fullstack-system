@@ -18,10 +18,16 @@ COPY . .
 # 在容器内部执行安装，pnpm自动创建workspace符号链接
 RUN pnpm install --frozen-lockfile --no-optional=false
 
-# 打包
-# 执行 package.json 脚本 `build:docker`，前端打包命令，生成 dist 目录，里面是 html/js/css 静态资源。
-# Docker 容器内构建	使用生产环境配置，针对容器化部署优化
-RUN pnpm build:docker
+# ── 构建时注入 ─────────────────────────────────────────────────────
+# FRONTEND_BUILD_ENV 构建参数（运行时不可变）：
+#   0 → vite build              → DEV=false → 锁定 release（生产流水线）
+#   1 → vite build --mode development → DEV=true  → localStorage 可切换（开发/预发）
+ARG FRONTEND_BUILD_ENV=0
+RUN cd src/app/main && if [ "$FRONTEND_BUILD_ENV" = "1" ]; then \
+      vite build --mode development; \
+    else \
+      vite build; \
+    fi
 
 # 阶段2 Nginx不变
 # 重新开启一个全新基础镜像，nginx alpine，只有 nginx，没有 node、pnpm、没有源码。

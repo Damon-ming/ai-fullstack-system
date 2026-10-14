@@ -24,6 +24,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制全部业务代码
 COPY . .
 
+# ── 构建时注入 ─────────────────────────────────────────────────────
+# SERVER_BUILD_ENV 构建参数（运行时不可变）：
+#   0 → 锁定 release，忽略 APP_ENV（生产流水线，不可切换）
+#   1 → 默认 debug，APP_ENV 可覆盖（开发/预发流水线，可切换）
+ARG SERVER_BUILD_ENV=0
+RUN printf 'SERVER_BUILD_ENV = %s\n' "$SERVER_BUILD_ENV" > src/com/damon/ming/debug/build_info.py
+
 # 容器内部访问ollama地址：http://ollama-server:11434
 # ENV OLLAMA_BASE_URL=http://ollama-server:11434
 

@@ -1,0 +1,38 @@
+# web-app/docker-compose.yaml
+# 前端服务
+#
+# ═══════════════════════════════════════════════════════════════════
+# 打包命令
+# ═══════════════════════════════════════════════════════════════════
+#
+# 子目录单独构建（默认 FRONTEND_BUILD_ENV=0 → DEV=false → 锁定 release）:
+#   docker compose up -d --build
+#
+# 子目录开发模式（FRONTEND_BUILD_ENV=1 → DEV=true → localStorage 可切换）:
+#   FRONTEND_BUILD_ENV=1 docker compose up -d --build
+#
+# 根目录一键构建（推荐，前后端同步）:
+#   生产: docker compose up -d --build
+#   开发: SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 docker compose up -d --build
+#
+# 流水线 - 生产打包:
+#   docker build --build-arg FRONTEND_BUILD_ENV=0 -t web-app:prod .
+#
+# 流水线 - 开发/预发打包:
+#   docker build --build-arg FRONTEND_BUILD_ENV=1 -t web-app:dev .
+#
+# ── 项目拆分后 ───────────────────────────────────────────────────
+# 拆为独立仓库时，本文件命令不变，只去掉根目录 include 行即可。
+
+services:
+  # ── React 前端 ────────────────────────────────────────────────────
+  web-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        FRONTEND_BUILD_ENV: ${FRONTEND_BUILD_ENV:-0}   # 0=锁定release(默认) | 1=可切换
+    container_name: web-app
+    restart: always
+    ports:
+      - "80:80"

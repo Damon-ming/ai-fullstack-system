@@ -1,6 +1,9 @@
-# app-server/src/com/damon/ming/db/db_config_loader.py
+# app-server/src/com/damon/ming/app/config/db_config_loader.py
 """
 数据库配置加载器 —— 从 YAML 文件读取连接参数。
+
+本模块属于 app/ 业务层，不属于 db/ 模块。
+db/ 模块通过 DbConfig 数据类接收参数，不感知配置来源。
 
 加载优先级：
   1. 显式传入的 config_path
@@ -14,7 +17,6 @@ import os
 from typing import Any
 
 import yaml
-from src.com.damon.ming.db.db_config import DbConfig
 
 
 class DbConfigLoader:
@@ -34,35 +36,28 @@ class DbConfigLoader:
             config_path = os.path.join(base_dir, "db-config.yaml")
         self._config_path = config_path
 
-    def load(self, profile: str = "default") -> DbConfig:
+    def load(self, profile: str = "default"):
         """加载指定剖面的配置，返回 DbConfig。
 
         环境变量覆盖规则：
-          DB_HOST、DB_PORT、DB_NAME、DB_USER、DB_PASSWORD
+          DB_HOST、DB_PORT、DB_NAME、DB_USER、DB_PASSWORD、DB_RETRY、DB_BACKOFF
           若设置，优先于 YAML 中的值。
         """
+        from src.com.damon.ming.db.db_config import DbConfig
+
         raw = self._read_yaml(profile)
         return DbConfig(
-            host=self._env_or_value("DB_HOST", raw.get("host", "localhost")),
+            host=self._env_or_value("DB_HOST", raw.get("host", "")),
             port=int(self._env_or_value("DB_PORT", raw.get("port", 5432))),
             dbname=self._env_or_value("DB_NAME", raw.get("dbname", "")),
             user=self._env_or_value("DB_USER", raw.get("user", "")),
             password=self._env_or_value("DB_PASSWORD", raw.get("password", "")),
+            retry_count=int(self._env_or_value("DB_RETRY", raw.get("retry", 3))),
+            backoff_seconds=float(self._env_or_value("DB_BACKOFF", raw.get("backoff", 0.1))),
+            pool_min=int(raw.get("pool_min", 1)),
+            pool_max=int(raw.get("pool_max", 10)),
             connect_kwargs=self._build_connect_kwargs(raw),
         )
-
-    def get_pool_settings(self, profile: str = "default") -> dict[str, Any]:
-        """获取连接池设置（pool_min, pool_max）。"""
-        raw = self._read_yaml(profile)
-        return {
-            "min_conn": int(raw.get("pool_min", 1)),
-            "max_conn": int(raw.get("pool_max", 10)),
-        }
-
-    def get_retry_settings(self, profile: str = "default") -> int:
-        """获取重试次数。"""
-        raw = self._read_yaml(profile)
-        return int(raw.get("retry", 3))
 
     # ---- 私有 -------------------------------------------------------------
 

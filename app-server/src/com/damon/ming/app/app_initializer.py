@@ -138,8 +138,8 @@ class AppInitializer:
     def _init_database_from_yaml(self) -> None:
         """从 YAML 配置文件初始化数据库。"""
         try:
+            from src.com.damon.ming.app.config import DbConfigLoader
             from src.com.damon.ming.db import (
-                DbConfigLoader,
                 DbConnection,
                 set_default_db,
             )
@@ -147,8 +147,7 @@ class AppInitializer:
             loader = DbConfigLoader()
             db_config = loader.load(profile=self._profile)
             self.db_conn = DbConnection(db_config)
-            pool = loader.get_pool_settings(profile=self._profile)
-            self.db_conn.initialize(**pool)
+            self.db_conn.initialize()  # pool 参数从 DbConfig 读取
             set_default_db(self.db_conn)
             self._create_account_tables()
             logger.info("数据库连接池初始化完成（YAML 配置）")

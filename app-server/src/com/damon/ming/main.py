@@ -9,18 +9,25 @@
 【生产环境必须设置（开发环境可自动生成）】
   MASTER_KEY              加密主密钥（≥32 字符），开发环境未设置时自动生成
 
-【可选（有默认值或降级）】
+【可选（本地开发用，生产镜像通过 build_info.py 固化）】
   APP_ENV                 环境标志：debug / release（默认 debug）
   LOG_LEVEL               日志级别：DEBUG / INFO / WARNING / ERROR（默认 INFO）
   DB_CONNECTION           数据库连接串（未设置则跳过数据库初始化）
   DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD  DB 分项配置
-  DB_CONFIG_PATH          DB YAML 配置文件路径（默认 db/db-config.yaml）
+  DB_RETRY / DB_BACKOFF   重试次数与退避秒数
+  DB_CONFIG_PATH          DB YAML 配置文件路径（默认 app/config/db-config.yaml）
   ENCRYPTION_CONFIG_PATH  加密 YAML 配置文件路径（默认 encryption/encryption-config.yaml）
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 
 【配置文件（YAML）】
-  db/db-config.yaml       数据库连接池配置（多剖面：default / production）
+  app/config/db-config.yaml  数据库连接池配置（多剖面：default / production，由 app 层注入 db 模块）
   app/config/encryption-config.yaml  加密业务配置（RSA 密钥大小、会话 TTL、sign_context 等，由 app 层注入 encryption 模块）
+
+【构建时注入（生产环境）】
+  src/com/damon/ming/debug/build_info.py  由 Dockerfile/CI 在镜像构建时生成
+  SERVER_BUILD_ENV=0 → 锁定 release | =1 → 可切换（启动时冻结）
+  → 存在此文件时 APP_ENV 环境变量被忽略，运行时不可变
+  → 本地开发无需此文件，默认 debug
 ══════════════════════════════════════════════════════════════════════
 """
 
@@ -48,9 +55,6 @@ logger = pin("app.main")
 # ---------------------------------------------------------------------------
 # 环境判断
 # ---------------------------------------------------------------------------
-
-# 调试阶段：默认注入 debug 环境（上线前删除或注释此行）
-os.environ.setdefault("APP_ENV", "DEBUG")
 
 IS_DEBUG = is_debug()
 

@@ -35,8 +35,14 @@ class DbConnection:
         self._local = threading.local()
         self._lock = threading.Lock()
 
-    def initialize(self, min_conn: int = 1, max_conn: int = 10) -> None:
-        """初始化连接池。应用启动时调用一次。"""
+    def initialize(self, min_conn: int | None = None, max_conn: int | None = None) -> None:
+        """初始化连接池。应用启动时调用一次。
+
+        参数省略时从 DbConfig 读取（由上层 YAML 配置或环境变量注入）。
+        """
+        min_conn = min_conn if min_conn is not None else self._config.pool_min
+        max_conn = max_conn if max_conn is not None else self._config.pool_max
+
         try:
             from psycopg2 import pool
 
@@ -48,7 +54,7 @@ class DbConnection:
             )
             logger.info(
                 "数据库连接池初始化完成 | host=%s | db=%s | pool=%d-%d",
-                self._config.host,
+                self._config.host or "from_url",
                 self._config.dbname or "from_url",
                 min_conn,
                 max_conn,
@@ -94,7 +100,7 @@ class DbConnection:
         *,
         commit: bool = True,
         fetch: bool = False,
-        retry: int = 3,
+        retry: int | None = None,
     ) -> list[tuple] | None:
         """执行单条 SQL。
 
@@ -103,11 +109,14 @@ class DbConnection:
           params: 参数元组或字典
           commit: 是否自动 commit（SELECT 用 False，INSERT/UPDATE 用 True）
           fetch:  是否返回查询结果（SELECT 用 True）
-          retry:  连接失败时的重试次数
+          retry:  连接失败时的重试次数（省略则用 DbConfig.retry_count）
 
         返回：
           fetch=True 时返回行列表，否则返回 None
         """
+        retry = retry if retry is not None else self._config.retry_count
+        backoff = self._config.backoff_seconds
+
         last_error = None
         for attempt in range(retry):
             conn = None
@@ -132,7 +141,7 @@ class DbConnection:
                     retry,
                     e,
                 )
-                time.sleep(0.1 * (attempt + 1))  # 指数退避
+                time.sleep(backoff * (attempt + 1))
             finally:
                 if conn is not None:
                     self._return_conn(conn)
@@ -146,9 +155,12 @@ class DbConnection:
         params_list: list[tuple | dict],
         *,
         commit: bool = True,
-        retry: int = 3,
+        retry: int | None = None,
     ) -> None:
         """批量执行同一条 SQL（不同参数）。"""
+        retry = retry if retry is not None else self._config.retry_count
+        backoff = self._config.backoff_seconds
+
         last_error = None
         for attempt in range(retry):
             conn = None
@@ -166,7 +178,7 @@ class DbConnection:
                         conn.rollback()
                     except Exception:
                         pass
-                time.sleep(0.1 * (attempt + 1))
+                time.sleep(backoff * (attempt + 1))
             finally:
                 if conn is not None:
                     self._return_conn(conn)
