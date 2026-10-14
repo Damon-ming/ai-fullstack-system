@@ -10,6 +10,7 @@ const log = createLogger("upload/api");
 /** @internal */
 export async function uploadFile(
   request: UploadRequest,
+  signal?: AbortSignal,
 ): Promise<BizResult<UploadResponse>> {
   log.debug("upload request", {
     endpoint: "/api/files/upload/v1",
@@ -26,7 +27,10 @@ export async function uploadFile(
   formData.set("meta_json", JSON.stringify(meta));
 
   // PDF 解析、Embedding 和向量入库可能持续几十秒，不能使用普通接口的 10s 超时。
-  const cfg: BizRequestConfig = { timeout: 1 * 60 * 1000 };
+  const cfg: BizRequestConfig = {
+    timeout: 1 * 60 * 1000,
+    ...(signal ? { axiosConfig: { signal } } : {}),
+  };
   const result = await netClient.post<UploadResponse>(
     "/api/files/upload/v1",
     formData,

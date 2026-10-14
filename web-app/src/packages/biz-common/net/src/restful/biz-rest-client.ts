@@ -23,11 +23,12 @@ export class BizRestClient {
     config: BizRequestConfig | undefined,
   ): Omit<RequestConfig, "url" | "method"> | undefined {
     if (!config) return undefined;
-    const { timeout, axiosConfig, ...rest } = config;
+    const { timeout, signal, axiosConfig, ...rest } = config;
     return {
       ...rest,
       axiosConfig: {
         ...(timeout !== undefined ? { timeout } : {}),
+        ...(signal ? { signal } : {}),
         ...axiosConfig,
       },
     };

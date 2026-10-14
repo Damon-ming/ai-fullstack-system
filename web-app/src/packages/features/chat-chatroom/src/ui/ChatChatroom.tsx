@@ -9,7 +9,7 @@ import { useTranslation } from "@ming/i18n";
 export const ChatChatroom: React.FC = () => {
   const { t } = useTranslation("chat-chatroom");
   const { input, setInput, sending, messages } = useChatMessageStateHook();
-  const { sendStream } = useChatSendStreamHook();
+  const { sendStream, abortStream } = useChatSendStreamHook();
   const send = sendStream;
 
   const messageContainerRef = useRef<HTMLDivElement>(null);
@@ -77,6 +77,17 @@ export const ChatChatroom: React.FC = () => {
     },
     [],
   );
+
+  // 页面关闭/刷新前取消进行中的请求，避免服务端继续空跑
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      abortStream();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [abortStream]);
 
   return (
     <main className="flex min-h-0 flex-1 flex-col items-center px-[100px]">
@@ -212,15 +223,26 @@ export const ChatChatroom: React.FC = () => {
               disabled={sending}
               rows={1}
             />
-            <button
-              type="button"
-              onClick={() => void send()}
-              aria-label={t("input.sendAria")}
-              disabled={sending || !input.trim()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
-            >
-              {sending ? "◌" : "↑"}
-            </button>
+            {sending ? (
+              <button
+                type="button"
+                onClick={() => abortStream()}
+                aria-label="取消发送"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500 text-white transition-all hover:bg-red-600 active:scale-95"
+              >
+                ✕
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void send()}
+                aria-label={t("input.sendAria")}
+                disabled={!input.trim()}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+              >
+                ↑
+              </button>
+            )}
           </div>
         </div>
       </section>

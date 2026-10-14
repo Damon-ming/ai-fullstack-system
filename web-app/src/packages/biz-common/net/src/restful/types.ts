@@ -11,6 +11,8 @@ import type { BizApiSuccessResponse, BizApiErrorResponse } from "../shared/types
 export type BizRequestConfig = Omit<RequestConfig, "url" | "method"> & {
   /** 单次请求超时时间（单位：毫秒） */
   timeout?: number;
+  /** 用于取消（中止）正在进行的请求，路由进 axiosConfig.signal */
+  signal?: AbortSignal;
 };
 
 /** 请求回调集合 */

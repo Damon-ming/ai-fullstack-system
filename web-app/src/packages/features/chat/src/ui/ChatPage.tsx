@@ -1,7 +1,7 @@
 // web-app/src/packages/features/chat/src/ui/ChatPage.tsx
 import { ChatDrawer } from "@ming/features-chat-drawer";
 import { ChatChatroom } from "@ming/features-chat-chatroom";
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { useChatPageHook } from "../hook";
 import { i18n, useTranslation } from "@ming/i18n";
 export const ChatPage: React.FC = () => {
@@ -21,6 +21,7 @@ export const ChatPage: React.FC = () => {
     loadHistory,
     upload,
     closeUpload,
+    abortUpload,
   } = useChatPageHook();
 
   const uploadMessage = useMemo(() => {
@@ -41,6 +42,19 @@ export const ChatPage: React.FC = () => {
         return "";
     }
   }, [upload.status, upload.files, t]);
+
+  // 页面关闭/刷新前取消进行中的上传，避免服务端继续空跑
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (upload.status === "uploading") {
+        abortUpload();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [abortUpload, upload.status]);
 
   const switchLang = () => {
     i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
@@ -229,7 +243,15 @@ export const ChatPage: React.FC = () => {
                 ))}
               </div>
             )}
-            {upload.status !== "uploading" && (
+            {upload.status === "uploading" ? (
+              <button
+                type="button"
+                onClick={abortUpload}
+                className="mt-5 min-w-[112px] rounded-xl bg-red-500 px-6 py-2.5 font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-600"
+              >
+                取消上传
+              </button>
+            ) : (
               <button
                 type="button"
                 onClick={closeUpload}

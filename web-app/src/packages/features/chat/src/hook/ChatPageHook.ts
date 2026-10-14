@@ -1,5 +1,5 @@
 // web-app/src/packages/features/chat/src/hook/ChatPageHook.ts
-import { useEffect } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { createLogger } from "@ming/core-log";
 import {
   useChatUiStore,
@@ -12,6 +12,7 @@ import {
 import { useHistory } from "@ming/features-history-api";
 import { searchHistory } from "@ming/features-search-api";
 import { useAccount } from "@ming/features-account-api";
+import { useDrawerUploadHook } from "@ming/features-chat-drawer";
 
 const log = createLogger("chat/page");
 
@@ -48,6 +49,7 @@ export function useChatPageHook() {
   const searchResults = searchHistory(searchKeyword);
   const upload = useChatUploadStore((state) => state.upload);
   const closeUpload = useChatUploadStore((state) => state.closeUpload);
+  const { abortUpload } = useDrawerUploadHook();
 
   useEffect(() => {
     if (historyLoading) {
@@ -116,5 +118,6 @@ export function useChatPageHook() {
     loadHistory,
     upload,
     closeUpload,
+    abortUpload,
   };
 }

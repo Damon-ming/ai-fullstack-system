@@ -1,4 +1,5 @@
 # app-server/src/com/damon/ming/upload/router/upload_router.py
+import asyncio
 import json
 from datetime import UTC, datetime
 
@@ -46,7 +47,10 @@ async def save_files(
         )
         return BaseSuccessResponse(code=ErrorCode.OK, data=success_data)
 
-    except Exception as e:  # noqa: BLE001
+    except asyncio.CancelledError:
+        logger.warning("【统计】文件上传请求被客户端主动取消（断网/关闭页面/强制结束）")
+        raise
+    except Exception as e:
         logger.exception("文件上传请求失败 | error=%s", e)
         fail_data = FileUploadFailedData(error_msg=str(e))
         return BaseFailedResponse(code=ErrorCode.UPLOAD.UPLOAD_FAILED, data=fail_data)

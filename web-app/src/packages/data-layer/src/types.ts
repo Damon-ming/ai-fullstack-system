@@ -28,6 +28,8 @@ export interface DataLayerRequestConfig {
   data?: unknown;
   timeout?: number;
   axiosConfig?: Record<string, unknown>;
+  /** 用于取消（中止）正在进行的请求，透传至 axios signal */
+  signal?: AbortSignal;
 }
 
 export interface DataLayerRequestMeta {

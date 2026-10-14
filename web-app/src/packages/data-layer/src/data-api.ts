@@ -14,7 +14,11 @@ import type {
  *
  * Restful：data-layer 做 [err, res] → resolve/reject 解包
  * SSE：data-layer 只做类型透传，所有公用逻辑（解析/校验/拦截器/错误格式化）下沉到 biz-common-net
+ *
+ * signal 路由：DataLayerRequestConfig.signal → netClient → BizRestClient.initConfig
+ * → axiosConfig.signal → RestfulClient → axios，全自动，无需手动路由。
  */
+
 export const dataApi = {
   get<T = any, F = any>(
     url: string,

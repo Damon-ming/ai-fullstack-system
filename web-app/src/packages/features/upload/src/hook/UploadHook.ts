@@ -42,13 +42,14 @@ function createUploadRequest(files: File[], meta?: UploadMeta): UploadRequest {
 export async function uploadFiles(
   files: File[],
   meta?: UploadMeta,
+  signal?: AbortSignal,
 ): Promise<BizResult<UploadResponse>> {
   log.debug("upload started", {
     fileCount: String(files.length),
     fileNames: files.map((file) => file.name).join(", "),
     hasMeta: String(!!meta),
   });
-  const result = await requestUploadFile(createUploadRequest(files, meta));
+  const result = await requestUploadFile(createUploadRequest(files, meta), signal);
   log.debug("upload finished", { fileCount: files.length });
   return result;
 }

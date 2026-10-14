@@ -1,3 +1,4 @@
+import { useRef, useCallback } from "react";
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { streamChatRoomMessage } from "../api";
 import type { ChatRoomRequest, ChatStartData } from "../api/types";
@@ -14,6 +15,18 @@ export function useChatSendStreamHook() {
   const setMessages = useChatMessageStore((s) => s.setMessages);
   const sending = useChatMessageStore((s) => s.sending);
   const setSending = useChatMessageStore((s) => s.setSending);
+
+  /** 当前进行中的 SSE 请求控制器，用于主动取消 */
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  /** 取消当前进行中的 SSE 请求 */
+  const abortStream = useCallback(() => {
+    if (abortControllerRef.current) {
+      log.debug("abortStream triggered");
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
 
   const sendStream = async () => {
     const query = input.trim();
@@ -33,6 +46,11 @@ export function useChatSendStreamHook() {
     setInput("");
     setSending(true);
 
+    // 为本次请求创建独立的控制器（先取消上一次，防止并发）
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     let firstChunk = true;
     let streamFinished = false;
 
@@ -48,7 +66,10 @@ export function useChatSendStreamHook() {
           if (eventType === "start") {
             // 记录本次会话的元信息，挂到 assistant 消息上供 UI 展示
             const startData = payload.data as ChatStartData;
-            log.debug("sendStream start metadata", { startData });
+            log.debug("sendStream start metadata", {
+              msgId: startData.msgId,
+              model: startData.model,
+            });
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantMsgId
@@ -125,8 +146,13 @@ export function useChatSendStreamHook() {
             ),
           );
         },
-      });
+      }, { signal: controller.signal });
     } catch (e) {
+      // 被主动取消时不显示错误
+      if (controller.signal.aborted) {
+        log.debug("sendStream aborted by user");
+        return;
+      }
       log.error("sendStream failed", e);
       const errMsg = e instanceof Error ? e.message : t("error.sendFailed");
       setMessages((prev) =>
@@ -135,11 +161,12 @@ export function useChatSendStreamHook() {
         ),
       );
     } finally {
+      abortControllerRef.current = null;
       log.debug("sendStream finished", { streamFinished });
       // 无论正常完成、服务端 error 还是网络异常，都释放输入框和发送按钮状态。
       setSending(false);
     }
   };
 
-  return { sendStream };
+  return { sendStream, abortStream };
 }
