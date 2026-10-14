@@ -13,7 +13,7 @@
 import type { NormalizedRequest } from "@ming/core-network";
 import { collectClientUA, encodeClientUA } from "@ming/core-util";
 import { getSessionContext, getDeviceId } from "@ming/biz-common-util";
-import { isDebugMode } from "../internal-providers";
+import { envCode, clientTypeCode } from "@ming/debug";
 import { VERSION } from "../../../../../version";
 
 export function createCommonHeaderInterceptor() {
@@ -24,7 +24,8 @@ export function createCommonHeaderInterceptor() {
       const headers: Record<string, string> = {
         ...request.headers,
         "X-App-Version": VERSION.productVersion,
-        "X-Client-Env": isDebugMode() ? "debug" : "release",
+        "X-Client-Env": String(envCode),
+        "X-Client-Type": String(clientTypeCode),
         "X-Client-UA": clientUA,
       };
 

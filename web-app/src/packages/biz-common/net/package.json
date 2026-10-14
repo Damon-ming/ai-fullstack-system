@@ -6,7 +6,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@ming/biz-common-util": "workspace:*"
+    "@ming/biz-common-util": "workspace:*",
+    "@ming/debug": "workspace:*"
   },
   "devDependencies": {
     "@ming/core-encryption": "workspace:*",

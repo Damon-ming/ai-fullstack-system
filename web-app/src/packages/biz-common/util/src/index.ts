@@ -12,3 +12,10 @@ export type { SessionContext } from "./session-context-store";
 
 // 设备 ID（独立存储，设备生命周期）
 export { getDeviceId, setDeviceId, clearDeviceId } from "./device-id-store";
+
+// 加密会话（密钥交换后由 bootstrap 写入，加密拦截器读取）
+export {
+  setEncryptionSession,
+  getEncryptionSession,
+  clearEncryptionSession,
+} from "./encryption-session-store";

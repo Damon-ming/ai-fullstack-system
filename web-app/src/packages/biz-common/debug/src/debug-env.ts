@@ -13,3 +13,15 @@ export const isDebug = import.meta.env.DEV;
 
 /** 当前环境字符串 */
 export const envName = isDebug ? "debug" : "release";
+
+/**
+ * 环境数值编码 —— 用于 X-Client-Env 请求头。
+ * 0 = debug，1 = release（服务端据此判断客户端环境）
+ */
+export const envCode = isDebug ? 0 : 1;
+
+/**
+ * 客户端类型编码 —— 用于 X-Client-Type 请求头。
+ * 0 = 浏览器，1 = 移动端（预留）
+ */
+export const clientTypeCode = 0;

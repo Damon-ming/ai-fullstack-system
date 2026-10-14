@@ -15,8 +15,11 @@ SIGNATURE_VERSION = "x-signature-version"
 # 系统版本头
 APP_VERSION = "x-App-version"
 
-# 环境头
+# 环境头（0 = debug，1 = release）
 CLIENT_ENV = "x-client-env"
+
+# 客户端类型头（0 = 浏览器，1 = 移动端）
+CLIENT_TYPE = "x-client-type"
 
 # 设备 ID 头（服务端下发给客户端，客户端回传用于校验）
 DEVICE_ID = "x-device-id"

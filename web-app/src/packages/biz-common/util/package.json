@@ -7,6 +7,10 @@
     "./session-context-store": "./src/session-context-store.ts",
     "./device-id-store": "./src/device-id-store.ts",
     "./token-store": "./src/token-store.ts",
-    "./session-store": "./src/session-store.ts"
+    "./session-store": "./src/session-store.ts",
+    "./encryption-session-store": "./src/encryption-session-store.ts"
+  },
+  "dependencies": {
+    "@ming/core-encryption": "workspace:*"
   }
 }

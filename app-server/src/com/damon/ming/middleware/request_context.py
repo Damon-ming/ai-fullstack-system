@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from src.com.damon.ming.middleware.header_constants import (
     APP_VERSION,
     CLIENT_ENV,
+    CLIENT_TYPE,
     CLIENT_UA,
     DEVICE_ID,
     ENCRYPT_ENABLED,
@@ -58,7 +59,8 @@ class RequestContext:
 
     # ---- 系统 ----
     app_version: str = ""
-    client_env: str = ""
+    client_env: int = 1          # 客户端环境：0 = debug，1 = release（默认 release）
+    client_type: int = 0         # 客户端类型：0 = 浏览器，1 = 移动端（默认浏览器）
 
     # ---- 标准头 ----
     content_type: str = ""
@@ -86,7 +88,18 @@ def build_request_context(request: "Request") -> RequestContext:
 
     # 系统
     app_version = headers.get(APP_VERSION, "")
-    client_env = headers.get(CLIENT_ENV, "")
+    # X-Client-Env: 0 = debug, 1 = release（默认 release）
+    client_env_raw = headers.get(CLIENT_ENV, "1")
+    try:
+        client_env = int(client_env_raw)
+    except ValueError:
+        client_env = 1  # 解析失败默认 release
+    # X-Client-Type: 0 = 浏览器, 1 = 移动端（默认浏览器）
+    client_type_raw = headers.get(CLIENT_TYPE, "0")
+    try:
+        client_type = int(client_type_raw)
+    except ValueError:
+        client_type = 0  # 解析失败默认浏览器
 
     # 标准头
     content_type = headers.get("content-type", "")
@@ -105,6 +118,7 @@ def build_request_context(request: "Request") -> RequestContext:
         signature_version=signature_version,
         app_version=app_version,
         client_env=client_env,
+        client_type=client_type,
         content_type=content_type,
     )
 

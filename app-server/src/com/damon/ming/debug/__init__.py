@@ -92,7 +92,7 @@ def get_runtime_config() -> RuntimeConfig:
 
 def is_trust_client_env() -> bool:
     """
-    是否信任客户端 X-Client-Env 头。
+    是否信任客户端 X-Client-Env 头（0 = debug, 1 = release）。
     debug 默认 True（方便联调），release 始终 False。
     """
     if not is_debug():

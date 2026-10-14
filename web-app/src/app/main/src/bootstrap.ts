@@ -1,14 +1,9 @@
 // src/app/main/src/bootstrap.ts
-import {
-  initNetApi,
-  setDebugGetter,
-  setEncryptionSessionGetter,
-  setTokenGetter,
-} from "@ming/biz-common-net-api";
+import { initNetApi } from "@ming/biz-common-net-api";
 import { createLogger } from "@ming/core-log";
 import { isDebug } from "@ming/debug";
 import { i18n } from "@ming/i18n";
-import { getToken } from "@ming/biz-common-util";
+import { setEncryptionSession } from "@ming/biz-common-util";
 import { initDeviceToken } from "@ming/features-account-api";
 import { exchangeKeys } from "@ming/features-encryption-api";
 import { useAppStore } from "@ming/store";
@@ -47,18 +42,6 @@ async function initGlobalNetwork(): Promise<void> {
   // 将环境标志写入全局 app-state
   //TODO: 上线记得删除这个写法，改为从服务端获取
   useAppStore.setState({ debug: { isDebug } });
-  // 注入 store 回调到 biz-common/net 内部提供者（解除反向依赖）
-  setDebugGetter(() => useAppStore.getState().debug.isDebug);
-  setTokenGetter(() => getToken()); // 从会话上下文读取，不经过 app-state
-  setEncryptionSessionGetter(() => {
-    const session = useAppStore.getState().encryption.session;
-    if (!session) return null;
-    if (Date.now() >= session.expiresAt) {
-      useAppStore.getState().encryption.setSession(null);
-      return null;
-    }
-    return session;
-  });
 
   initNetApi({
     baseURL: "",
@@ -74,7 +57,7 @@ async function initGlobalNetwork(): Promise<void> {
     // 签名密钥已在 exchangeKeys 内部通过 HKDF 派生，存储在 session.signatureKeyHex
 
     const session = await exchangeKeys();
-    useAppStore.getState().encryption.setSession(session);
+    await setEncryptionSession(session);
     log.info("加密会话初始化完成", { key_id: session.keyId });
   }
 

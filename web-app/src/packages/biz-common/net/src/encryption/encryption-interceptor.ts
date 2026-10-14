@@ -3,7 +3,7 @@
  * 加密 + 签名拦截器 — 纯加解密，不感知密钥交换。
  *
  * 密钥交换在 bootstrap 阶段由 features-encryption-api 完成，
- * 会话从 app-state 读取。
+ * 会话写入 localStorage，拦截器从 biz-common-util 读取。
  *
  * 支持两种请求类型：
  *   1. JSON: 整体签名 → 整体加密
@@ -26,7 +26,7 @@
 import type { InterceptorConfig } from "@ming/core-network";
 import { createLogger } from "@ming/core-log";
 import { generateNonce } from "@ming/core-encryption";
-import { getEncryptionSession } from "../internal-providers";
+import { getEncryptionSession } from "@ming/biz-common-util";
 import { encryptJson, decryptPayload } from "./encryption-crypto";
 import { computeSignature, signParams } from "./signature";
 import type { EncryptedResult, EncryptionSession } from "./encryption-types";
@@ -46,7 +46,7 @@ export function createEncryptionInterceptors(): {
 
   const requestEncrypt: InterceptorConfig = {
     onFulfilled: async (request) => {
-      const session = getEncryptionSession();
+      const session = await getEncryptionSession();
       if (!session) {
         log.error("加密会话不可用，请求中止");
         throw new Error("加密会话不可用，请求中止");
@@ -86,7 +86,7 @@ export function createEncryptionInterceptors(): {
 
       if (!isEncryptedPayload(response.data)) return response;
 
-      const session = getEncryptionSession();
+      const session = await getEncryptionSession();
       if (!session) {
         log.error("加密会话不可用，无法解密响应");
         throw new Error("加密会话不可用，无法解密响应");
