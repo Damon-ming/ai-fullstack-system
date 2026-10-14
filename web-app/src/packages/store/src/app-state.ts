@@ -7,15 +7,15 @@
  *   - token   仅保留 clearToken（用于后期踢出 token 触发刷新）
  *
  * 不包含：
- *   - token / device_id / session_id 存储 → localStorage（session-context-store），拦截器直接读取
- *   - 加密会话 → localStorage（encryption-session-store），拦截器直接读取
+ *   - token / device_id / session_id 存储 → biz-common/storage（auth-store），拦截器直接读取
+ *   - 加密会话 → biz-common/storage（encryption-store），拦截器直接读取
  *   - 加密/认证开关 → 由 bootstrap 初始化时通过拦截器注入，逻辑锁死在 biz-common/net
  *   - 业务状态 → 在 biz/ 目录下（chat、upload 等）
  *
  * 所有模块通过 @ming/store 统一访问。
  */
 
-import { clearSessionContext } from "@ming/biz-common-util";
+import { clearSessionContext } from "@ming/biz-common-storage";
 import { createAppStore } from "./app-store";
 
 export interface AppState {

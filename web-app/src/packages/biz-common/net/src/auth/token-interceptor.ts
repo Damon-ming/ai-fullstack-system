@@ -4,7 +4,7 @@
  */
 
 import type { NormalizedRequest } from "@ming/core-network";
-import { getToken } from "@ming/biz-common-util";
+import { getToken } from "@ming/biz-common-storage";
 
 const TOKEN_COOKIE_NAME = "device_auth_token";
 

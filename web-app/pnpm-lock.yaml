@@ -38,9 +38,9 @@ importers:
       '@ming/biz-common-net-api':
         specifier: workspace:*
         version: link:../../packages/biz-common/net-api
-      '@ming/biz-common-util':
+      '@ming/biz-common-storage':
         specifier: workspace:*
-        version: link:../../packages/biz-common/util
+        version: link:../../packages/biz-common/storage
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../packages/core/log
@@ -86,9 +86,9 @@ importers:
       '@ming/biz-common-debug':
         specifier: workspace:*
         version: link:../debug
-      '@ming/biz-common-util':
+      '@ming/biz-common-storage':
         specifier: workspace:*
-        version: link:../util
+        version: link:../storage
       react:
         specifier: ^18.0.0
         version: 18.3.1
@@ -121,11 +121,14 @@ importers:
         specifier: workspace:*
         version: link:../../core/network
 
-  src/packages/biz-common/util:
+  src/packages/biz-common/storage:
     dependencies:
       '@ming/core-encryption':
         specifier: workspace:*
         version: link:../../core/encryption
+      '@ming/core-storage':
+        specifier: workspace:*
+        version: link:../../core/storage
 
   src/packages/core/encryption: {}
 
@@ -147,6 +150,8 @@ importers:
         specifier: ^1.7.7
         version: 1.20.0(debug@4.4.3)
 
+  src/packages/core/storage: {}
+
   src/packages/core/util: {}
 
   src/packages/data-layer:
@@ -163,12 +168,15 @@ importers:
       '@ming/biz-common-net-api':
         specifier: workspace:*
         version: link:../../biz-common/net-api
-      '@ming/biz-common-util':
+      '@ming/biz-common-storage':
         specifier: workspace:*
-        version: link:../../biz-common/util
+        version: link:../../biz-common/storage
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
+      '@ming/core-storage':
+        specifier: workspace:*
+        version: link:../../core/storage
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -295,6 +303,9 @@ importers:
 
   src/packages/features/history:
     dependencies:
+      '@ming/core-storage':
+        specifier: workspace:*
+        version: link:../../core/storage
       '@ming/core-util':
         specifier: workspace:*
         version: link:../../core/util
@@ -355,9 +366,9 @@ importers:
 
   src/packages/store:
     dependencies:
-      '@ming/biz-common-util':
+      '@ming/biz-common-storage':
         specifier: workspace:*
-        version: link:../biz-common/util
+        version: link:../biz-common/storage
       react:
         specifier: '>=18.0.0'
         version: 18.3.1

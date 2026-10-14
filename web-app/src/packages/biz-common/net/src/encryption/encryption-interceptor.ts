@@ -26,7 +26,7 @@
 import type { InterceptorConfig } from "@ming/core-network";
 import { createLogger } from "@ming/core-log";
 import { generateNonce } from "@ming/core-encryption";
-import { getEncryptionSession } from "@ming/biz-common-util";
+import { getEncryptionSession } from "@ming/biz-common-storage";
 import { encryptJson, decryptPayload } from "./encryption-crypto";
 import { computeSignature, signParams } from "./signature";
 import type { EncryptedResult, EncryptionSession } from "./encryption-types";

@@ -11,12 +11,13 @@
 
 import { useState } from "react";
 import { createLogger } from "@ming/core-log";
+import { getJson, setJson } from "@ming/core-storage";
 import {
   getSessionContext,
   setSessionContext,
   clearSessionContext,
   setDeviceId,
-} from "@ming/biz-common-util";
+} from "@ming/biz-common-storage";
 import { requestDeviceToken, SIMULATED_PHONE } from "../api";
 import type { AccountProfile } from "../api/types";
 
@@ -35,25 +36,18 @@ const fallback: AccountProfile = {
 
 export const accountStore = {
   current(): AccountProfile {
-    if (typeof window === "undefined") return fallback;
-    try {
-      return {
-        ...fallback,
-        ...JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}"),
-      };
-    } catch {
-      return fallback;
-    }
+    const stored = getJson<Partial<AccountProfile>>(PROFILE_KEY);
+    return { ...fallback, ...stored };
   },
   update(name: string) {
     const normalized = name.trim() || fallback.name;
-    const profile = {
+    const profile: AccountProfile = {
       ...fallback,
       ...this.current(),
       name: normalized,
       avatarText: normalized.slice(0, 1).toUpperCase(),
     };
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    setJson(PROFILE_KEY, profile);
     return profile;
   },
 };

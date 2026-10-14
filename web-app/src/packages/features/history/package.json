@@ -1,1 +1,15 @@
-{"name":"@ming/feature-history","version":"0.0.1","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@ming/core-util":"workspace:*"},"peerDependencies":{"react":"^18.2.0"}}
+{
+  "name": "@ming/feature-history",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ming/core-util": "workspace:*",
+    "@ming/core-storage": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}

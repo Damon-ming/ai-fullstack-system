@@ -6,7 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@ming/biz-common-util": "workspace:*",
+    "@ming/biz-common-storage": "workspace:*",
     "@ming/biz-common-debug": "workspace:*"
   },
   "devDependencies": {
