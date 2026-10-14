@@ -52,7 +52,9 @@ async def get_public_key():
 @router.post("/session/v1")
 async def register_session(
     request: Request,
-    encryptedAesKey: str = Body(..., description="RSA-OAEP 加密的 AES 密钥 (base64)"),
+    encrypted_aes_key: str = Body(
+        ..., alias="encryptedAesKey", description="RSA-OAEP 加密的 AES 密钥 (base64)"
+    ),
 ):
     """
     注册 AES 会话。
@@ -108,7 +110,7 @@ async def register_session(
 
     # 5. 注册加密会话（纯密钥操作，不感知业务绑定）
     try:
-        encrypted_aes_key = base64.b64decode(encryptedAesKey)
+        encrypted_aes_key = base64.b64decode(encrypted_aes_key)
         enc_session = km.register_session(encrypted_aes_key)
     except ValueError as e:
         logger.warning("会话注册失败（密钥格式错误）: %s", e)

@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 class TokenRequest(BaseModel):
     """申请 Token 请求体。"""
 
-    # TODO: 当前用随机模拟手机号，后期替换为用户真实输入的手机号
     phone: str = Field(
         ...,
         description="手机号（含区号），用于标识用户身份。TODO: 当前模拟",

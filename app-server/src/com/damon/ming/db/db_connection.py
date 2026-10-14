@@ -318,7 +318,10 @@ def _convert_placeholders(
 
 
 def _mask_url(url: str) -> str:
-    """脱敏 URL 中的密码部分（用于日志）。"""
+    """脱敏 URL 中的密码部分（用于日志）。
+
+    脱敏失败时返回占位符而非原始 URL，避免密码明文泄漏到日志。
+    """
     try:
         from urllib.parse import urlparse, urlunparse
 
@@ -328,6 +331,7 @@ def _mask_url(url: str) -> str:
                 netloc=f"{parsed.username}:***@{parsed.hostname}:{parsed.port}"
             )
             return urlunparse(masked)
-    except Exception:
-        pass
-    return url
+        return url
+    except Exception as e:
+        logger.debug("URL 脱敏失败，已隐藏原始 URL | error=%s", e)
+        return "<unprintable-url>"

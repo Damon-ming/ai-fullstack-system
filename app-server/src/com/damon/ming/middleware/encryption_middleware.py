@@ -153,9 +153,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 if raw_body:
                     body_json = json.loads(raw_body)
                     if _is_encrypted_body(body_json):
-                        session = await self._decrypt_and_verify_json(
-                            request, km, body_json
-                        )
+                        session = self._decrypt_and_verify_json(request, km, body_json)
                         if session is None:
                             return JSONResponse(
                                 status_code=401,
@@ -205,13 +203,13 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
         # ---- 4. 加密响应 --------------------------------------------
         if encrypt_response and _is_json_response(response):
-            return await self._encrypt_response(request, response, km, session)
+            return await self._encrypt_response(request, response, session)
 
         return response
 
     # ==== 私有 ============================================================
 
-    async def _decrypt_and_verify_json(
+    def _decrypt_and_verify_json(
         self, request: Request, km: KeyManager, body_json: dict
     ) -> SessionKey | None:
         """解密 JSON 请求并验证签名。返回 session 或 None。"""
@@ -305,7 +303,6 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         self,
         request: Request,
         response: Response,
-        km: KeyManager,
         session: SessionKey | None,
     ) -> Response:
         """加密 JSON 响应。"""
@@ -357,7 +354,7 @@ def _patch_request_body(request: Request, new_body: str) -> None:
     body_bytes = new_body.encode("utf-8")
     request._body = body_bytes
 
-    async def _new_body() -> bytes:
+    def _new_body() -> bytes:
         return body_bytes
 
     request.body = _new_body  # type: ignore[method-assign]

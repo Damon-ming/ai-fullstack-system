@@ -65,7 +65,7 @@ class DbConfigLoader:
         with open(self._config_path, "r", encoding="utf-8") as f:
             raw_cfg = yaml.safe_load(f)
         if raw_cfg is None or "db" not in raw_cfg:
-            raise ValueError(f"DB 配置文件格式错误：缺少 'db' 根节点")
+            raise ValueError("DB 配置文件格式错误：缺少 'db' 根节点")
         section = raw_cfg["db"].get(profile, {})
         if not section:
             raise ValueError(f"DB 配置文件中未找到剖面: {profile}")

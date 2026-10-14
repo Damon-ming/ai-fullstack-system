@@ -1,4 +1,6 @@
 // web-app/src/packages/core/log/src/index.ts
+import { nowISO } from "@ming/core-util";
+
 export type LogContext = Record<
   string,
   string | number | boolean | null | undefined
@@ -89,7 +91,7 @@ function format(
   message: string,
   context?: LogContext,
 ): unknown[] {
-  const ts = new Date().toISOString().slice(0, 23);
+  const ts = nowISO();
   const location = ` [${callerLocation()}]`;
   const line = `[${ts}] [${namespace}]${location} ${message}`;
   return context ? [line, context] : [line];
@@ -101,7 +103,7 @@ function formatClientError(
   error: Error,
   context?: LogContext,
 ): unknown[] {
-  const ts = new Date().toISOString().slice(0, 23);
+  const ts = nowISO();
   const frame = parseStackFrame(error);
   const location = frame
     ? `${frame.functionName} (${shortPath(frame.file)}:${frame.line})`
@@ -136,7 +138,7 @@ function formatServerError(
   error: unknown,
   context?: LogContext,
 ): unknown[] {
-  const ts = new Date().toISOString().slice(0, 23);
+  const ts = nowISO();
   const location = ` [${callerLocation()}]`;
   const output: unknown[] = [
     `[${ts}] [${namespace}]${location} ${message}: ${errorDetail(error)}`,

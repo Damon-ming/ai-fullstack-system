@@ -59,8 +59,8 @@ class RequestContext:
 
     # ---- 系统 ----
     app_version: str = ""
-    client_env: int = 1          # 客户端环境：0 = debug，1 = release（默认 release）
-    client_type: int = 0         # 客户端类型：0 = 浏览器，1 = 移动端（默认浏览器）
+    client_env: int = 1  # 客户端环境：0 = debug，1 = release（默认 release）
+    client_type: int = 0  # 客户端类型：0 = 浏览器，1 = 移动端
 
     # ---- 标准头 ----
     content_type: str = ""

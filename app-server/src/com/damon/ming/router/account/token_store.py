@@ -18,7 +18,7 @@
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import text
 from src.com.damon.ming.db.db_connection import get_default_db
@@ -30,6 +30,7 @@ from src.com.damon.ming.router.tables import (
     sessions,
     users,
 )
+from src.com.damon.ming.utils.time import now
 
 logger = pin("account.store")
 
@@ -48,10 +49,6 @@ SESSION_TTL = timedelta(days=30)  # 会话有效期
 def _db():
     """获取默认数据库连接。"""
     return get_default_db()
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +84,7 @@ def bind_token(phone: str, token: str) -> None:
     _db().execute(
         "INSERT INTO users (token, phone, created_at) VALUES (%s, %s, %s) "
         "ON CONFLICT (token) DO UPDATE SET phone = EXCLUDED.phone",
-        (token, phone, _now()),
+        (token, phone, now()),
         commit=True,
     )
 
@@ -117,7 +114,7 @@ def register_device(
         "ua_hash = EXCLUDED.ua_hash, raw_ua = EXCLUDED.raw_ua, "
         "platform = EXCLUDED.platform, screen = EXCLUDED.screen, "
         "lang = EXCLUDED.lang, tz = EXCLUDED.tz",
-        (device_id, ua_hash, raw_ua, platform, screen, lang, tz, _now()),
+        (device_id, ua_hash, raw_ua, platform, screen, lang, tz, now()),
         commit=True,
     )
 
@@ -150,13 +147,13 @@ def is_device_registered(device_id: str) -> bool:
 
 def remove_device(device_id: str) -> None:
     """删除设备记录（同时逻辑过期该设备的所有会话）。"""
-    now = _now()
+    current = now()
     with _db().transaction() as conn:
         conn.execute(
             text(
                 "UPDATE sessions SET expires_at = :now WHERE device_id = :did AND expires_at > :now"
             ),
-            {"now": now, "did": device_id},
+            {"now": current, "did": device_id},
         )
         conn.execute(devices.delete().where(devices.c.device_id == device_id))
 
@@ -172,9 +169,9 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
     同一组合的旧会话立即过期（确保每个 token+device 只有一条活跃会话）。
     返回新 session_id。
     """
-    now = _now()
+    current = now()
     session_id = str(uuid.uuid4())
-    expires_at = now + SESSION_TTL
+    expires_at = current + SESSION_TTL
 
     with _db().transaction() as conn:
         # 过期旧会话
@@ -182,7 +179,7 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
             text(
                 "UPDATE sessions SET expires_at = :now WHERE token = :tok AND device_id = :did AND expires_at > :now"
             ),
-            {"now": now, "tok": token, "did": device_id},
+            {"now": current, "tok": token, "did": device_id},
         )
         # 插入新会话
         conn.execute(
@@ -191,7 +188,7 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
                 token=token,
                 device_id=device_id,
                 issued_ua_hash=ua_hash,
-                created_at=now,
+                created_at=current,
                 expires_at=expires_at,
             )
         )
@@ -201,12 +198,12 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
 
 def get_session(session_id: str) -> SessionRow | None:
     """查询有效会话（未过期）。"""
-    now = _now()
+    current = now()
     with _db().engine.connect() as conn:
         result = conn.execute(
             sessions.select().where(
                 sessions.c.session_id == session_id,
-                sessions.c.expires_at > now,
+                sessions.c.expires_at > current,
             )
         )
         row = result.fetchone()
@@ -215,13 +212,13 @@ def get_session(session_id: str) -> SessionRow | None:
 
 def get_active_session(token: str, device_id: str) -> SessionRow | None:
     """查询某 (token, device_id) 的活跃会话。"""
-    now = _now()
+    current = now()
     with _db().engine.connect() as conn:
         result = conn.execute(
             sessions.select().where(
                 sessions.c.token == token,
                 sessions.c.device_id == device_id,
-                sessions.c.expires_at > now,
+                sessions.c.expires_at > current,
             )
         )
         row = result.fetchone()
@@ -230,26 +227,26 @@ def get_active_session(token: str, device_id: str) -> SessionRow | None:
 
 def revoke_sessions_by_token(token: str) -> int:
     """注销某 token 的所有会话。返回注销数量。"""
-    now = _now()
+    current = now()
     with _db().transaction() as conn:
         result = conn.execute(
             text(
                 "UPDATE sessions SET expires_at = :now WHERE token = :tok AND expires_at > :now"
             ),
-            {"now": now, "tok": token},
+            {"now": current, "tok": token},
         )
         return result.rowcount
 
 
 def revoke_sessions_by_device(device_id: str) -> int:
     """注销某设备的所有会话。返回注销数量。"""
-    now = _now()
+    current = now()
     with _db().transaction() as conn:
         result = conn.execute(
             text(
                 "UPDATE sessions SET expires_at = :now WHERE device_id = :did AND expires_at > :now"
             ),
-            {"now": now, "did": device_id},
+            {"now": current, "did": device_id},
         )
         return result.rowcount
 
@@ -281,23 +278,23 @@ def get_all_devices() -> list[DeviceRow]:
 
 def get_all_sessions() -> list[SessionRow]:
     """获取所有有效会话副本（调试用）。"""
-    now = _now()
+    current = now()
     with _db().engine.connect() as conn:
-        result = conn.execute(sessions.select().where(sessions.c.expires_at > now))
+        result = conn.execute(sessions.select().where(sessions.c.expires_at > current))
         rows = result.fetchall()
     return [_session_row(r) for r in (rows or [])]
 
 
 def get_stats() -> dict:
     """获取统计信息。"""
-    now = _now()
+    current = now()
     with _db().engine.connect() as conn:
         users_count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0
         devices_count = conn.execute(text("SELECT COUNT(*) FROM devices")).scalar() or 0
         sessions_count = (
             conn.execute(
                 text("SELECT COUNT(*) FROM sessions WHERE expires_at > :now"),
-                {"now": now},
+                {"now": current},
             ).scalar()
             or 0
         )

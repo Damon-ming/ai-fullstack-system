@@ -29,6 +29,11 @@ from sqlalchemy import (
 metadata = MetaData()
 
 # ---------------------------------------------------------------------------
+# 共享 server_default
+# ---------------------------------------------------------------------------
+_NOW = text("NOW()")
+
+# ---------------------------------------------------------------------------
 # users 表
 # ---------------------------------------------------------------------------
 
@@ -37,7 +42,7 @@ users = Table(
     metadata,
     Column("token", String(64), primary_key=True),
     Column("phone", String(32), nullable=False, unique=True),
-    Column("created_at", nullable=False, server_default=text("NOW()")),
+    Column("created_at", nullable=False, server_default=_NOW),
 )
 
 
@@ -62,7 +67,7 @@ devices = Table(
     Column("screen", String(16), nullable=False, server_default=""),
     Column("lang", String(16), nullable=False, server_default=""),
     Column("tz", String(32), nullable=False, server_default=""),
-    Column("created_at", nullable=False, server_default=text("NOW()")),
+    Column("created_at", nullable=False, server_default=_NOW),
 )
 
 
@@ -89,7 +94,7 @@ sessions = Table(
     Column("token", String(64), nullable=False),
     Column("device_id", String(64), nullable=False),
     Column("issued_ua_hash", String(64), nullable=False, server_default=""),
-    Column("created_at", nullable=False, server_default=text("NOW()")),
+    Column("created_at", nullable=False, server_default=_NOW),
     Column("expires_at", nullable=False),
 )
 

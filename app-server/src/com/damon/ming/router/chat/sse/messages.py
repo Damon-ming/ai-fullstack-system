@@ -9,7 +9,6 @@ SSE 业务消息工厂 —— 统一构造 StreamMessage 并序列化。
 """
 
 import json
-import time
 import uuid
 
 from src.com.damon.ming.ai.schemas.response import (
@@ -20,6 +19,7 @@ from src.com.damon.ming.ai.schemas.response import (
     StreamMessage,
 )
 from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.utils.time import unix_timestamp
 
 
 class SseMessageFactory:
@@ -32,7 +32,7 @@ class SseMessageFactory:
             msgId=f"msg_{uuid.uuid4().hex[:12]}",
             conversationId=f"conv_{uuid.uuid4().hex[:8]}",
             model=llm_model_name,
-            createdAt=int(time.time()),
+            createdAt=unix_timestamp(),
             traceId=f"trace_{uuid.uuid4().hex[:16]}",
         )
 

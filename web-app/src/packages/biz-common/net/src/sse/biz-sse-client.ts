@@ -178,7 +178,7 @@ export class BizSseClient {
     try {
       callbacks.onStatus?.(status);
     } catch (error) {
-      log.warn("onStatus callback error", error);
+      log.warn("onStatus callback error", { error: String(error) });
     }
   }
 

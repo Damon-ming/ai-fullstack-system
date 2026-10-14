@@ -136,7 +136,11 @@ importers:
 
   src/packages/core/encryption: {}
 
-  src/packages/core/log: {}
+  src/packages/core/log:
+    dependencies:
+      '@ming/core-util':
+        specifier: workspace:*
+        version: link:../util
 
   src/packages/core/network:
     dependencies:

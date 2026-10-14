@@ -1,7 +1,6 @@
 # app-server/src/com/damon/ming/upload/router/upload_router.py
 import asyncio
 import json
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -13,6 +12,7 @@ from src.com.damon.ming.router.upload.schemas.bean import (
 )
 from src.com.damon.ming.router.upload.service.upload_service import UploadService
 from src.com.damon.ming.schemas.response import BaseFailedResponse, BaseSuccessResponse
+from src.com.damon.ming.utils.time import now
 
 logger = pin("upload.router")
 
@@ -43,7 +43,7 @@ async def save_files(
         logger.info("文件上传请求完成 | saved_count=%s", len(saved_files))
 
         success_data = FileUploadSuccessData(
-            server_time=datetime.now(tz=UTC).isoformat(), files=saved_files
+            server_time=now().isoformat(), files=saved_files
         )
         return BaseSuccessResponse(code=ErrorCode.OK, data=success_data)
 
@@ -51,6 +51,6 @@ async def save_files(
         logger.warning("【统计】文件上传请求被客户端主动取消（断网/关闭页面/强制结束）")
         raise
     except Exception as e:
-        logger.exception("文件上传请求失败 | error=%s", e)
+        logger.exception("文件上传请求失败")
         fail_data = FileUploadFailedData(error_msg=str(e))
         return BaseFailedResponse(code=ErrorCode.UPLOAD.UPLOAD_FAILED, data=fail_data)
