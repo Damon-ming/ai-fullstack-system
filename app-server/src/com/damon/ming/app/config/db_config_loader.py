@@ -40,23 +40,47 @@ class DbConfigLoader:
         """加载指定剖面的配置，返回 DbConfig。
 
         环境变量覆盖规则：
-          DB_HOST、DB_PORT、DB_NAME、DB_USER、DB_PASSWORD、DB_RETRY、DB_BACKOFF
+          DB_URL / DB_DIALECT / DB_HOST / DB_PORT / DB_NAME /
+          DB_USER / DB_PASSWORD / DB_RETRY / DB_BACKOFF /
+          DB_POOL_SIZE / DB_MAX_OVERFLOW
           若设置，优先于 YAML 中的值。
         """
         from src.com.damon.ming.db.db_config import DbConfig
 
         raw = self._read_yaml(profile)
+
+        # 如果有完整 URL，直接返回
+        url = self._env_or_value("DB_URL", raw.get("url", ""))
+        if url:
+            return DbConfig(
+                url=url,
+                retry_count=int(self._env_or_value("DB_RETRY", raw.get("retry", 3))),
+                backoff_seconds=float(
+                    self._env_or_value("DB_BACKOFF", raw.get("backoff", 0.1))
+                ),
+                pool_size=int(self._env_or_value("DB_POOL_SIZE", raw.get("pool_size", 5))),
+                max_overflow=int(
+                    self._env_or_value("DB_MAX_OVERFLOW", raw.get("max_overflow", 10))
+                ),
+            )
+
         return DbConfig(
             host=self._env_or_value("DB_HOST", raw.get("host", "")),
             port=int(self._env_or_value("DB_PORT", raw.get("port", 5432))),
             dbname=self._env_or_value("DB_NAME", raw.get("dbname", "")),
             user=self._env_or_value("DB_USER", raw.get("user", "")),
             password=self._env_or_value("DB_PASSWORD", raw.get("password", "")),
+            dialect=self._env_or_value("DB_DIALECT", raw.get("dialect", "postgresql")),
+            driver=raw.get("driver", ""),
             retry_count=int(self._env_or_value("DB_RETRY", raw.get("retry", 3))),
-            backoff_seconds=float(self._env_or_value("DB_BACKOFF", raw.get("backoff", 0.1))),
-            pool_min=int(raw.get("pool_min", 1)),
-            pool_max=int(raw.get("pool_max", 10)),
-            connect_kwargs=self._build_connect_kwargs(raw),
+            backoff_seconds=float(
+                self._env_or_value("DB_BACKOFF", raw.get("backoff", 0.1))
+            ),
+            pool_size=int(self._env_or_value("DB_POOL_SIZE", raw.get("pool_size", 5))),
+            max_overflow=int(
+                self._env_or_value("DB_MAX_OVERFLOW", raw.get("max_overflow", 10))
+            ),
+            engine_kwargs=self._build_engine_kwargs(raw),
         )
 
     # ---- 私有 -------------------------------------------------------------
@@ -80,10 +104,10 @@ class DbConfigLoader:
         return env_val if env_val else str(yaml_value)
 
     @staticmethod
-    def _build_connect_kwargs(raw: dict) -> dict:
-        """构建额外的 psycopg2 连接参数。"""
-        kwargs = {}
+    def _build_engine_kwargs(raw: dict) -> dict:
+        """构建 SQLAlchemy engine 的额外连接参数。"""
+        kwargs: dict = {}
         timeout = raw.get("connect_timeout", None)
         if timeout is not None:
-            kwargs["connect_timeout"] = int(timeout)
+            kwargs["connect_args"] = {"connect_timeout": int(timeout)}
         return kwargs

@@ -16,7 +16,6 @@
   # 持久化到 PostgreSQL（PgKeyStore 在业务层 router/encryption/）
   from src.com.damon.ming.router.encryption.pg_key_store import PgKeyStore
   from src.com.damon.ming.encryption.key_store import derive_kek
-  store = PgKeyStore.from_connection_string("postgresql://user:pass@host/db")
   kek = derive_kek(kek_salt=b"...", kek_info=b"...")  # salt/info 由业务配置注入
   km = KeyManager(key_store=store, kek=kek)
   km.initialize()
@@ -234,7 +233,9 @@ class KeyManager:
                 self._key_store.save_session(stored)
             except Exception as e:
                 # 持久化失败不阻塞会话注册（降级为纯内存）
-                logger.warning("会话持久化失败，降级为纯内存 | key_id=%s error=%s", key_id, e)
+                logger.warning(
+                    "会话持久化失败，降级为纯内存 | key_id=%s error=%s", key_id, e
+                )
 
         return session
 

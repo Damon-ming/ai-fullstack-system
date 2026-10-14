@@ -32,7 +32,9 @@ def _check_encryption_config(is_debug: bool) -> None:
     from src.com.damon.ming.app.config import EncryptionConfigLoader
 
     try:
-        config = EncryptionConfigLoader().load(profile="default" if is_debug else "production")
+        config = EncryptionConfigLoader().load(
+            profile="default" if is_debug else "production"
+        )
     except FileNotFoundError:
         raise RuntimeError(
             "加密配置文件不存在，启动终止。"
@@ -69,8 +71,8 @@ def _check_database(is_debug: bool) -> list[str]:
     if is_debug:
         return errors
 
-    # 环境变量 DB_CONNECTION
-    db_url = os.environ.get("DB_CONNECTION", "")
+    # 环境变量 DB_URL（DB_CONNECTION 兼容）
+    db_url = os.environ.get("DB_URL", "") or os.environ.get("DB_CONNECTION", "")
     if db_url:
         return errors
 
@@ -80,7 +82,7 @@ def _check_database(is_debug: bool) -> list[str]:
 
         loader = DbConfigLoader()
         db_config = loader.load(profile="production")
-        if db_config.get_connection_string():
+        if db_config.url or db_config.host:
             return errors
     except Exception:
         pass

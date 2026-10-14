@@ -1,30 +1,43 @@
 # app-server/src/com/damon/ming/app/config/db-config.yaml
 # 数据库连接配置 —— 由 app_initializer 读取，注入 db 模块。
 # db 模块本身不包含任何配置文件，纯参数化调用。
+#
+# 支持多数据库后端：
+#   PostgreSQL:  dialect: postgresql
+#   MySQL:       dialect: mysql  driver: pymysql
+#   SQLite:      dialect: sqlite
+#
+# 也可以直接写 url 覆盖拆解字段：
+#   default:
+#     url: postgresql://user:pass@localhost:5432/mydb
 
 db:
   # 开发环境：本地 PostgreSQL
   default:
+    dialect: postgresql
+    driver: psycopg2
     host: localhost
     port: 5432
     dbname: damon_dev
     user: postgres
     password: ""
-    pool_min: 1
-    pool_max: 5
+    pool_size: 5
+    max_overflow: 10
     connect_timeout: 10
     retry: 3
     backoff: 0.1
 
-  # 生产环境：通过环境变量覆盖（DB_CONNECTION 优先级更高）
+  # 生产环境：通过环境变量覆盖（DB_URL 优先级最高）
   production:
+    dialect: postgresql
+    driver: psycopg2
     host: localhost
     port: 5432
     dbname: damon_prod
     user: postgres
     password: ""
-    pool_min: 2
-    pool_max: 10
+    pool_size: 5
+    max_overflow: 10
     connect_timeout: 15
     retry: 5
     backoff: 0.5

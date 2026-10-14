@@ -33,6 +33,9 @@ rank-bm25==0.2.2
 pymupdf4llm==1.28.2
 
 # ── Database ─────────────────────────────────────────────────
+# SQLAlchemy 2.x — 通用 ORM/核心层，支持 PostgreSQL / MySQL / SQLite 等
+sqlalchemy>=2.0.0
+# PostgreSQL 适配器（SQLAlchemy 驱动层）
 psycopg2-binary==2.9.13
 
 # ── Security / Encryption ────────────────────────────────────

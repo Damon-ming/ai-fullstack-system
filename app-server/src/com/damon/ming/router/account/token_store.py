@@ -229,29 +229,27 @@ def get_active_session(token: str, device_id: str) -> SessionRecord | None:
 def revoke_sessions_by_token(token: str) -> int:
     """注销某 token 的所有会话。返回注销数量。"""
     now = _now()
-    conn = _db()._get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sessions_sql.REVOKE_BY_TOKEN, (now, token, now))
-            count = cur.rowcount
-        conn.commit()
-        return count
-    finally:
-        _db()._return_conn(conn)
+    from sqlalchemy import text
+    from src.com.damon.ming.db.db_connection import _convert_placeholders
+
+    with _db().transaction() as conn:
+        sql, params = _convert_placeholders(sessions_sql.REVOKE_BY_TOKEN, (now, token, now))
+        result = conn.execute(text(sql), params)
+        count = result.rowcount
+    return count
 
 
 def revoke_sessions_by_device(device_id: str) -> int:
     """注销某设备的所有会话。返回注销数量。"""
     now = _now()
-    conn = _db()._get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sessions_sql.REVOKE_BY_DEVICE, (now, device_id, now))
-            count = cur.rowcount
-        conn.commit()
-        return count
-    finally:
-        _db()._return_conn(conn)
+    from sqlalchemy import text
+    from src.com.damon.ming.db.db_connection import _convert_placeholders
+
+    with _db().transaction() as conn:
+        sql, params = _convert_placeholders(sessions_sql.REVOKE_BY_DEVICE, (now, device_id, now))
+        result = conn.execute(text(sql), params)
+        count = result.rowcount
+    return count
 
 
 # ---------------------------------------------------------------------------

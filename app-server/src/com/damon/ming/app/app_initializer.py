@@ -86,11 +86,11 @@ class AppInitializer:
             register_exception(DatabaseError, ServerSubSystem.DATABASE)
             register_exception(EncryptionError, ServerSubSystem.ENCRYPTION)
 
-            # psycopg2 数据库驱动异常也归类为数据库子系统
+            # 数据库驱动异常也归类为数据库子系统
             try:
-                import psycopg2
+                import sqlalchemy.exc
 
-                register_exception(psycopg2.Error, ServerSubSystem.DATABASE)
+                register_exception(sqlalchemy.exc.SQLAlchemyError, ServerSubSystem.DATABASE)
             except ImportError:
                 pass
 
@@ -126,13 +126,13 @@ class AppInitializer:
         try:
             from src.com.damon.ming.db import DbConfig, DbConnection, set_default_db
 
-            self.db_conn = DbConnection(DbConfig(connection_string=db_url))
-            self.db_conn.initialize(min_conn=1, max_conn=5)
+            self.db_conn = DbConnection(DbConfig(url=db_url, pool_size=5))
+            self.db_conn.initialize()
             set_default_db(self.db_conn)
             self._create_account_tables()
-            logger.info("数据库连接池初始化完成（环境变量 DB_CONNECTION）")
+            logger.info("数据库引擎初始化完成（环境变量 DB_CONNECTION）")
         except Exception as e:
-            logger.warning("数据库连接池初始化失败: %s", e)
+            logger.warning("数据库引擎初始化失败: %s", e)
             self.db_conn = None
 
     def _init_database_from_yaml(self) -> None:
@@ -150,11 +150,11 @@ class AppInitializer:
             self.db_conn.initialize()  # pool 参数从 DbConfig 读取
             set_default_db(self.db_conn)
             self._create_account_tables()
-            logger.info("数据库连接池初始化完成（YAML 配置）")
+            logger.info("数据库引擎初始化完成（YAML 配置）")
         except FileNotFoundError:
             logger.info("数据库配置文件不存在，跳过数据库初始化")
         except Exception as e:
-            logger.warning("数据库连接池初始化失败: %s", e)
+            logger.warning("数据库引擎初始化失败: %s", e)
             self.db_conn = None
 
     def _create_account_tables(self) -> None:

@@ -31,7 +31,7 @@ from src.com.damon.ming.router.encryption.encryption_sql import (
 
 
 class PgKeyStore(BaseKeyStore):
-    """PostgreSQL 密钥存储后端。
+    """密钥存储后端（基于 SQLAlchemy，支持多数据库后端）。
 
     在 BaseKeyStore 纯 key_id 接口之上，扩展了会话维度索引（业务需求）。
 
@@ -42,8 +42,8 @@ class PgKeyStore(BaseKeyStore):
         store = PgKeyStore(db_conn)
         store.initialize()
 
-        # 方式二：传入连接字符串（独立连接）
-        store = PgKeyStore.from_connection_string("postgresql://...")
+        # 方式二：传入 SQLAlchemy URL（独立连接）
+        store = PgKeyStore.from_url("postgresql://...")
         store.initialize()
     """
 
@@ -51,9 +51,9 @@ class PgKeyStore(BaseKeyStore):
         self._db = db_connection
 
     @staticmethod
-    def from_connection_string(conn_string: str) -> "PgKeyStore":
-        """从连接字符串创建 PgKeyStore（使用独立连接）。"""
-        config = DbConfig(connection_string=conn_string)
+    def from_url(url: str) -> "PgKeyStore":
+        """从 SQLAlchemy URL 创建 PgKeyStore（使用独立连接）。"""
+        config = DbConfig(url=url)
         db_conn = DbConnection(config)
         db_conn.initialize()
         return PgKeyStore(db_conn)
@@ -102,15 +102,11 @@ class PgKeyStore(BaseKeyStore):
         self._db.execute(DELETE_BY_SESSION, (session_id,))
 
     def cleanup_expired(self) -> int:
-        conn = self._db._get_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(CLEANUP_EXPIRED)
-                count = cur.rowcount
-            conn.commit()
-            return count
-        finally:
-            self._db._return_conn(conn)
+        from sqlalchemy import text
+
+        with self._db.transaction() as conn:
+            result = conn.execute(text(CLEANUP_EXPIRED))
+            return result.rowcount
 
     def count(self) -> int:
         rows = self._db.execute(COUNT, commit=False, fetch=True)
