@@ -47,7 +47,6 @@ async function initGlobalNetwork(): Promise<void> {
     baseURL: "",
     timeout: 15000,
     enableEncryption: !debug,
-    enableAuth: !debug,
     enableLogging: debug,
   });
 

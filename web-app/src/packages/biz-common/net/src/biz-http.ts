@@ -19,7 +19,6 @@ import type { INetClient } from "./interface";
 import { BizRestClient } from "./restful/biz-rest-client";
 import { BizSseClient } from "./sse/biz-sse-client";
 import { createCommonHeaderInterceptor } from "./header/common-header-interceptor";
-import { createTokenInterceptor } from "./auth/token-interceptor";
 import { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
 import { createLoggingInterceptors } from "./logging/logging-interceptor";
 
@@ -39,7 +38,6 @@ export class BizHttp implements INetClient {
       timeout = BizRestClient.getDefaultTimeout(),
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
-      enableAuth = false,
       enableEncryption = false,
       enableLogging = false,
       axiosConfig,
@@ -56,22 +54,23 @@ export class BizHttp implements INetClient {
       sseMessageInterceptors,
     });
 
-    // 所有拦截器始终注册，内部通过 isDebug() 运行时决定行为
     // 公共请求头：每次请求必须携带（系统版本 + 环境标志）
     client.addRequestInterceptor(createCommonHeaderInterceptor());
 
-    // 加密 + 签名拦截器：debug 模式下内部 pass through
-    const encryption = createEncryptionInterceptors();
-    client.addRequestInterceptor(encryption.requestEncrypt);
-    client.addResponseInterceptor(encryption.responseDecrypt);
+    // 加密 + 签名拦截器：release 模式注册，debug 模式不注册
+    if (enableEncryption) {
+      const encryption = createEncryptionInterceptors();
+      client.addRequestInterceptor(encryption.requestEncrypt);
+      client.addResponseInterceptor(encryption.responseDecrypt);
+    }
 
-    // 日志拦截器：debug 模式下内部打印，release 下 pass through
-    const logging = createLoggingInterceptors();
-    client.addRequestInterceptor(logging.requestLog);
-    client.addResponseInterceptor(logging.responseLog);
+    // 日志拦截器：debug 模式注册，release 模式不注册
+    if (enableLogging) {
+      const logging = createLoggingInterceptors();
+      client.addRequestInterceptor(logging.requestLog);
+      client.addResponseInterceptor(logging.responseLog);
+    }
 
-    // Token 拦截器：无 token 时自然跳过
-    client.addRequestInterceptor(createTokenInterceptor());
 
     return client;
   }

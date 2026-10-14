@@ -79,7 +79,11 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@20.19.43)(lightningcss@1.32.0)
 
-  src/packages/biz-common/debug: {}
+  src/packages/biz-common/debug:
+    dependencies:
+      '@ming/core-storage':
+        specifier: workspace:*
+        version: link:../../core/storage
 
   src/packages/biz-common/net:
     dependencies:
