@@ -320,18 +320,15 @@ importers:
 
   src/packages/features/history:
     dependencies:
-      '@ming/core-storage':
+      '@ming/core-log':
         specifier: workspace:*
-        version: link:../../core/storage
+        version: link:../../core/log
       '@ming/core-util':
         specifier: workspace:*
         version: link:../../core/util
       '@ming/data-layer':
         specifier: workspace:*
         version: link:../../data-layer
-      '@tanstack/react-query':
-        specifier: ^5.0.0
-        version: 5.104.2(react@18.3.1)
       react:
         specifier: ^18.2.0
         version: 18.3.1

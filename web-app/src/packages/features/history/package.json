@@ -6,10 +6,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@ming/core-log": "workspace:*",
     "@ming/core-util": "workspace:*",
-    "@ming/core-storage": "workspace:*",
-    "@ming/data-layer": "workspace:*",
-    "@tanstack/react-query": "^5.0.0"
+    "@ming/data-layer": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.2.0"

@@ -12,94 +12,31 @@ import type { DataApiResponse, DataLayerError } from "./types";
 /**
  * QueryFactory —— 把数据请求 + 缓存策略收敛在 api 层。
  *
- * 静态方法（genQueryHook/genMutationHook）保持向后兼容，供已有 chat-chatroom 使用。
+ * 实例级方法提供：
+ * 1. queryKey 注入能力：api 层在模块级创建预配置 hook，key 由 api 层管理
+ * 2. mutation 成功后自动 invalidateQueries 失效关联缓存
+ * 3. hook 层不再需要直接调 useQuery/useMutation/useQueryClient
  *
- * 实例级方法新增 cacheKey 注入能力：api 层在模块级创建单例工厂，
- * mutation 成功后自动调用 invalidateQueries 失效关联 query 的缓存，
- * hook 层不再需要直接调 useQuery/useMutation/useQueryClient。
- *
- * 实例方法的泛型 TData/TVariables 是 fetcher 的【实际返回类型】，
- * 不做 DataApiResponse 包装 —— api 层 fetcher 内部自行解包。
+ * 泛型 TData 是业务数据的实际类型，fetcher 返回 DataApiResponse<TData>（透传网络层结构），
+ * query/mutation 的 data 字段也是 DataApiResponse<TData>，由 hook 层决定如何解包。
  */
 export class QueryFactory {
-  // ---------------------------------------------------------------------------
-  // 静态方法（向后兼容，无 QueryClient 访问能力）
-  // ---------------------------------------------------------------------------
-
-  /** @deprecated 优先使用实例级方法以支持自动缓存失效 */
-  static genQueryHook<
-    TData,
-    TError = DataLayerError,
-    TQueryKey extends QueryKey = QueryKey,
-  >(
-    fetcher: () => Promise<DataApiResponse<TData>>,
-    defaultOptions: Omit<
-      UseQueryOptions<
-        DataApiResponse<TData>,
-        TError,
-        DataApiResponse<TData>,
-        TQueryKey
-      >,
-      "queryKey" | "queryFn"
-    >,
-  ) {
-    return (queryKey: TQueryKey, customOptions?: typeof defaultOptions) => {
-      return useQuery<
-        DataApiResponse<TData>,
-        TError,
-        DataApiResponse<TData>,
-        TQueryKey
-      >({
-        queryKey,
-        queryFn: fetcher,
-        ...defaultOptions,
-        ...customOptions,
-      });
-    };
-  }
-
-  /** @deprecated 优先使用实例级方法以支持自动缓存失效 */
-  static genMutationHook<TData, TVariables, TError = DataLayerError>(
-    fetcher: (vars: TVariables) => Promise<DataApiResponse<TData>>,
-    defaultOptions: Omit<
-      UseMutationOptions<DataApiResponse<TData>, TError, TVariables>,
-      "mutationFn"
-    >,
-  ) {
-    return (
-      customOptions?: Omit<
-        UseMutationOptions<DataApiResponse<TData>, TError, TVariables>,
-        "mutationFn"
-      >,
-    ) => {
-      return useMutation<DataApiResponse<TData>, TError, TVariables>({
-        mutationFn: fetcher,
-        ...defaultOptions,
-        ...customOptions,
-      });
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // 实例级方法（支持自动缓存失效，泛型为实际返回类型）
-  // ---------------------------------------------------------------------------
-
   /**
    * 创建预配置 query hook。
    * @param queryKey 缓存 key（固定，由 api 层管理）
-   * @param fetcher 数据请求函数，返回实际业务数据（非 DataApiResponse 包装）
+   * @param fetcher 数据请求函数，返回 DataApiResponse<TData>（透传网络层结构）
    * @param defaultOptions 默认 query 选项
    */
   createQueryHook<TData, TError = DataLayerError, TQueryKey extends QueryKey = QueryKey>(
     queryKey: TQueryKey,
-    fetcher: () => Promise<TData>,
+    fetcher: () => Promise<DataApiResponse<TData>>,
     defaultOptions?: Omit<
-      UseQueryOptions<TData, TError, TData, TQueryKey>,
+      UseQueryOptions<DataApiResponse<TData>, TError, DataApiResponse<TData>, TQueryKey>,
       "queryKey" | "queryFn"
     >,
   ) {
     return (customOptions?: typeof defaultOptions) => {
-      return useQuery<TData, TError, TData, TQueryKey>({
+      return useQuery<DataApiResponse<TData>, TError, DataApiResponse<TData>, TQueryKey>({
         queryKey,
         queryFn: fetcher,
         ...defaultOptions,
@@ -110,27 +47,27 @@ export class QueryFactory {
 
   /**
    * 创建预配置 mutation hook，支持自动缓存失效。
-   * @param fetcher mutation 函数，参数为 TVariables，返回实际数据
+   * @param fetcher mutation 函数，返回 DataApiResponse<TData>（透传网络层结构）
    * @param options invalidateKeys: mutation 成功后自动失效的 queryKey 列表
    */
   createMutationHook<TData, TVariables, TError = DataLayerError>(
-    fetcher: (vars: TVariables) => Promise<TData>,
+    fetcher: (vars: TVariables) => Promise<DataApiResponse<TData>>,
     options?: {
       invalidateKeys?: QueryKey[];
       defaultOptions?: Omit<
-        UseMutationOptions<TData, TError, TVariables>,
+        UseMutationOptions<DataApiResponse<TData>, TError, TVariables>,
         "mutationFn"
       >;
     },
   ) {
     return (
       customOptions?: Omit<
-        UseMutationOptions<TData, TError, TVariables>,
+        UseMutationOptions<DataApiResponse<TData>, TError, TVariables>,
         "mutationFn"
       >,
     ) => {
       const queryClient = useQueryClient();
-      return useMutation<TData, TError, TVariables>({
+      return useMutation<DataApiResponse<TData>, TError, TVariables>({
         mutationFn: fetcher,
         ...options?.defaultOptions,
         ...customOptions,
