@@ -13,9 +13,6 @@ export interface DataApiResponse<T = unknown> {
 /** 数据层错误。结构与 biz-common-net 的 BizApiErrorResponse 对齐，供 query/mutation 使用。 */
 export interface DataLayerError<ErrData = unknown> {
   code: number;
-  clientData?: {
-    message?: string;
-  };
   data?: ErrData;
 }
 

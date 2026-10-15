@@ -20,6 +20,20 @@ function _extractErrorMsg(rawRes?: Record<string, any>): string | undefined {
   return undefined;
 }
 
+// ---------------------------------------------------------------------------
+// 错误信息优先级兜底 —— 统一写入 data.error_msg
+// ---------------------------------------------------------------------------
+
+function _withErrorMsg<F>(
+  res: BizApiErrorResponse<F>,
+  errorMsg: string,
+): BizApiErrorResponse<F> {
+  return {
+    ...res,
+    data: { ...((res.data as Record<string, unknown>) || {}), error_msg: errorMsg } as F,
+  };
+}
+
 /**
  * 非 2xx HTTP 响应的错误构造
  *
@@ -34,26 +48,18 @@ export function buildHttpCodeError<F = any>(
   // 服务端返回了结构化的业务错误体 {code, data, message}
   if (rawRes && typeof rawRes.code === "number" && isServerCode(rawRes.code)) {
     const errorMsg = _extractErrorMsg(rawRes);
-    return {
-      code: rawRes.code,
-      data: (rawRes.data ?? undefined) as F | undefined,
-      clientData: {
-        message:
-          errorMsg ||
-          getHttpStatusMessage(httpCode) ||
-          getServerSafeMessage(rawRes.code),
-      },
-    };
+    return _withErrorMsg(
+      { code: rawRes.code, data: rawRes.data as F },
+      errorMsg || getServerSafeMessage(rawRes.code),
+    );
   }
 
   // 服务端未返回结构化错误 → 直接透传 HTTP 状态码
   const errorMsg = _extractErrorMsg(rawRes);
-  return {
-    code: httpCode,
-    clientData: {
-      message: errorMsg || getHttpStatusMessage(httpCode),
-    },
-  };
+  return _withErrorMsg(
+    { code: httpCode, data: rawRes as F },
+    errorMsg || getHttpStatusMessage(httpCode),
+  );
 }
 
 /**
@@ -68,10 +74,10 @@ export function formatAxiosException<F = any>(
     err.message?.includes("cancelled") ||
     err.code === "ERR_CANCELED"
   ) {
-    return {
-      code: ClientErrorCode.CONFIG_CANCEL,
-      clientData: { message: ERROR_MESSAGES[ClientErrorCode.CONFIG_CANCEL] },
-    };
+    return _withErrorMsg(
+      { code: ClientErrorCode.CONFIG_CANCEL },
+      ERROR_MESSAGES[ClientErrorCode.CONFIG_CANCEL],
+    );
   }
 
   // 服务端返回了 HTTP 错误响应（有 response 对象）
@@ -79,17 +85,17 @@ export function formatAxiosException<F = any>(
     return buildHttpCodeError<F>(err.response.status, err.response.data);
   }
 
-  // 网络不可达（服务端未启动、DNS 失败、连接被拒）
+  // 服务不可达（服务端未启动、DNS 失败、连接被拒、主机不可达）
   if (
     err.code === "ECONNREFUSED" ||
     err.code === "ENOTFOUND" ||
     err.code === "ECONNRESET" ||
     err.code === "EHOSTUNREACH"
   ) {
-    return {
-      code: ClientErrorCode.NET_TIMEOUT,
-      clientData: { message: ERROR_MESSAGES[ClientErrorCode.NET_TIMEOUT] },
-    };
+    return _withErrorMsg(
+      { code: ClientErrorCode.NET_UNREACHABLE },
+      ERROR_MESSAGES[ClientErrorCode.NET_UNREACHABLE],
+    );
   }
 
   // 网络超时
@@ -98,19 +104,17 @@ export function formatAxiosException<F = any>(
     err.code === "ETIMEDOUT" ||
     /timeout/i.test(err.message || "")
   ) {
-    return {
-      code: ClientErrorCode.NET_TIMEOUT,
-      clientData: { message: ERROR_MESSAGES[ClientErrorCode.NET_TIMEOUT] },
-    };
+    return _withErrorMsg(
+      { code: ClientErrorCode.NET_TIMEOUT },
+      ERROR_MESSAGES[ClientErrorCode.NET_TIMEOUT],
+    );
   }
 
   // 其他客户端错误（配置错误等）
-  return {
-    code: ClientErrorCode.CONFIG_ERR,
-    clientData: {
-      message: err.message || ERROR_MESSAGES.unknownError,
-    },
-  };
+  return _withErrorMsg(
+    { code: ClientErrorCode.CONFIG_ERR },
+    err.message || ERROR_MESSAGES.unknownError,
+  );
 }
 
 /**
@@ -123,10 +127,10 @@ export function formatSseException(err: any): BizApiErrorResponse {
     err.message?.includes("canceled") ||
     err.message?.includes("cancelled")
   ) {
-    return {
-      code: ClientErrorCode.CONFIG_CANCEL,
-      clientData: { message: ERROR_MESSAGES[ClientErrorCode.CONFIG_CANCEL] },
-    };
+    return _withErrorMsg(
+      { code: ClientErrorCode.CONFIG_CANCEL },
+      ERROR_MESSAGES[ClientErrorCode.CONFIG_CANCEL],
+    );
   }
 
   // 网络超时
@@ -135,18 +139,16 @@ export function formatSseException(err: any): BizApiErrorResponse {
     err.message?.includes("NetworkError") ||
     err.message?.includes("Failed to fetch")
   ) {
-    return {
-      code: ClientErrorCode.NET_TIMEOUT,
-      clientData: { message: ERROR_MESSAGES[ClientErrorCode.NET_TIMEOUT] },
-    };
+    return _withErrorMsg(
+      { code: ClientErrorCode.NET_TIMEOUT },
+      ERROR_MESSAGES[ClientErrorCode.NET_TIMEOUT],
+    );
   }
 
-  return {
-    code: ClientErrorCode.CONFIG_ERR,
-    clientData: {
-      message: err?.message || ERROR_MESSAGES.unknownError,
-    },
-  };
+  return _withErrorMsg(
+    { code: ClientErrorCode.CONFIG_ERR },
+    err?.message || ERROR_MESSAGES.unknownError,
+  );
 }
 
 /**
@@ -168,9 +170,5 @@ export function buildSseErrorPayload(payload: {
     (payload.data as { error_msg?: string }).error_msg
       ? (payload.data as { error_msg?: string }).error_msg!
       : getServerSafeMessage(code);
-  return {
-    code,
-    data: payload.data,
-    clientData: { message: errorMsg },
-  };
+  return { code, data: { error_msg: errorMsg } };
 }

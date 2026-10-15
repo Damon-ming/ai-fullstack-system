@@ -29,8 +29,8 @@ export async function unwrapBizResult<T = any, F = any>(
   // eslint-disable-next-line @typescript-eslint/no-throw-literal -- 结构化业务错误对象，非 Error 实例
   throw {
     code: -1,
-    clientData: {
-      message: "CLIENT:Unknown data layer error: Both res and err are null",
+    data: {
+      error_msg: "CLIENT:Unknown data layer error: Both res and err are null",
     },
   } as DataLayerError<F>;
 }

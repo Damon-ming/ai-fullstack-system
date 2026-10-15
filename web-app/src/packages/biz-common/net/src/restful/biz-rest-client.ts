@@ -58,15 +58,21 @@ export class BizRestClient {
         if (isSuccess(code)) {
           successRes = { code, data: data as T };
         } else {
-          // 服务端业务失败码 → 提取 error_msg 作为 clientData.message
-          // 优先级：data.error_msg（服务端脱敏描述）> getServerSafeMessage（子系统兜底文案）
+          // 服务端业务失败码 → 确保 data.error_msg 有值
+          // 优先级：data.error_msg（服务端原始描述）> getServerSafeMessage（子系统兜底文案）
           const errorMsg =
             data &&
             typeof data === "object" &&
             typeof (data as Record<string, unknown>).error_msg === "string"
               ? ((data as Record<string, unknown>).error_msg as string)
               : getServerSafeMessage(code);
-          errRes = { code, data: data as F, clientData: { message: errorMsg } };
+          errRes = {
+            code,
+            data: {
+              ...(data as Record<string, unknown>),
+              error_msg: errorMsg,
+            } as F,
+          };
         }
       }
       // HTTP 204 或 2xx + 空 body → 成功（无业务数据）

@@ -18,8 +18,11 @@ export async function fetchPublicKey(): Promise<PublicKeyResponse> {
   const [err, resp] = await netClient.get<PublicKeyResponse>(
     "/api/encryption/key/v1",
   );
-  if (err || !resp?.data) {
-    throw new Error(`获取公钥失败: ${err?.clientData?.message || "未知错误"}`);
+  if (err) {
+    throw new Error(`获取公钥失败: ${err.data!.error_msg}`);
+  }
+  if (!resp?.data) {
+    throw new Error("获取公钥失败: 服务端未返回有效公钥");
   }
   return resp.data;
 }
@@ -33,8 +36,11 @@ export async function registerSession(
     "/api/encryption/session/v1",
     { encryptedAesKey: encryptedKeyB64 },
   );
-  if (err || !resp?.data) {
-    throw new Error(`会话注册失败: ${err?.clientData?.message || "未知错误"}`);
+  if (err) {
+    throw new Error(`会话注册失败: ${err.data!.error_msg}`);
+  }
+  if (!resp?.data) {
+    throw new Error("会话注册失败: 服务端未返回有效会话信息");
   }
   return resp.data;
 }

@@ -11,11 +11,13 @@ export const ERROR_MESSAGES: Record<number | string, string> = {
     "CLIENT:Network request timeout, please check network connection.",
   [ClientErrorCode.CONFIG_ERR]: "CLIENT:Request configuration error.",
   [ClientErrorCode.CONFIG_CANCEL]: "CLIENT:Request was canceled.",
+  [ClientErrorCode.NET_UNREACHABLE]:
+    "CLIENT:Unable to connect to server, please try again later.",
   unknownError: "CLIENT:Unknown network or execution error.",
 };
 
 // ---------------------------------------------------------------------------
-// HTTP 状态码映射 —— 仅用于构造 clientData.message，不参与逻辑分支
+// HTTP 状态码映射 —— 仅用于构造 data.error_msg，不参与逻辑分支
 // ---------------------------------------------------------------------------
 
 export const HTTP_STATUS_MESSAGES: Record<number, string> = {

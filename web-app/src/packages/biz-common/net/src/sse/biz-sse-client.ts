@@ -122,7 +122,7 @@ export class BizSseClient {
       if (!reader) {
         const error: BizApiErrorResponse = {
           code: ClientErrorCode.CONFIG_ERR,
-          clientData: { message: "ReadableStream reader is not available" },
+          data: { error_msg: "CLIENT:ReadableStream reader is not available" },
         };
         this.emitStatus(callbacks, "transport-error");
         this.safeOnError(callbacks, error);

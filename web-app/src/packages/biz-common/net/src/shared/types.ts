@@ -37,7 +37,7 @@ export interface BizHttpClientConfig extends HttpClientConfig {
 export interface BaseRequest {
   /** 请求时间戳（毫秒），由拦截器自动注入 */
   timestamp?: number;
-  /** 请求随机数，由拦截器自动注入 */
+  /** 请求随机数（由 generateNonce() 生成的字符串），由拦截器自动注入 */
   nonce?: string;
   /** HMAC-SHA256 签名，由拦截器自动注入 */
   signature?: string;
@@ -49,18 +49,17 @@ export interface BizApiSuccessResponse<T = any> {
   data?: T;
 }
 
-/** 后端标准错误详情 BizApiErrorResponse */
+/**
+ * 前端统一错误响应 —— 由 BizRestClient.requestWrap 构造。
+ *
+ * 错误信息优先级（统一在 data.error_msg）：
+ *   1. 服务端 data.error_msg（原始错误描述）
+ *   2. HTTP 状态码文案（服务端未返回结构化 body 时）
+ *   3. 客户端兜底文案（网络异常等纯客户端场景，带 CLIENT: 前缀）
+ *
+ * data 是服务端原始响应体，error_msg 由 requestWrap 统一填充。
+ */
 export interface BizApiErrorResponse<ErrData = any> {
   code: number;
-  clientData?: ClientErrData; // 只有客户端抛出异常或处理网络错误时存在
   data?: ErrData;
-}
-
-/**
- * 客户端专属错误信息（仅客户端码场景存在）
- * UI 层只读 .message 用于展示，不需要分支逻辑 ——
- * 错误来源已由 error.code 唯一确定
- */
-export interface ClientErrData {
-  message?: string;
 }

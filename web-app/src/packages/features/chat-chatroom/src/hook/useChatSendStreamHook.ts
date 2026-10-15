@@ -147,7 +147,7 @@ export function useChatSendStreamHook() {
         onError: (error) => {
           streamFinished = true;
           const message =
-            error.clientData?.message || t("error.streamFailed");
+            error.data?.error_msg || t("error.streamFailed");
           log.error("sendStream response failed", error);
           setMessages((prev) =>
             prev.map((msg) =>

@@ -82,7 +82,7 @@ export function createLoggingInterceptors(): {
       } else {
         // 网络层错误（无响应/断网/超时）：axios 不会内部打印，此处用 error 完整记录
         log.error(
-          `${config?.method?.toUpperCase()} ${config?.url} → ${status || "CLIENT: NETWORK_ERROR"} (${formatTime(elapsed)})`,
+          `${config?.method?.toUpperCase()} ${config?.url} → ${status || "NETWORK_ERROR"} (${formatTime(elapsed)})`,
           error,
         );
       }

@@ -73,7 +73,10 @@ export function useChatSendNormalHook() {
         log.debug("sendNormal aborted by user");
         return;
       }
-      const errMsg = e instanceof Error ? e.message : t("error.sendFailed");
+      const errMsg =
+        (e instanceof Error
+          ? e.message
+          : (e as { data?: { error_msg?: string } })?.data?.error_msg) ?? "";
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMsgId ? { ...msg, text: errMsg } : msg,

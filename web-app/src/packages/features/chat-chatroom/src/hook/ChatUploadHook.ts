@@ -21,7 +21,7 @@ export function chatUploadHook() {
     startUpload(files.map((f) => f.name));
     const [err, res] = await uploadFiles(files);
     if (err) {
-      const errMsg = err.clientData?.message || "upload failed";
+      const errMsg = err.data?.error_msg || "CLIENT:Upload failed";
       setError(errMsg);
       finishUpload("error");
     } else {

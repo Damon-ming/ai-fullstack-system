@@ -17,7 +17,7 @@
     "sendAria": "Send message"
   },
   "error": {
-    "streamFailed": "Stream request failed",
-    "sendFailed": "Failed to send, please try again"
+    "streamFailed": "CLIENT:Stream request failed",
+    "sendFailed": "CLIENT:Failed to send, please try again"
   }
 }

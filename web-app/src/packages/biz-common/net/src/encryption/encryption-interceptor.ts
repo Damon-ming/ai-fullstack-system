@@ -83,6 +83,12 @@ export function createEncryptionInterceptors(
         return handleFormData(request, session);
       }
 
+      // GET / HEAD 等无 body 的请求：无数据可加密，直接放行
+      if (!request.method || request.method.toUpperCase() === "GET" || request.method.toUpperCase() === "HEAD") {
+        log.debug("GET/HEAD 请求跳过加密: %s", request.url);
+        return request;
+      }
+
       // JSON 请求
       const contentType = request.headers["content-type"] || "";
       if (!contentType.includes("application/json")) {

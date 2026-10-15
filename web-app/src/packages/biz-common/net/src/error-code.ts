@@ -65,6 +65,8 @@ export enum ClientErrorCode {
   CONFIG_ERR = 2,
   /** 请求被主动取消（用户操作 / AbortController） */
   CONFIG_CANCEL = 3,
+  /** 服务不可达（服务端未启动、连接被拒、DNS 失败、主机不可达） */
+  NET_UNREACHABLE = 4,
 }
 
 // ---------------------------------------------------------------------------

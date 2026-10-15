@@ -106,7 +106,13 @@ export class SseParser<T = any> {
         this.safeOnComplete();
         return { status: "complete" };
       }
-      return { status: "error", error: this.errorPayload ?? { code: ErrorCode.SYSTEM.UNKNOWN } };
+      return {
+        status: "error",
+        error: this.errorPayload ?? {
+          code: ErrorCode.SYSTEM.UNKNOWN,
+          data: { error_msg: "CLIENT:服务暂不可用，请稍后重试" },
+        },
+      };
     } finally {
       reader.releaseLock();
     }

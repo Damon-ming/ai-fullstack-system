@@ -17,7 +17,7 @@
     "sendAria": "发送消息"
   },
   "error": {
-    "streamFailed": "流式请求失败",
-    "sendFailed": "消息发送失败，请稍后重试"
+    "streamFailed": "CLIENT:流式请求失败",
+    "sendFailed": "CLIENT:消息发送失败，请稍后重试"
   }
 }
