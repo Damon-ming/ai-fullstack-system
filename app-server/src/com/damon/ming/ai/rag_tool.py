@@ -26,6 +26,7 @@ from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.tokenizer.config import TokenizerConfig
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.ai.vector_db.config import VectorStoreConfig
+from src.com.damon.ming.db import DbConfig, DbConnection
 from src.com.damon.ming.log import pin
 
 logger = pin("ai.rag")
@@ -70,10 +71,13 @@ class RAGContainer:
             profile="default"
         )
 
-        # 步骤3：初始化向量库（本地Chroma）
+        # 步骤3：初始化向量库
+        # 向量库的数据库连接由外层创建（统一走 db 模块），再注入到 store
         self.vector_config = VectorStoreConfig()
+        vector_db_conn = self._create_vector_db_connection()
         self.vector_store: BaseVectorStore = self.vector_config.create_store(
-            profile="default"
+            profile="default",
+            db_connection=vector_db_conn,
         )
 
         # 新增：轻量文本摘要器
@@ -137,6 +141,25 @@ class RAGContainer:
                 self.ingest_files(pdf_paths)
 
         logger.info("RAG 容器初始化完成")
+
+    def _create_vector_db_connection(self) -> DbConnection | None:
+        """为向量库创建数据库连接（仅 pgvector 需要，chromadb 返回 None）。
+
+        连接创建统一走 db 模块的 DbConnection，复用连接池、重试等能力。
+        """
+        config = self.vector_config.config.get("default", {})
+        if config.get("provider") != "pgvector":
+            return None
+
+        connection_string = config.get("connection_string")
+        if not connection_string:
+            raise ValueError("pgvector 配置缺少 connection_string")
+
+        db_config = DbConfig(url=connection_string)
+        db_conn = DbConnection(db_config)
+        db_conn.initialize()
+        logger.info("[RAG] 向量库 DbConnection 已初始化（pgvector）")
+        return db_conn
 
     def _index_nodes(self, all_nodes, rebuild_bm25: bool = True) -> list[str]:
         """向量入库的唯一入口；调用方应确保节点已按 file_md5 去重。"""
