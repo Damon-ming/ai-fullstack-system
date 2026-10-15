@@ -11,15 +11,20 @@
 """
 
 from src.com.damon.ming.db.db_connection import DbConnection
-from src.com.damon.ming.router.tables import create_all_tables
+from src.com.damon.ming.router.tables import create_all_tables as _create_all_tables
 
 
 def create_account_tables(db_conn: DbConnection) -> None:
-    """创建账号体系所有表 + 索引（幂等）。
+    """创建所有业务模块的表 + 索引（幂等）。
+
+    聚合调用各模块的 create_X_tables()：
+      - account:     users / devices / sessions
+      - encryption:  encryption_sessions
+      - history:     history_conversations
 
     用法：
         db_conn = DbConnection(config)
         db_conn.initialize()
         create_account_tables(db_conn)
     """
-    create_all_tables(db_conn)
+    _create_all_tables(db_conn)

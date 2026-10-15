@@ -18,3 +18,17 @@ def now() -> datetime:
 def unix_timestamp() -> int:
     """获取当前 Unix 时间戳（秒）。"""
     return int(datetime.now(UTC).timestamp())
+
+
+def iso_format(dt: datetime | None) -> str:
+    """datetime → ISO8601 字符串，None 返回空串。
+
+    统一处理 DB 时间戳的格式化，避免各处重复写
+    `dt.isoformat() if dt else ""`。
+    """
+    return dt.isoformat() if dt else ""
+
+
+def now_iso() -> str:
+    """当前时间的 ISO8601 字符串（快捷方法）。"""
+    return now().isoformat()

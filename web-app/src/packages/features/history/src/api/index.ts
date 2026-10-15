@@ -1,1 +1,6 @@
-export { historyStore } from "./history.api"
+export {
+  historyStore,
+  useHistoryListQuery,
+  useSaveHistoryMutation,
+  useRemoveHistoryMutation,
+} from "./history.api";

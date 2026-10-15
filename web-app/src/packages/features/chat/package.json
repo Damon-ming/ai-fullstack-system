@@ -12,6 +12,7 @@
     "@ming/core-log": "workspace:*",
     "@ming/store": "workspace:*",
     "@ming/feature-chat-drawer": "workspace:*",
+    "@ming/feature-chat-drawer-api": "workspace:*",
     "@ming/feature-chat-chatroom": "workspace:*",
     "@ming/feature-history-api": "workspace:*",
     "@ming/feature-search-api": "workspace:*",

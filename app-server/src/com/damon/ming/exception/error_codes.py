@@ -67,6 +67,7 @@ class Business:
     CHAT = 5  # 005 AI/Chat
     UPLOAD = 6  # 006 文件上传
     SYSTEM = 7  # 007 系统/基础设施
+    HISTORY = 8  # 008 对话历史
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +143,14 @@ class _Upload:
     IN_PROGRESS = _build(detail=2, business=Business.UPLOAD)  # 200006002
 
 
+class _History:
+    """对话历史错误 (2 00 008 xxx)"""
+
+    SAVE_FAILED = _build(detail=1, business=Business.HISTORY)  # 200008001
+    NOT_FOUND = _build(detail=2, business=Business.HISTORY)  # 200008002
+    DELETE_FAILED = _build(detail=3, business=Business.HISTORY)  # 200008003
+
+
 class _System:
     """系统/基础设施错误 (2 00 007 xxx)
 
@@ -185,6 +194,9 @@ class ErrorCode:
 
     # 文件上传
     UPLOAD = _Upload
+
+    # 对话历史
+    HISTORY = _History
 
     # 系统/基础设施
     SYSTEM = _System
@@ -258,6 +270,7 @@ _BUSINESS_NAMES: dict[int, str] = {
     Business.ACCOUNT: "account",
     Business.CHAT: "chat",
     Business.UPLOAD: "upload",
+    Business.HISTORY: "history",
     Business.SYSTEM: "system-infra",
 }
 

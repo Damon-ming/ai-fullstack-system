@@ -1,5 +1,5 @@
 // web-app/src/packages/features/chat/src/hook/ChatPageHook.ts
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useMemo } from "react";
 import { createLogger } from "@ming/core-log";
 import {
   useChatUiStore,
@@ -12,7 +12,7 @@ import {
 import { useHistory } from "@ming/feature-history-api";
 import { searchHistory } from "@ming/feature-search-api";
 import { useAccount } from "@ming/feature-account-api";
-import { useDrawerUploadHook } from "@ming/feature-chat-drawer";
+import { useDrawerUploadHook } from "@ming/feature-chat-drawer-api";
 
 const log = createLogger("chat/page");
 
@@ -22,18 +22,16 @@ export function useChatPageHook() {
   const toggleDrawer = useChatUiStore((state) => state.toggleDrawer);
   const resetSession = useChatUiStore((state) => state.resetSession);
   const setActiveHistoryId = useHistoryStore((state) => state.setActiveId);
-  const historyRevision = useHistoryStore((state) => state.revision);
   const historyLoading = useHistoryStore((state) => state.loading);
   const skipHistorySave = useHistoryStore((state) => state.skipSave);
   const finishHistoryLoad = useHistoryStore((state) => state.finishLoad);
   const clearSkipHistorySave = useHistoryStore((state) => state.clearSkipSave);
   const beginHistoryLoad = useHistoryStore((state) => state.beginLoad);
-  const notifyHistory = useHistoryStore((state) => state.notifyChanged);
   const {
     list: historyList,
     getMessages,
     saveMessages,
-  } = useHistory(historyRevision);
+  } = useHistory();
   const messages = useChatMessageStore((state) => state.messages);
   const setMessages = useChatMessageStore((state) => state.setMessages);
   const accountOpen = useAccountStore((state) => state.dialogOpen);
@@ -45,7 +43,10 @@ export function useChatPageHook() {
   const searchKeyword = useSearchStore((state) => state.keyword);
   const closeSearch = useSearchStore((state) => state.closeSearch);
   const setSearchKeyword = useSearchStore((state) => state.setKeyword);
-  const searchResults = searchHistory(searchKeyword);
+  const searchResults = useMemo(
+    () => searchHistory(historyList, searchKeyword),
+    [historyList, searchKeyword],
+  );
   const upload = useChatUploadStore((state) => state.upload);
   const closeUpload = useChatUploadStore((state) => state.closeUpload);
   const { abortUpload } = useDrawerUploadHook();
@@ -63,17 +64,14 @@ export function useChatPageHook() {
       (message) => message.role === "user",
     );
     if (firstUserMessage) {
-      const savedHistory = saveMessages(
+      saveMessages(
         firstUserMessage.text.slice(0, 40),
         messages,
       );
-      const currentHistory =
-        savedHistory ??
-        historyList.find(
-          (item) => item.title === firstUserMessage.text.slice(0, 40),
-        );
+      const currentHistory = historyList.find(
+        (item) => item.title === firstUserMessage.text.slice(0, 40),
+      );
       if (currentHistory) setActiveHistoryId(currentHistory.id);
-      notifyHistory();
     }
   }, [
     messages,
@@ -83,8 +81,8 @@ export function useChatPageHook() {
     clearSkipHistorySave,
   ]);
 
-  const loadHistory = (id: string) => {
-    const saved = getMessages(id);
+  const loadHistory = async (id: string) => {
+    const saved = await getMessages(id);
     if (saved.length) {
       beginHistoryLoad();
       setMessages(saved);

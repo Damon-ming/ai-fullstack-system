@@ -1,2 +1,2 @@
-export { getHistoryList, addHistory, removeHistory, getHistoryMessages, saveHistoryMessages } from "./api/history-api.api"
-export { useHistory } from "./api/history-api.api"
+export { useHistory, historyActions } from "./api/history-api.api"
+export type { HistoryMessage, HistoryItem } from "./api/history-api.api"

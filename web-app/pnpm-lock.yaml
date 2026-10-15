@@ -215,6 +215,9 @@ importers:
       '@ming/feature-chat-drawer':
         specifier: workspace:*
         version: link:../chat-drawer
+      '@ming/feature-chat-drawer-api':
+        specifier: workspace:*
+        version: link:../chat-drawer-api
       '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api
@@ -291,6 +294,12 @@ importers:
         specifier: ^18.0.0
         version: 18.3.1
 
+  src/packages/features/chat-drawer-api:
+    dependencies:
+      '@ming/feature-chat-drawer':
+        specifier: workspace:*
+        version: link:../chat-drawer
+
   src/packages/features/encryption:
     dependencies:
       '@ming/biz-common-net-api':
@@ -317,6 +326,12 @@ importers:
       '@ming/core-util':
         specifier: workspace:*
         version: link:../../core/util
+      '@ming/data-layer':
+        specifier: workspace:*
+        version: link:../../data-layer
+      '@tanstack/react-query':
+        specifier: ^5.0.0
+        version: 5.104.2(react@18.3.1)
       react:
         specifier: ^18.2.0
         version: 18.3.1

@@ -7,7 +7,9 @@
   },
   "dependencies": {
     "@ming/core-util": "workspace:*",
-    "@ming/core-storage": "workspace:*"
+    "@ming/core-storage": "workspace:*",
+    "@ming/data-layer": "workspace:*",
+    "@tanstack/react-query": "^5.0.0"
   },
   "peerDependencies": {
     "react": "^18.2.0"

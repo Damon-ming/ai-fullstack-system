@@ -1,0 +1,1 @@
+{"name":"@ming/feature-chat-drawer-api","version":"0.0.1","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@ming/feature-chat-drawer":"workspace:*"}}

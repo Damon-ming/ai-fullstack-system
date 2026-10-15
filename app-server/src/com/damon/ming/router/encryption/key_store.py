@@ -18,7 +18,7 @@ from src.com.damon.ming.encryption.key_store.base_key_store import (
     BaseKeyStore,
     StoredSession,
 )
-from src.com.damon.ming.router.tables import (
+from src.com.damon.ming.router.tables.encryption import (
     encryption_sessions,
 )
 
