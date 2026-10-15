@@ -47,6 +47,8 @@ async function initGlobalNetwork(): Promise<void> {
     baseURL: "",
     timeout: 15000,
     enableEncryption: !debug,
+    // 白名单：密钥交换端点无加密会话可用，必须跳过加密拦截器
+    encryptionExcludePaths: ["/api/encryption"],
     enableLogging: debug,
   });
 

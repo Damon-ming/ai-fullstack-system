@@ -117,6 +117,9 @@ class _Auth:
 
     MISSING_TOKEN = _build(detail=1, business=Business.AUTH)  # 200003001
     INVALID_TOKEN = _build(detail=2, business=Business.AUTH)  # 200003002
+    MISSING_SESSION = _build(detail=3, business=Business.AUTH)  # 200003003
+    INVALID_SESSION = _build(detail=4, business=Business.AUTH)  # 200003004
+    SESSION_TOKEN_MISMATCH = _build(detail=5, business=Business.AUTH)  # 200003005
 
 
 class _Account:

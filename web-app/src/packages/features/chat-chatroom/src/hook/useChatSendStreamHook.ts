@@ -84,19 +84,6 @@ export function useChatSendStreamHook() {
                   : msg,
               ),
             );
-          } else if (eventType === "thinking") {
-            // 思考过程分片 —— 累加到 thinking 字段，不干扰正文
-            const data = payload.data as { content: string };
-            const thinking = data.content || "";
-            if (thinking) {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
-                    ? { ...msg, thinking: (msg.thinking ?? "") + thinking }
-                    : msg,
-                ),
-              );
-            }
           } else if (eventType === "delta") {
             const data = payload.data as { content: string };
             const delta = data.content || "";

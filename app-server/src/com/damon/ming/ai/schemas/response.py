@@ -3,6 +3,7 @@
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
+from src.com.damon.ming.exception.error_codes import ErrorCode
 
 # 定义泛型，用于包裹具体的业务数据
 T = TypeVar("T")
@@ -15,14 +16,14 @@ F = TypeVar("F")
 class BaseLLMSuccessResponse(BaseModel, Generic[T]):
     """全局统一成功响应结构 (code: 100000000)"""
 
-    code: int = Field(100000000, description="业务状态码")
+    code: int = Field(ErrorCode.OK, description="业务状态码")
     data: T | None = Field(None, description="成功业务数据")
 
 
 class BaseLLMFailedResponse(BaseModel, Generic[F]):
     """全局统一失败响应结构 (code: 200000000+)"""
 
-    code: int = Field(200005002, description="业务状态码（默认 CHAT.UNKNOWN）")
+    code: int = Field(ErrorCode.CHAT.UNKNOWN, description="业务状态码（默认 CHAT.UNKNOWN）")
     data: F | None = Field(None, description="失败业务数据")
 
 
@@ -59,10 +60,10 @@ class ChatDeltaData(BaseModel):
 
 # 空结束数据
 class ChatDoneData(BaseModel):
-    # `extra="forbid"`：**禁止传入模型定义之外的字段**。
-    # 如果前端 / 传入的 json 多了任何没有在这个 Model 里定义的 key，直接抛校验异常，请求报错。
+    # `extra="ignore"`：允许传入模型定义之外的字段，静默忽略。
+    # 未来 done 事件可能携带 summary / usage 等扩展信息，避免兼容性问题。
     class Config:
-        extra = "forbid"
+        extra = "ignore"
 
 
 # SSE start 事件携带的元信息

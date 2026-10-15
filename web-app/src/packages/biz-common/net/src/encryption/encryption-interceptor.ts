@@ -9,13 +9,15 @@
  *   1. JSON: 整体签名 → 整体加密
  *   2. FormData (文件上传): 提取 meta_json → 签名 + 加密 meta → 重新组装 FormData
  *
- * 请求头（加密协议层）：
+ * 请求头（加密协议层，仅版本控制 + 加密开关）：
  *   X-Encrypt-Enabled: 1       → 服务端对响应也加密
  *   X-Encrypt-Version: v1      → 客户端加密协议版本
  *   X-Signature-Version: v1    → 客户端签名协议版本
- *   X-Signature: <hex>         → 请求签名
- *   X-Timestamp: <ms>          → 签名时间戳
- *   X-Nonce: <hex>             → 签名随机数
+ *
+ * 签名数据（timestamp/nonce/signature）的传递方式：
+ *   JSON 请求：放入 body，参与签名后整体加密（服务端从解密后的 body 读取）
+ *   FormData 请求：作为独立 form 字段（timestamp、nonce、signature），
+ *                  meta_json 加密为 meta_json_encrypted
  *
  * 加密 payload 内也携带 version 字段（防篡改，认证后验证）
  *
@@ -38,14 +40,38 @@ const log = createLogger("net/encryption");
 // 工厂函数
 // ---------------------------------------------------------------------------
 
-export function createEncryptionInterceptors(): {
+export interface EncryptionInterceptorOptions {
+  /**
+   * 加密白名单 —— 命中这些前缀的请求跳过加密/解密。
+   * 由调用方注入，拦截器本身不感知业务路径。
+   */
+  excludePaths?: string[];
+}
+
+export function createEncryptionInterceptors(
+  options: EncryptionInterceptorOptions = {},
+): {
   requestEncrypt: InterceptorConfig;
   responseDecrypt: InterceptorConfig;
 } {
+  const excludePaths = options.excludePaths ?? [];
+
+  /** 检查 URL 是否命中排除前缀 */
+  const isExcluded = (url: string | undefined): boolean => {
+    if (!url || excludePaths.length === 0) return false;
+    return excludePaths.some((prefix) => url.startsWith(prefix));
+  };
+
   // ---- 请求拦截器：签名 + 加密 ---------------------------------------
 
   const requestEncrypt: InterceptorConfig = {
     onFulfilled: async (request) => {
+      // 白名单路径：不加密，直接放行
+      if (isExcluded(request.url)) {
+        log.debug("加密白名单命中，跳过加密: %s", request.url);
+        return request;
+      }
+
       const session = await getEncryptionSession();
       if (!session) {
         log.error("加密会话不可用，请求中止");
@@ -81,6 +107,11 @@ export function createEncryptionInterceptors(): {
   const responseDecrypt: InterceptorConfig = {
     onFulfilled: async (response) => {
       if (response.headers["content-type"]?.includes("text/event-stream")) {
+        return response;
+      }
+
+      // 白名单路径：不尝试解密，直接放行
+      if (isExcluded(response.config?.url)) {
         return response;
       }
 

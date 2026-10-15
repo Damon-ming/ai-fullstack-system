@@ -39,6 +39,7 @@ export class BizHttp implements INetClient {
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
       enableEncryption = false,
+      encryptionExcludePaths,
       enableLogging = false,
       axiosConfig,
       ...restConfig
@@ -59,7 +60,9 @@ export class BizHttp implements INetClient {
 
     // 加密 + 签名拦截器：release 模式注册，debug 模式不注册
     if (enableEncryption) {
-      const encryption = createEncryptionInterceptors();
+      const encryption = createEncryptionInterceptors({
+        excludePaths: encryptionExcludePaths,
+      });
       client.addRequestInterceptor(encryption.requestEncrypt);
       client.addResponseInterceptor(encryption.responseDecrypt);
     }

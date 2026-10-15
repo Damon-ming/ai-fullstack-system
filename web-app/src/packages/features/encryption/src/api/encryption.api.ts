@@ -2,7 +2,7 @@
 /**
  * 加密密钥交换的原始 HTTP 调用。
  *
- * 使用 netClient（加密拦截器已排除 /api/encryption/v1 路径，不会递归加密）。
+ * 使用 netClient（/api/encryption 路径已加入加密白名单，不会递归加密）。
  *
  * @internal
  */

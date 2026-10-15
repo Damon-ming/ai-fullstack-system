@@ -24,6 +24,12 @@ export interface BizHttpClientConfig extends HttpClientConfig {
     | SseGlobalMessageInterceptor[];
   /** 是否启用全局请求/响应加密（默认 false） */
   enableEncryption?: boolean;
+  /**
+   * 加密白名单 —— 命中这些前缀的请求不加密（也不尝试解密响应）。
+   * 用于密钥交换、公开接口等无加密会话阶段必须调用的端点。
+   * 示例：["/api/encryption", "/api/account"]
+   */
+  encryptionExcludePaths?: string[];
   /** 是否启用全局日志拦截器（打印请求/响应详情，仅 debug 环境使用） */
   enableLogging?: boolean;
 }
