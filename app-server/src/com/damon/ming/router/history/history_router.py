@@ -2,10 +2,10 @@
 对话历史路由 —— 历史记录 CRUD + 分页。
 
 接口：
-  GET    /api/history/list        分页获取历史记录列表
-  GET    /api/history/{id}        获取单条历史记录详情（含消息正文）
-  POST   /api/history/save        保存/更新对话历史（按 title 幂等）
-  DELETE /api/history/{id}        删除单条历史记录
+  GET    /api/history/list/v1          分页获取历史记录列表
+  GET    /api/history/v1/{conversation_id}  获取单条历史记录详情（含消息正文）
+  POST   /api/history/save/v1          保存/更新对话历史（按 title 幂等）
+  DELETE /api/history/v1/{conversation_id}  删除单条历史记录
 
 所有接口从 request.state.ctx.token 获取用户身份，数据按 token 隔离。
 """

@@ -26,6 +26,7 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.tables.account import (
     DeviceRow,
     SessionRow,
+    UserRow,
     devices,
     sessions,
     users,
@@ -82,11 +83,36 @@ def is_token_valid(token: str) -> bool:
 def bind_token(phone: str, token: str) -> None:
     """绑定 phone → token 映射（幂等，ON CONFLICT 覆盖）。"""
     _db().execute(
-        "INSERT INTO users (token, phone, created_at) VALUES (%s, %s, %s) "
+        "INSERT INTO users (token, phone, name, created_at) VALUES (%s, %s, '', %s) "
         "ON CONFLICT (token) DO UPDATE SET phone = EXCLUDED.phone",
         (token, phone, now()),
         commit=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# 用户资料（token → UserRow）
+# ---------------------------------------------------------------------------
+
+
+def get_user_profile(token: str) -> UserRow | None:
+    """根据 token 查询用户资料。"""
+    with _db().engine.connect() as conn:
+        result = conn.execute(users.select().where(users.c.token == token))
+        row = result.fetchone()
+    return UserRow(**row._mapping) if row else None
+
+
+def update_user_name(token: str, name: str) -> bool:
+    """更新用户昵称。返回是否成功。"""
+    with _db().engine.connect() as conn:
+        result = conn.execute(
+            users.update()
+            .where(users.c.token == token)
+            .values(name=name)
+        )
+        conn.commit()
+    return result.rowcount > 0
 
 
 # ---------------------------------------------------------------------------

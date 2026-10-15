@@ -3,6 +3,7 @@ import { dataApi, queryFactory } from "@ming/data-layer";
 import type { DataApiResponse } from "@ming/data-layer";
 import { createLogger } from "@ming/core-log";
 import type { HistoryMessage, SaveHistoryRequest } from "./types";
+import { parseMessages, unpackDetail } from "./unpack";
 
 const log = createLogger("history/api");
 
@@ -18,35 +19,35 @@ const HISTORY_LIST_KEY = ["history", "list"] as const;
 
 async function fetchList(): Promise<DataApiResponse<unknown[]>> {
   log.debug("fetch history list");
-  return dataApi.get<unknown[]>("/api/history/list", {
+  return dataApi.get<unknown[]>("/api/history/list/v1", {
     params: { page: 1, page_size: 100 },
   });
 }
 
 async function fetchMessages(id: string): Promise<DataApiResponse<unknown>> {
   log.debug("fetch history messages", { id });
-  return dataApi.get<unknown>(`/api/history/${id}`);
+  return dataApi.get<unknown>(`/api/history/v1/${id}`);
 }
 
 async function saveToServer(
   params: SaveHistoryRequest,
 ): Promise<DataApiResponse<unknown>> {
   log.debug("save history", { title: params.title });
-  return dataApi.post<unknown>("/api/history/save", params);
+  return dataApi.post<unknown>("/api/history/save/v1", params);
 }
 
 async function addConversation(
   title: string,
 ): Promise<DataApiResponse<unknown>> {
   log.debug("add conversation", { title });
-  return dataApi.post<unknown>("/api/history/save", { title, messages: [] });
+  return dataApi.post<unknown>("/api/history/save/v1", { title, messages: [] });
 }
 
 async function removeFromServer(
   id: string,
 ): Promise<DataApiResponse<void>> {
   log.debug("remove history", { id });
-  return dataApi.delete<void>(`/api/history/${id}`);
+  return dataApi.delete<void>(`/api/history/v1/${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,11 +75,13 @@ export const useRemoveHistoryMutation = queryFactory.createMutationHook<
 
 // ---------------------------------------------------------------------------
 // 同步调用对象（非 React 上下文使用，不走缓存）
+// 内部解包 DataApiResponse，返回干净业务数据
 // ---------------------------------------------------------------------------
 
 export const historyStore = {
   list: fetchList,
-  messages: fetchMessages,
+  messages: async (id: string) =>
+    parseMessages(unpackDetail(await fetchMessages(id))?.messages),
   saveMessages: (title: string, messages: HistoryMessage[]) =>
     saveToServer({ title, messages }),
   add: addConversation,

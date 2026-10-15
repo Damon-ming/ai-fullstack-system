@@ -23,6 +23,7 @@ users = Table(
     metadata,
     Column("token", String(64), primary_key=True),
     Column("phone", String(32), nullable=False, unique=True),
+    Column("name", String(64), nullable=False, server_default=""),
     Column("created_at", nullable=False, server_default=_NOW),
 )
 
@@ -31,6 +32,7 @@ users = Table(
 class UserRow:
     token: str
     phone: str
+    name: str = ""
     created_at: datetime | None = None
 
 

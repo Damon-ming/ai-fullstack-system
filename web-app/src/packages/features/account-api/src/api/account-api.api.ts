@@ -7,4 +7,7 @@ export { useAccount } from "@ming/feature-account";
 export type { AccountProfile } from "@ming/feature-account";
 
 // ---- Token 编排（来自 hook 层） ----
-export { initDeviceToken, refreshDeviceToken } from "@ming/feature-account";
+export {
+  initDeviceToken,
+  refreshDeviceToken,
+} from "@ming/feature-account";

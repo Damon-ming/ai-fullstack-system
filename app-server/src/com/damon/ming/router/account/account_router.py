@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/router/account/account_router.py
 """
-Account 路由 —— 用户 Token 签发
+Account 路由 —— 用户登录 / Token 签发 / 资料管理
 
 职责：
   - 为客户端签发身份 token（绑定手机号，模拟阶段用随机 phone）
@@ -8,12 +8,17 @@ Account 路由 —— 用户 Token 签发
   - 创建 session_id（token + device_id 的唯一会话标识）
   - 同一手机号再次请求返回已有 token（幂等）
   - 同一 (token, device_id) 组合复用同一 session_id
+  - 用户资料读取与修改（昵称）
 
 TODO: 后期接入真实手机号 + 验证码校验
 
 用法：
-  POST /api/account/token/v1  body: { "phone": "+8613800138000" }
+  POST /api/account/login/v1     body: { "phone": "+8613800138000" }
     → { "token": "xxx", "device_id": "dev_sha256abc...", "session_id": "uuid..." }
+  GET  /api/account/profile/v1
+    → { "name": "Murphy" }
+  POST /api/account/profile/v1   body: { "name": "NewName" }
+    → { "name": "NewName" }
 """
 
 import secrets
@@ -27,6 +32,7 @@ from src.com.damon.ming.middleware.ua_fingerprint import (
     compute_ua_hash,
 )
 from src.com.damon.ming.router.account.schemas.bean import (
+    ProfileResponseData,
     TokenRequest,
     TokenResponseData,
 )
@@ -35,7 +41,10 @@ from src.com.damon.ming.router.account.token_store import (
     create_session,
     get_active_session,
     get_token_by_phone,
+    get_user_profile,
+    is_token_valid,
     register_device,
+    update_user_name,
 )
 from src.com.damon.ming.schemas.response import BaseSuccessResponse
 
@@ -44,10 +53,10 @@ logger = pin("account.router")
 router = APIRouter(prefix="/api/account", tags=["账号体系"])
 
 
-@router.post("/token/v1", response_model=BaseSuccessResponse[TokenResponseData])
-async def generate_token(body: TokenRequest, request: Request):
+@router.post("/login/v1", response_model=BaseSuccessResponse[TokenResponseData])
+async def login(body: TokenRequest, request: Request):
     """
-    签发用户 Token。
+    登录 —— 签发用户 Token。
 
     流程：
       1. 解析 X-Client-UA header → 计算 device_id
@@ -122,6 +131,55 @@ async def generate_token(body: TokenRequest, request: Request):
             device_id=device_id,
             session_id=session_id,
         ),
+    )
+
+
+@router.get("/profile/v1", response_model=BaseSuccessResponse[ProfileResponseData])
+async def get_profile(request: Request):
+    """
+    获取当前用户资料。
+
+    从请求上下文提取 token → 查询用户昵称。
+    公开路径，但需要有效的 token（通过 Cookie / Authorization Bearer 传递）。
+    """
+    ctx = request.state.ctx
+    if not ctx.token or not is_token_valid(ctx.token):
+        return BaseSuccessResponse(
+            code=ErrorCode.AUTH_INVALID_TOKEN,
+            data=ProfileResponseData(name=""),
+        )
+
+    user = get_user_profile(ctx.token)
+    name = user.name if user else ""
+
+    return BaseSuccessResponse(
+        code=ErrorCode.OK,
+        data=ProfileResponseData(name=name),
+    )
+
+
+@router.post("/profile/v1", response_model=BaseSuccessResponse[ProfileResponseData])
+async def update_profile(body: ProfileResponseData, request: Request):
+    """
+    更新当前用户昵称。
+
+    从请求上下文提取 token → 更新 users 表 name 字段。
+    """
+    ctx = request.state.ctx
+    if not ctx.token or not is_token_valid(ctx.token):
+        return BaseSuccessResponse(
+            code=ErrorCode.AUTH_INVALID_TOKEN,
+            data=ProfileResponseData(name=""),
+        )
+
+    name = body.name.strip()[:64]
+    update_user_name(ctx.token, name)
+
+    logger.info("用户资料已更新 | token_prefix=%s name=%s", ctx.token[:8] + "...", name)
+
+    return BaseSuccessResponse(
+        code=ErrorCode.OK,
+        data=ProfileResponseData(name=name),
     )
 
 

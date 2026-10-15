@@ -6,10 +6,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@ming/biz-common-net-api": "workspace:*",
     "@ming/biz-common-storage": "workspace:*",
     "@ming/core-log": "workspace:*",
-    "@ming/core-storage": "workspace:*"
+    "@ming/data-layer": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.2.0"

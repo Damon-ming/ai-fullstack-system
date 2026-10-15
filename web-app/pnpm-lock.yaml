@@ -173,18 +173,15 @@ importers:
 
   src/packages/features/account:
     dependencies:
-      '@ming/biz-common-net-api':
-        specifier: workspace:*
-        version: link:../../biz-common/net-api
       '@ming/biz-common-storage':
         specifier: workspace:*
         version: link:../../biz-common/storage
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
-      '@ming/core-storage':
+      '@ming/data-layer':
         specifier: workspace:*
-        version: link:../../core/storage
+        version: link:../../data-layer
       react:
         specifier: ^18.2.0
         version: 18.3.1

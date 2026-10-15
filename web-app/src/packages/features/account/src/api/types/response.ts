@@ -12,3 +12,8 @@ export interface DeviceTokenResponse {
   /** token + device_id 组合的会话标识（加密绑定粒度） */
   session_id: string
 }
+
+export interface ProfileResponse {
+  /** 用户昵称 */
+  name: string
+}
