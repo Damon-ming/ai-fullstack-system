@@ -5,10 +5,98 @@ import ReactMarkdown from "react-markdown";
 import { useChatMessageStateHook } from "../hook/useChatMessageStateHook";
 import { useChatSendStreamHook } from "../hook/useChatSendStreamHook";
 import { useTranslation } from "@ming/i18n";
+import type { ChatMessage } from "@ming/store/biz/chat-state";
+
+/**
+ * 单条消息内容渲染 —— 替代原嵌套三元，用早期返回扁平化分支。
+ * - 占位消息（"正在思考中..."）：展示脉冲动画
+ * - 助手正文：可选 reasoning 面板 + 正文 Markdown
+ * - 用户消息：纯文本
+ */
+function MessageBody({
+  message,
+  setMessages,
+}: Readonly<{
+  message: ChatMessage;
+  setMessages: (
+    updater: ChatMessage[] | ((messages: ChatMessage[]) => ChatMessage[]),
+  ) => void;
+}>) {
+  const { t } = useTranslation("chat-chatroom");
+
+  // 分支 1：流式占位 —— 服务端尚未返回正文
+  if (message.text === t("reasoning")) {
+    return (
+      <span aria-label={t("reasoningAria")}>
+        {t("reasoning")}
+        <span className="inline-flex min-w-[1.2em] animate-pulse">
+          ...
+        </span>
+      </span>
+    );
+  }
+
+  // 分支 2：助手消息 —— 可选 reasoning 折叠面板 + 正文
+  if (message.role === "assistant") {
+    return (
+      <>
+        {message.reasoning && (
+          <div className="mb-1.5 rounded-lg bg-gray-50 border border-gray-100">
+            <button
+              type="button"
+              onClick={() =>
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === message.id
+                      ? { ...m, reasoningCollapsed: !m.reasoningCollapsed }
+                      : m,
+                  ),
+                )
+              }
+              className="flex w-full items-center gap-1.5 px-3 py-2 text-sm text-gray-500 select-none cursor-pointer"
+            >
+              <span
+                className={`inline-block transition-transform duration-150 text-xs ${
+                  message.reasoningCollapsed ? "" : "rotate-90"
+                }`}
+              >
+                ▶
+              </span>
+              <span className="font-medium">
+                {message.isReasoning
+                  ? t("reasoning")
+                  : t("reasoningProcess")}
+              </span>
+              {message.isReasoning && (
+                <span className="inline-flex min-w-[1.2em] animate-pulse text-gray-400">
+                  ...
+                </span>
+              )}
+            </button>
+            {!message.reasoningCollapsed && (
+              <div className="px-3 pb-2 text-sm text-gray-400 leading-relaxed">
+                <ReactMarkdown>{message.reasoning}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="text-gray-800">
+          <ReactMarkdown>{message.text}</ReactMarkdown>
+        </div>
+      </>
+    );
+  }
+
+  // 分支 3：用户消息 —— 纯文本
+  return (
+    <span className="whitespace-pre-wrap">{message.text}</span>
+  );
+}
 
 export const ChatChatroom: React.FC = () => {
   const { t } = useTranslation("chat-chatroom");
-  const { input, setInput, sending, messages } = useChatMessageStateHook();
+  const { input, setInput, sending, messages, reason, setReason } =
+    useChatMessageStateHook();
   const { sendStream, abortStream } = useChatSendStreamHook();
   const send = sendStream;
 
@@ -117,36 +205,11 @@ export const ChatChatroom: React.FC = () => {
                       : "bg-white text-gray-800 border border-gray-100 shadow-sm"
                   }`}
                 >
-                  {message.text === t("thinking") ? (
-                    <span aria-label={t("thinkingAria")}>
-                      {t("thinking")}
-                      <span className="inline-flex min-w-[1.2em] animate-pulse">
-                        ...
-                      </span>
-                    </span>
-                  ) : message.role === "assistant" ? (
-                    <>
-                      {message.thinking && (
-                        <details className="mb-1.5 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500 border border-gray-100">
-                          <summary className="cursor-pointer select-none font-medium">
-                            {t("thinkingProcess")}
-                          </summary>
-                          <div className="mt-2">
-                            <ReactMarkdown>{message.thinking}</ReactMarkdown>
-                          </div>
-                        </details>
-                      )}
-                      <ReactMarkdown>{message.text}</ReactMarkdown>
-                    </>
-                  ) : (
-                    <span className="whitespace-pre-wrap">
-                      {message.text}
-                    </span>
-                  )}
+                  <MessageBody message={message} setMessages={setMessages} />
                 </div>
                 {/* 助手消息元信息 */}
                 {message.role === "assistant" &&
-                  message.text !== t("thinking") &&
+                  message.text !== t("reasoning") &&
                   message.msgId && (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-400">
                       {message.model && (
@@ -207,6 +270,22 @@ export const ChatChatroom: React.FC = () => {
         }`}
       >
         <div className="w-full max-w-[560px]">
+          {/* 深度思考开关 */}
+          <div className="mb-2 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setReason(!reason)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                reasoning
+                  ? "bg-purple-100 text-purple-700 ring-1 ring-purple-300"
+                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              }`}
+              title={t("reasonToggle")}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${reason ? "bg-purple-500" : "bg-gray-400"}`} />
+              {t("reasonToggle")}
+            </button>
+          </div>
           <div className="flex items-end gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-lg transition-all focus-within:border-blue-400 focus-within:shadow-xl">
             <textarea
               ref={composerInputRef}

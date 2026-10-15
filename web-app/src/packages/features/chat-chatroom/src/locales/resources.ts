@@ -1,7 +1,8 @@
 export interface ChatChatroomResources {
-  thinking: string;
-  thinkingAria: string;
-  thinkingProcess: string;
+  reasoning: string;
+  reasoningAria: string;
+  reasoningProcess: string;
+  reasonToggle: string;
   copy: string;
   copied: string;
   scrollToBottom: string;

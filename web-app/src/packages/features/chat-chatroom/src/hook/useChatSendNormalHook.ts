@@ -48,13 +48,13 @@ export function useChatSendNormalHook() {
     setMessages((items) => [
       ...items,
       { id: userMsgId, text: query, role: "user" },
-      { id: assistantMsgId, text: t("thinking"), role: "assistant" },
+      { id: assistantMsgId, text: t("reasoning"), role: "assistant" },
     ]);
     setInput("");
     setSending(true);
 
     try {
-      const req: ChatRoomRequest = { query, think: false };
+      const req: ChatRoomRequest = { query, reason: false };
       const res = await sendChatRoomMessageFn(req, controller.signal);
       log.debug("sendNormal succeeded");
       const result = res.data?.data;

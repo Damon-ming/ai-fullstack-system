@@ -15,6 +15,8 @@ export function useChatSendStreamHook() {
   const setMessages = useChatMessageStore((s) => s.setMessages);
   const sending = useChatMessageStore((s) => s.sending);
   const setSending = useChatMessageStore((s) => s.setSending);
+  const reason = useChatMessageStore((s) => s.reason);
+  const setReason = useChatMessageStore((s) => s.setReason);
 
   /** 当前进行中的 SSE 请求控制器，用于主动取消 */
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -41,7 +43,7 @@ export function useChatSendStreamHook() {
     setMessages((items) => [
       ...items,
       { id: userMsgId, text: query, role: "user" },
-      { id: assistantMsgId, text: t("thinking"), role: "assistant" },
+      { id: assistantMsgId, text: t("reasoning"), role: "assistant" },
     ]);
     setInput("");
     setSending(true);
@@ -55,7 +57,7 @@ export function useChatSendStreamHook() {
     let streamFinished = false;
 
     try {
-      const req: ChatRoomRequest = { query, think: false };
+      const req: ChatRoomRequest = { query, reason };
 
       await streamChatRoomMessage(req, {
         // meta.event 来自 SSE 协议 event: 字段，payload 是解析后的 data JSON
@@ -84,6 +86,23 @@ export function useChatSendStreamHook() {
                   : msg,
               ),
             );
+          } else if (eventType === "reasoning") {
+            // 推理过程分片 —— 累加到 reasoning 字段，不干扰正文
+            const data = payload.data as { content: string };
+            const reasoning = data.content || "";
+            if (reasoning) {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId
+                    ? {
+                        ...msg,
+                        reasoning: (msg.reasoning ?? "") + reasoning,
+                        isReasoning: true,
+                      }
+                    : msg,
+                ),
+              );
+            }
           } else if (eventType === "delta") {
             const data = payload.data as { content: string };
             const delta = data.content || "";
@@ -91,9 +110,12 @@ export function useChatSendStreamHook() {
             if (firstChunk) {
               if (delta) {
                 firstChunk = false;
+                // 正文开始输出 → 自动折叠 reasoning 区域
                 setMessages((prev) =>
                   prev.map((msg) =>
-                    msg.id === assistantMsgId ? { ...msg, text: delta } : msg,
+                    msg.id === assistantMsgId
+                      ? { ...msg, text: delta, isReasoning: false, reasoningCollapsed: true }
+                      : msg,
                   ),
                 );
               }
@@ -155,5 +177,5 @@ export function useChatSendStreamHook() {
     }
   };
 
-  return { sendStream, abortStream };
+  return { sendStream, abortStream, reason, setReason };
 }

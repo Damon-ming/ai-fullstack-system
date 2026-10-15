@@ -6,7 +6,10 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from openai import AsyncOpenAI
-from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
+from src.com.damon.ming.ai.inference.base_inference import (
+    BaseInferenceService,
+    StreamToken,
+)
 from src.com.damon.ming.log import pin
 
 logger = pin("VLLMInference")
@@ -39,7 +42,7 @@ class VLLMInference(BaseInferenceService):
         self,
         model_name: str,
         messages: list[dict[str, str]],
-        think_flag: bool = False,
+        reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
     ) -> str:
@@ -73,8 +76,8 @@ class VLLMInference(BaseInferenceService):
             fallback_dict = {
                 "answer_content": f"系统调用失败: {err_msg}",
             }
-            if think_flag:
-                fallback_dict["thinking_process"] = ""
+            if reason:
+                fallback_dict["reasoning_process"] = ""
             return json.dumps(fallback_dict, ensure_ascii=False)
         return json.dumps({"error": err_msg})
 
@@ -82,8 +85,9 @@ class VLLMInference(BaseInferenceService):
         self,
         model_name: str,
         messages: list[dict[str, str]],
+        reason: bool = False,
         options: dict[str, Any] | None = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[StreamToken, None]:
         run_opts = self.default_options.copy()
         if options:
             run_opts.update(options)
@@ -91,9 +95,14 @@ class VLLMInference(BaseInferenceService):
             model=model_name, messages=messages, stream=True, **run_opts
         )
         async for chunk in stream:
-            content = chunk.choices[0].delta.content
+            delta = chunk.choices[0].delta
+            # 部分 reasoning 模型通过 reasoning_content 返回推理过程
+            reasoning = getattr(delta, "reasoning_content", None)
+            if reasoning:
+                yield StreamToken(content=reasoning, type="reasoning")
+            content = delta.content
             if content:
-                yield content
+                yield StreamToken(content=content, type="content")
 
     async def check_model_ready(self, model_name: str) -> bool:
         try:

@@ -1,7 +1,24 @@
 # app-server/src/com/damon/ming/ai/inference/base_inference.py
+"""
+推理服务统一抽象，Ollama/VLLM/第三方大模型统一接口。
+
+流式输出使用 StreamToken 区分推理过程与正文：
+  StreamToken(type="reasoning", content="...")  —— 推理过程
+  StreamToken(type="content",   content="...")  —— 正文回答
+"""
+
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass
+class StreamToken:
+    """流式输出的带标签 token —— 区分 reasoning 与 content。"""
+
+    content: str
+    type: str = "content"  # "reasoning" | "content"
 
 
 class BaseInferenceService(ABC):
@@ -12,7 +29,7 @@ class BaseInferenceService(ABC):
         self,
         model_name: str,
         messages: list[dict[str, str]],
-        think_flag: bool = False,
+        reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
     ) -> str:
@@ -23,9 +40,10 @@ class BaseInferenceService(ABC):
         self,
         model_name: str,
         messages: list[dict[str, str]],
+        reason: bool = False,
         options: dict[str, Any] | None = None,
-    ) -> AsyncGenerator[str, None]:
-        """流式SSE输出"""
+    ) -> AsyncGenerator[StreamToken, None]:
+        """流式SSE输出 —— 产出 StreamToken 区分 reasoning / content"""
 
     @abstractmethod
     async def check_model_ready(self, model_name: str) -> bool:

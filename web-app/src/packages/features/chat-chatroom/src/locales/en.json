@@ -1,7 +1,8 @@
 {
-  "thinking": "Thinking",
-  "thinkingAria": "Thinking",
-  "thinkingProcess": "Thinking process",
+  "reasoning": "Thinking deeply",
+  "reasoningAria": "Thinking deeply",
+  "reasoningProcess": "Reasoning process",
+  "reasonToggle": "Deep Reasoning",
   "copy": "Copy",
   "copied": "Copied",
   "scrollToBottom": "Scroll to bottom",

@@ -1,7 +1,8 @@
 {
-  "thinking": "正在思考中",
-  "thinkingAria": "正在思考中",
-  "thinkingProcess": "思考过程",
+  "reasoning": "正在深度思考中",
+  "reasoningAria": "正在深度思考中",
+  "reasoningProcess": "推理过程",
+  "reasonToggle": "深度推理",
   "copy": "复制",
   "copied": "已复制",
   "scrollToBottom": "滚动到底部",

@@ -53,9 +53,9 @@ SYSTEM_PROMPT_TPL = """
 @router.post("/send/v1")
 async def chat(req: Request, body: ChatRequest):
     logger.info(
-        "同步聊天请求开始 | query_length=%s | think=%s",
+        "同步聊天请求开始 | query_length=%s | reason=%s",
         len(body.query),
-        body.think,
+        body.reason,
     )
 
     try:
@@ -68,7 +68,7 @@ async def chat(req: Request, body: ChatRequest):
                     req.app.state.rag_app.query_rag(body.query)
                 )
 
-                schema = get_chat_schema(body.think)
+                schema = get_chat_schema(body.reason)
 
                 # 2. 填充固定Prompt，构造标准messages数组
                 system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
@@ -80,7 +80,7 @@ async def chat(req: Request, body: ChatRequest):
                 llm_raw = await req.app.state.infer_service.text_generation(
                     model_name=req.app.state.llm_model_name,
                     messages=prompt_messages,
-                    think_flag=body.think,
+                    reason=body.reason,
                     response_schema=schema,
                 )
 
@@ -158,11 +158,19 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
                         async for token in req.app.state.infer_service.stream_generate(
                             model_name=req.app.state.llm_model_name,
                             messages=prompt_messages,
+                            reason=body.reason,
                         ):
-                            # ── delta 事件（增量分片） ──
+                            # 根据 token 类型发射不同事件：
+                            #   reasoning → event: "reasoning"（推理过程）
+                            #   content   → event: "delta"（正文回答）
+                            event_name = (
+                                "reasoning" if token.type == "reasoning" else "delta"
+                            )
                             yield emitter.emit(
-                                "delta",
-                                SseMessageFactory.delta(ChatDeltaData(content=token)),
+                                event_name,
+                                SseMessageFactory.delta(
+                                    ChatDeltaData(content=token.content)
+                                ),
                             )
                     except asyncio.CancelledError:
                         logger.warning("SSE客户端主动断开连接，取消推理任务")
@@ -188,5 +196,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
         logger.exception("流式聊天请求失败")
         yield emitter.emit(
             "error",
-            SseMessageFactory.error(ErrorCode.CHAT.UNKNOWN, BaseLLMFailedData(error_msg=str(e))),
+            SseMessageFactory.error(
+                ErrorCode.CHAT.UNKNOWN, BaseLLMFailedData(error_msg=str(e))
+            ),
         )

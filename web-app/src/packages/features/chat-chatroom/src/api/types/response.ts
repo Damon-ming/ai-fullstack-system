@@ -2,7 +2,7 @@ import type { DataApiResponse } from "@ming/data-layer";
 /** 后端 LLM 实际返回内容 */
 export interface ChatRoomResult {
   answer_content: string;
-  thinking_process?: string;
+  reasoning_process?: string;
 }
 /** 后端 data 层：data 字段包裹 LLM 返回值（与 BaseLLMSuccessData 结构对齐） */
 export interface ChatRoomSyncData {
@@ -14,9 +14,9 @@ export type ChatRoomApiResponse = DataApiResponse<ChatRoomSyncData>;
  * SSE 事件类型 —— 由 SSE 协议外层 event: 字段决定，
  * 不再嵌入 JSON payload（后端 StreamMessage 已去掉 event 字段）
  * - delta:    回答内容分片
- * - thinking: 思考过程分片（think=true 时）
+ * - reasoning: 推理过程分片（reasoning=true 时）
  */
-export type SseEvent = "start" | "delta" | "thinking" | "done" | "error";
+export type SseEvent = "start" | "delta" | "reasoning" | "done" | "error";
 
 /** SSE start 事件携带的元信息（对应后端 ChatStartData / StartMetadata） */
 export interface ChatStartData {
@@ -30,7 +30,7 @@ export interface ChatStartData {
 /**
  * 增量分片数据 —— 统一用 content 承载文本
  * event: delta   → 回答内容
- * event: thinking → 思考过程
+ * event: reasoning → 推理过程
  */
 export interface ChatDeltaData {
   content: string;

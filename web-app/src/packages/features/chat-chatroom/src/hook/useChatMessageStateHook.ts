@@ -8,6 +8,8 @@ export function useChatMessageStateHook() {
   const setMessages = useChatMessageStore((s) => s.setMessages);
   const sending = useChatMessageStore((s) => s.sending);
   const setSending = useChatMessageStore((s) => s.setSending);
+  const reason = useChatMessageStore((s) => s.reason);
+  const setReason = useChatMessageStore((s) => s.setReason);
 
-  return { input, setInput, messages, setMessages, sending, setSending };
+  return { input, setInput, messages, setMessages, sending, setSending, reason, setReason };
 }

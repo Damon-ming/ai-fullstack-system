@@ -5,7 +5,10 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import ollama
-from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
+from src.com.damon.ming.ai.inference.base_inference import (
+    BaseInferenceService,
+    StreamToken,
+)
 from src.com.damon.ming.log import pin
 
 logger = pin("OllamaInference")
@@ -36,14 +39,21 @@ class OllamaInference(BaseInferenceService):
         self,
         model_name: str,
         messages: list[dict[str, str]],
-        think_flag: bool = False,
+        reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
     ) -> str:
         run_opts = self.default_options.copy()
         if options:
             run_opts.update(options)
-        ollama_kwargs = {"model": model_name, "messages": messages, "options": run_opts}
+        # Ollama 原生 thinking 模式
+        if reason:
+            run_opts["think"] = True
+        ollama_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": messages,
+            "options": run_opts,
+        }
         if response_schema is not None:
             ollama_kwargs["format"] = response_schema
         ollama_kwargs["stream"] = True
@@ -53,14 +63,29 @@ class OllamaInference(BaseInferenceService):
             stream = None
             try:
                 stream = await self.client.chat(**ollama_kwargs)
-                buf = []
+                thinking_parts: list[str] = []
+                content_parts: list[str] = []
                 async for chunk in stream:
-                    content = chunk["message"].get("content", "")
+                    msg = chunk.get("message", {})
+                    thinking = msg.get("thinking", "")
+                    if thinking:
+                        thinking_parts.append(thinking)
+                    content = msg.get("content", "")
                     if content:
-                        buf.append(content)
-                full_content = "".join(buf)
+                        content_parts.append(content)
                 await stream.close()
-                return full_content
+                # reasoning 模式下拼接为结构化 JSON（reasoning_process + answer_content）
+                if reason and thinking_parts:
+                    thinking_text = "".join(thinking_parts)
+                    answer_text = "".join(content_parts)
+                    return json.dumps(
+                        {
+                            "reasoning_process": thinking_text,
+                            "answer_content": answer_text,
+                        },
+                        ensure_ascii=False,
+                    )
+                return "".join(content_parts)
             except asyncio.CancelledError:
                 logger.warning("text_generation 任务被取消，关闭ollama流")
                 if stream is not None:
@@ -76,11 +101,11 @@ class OllamaInference(BaseInferenceService):
         logger.error(f"Ollama推理全部重试失败: {err_msg}")
         # 结构化兜底返回
         if response_schema is not None:
-            fallback_dict = {
+            fallback_dict: dict[str, Any] = {
                 "answer_content": f"系统调用失败: {err_msg}",
             }
-            if think_flag:
-                fallback_dict["thinking_process"] = ""
+            if reason:
+                fallback_dict["reasoning_process"] = ""
             return json.dumps(fallback_dict, ensure_ascii=False)
         return json.dumps({"error": err_msg})
 
@@ -88,24 +113,32 @@ class OllamaInference(BaseInferenceService):
         self,
         model_name: str,
         messages: list[dict[str, str]],
+        reason: bool = False,
         options: dict[str, Any] | None = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[StreamToken, None]:
         run_opts = self.default_options.copy()
         if options:
             run_opts.update(options)
+        # Ollama 原生 reasoning 模式（qwen3、deepseek-r1 等支持）
+        if reason:
+            run_opts["think"] = True
         stream = await self.client.chat(
             model=model_name,
             messages=messages,
             options=run_opts,
             stream=True,
-            # 用于控制模型在内存中保持加载状态的时间
-            keep_alive="30m",
+            keep_alive="30m",  # 控制模型在内存中保持加载状态的时间
         )
         try:
             async for chunk in stream:
-                content = chunk["message"].get("content", "")
+                msg = chunk.get("message", {})
+                # reasoning 模式下 Ollama 先返回 thinking 字段，再返回 content
+                thinking = msg.get("thinking", "")
+                if thinking:
+                    yield StreamToken(content=thinking, type="reasoning")
+                content = msg.get("content", "")
                 if content:
-                    yield content
+                    yield StreamToken(content=content, type="content")
         except asyncio.CancelledError:
             logger.warning("Ollama stream 收到取消信号，关闭ollama流")
             # 主动关闭流，终止ollama服务端生成
