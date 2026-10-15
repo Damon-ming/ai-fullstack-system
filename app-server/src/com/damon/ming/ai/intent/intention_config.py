@@ -1,13 +1,15 @@
 # app-server/src/com/damon/ming/ai/intent/intention_config.py
 import os
+
 import yaml
-from typing import Optional
-from src.com.damon.ming.ai.intent.intention_factory import IntentionFactory
 from src.com.damon.ming.ai.intent.base_intention import BaseIntentionClassifier
+from src.com.damon.ming.ai.intent.intention_factory import IntentionFactory
+
 
 class IntentionConfig:
     """意图识别配置加载，风格与SummarizerConfig统一"""
-    def __init__(self, config_path: Optional[str] = None):
+
+    def __init__(self, config_path: str | None = None):
         if config_path is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "intention-config.yaml")

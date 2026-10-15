@@ -23,7 +23,9 @@ class BaseLLMSuccessResponse(BaseModel, Generic[T]):
 class BaseLLMFailedResponse(BaseModel, Generic[F]):
     """全局统一失败响应结构 (code: 200000000+)"""
 
-    code: int = Field(ErrorCode.CHAT.UNKNOWN, description="业务状态码（默认 CHAT.UNKNOWN）")
+    code: int = Field(
+        ErrorCode.CHAT.UNKNOWN, description="业务状态码（默认 CHAT.UNKNOWN）"
+    )
     data: F | None = Field(None, description="失败业务数据")
 
 

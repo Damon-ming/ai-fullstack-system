@@ -1,9 +1,11 @@
 # app-server/src/com/damon/ming/ai/embedding/ollama.py
-from typing import List
-import time
 import hashlib
-from src.com.damon.ming.log import pin
+import time
+from typing import List
+
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
+from src.com.damon.ming.log import pin
+
 
 class OllamaEmbedding(BaseEmbeddingService):
     """

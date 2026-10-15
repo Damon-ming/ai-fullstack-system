@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+
 class BaseEmbeddingService(ABC):
     """Embedding 服务抽象基类"""
     

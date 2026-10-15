@@ -1,13 +1,15 @@
 # app-server/src/com/damon/ming/ai/rerank/config.py
 import os
+
 import yaml
-from typing import Optional
-from src.com.damon.ming.ai.rerank.factory import RerankerFactory
 from src.com.damon.ming.ai.rerank.base_reranker import BaseReranker
+from src.com.damon.ming.ai.rerank.factory import RerankerFactory
+
 
 class RerankerConfig:
     """重排器配置加载，与Embedding/VectorStore/Tokenizer/Summarizer风格统一"""
-    def __init__(self, config_path: Optional[str] = None):
+
+    def __init__(self, config_path: str | None = None):
         if config_path is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "rerank-config.yaml")

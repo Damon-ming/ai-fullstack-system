@@ -1,14 +1,15 @@
 # app-server/src/com/damon/ming/ai/intent/base_intention.py
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 
 class BaseIntentionClassifier(ABC):
     @abstractmethod
     def classify(
         self,
         query: str,
-        intention_list: List[str],
-        extra_instruction: Optional[str] = None
+        intention_list: list[str],
+        extra_instruction: str | None = None,
     ) -> str:
         """
         用户query意图识别
@@ -17,9 +18,7 @@ class BaseIntentionClassifier(ABC):
         :param extra_instruction: 额外业务约束指令
         :return: 识别出的意图名称（严格返回intention_list内的值）
         """
-        pass
 
     @abstractmethod
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """监控、日志使用"""
-        pass

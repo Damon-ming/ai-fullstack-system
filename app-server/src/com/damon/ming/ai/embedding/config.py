@@ -1,8 +1,10 @@
 # app-server/src/com/damon/ming/ai/embedding/config.py
 import os
-import yaml
 from typing import Optional
+
+import yaml
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
+
 
 class EmbeddingConfig:
     """从配置文件加载 embedding 配置"""

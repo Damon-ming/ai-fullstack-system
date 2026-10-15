@@ -1,14 +1,16 @@
 # app-server/src/com/damon/ming/ai/rewrite/rewrite_config.py
 
 import os
+
 import yaml
-from typing import Optional
-from src.com.damon.ming.ai.rewrite.rewrite_factory import RewriteFactory
 from src.com.damon.ming.ai.rewrite.base_rewriter import BaseQueryRewriter
+from src.com.damon.ming.ai.rewrite.rewrite_factory import RewriteFactory
+
 
 class RewriteConfig:
     """Query改写配置，风格与SummarizerConfig/IntentionConfig完全统一"""
-    def __init__(self, config_path: Optional[str] = None):
+
+    def __init__(self, config_path: str | None = None):
         if config_path is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "rewrite-config.yaml")
@@ -33,4 +35,3 @@ class RewriteConfig:
 
         kwargs = {k: v for k, v in cfg.items() if k != "provider"}
         return RewriteFactory.create(provider=cfg["provider"], **kwargs)
-

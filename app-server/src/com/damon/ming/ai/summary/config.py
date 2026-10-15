@@ -1,13 +1,15 @@
 # app-server/src/com/damon/ming/ai/summary/config.py
 import os
+
 import yaml
-from typing import Optional
-from src.com.damon.ming.ai.summary.summarizer_factory import SummarizerFactory
 from src.com.damon.ming.ai.summary.base_summarizer import BaseSummarizer
+from src.com.damon.ming.ai.summary.summarizer_factory import SummarizerFactory
+
 
 class SummarizerConfig:
     """摘要器配置加载，与EmbeddingConfig/VectorStoreConfig/TokenizerConfig风格统一"""
-    def __init__(self, config_path: Optional[str] = None):
+
+    def __init__(self, config_path: str | None = None):
         if config_path is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "summary-config.yaml")

@@ -1,9 +1,10 @@
 # app-server/src/com/damon/ming/ai/rerank/cross_encoder_reranker.py
-from typing import List, Optional
+
 import torch
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.log import pin
 from src.com.damon.ming.ai.rerank.base_reranker import BaseReranker
+from src.com.damon.ming.log import pin
+
 
 class CrossEncoderModel:
     """
@@ -11,14 +12,16 @@ class CrossEncoderModel:
     只实现：query + 文本列表 → 相似度分数列表
     不感知业务框架、TextNode，可独立复用
     """
+
     def __init__(
         self,
         model_name: str,
-        device: str = None,
+        device: str | None = None,
         max_seq_len: int = 512,
-        batch_size: int = 16
+        batch_size: int = 16,
     ):
-        from transformers import AutoTokenizer, AutoModelForSequenceClassification
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
         self.logger = pin("CrossEncoderModel")
 
         if device is None:
@@ -28,20 +31,22 @@ class CrossEncoderModel:
         self.max_seq_len = max_seq_len
         self.batch_size = batch_size
 
-        self.logger.info(f"加载Rerank模型: {model_name}, device={self.device}, max_seq_len={max_seq_len}")
+        self.logger.info(
+            f"加载Rerank模型: {model_name}, device={self.device}, max_seq_len={max_seq_len}"
+        )
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
         self.model.to(self.device)
         self.model.eval()
 
-    def score_pairs(self, query: str, texts: List[str]) -> List[float]:
+    def score_pairs(self, query: str, texts: list[str]) -> list[float]:
         if not texts:
             return []
 
         all_scores = []
         # 分批推理，避免OOM
         for start in range(0, len(texts), self.batch_size):
-            batch_texts = texts[start:start + self.batch_size]
+            batch_texts = texts[start : start + self.batch_size]
             pairs = [[query, text] for text in batch_texts]
 
             inputs = self.tokenizer(
@@ -49,7 +54,7 @@ class CrossEncoderModel:
                 padding=True,
                 truncation=True,
                 max_length=self.max_seq_len,
-                return_tensors="pt"
+                return_tensors="pt",
             ).to(self.device)
 
             with torch.no_grad():
@@ -64,27 +69,25 @@ class CrossEncoderReranker(BaseReranker):
     CrossEncoder 重排适配器
     实现BaseReranker抽象接口，适配整套RAG框架
     """
+
     def __init__(
         self,
         model_name: str,
-        device: str = None,
+        device: str | None = None,
         max_seq_len: int = 512,
-        batch_size: int = 16
+        batch_size: int = 16,
     ):
         self.logger = pin("CrossEncoderReranker")
         self.model = CrossEncoderModel(
             model_name=model_name,
             device=device,
             max_seq_len=max_seq_len,
-            batch_size=batch_size
+            batch_size=batch_size,
         )
 
     def rerank(
-        self,
-        query: str,
-        nodes: List[TextNode],
-        top_k: Optional[int] = None
-    ) -> List[TextNode]:
+        self, query: str, nodes: list[TextNode], top_k: int | None = None
+    ) -> list[TextNode]:
         if not nodes:
             return []
 

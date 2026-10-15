@@ -1,18 +1,13 @@
 # app-server/src/com/damon/ming/ai/inference/config.py
 import os
-import yaml
-from typing import Optional
-from .factory import InferenceFactory
-from .base_inference import BaseInferenceService
 
-import os
 import yaml
-from typing import Optional
-from src.com.damon.ming.ai.inference.factory import InferenceFactory
 from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
+from src.com.damon.ming.ai.inference.factory import InferenceFactory
+
 
 class InferenceConfig:
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         if config_path is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "inference-config.yaml")
