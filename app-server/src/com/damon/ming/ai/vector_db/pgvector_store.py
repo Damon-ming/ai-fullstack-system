@@ -1,68 +1,70 @@
 # app-server/src/com/damon/ming/ai/vector_db/pgvector_store.py
 import json
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.log import pin
 
-if TYPE_CHECKING:
-    from src.com.damon.ming.db import DbConnection
-
 
 class PGVectorStore(BaseVectorStore):
     """
-    PGVector (PostgreSQL + pgvector) 向量存储实现。
+    PGVector (PostgreSQL + pgvector) 向量存储实现
 
-    通过共享的 DbConnection（SQLAlchemy 连接池）操作数据库，
-    复用连接池、重试、健康检查等能力。
-
-    需要 PostgreSQL 12+ 且安装 pgvector 扩展。
+    需要 PostgreSQL 12+ 且安装 pgvector 扩展
     """
 
     def __init__(
         self,
-        db_connection: "DbConnection",
+        connection_string: str,
         table_name: str = "documents",
         embedding_dimension: int = 768,
         **kwargs,
     ):
+        try:
+            import psycopg2
+            from psycopg2.extras import Json
+        except ImportError:
+            raise ImportError("请安装 psycopg2: pip install psycopg2-binary")
+
         self.logger = pin("PGVectorStore")
-        self.db = db_connection
+        self.connection_string = connection_string
         self.table_name = table_name
         self.embedding_dimension = embedding_dimension
+        self._json = Json
+
+        # 连接数据库
+        self.conn = psycopg2.connect(connection_string)
         self._init_table()
 
     def _init_table(self):
         """初始化表结构和索引"""
         try:
-            # 启用 pgvector 扩展
-            self.db.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            with self.conn.cursor() as cur:
+                # 启用 pgvector 扩展
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
-            # 创建表
-            self.db.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {self.table_name} (
-                    id VARCHAR(64) PRIMARY KEY,
-                    text TEXT NOT NULL,
-                    embedding VECTOR({self.embedding_dimension}),
-                    metadata JSONB,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
-                """
-            )
+                # 创建表
+                cur.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {self.table_name} (
+                        id VARCHAR(64) PRIMARY KEY,
+                        text TEXT NOT NULL,
+                        embedding VECTOR({self.embedding_dimension}),
+                        metadata JSONB,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                """)
 
-            # 创建 HNSW 索引（加速检索）
-            self.db.execute(
-                f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.table_name}_embedding
-                ON {self.table_name}
-                USING hnsw (embedding vector_cosine_ops);
-                """
-            )
+                # 创建 HNSW 索引（加速检索）
+                cur.execute(f"""
+                    CREATE INDEX IF NOT EXISTS idx_{self.table_name}_embedding 
+                    ON {self.table_name} 
+                    USING hnsw (embedding vector_cosine_ops);
+                """)
 
-            self.logger.info(f"[PGVectorStore] 表初始化成功: {self.table_name}")
+                self.conn.commit()
+                self.logger.info(f"[PGVectorStore] 表初始化成功: {self.table_name}")
         except Exception as e:
             self.logger.error(f"[PGVectorStore] 初始化失败: {e}")
             raise
@@ -73,28 +75,35 @@ class PGVectorStore(BaseVectorStore):
             return []
 
         ids = []
-        for node in nodes:
-            node_id = node.node_id or str(uuid.uuid4())
-            ids.append(node_id)
+        try:
+            with self.conn.cursor() as cur:
+                for node in nodes:
+                    node_id = node.node_id or str(uuid.uuid4())
+                    ids.append(node_id)
 
-            # 将向量转为 PostgreSQL vector 格式
-            embedding_str = f"[{','.join(str(x) for x in node.embedding)}]"
+                    # 将向量转为 PostgreSQL vector 格式
+                    embedding_str = f"[{','.join(str(x) for x in node.embedding)}]"
 
-            self.db.execute(
-                f"""
-                INSERT INTO {self.table_name}
-                (id, text, embedding, metadata)
-                VALUES (%s, %s, CAST(%s AS vector), %s::jsonb)
-                ON CONFLICT (id) DO UPDATE SET
-                    text = EXCLUDED.text,
-                    embedding = EXCLUDED.embedding,
-                    metadata = EXCLUDED.metadata
-                """,
-                (node_id, node.text, embedding_str, json.dumps(node.metadata)),
-            )
+                    cur.execute(
+                        f"""
+                        INSERT INTO {self.table_name} 
+                        (id, text, embedding, metadata)
+                        VALUES (%s, %s, %s::vector, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            text = EXCLUDED.text,
+                            embedding = EXCLUDED.embedding,
+                            metadata = EXCLUDED.metadata
+                        """,
+                        (node_id, node.text, embedding_str, json.dumps(node.metadata)),
+                    )
 
-        self.logger.info(f"[PGVectorStore] 添加 {len(nodes)} 个文档成功")
-        return ids
+                self.conn.commit()
+                self.logger.info(f"[PGVectorStore] 添加 {len(nodes)} 个文档成功")
+                return ids
+        except Exception as e:
+            self.conn.rollback()
+            self.logger.error(f"[PGVectorStore] 添加文档失败: {e}")
+            raise
 
     def similarity_search_by_vector(
         self,
@@ -107,44 +116,37 @@ class PGVectorStore(BaseVectorStore):
         try:
             embedding_str = f"[{','.join(str(x) for x in query_vector)}]"
 
+            # 构建 WHERE 条件
+            where_clause = ""
             if metadata_filter:
-                # 使用 JSONB 包含操作符 @>，参数化避免 SQL 注入
-                rows = self.db.execute(
+                conditions = []
+                for key, value in metadata_filter.items():
+                    conditions.append(f"metadata->>'{key}' = '{value}'")
+                where_clause = f"WHERE {' AND '.join(conditions)}"
+
+            with self.conn.cursor() as cur:
+                cur.execute(
                     f"""
-                    SELECT id, text, metadata,
-                           1 - (embedding <=> CAST(%s AS vector)) AS similarity
+                    SELECT id, text, metadata, 
+                           1 - (embedding <=> %s::vector) AS similarity
                     FROM {self.table_name}
-                    WHERE metadata @> %s::jsonb
-                    ORDER BY embedding <=> CAST(%s AS vector)
-                    LIMIT %s
-                    """,
-                    (embedding_str, json.dumps(metadata_filter), embedding_str, k),
-                    commit=False,
-                    fetch=True,
-                )
-            else:
-                rows = self.db.execute(
-                    f"""
-                    SELECT id, text, metadata,
-                           1 - (embedding <=> CAST(%s AS vector)) AS similarity
-                    FROM {self.table_name}
-                    ORDER BY embedding <=> CAST(%s AS vector)
+                    {where_clause}
+                    ORDER BY embedding <=> %s::vector
                     LIMIT %s
                     """,
                     (embedding_str, embedding_str, k),
-                    commit=False,
-                    fetch=True,
                 )
 
-            nodes = []
-            if rows:
-                for row in rows:
+                results = cur.fetchall()
+
+                nodes = []
+                for row in results:
                     node = TextNode(id_=row[0], text=row[1], metadata=row[2])
-                    node.metadata["_score"] = row[3]
+                    node.metadata["_score"] = row[3]  # 相似度分数
                     nodes.append(node)
 
-            self.logger.info(f"[PGVectorStore] 检索到 {len(nodes)} 个结果")
-            return nodes
+                self.logger.info(f"[PGVectorStore] 检索到 {len(nodes)} 个结果")
+                return nodes
         except Exception as e:
             self.logger.error(f"[PGVectorStore] 检索失败: {e}")
             return []
@@ -158,30 +160,33 @@ class PGVectorStore(BaseVectorStore):
     def delete(self, node_ids: list[str], **kwargs) -> bool:
         """删除文档"""
         try:
-            placeholders = ",".join(["%s"] * len(node_ids))
-            self.db.execute(
-                f"DELETE FROM {self.table_name} WHERE id IN ({placeholders})",
-                tuple(node_ids),
-            )
-            self.logger.info(f"[PGVectorStore] 删除 {len(node_ids)} 个文档成功")
-            return True
+            with self.conn.cursor() as cur:
+                # 构建 IN 条件
+                placeholders = ",".join(["%s"] * len(node_ids))
+                cur.execute(
+                    f"DELETE FROM {self.table_name} WHERE id IN ({placeholders})",
+                    node_ids,
+                )
+                self.conn.commit()
+                self.logger.info(f"[PGVectorStore] 删除 {len(node_ids)} 个文档成功")
+                return True
         except Exception as e:
+            self.conn.rollback()
             self.logger.error(f"[PGVectorStore] 删除失败: {e}")
             return False
 
     def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
         """根据 ID 获取文档"""
         try:
-            rows = self.db.execute(
-                f"SELECT id, text, metadata FROM {self.table_name} WHERE id = %s",
-                (node_id,),
-                commit=False,
-                fetch=True,
-            )
-            if rows:
-                row = rows[0]
-                return TextNode(id_=row[0], text=row[1], metadata=row[2])
-            return None
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT id, text, metadata FROM {self.table_name} WHERE id = %s",
+                    (node_id,),
+                )
+                row = cur.fetchone()
+                if row:
+                    return TextNode(id_=row[0], text=row[1], metadata=row[2])
+                return None
         except Exception as e:
             self.logger.error(f"[PGVectorStore] 获取文档失败: {e}")
             return None
@@ -191,17 +196,21 @@ class PGVectorStore(BaseVectorStore):
     ) -> list[TextNode]:
         """根据元数据查询"""
         try:
-            rows = self.db.execute(
-                f"SELECT id, text, metadata FROM {self.table_name} WHERE metadata @> %s::jsonb",
-                (json.dumps(metadata_filter),),
-                commit=False,
-                fetch=True,
-            )
-            nodes = []
-            if rows:
-                for row in rows:
+            conditions = []
+            for key, value in metadata_filter.items():
+                conditions.append(f"metadata->>'{key}' = '{value}'")
+            where_clause = " AND ".join(conditions)
+
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT id, text, metadata FROM {self.table_name} WHERE {where_clause}"
+                )
+                results = cur.fetchall()
+
+                nodes = []
+                for row in results:
                     nodes.append(TextNode(id_=row[0], text=row[1], metadata=row[2]))
-            return nodes
+                return nodes
         except Exception as e:
             self.logger.error(f"[PGVectorStore] 元数据查询失败: {e}")
             return []
@@ -209,12 +218,9 @@ class PGVectorStore(BaseVectorStore):
     def count(self, **kwargs) -> int:
         """获取文档总数"""
         try:
-            rows = self.db.execute(
-                f"SELECT COUNT(*) FROM {self.table_name}",
-                commit=False,
-                fetch=True,
-            )
-            return rows[0][0] if rows else 0
+            with self.conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
+                return cur.fetchone()[0]
         except Exception as e:
             self.logger.error(f"[PGVectorStore] 获取总数失败: {e}")
             return 0
@@ -222,10 +228,13 @@ class PGVectorStore(BaseVectorStore):
     def clear(self, **kwargs) -> bool:
         """清空所有文档"""
         try:
-            self.db.execute(f"DELETE FROM {self.table_name}")
-            self.logger.info("[PGVectorStore] 清空成功")
-            return True
+            with self.conn.cursor() as cur:
+                cur.execute(f"DELETE FROM {self.table_name}")
+                self.conn.commit()
+                self.logger.info("[PGVectorStore] 清空成功")
+                return True
         except Exception as e:
+            self.conn.rollback()
             self.logger.error(f"[PGVectorStore] 清空失败: {e}")
             return False
 
@@ -244,7 +253,3 @@ class PGVectorStore(BaseVectorStore):
                 "table_name": self.table_name,
                 "error": str(e),
             }
-
-    def close(self):
-        """关闭底层数据库连接池。"""
-        self.db.close()

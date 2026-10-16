@@ -7,7 +7,7 @@ vector_store:
     persist_directory: ./chroma_data
     embedding_dimension: 1024
   
-  # 生产环境使用 PGVector（connection_string 由 VectorStoreConfig 转换为共享 db 模块的 DbConnection）
+  # 生产环境使用 PGVector
   production:
     provider: pgvector
     connection_string: postgresql://user:pass@localhost:5432/rag_db
