@@ -2,7 +2,7 @@
 # Embedding 配置 —— 由 EmbeddingConfigLoader 读取，注入 embedding 模块。
 # embedding 模块本身不包含任何配置文件，纯参数化调用。
 #
-# 上层调用方必须显式指定引擎名：EmbeddingConfigLoader().load("ollama")
+# 上层调用方通过 EmbeddingConfigLoader().load_all() 全量加载后按名字引用
 # 引擎名称与实现类的映射在 embedding/__init__.py 中通过 @register_engine 维护。
 #
 # 可选引擎：
@@ -21,5 +21,9 @@ embedding_engines:
   # huggingface:
   #   params:
   #     model_name: BAAI/bge-m3
+  #     base_url: ""
+  #     timeout: 0
+  #     max_retries: 0
   #     device: cpu
   #     normalize_embeddings: true
+  #     cache_folder: ""

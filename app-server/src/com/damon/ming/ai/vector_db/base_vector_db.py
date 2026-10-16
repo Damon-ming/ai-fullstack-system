@@ -30,32 +30,18 @@ from llama_index.core.schema import TextNode
 
 @dataclass(frozen=True)
 class VectorStoreParams:
-    """
-    向量存储连接参数（纯数据类）。
+    """向量存储连接参数（纯数据类）。
 
     所有参数由上层配置传入，vector_db 模块内不含任何 YAML/环境变量读取逻辑。
-    切换 vector_db 实现时，只需构造不同的 Params 子类或调整字段。
-
-    通用字段（所有实现共享）：
-      embedding_dimension: 向量维度
-
-    ChromaDB 特有字段：
-      collection_name: collection 名称
-      persist_directory: 本地持久化目录（PersistentClient 模式）
-      host / port: 远程服务地址（HttpClient 模式，同时非空则启用）
-
-    PGVector 特有字段（预留）：
-      connection_string: PostgreSQL 连接串
-      table_name: 表名
-      pool_min_conn / pool_max_conn: 连接池配置
+    关键决策参数无默认值，必须在 YAML 中显式声明。
     """
 
-    # ---- 通用 ----
-    embedding_dimension: int = 1024
+    # ---- 通用（必填）----
+    embedding_dimension: int
 
     # ---- ChromaDB ----
-    collection_name: str = "rag_collection"
-    persist_directory: str = "./chroma_data"
+    collection_name: str
+    persist_directory: str
     host: str = ""
     port: int = 0
 

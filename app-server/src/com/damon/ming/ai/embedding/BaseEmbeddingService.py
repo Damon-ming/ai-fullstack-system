@@ -23,36 +23,15 @@ from typing import Any
 
 @dataclass(frozen=True)
 class EmbeddingParams:
-    """
-    Embedding 参数（纯数据类）。
+    """Embedding 参数（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
-    通用字段：
-      model_name: 模型名称
-      timeout: 请求超时秒数
-
-    Ollama 特有：
-      base_url: Ollama 服务地址
-      max_retries: 重试次数
-
-    HuggingFace 特有：
-      device: 推理设备（cpu / cuda）
-      normalize_embeddings: 是否归一化
-      cache_folder: 模型缓存目录
-    """
-
-    model_name: str = "bge-m3"
-    timeout: int = 60
-
-    # Ollama
-    base_url: str = "http://localhost:11434"
-    max_retries: int = 3
-
-    # HuggingFace
-    device: str = "cpu"
-    normalize_embeddings: bool = True
-    cache_folder: str = ""
-
-    # 扩展
+    model_name: str
+    base_url: str
+    timeout: int
+    max_retries: int
+    device: str
+    normalize_embeddings: bool
+    cache_folder: str
     extra: dict[str, Any] = field(default_factory=dict)
 
 

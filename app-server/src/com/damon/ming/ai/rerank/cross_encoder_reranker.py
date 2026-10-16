@@ -2,7 +2,11 @@
 
 import torch
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.rerank.base_reranker import BaseReranker
+from src.com.damon.ming.ai.rerank import register_reranker
+from src.com.damon.ming.ai.rerank.base_reranker import (
+    BaseReranker,
+    RerankerParams,
+)
 from src.com.damon.ming.log import pin
 
 
@@ -13,29 +17,26 @@ class CrossEncoderModel:
     不感知业务框架、TextNode，可独立复用
     """
 
-    def __init__(
-        self,
-        model_name: str,
-        device: str | None = None,
-        max_seq_len: int = 512,
-        batch_size: int = 16,
-    ):
+    def __init__(self, params: RerankerParams):
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         self.logger = pin("CrossEncoderModel")
 
+        device = params.device
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.logger.info(f"device: {device}")
         self.device = torch.device(device)
-        self.max_seq_len = max_seq_len
-        self.batch_size = batch_size
+        self.max_seq_len = params.max_seq_len
+        self.batch_size = params.batch_size
 
         self.logger.info(
-            f"加载Rerank模型: {model_name}, device={self.device}, max_seq_len={max_seq_len}"
+            f"加载Rerank模型: {params.model_name}, device={self.device}, max_seq_len={params.max_seq_len}"
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(params.model_name)
+        self.model = AutoModelForSequenceClassification.from_pretrained(
+            params.model_name
+        )
         self.model.to(self.device)
         self.model.eval()
 
@@ -64,26 +65,17 @@ class CrossEncoderModel:
         return all_scores
 
 
+@register_reranker("cross_encoder")
 class CrossEncoderReranker(BaseReranker):
     """
     CrossEncoder 重排适配器
     实现BaseReranker抽象接口，适配整套RAG框架
     """
 
-    def __init__(
-        self,
-        model_name: str,
-        device: str | None = None,
-        max_seq_len: int = 512,
-        batch_size: int = 16,
-    ):
+    def __init__(self, params: RerankerParams):
+        super().__init__(params)
         self.logger = pin("CrossEncoderReranker")
-        self.model = CrossEncoderModel(
-            model_name=model_name,
-            device=device,
-            max_seq_len=max_seq_len,
-            batch_size=batch_size,
-        )
+        self.model = CrossEncoderModel(params=params)
 
     def rerank(
         self, query: str, nodes: list[TextNode], top_k: int | None = None

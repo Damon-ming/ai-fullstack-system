@@ -4,13 +4,16 @@ import threading
 from pathlib import Path
 
 from src.com.damon.ming.ai.config.embedding_config_loader import EmbeddingConfigLoader
+from src.com.damon.ming.ai.config.rerank_config_loader import RerankerConfigLoader
 from src.com.damon.ming.ai.config.tokenizer_config_loader import TokenizerConfigLoader
 from src.com.damon.ming.ai.config.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
+from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.registry.summary_registry import register_all_summarizers
-from src.com.damon.ming.ai.rerank.config import RerankerConfig
+from src.com.damon.ming.ai.registry.tokenizer_registry import register_all_tokenizers
+from src.com.damon.ming.ai.rerank.base_reranker import BaseReranker
 from src.com.damon.ming.ai.retriever.base_retriever import (
     DenseRetriever,
     SparseRetriever,
@@ -49,16 +52,25 @@ class RAGContainer:
         # 步骤1：执行所有模块注册
         register_all_summarizers()
         register_all_rerankers()
+        register_all_tokenizers()
+        register_all_embeddings()
 
         # 全局缓存全部分块节点，避免每次上传全量解析PDF
         self.all_nodes = []
 
-        self.tokenizer: BaseTokenizer = TokenizerConfigLoader().load("llm_counter")
+        # 步骤1.5：全量加载所有分词器（启动时一次性加载，避免响应延迟）
+        _tokenizers = TokenizerConfigLoader().load_all()
+        self.tokenizer: BaseTokenizer = _tokenizers["llm_counter"]
         # BM25 词语分词器（中文关键词检索）
-        self.word_tokenizer = TokenizerConfigLoader().load("bm25_searcher")
+        self.word_tokenizer = _tokenizers["bm25_searcher"]
+        # 所有分词器实例，外部按名字直接引用
+        self.tokenizers = _tokenizers
 
-        # 步骤2：加载配置，初始化Embedding
-        self.embedder: BaseEmbeddingService = EmbeddingConfigLoader().load("ollama")
+        # 步骤2：全量加载所有 embedding（启动时一次性加载，避免响应延迟）
+        _embedders = EmbeddingConfigLoader().load_all()
+        self.embedder: BaseEmbeddingService = _embedders["ollama"]
+        # 所有 embedding 实例，外部按名字直接引用
+        self.embedders = _embedders
 
         # 步骤3：初始化向量库
         self.vector_store: BaseVectorStore = VectorConfigLoader().load("chroma")
@@ -74,9 +86,9 @@ class RAGContainer:
             tokenizer=self.tokenizer, summarizer=self.summarizer
         )
 
-        # 步骤5：初始化重排器 cross-encoder
-        self.rerank_config = RerankerConfig()
-        self.reranker = self.rerank_config.create_reranker(profile="default")
+        # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）
+        self.rerankers: dict[str, BaseReranker] = RerankerConfigLoader().load_all()
+        self.reranker: BaseReranker = self.rerankers["zh_primary"]
 
         # 步骤6：初始化稠密检索器
         self.dense_retriever = DenseRetriever(
@@ -197,7 +209,12 @@ class RAGContainer:
             )
         return {"indexed": accepted, "skipped": skipped}
 
-    def query_rag(self, query: str, top_k: int = 5, max_context_tokens: int = 4096):
+    def query_rag(
+        self,
+        query: str,
+        top_k: int = 5,
+        max_context_tokens: int = 4096,
+    ):
         logger.info("RAG 检索开始 | query_length=%s | top_k=%s", len(query), top_k)
         # 1. 混合稠密+稀疏召回
         raw_nodes = self.hybrid_retriever.retrieve(

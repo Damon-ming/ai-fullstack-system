@@ -21,7 +21,8 @@ tokenizers:
   # BM25 中文词语切分（用于关键词检索）
   bm25_searcher:
     tokenizer_engine: jieba
-    params: {}
+    params:
+      encoding_name: none
 
   # 备用 GPT-3.5 编码（与 GPT-4 的 cl100k 不同）
   # gpt35_counter:

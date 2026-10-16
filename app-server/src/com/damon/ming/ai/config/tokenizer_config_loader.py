@@ -5,12 +5,13 @@
 本模块属于 ai/config/ 配置层，不属于 tokenizer/ 模块。
 tokenizer/ 模块通过 TokenizerParams 数据类接收参数，不感知配置来源。
 
-支持多个分词器实例同时存在（如 token ID 级 + 词语级），各组件按需选用。
+启动时通过 load_all() 一次性加载全部配置实例，避免懒加载导致的响应延迟。
 
 用法：
   loader = TokenizerConfigLoader()
-  tokenizer = loader.load("llm_counter")         # Token ID 级
-  bm25_tokenizer = loader.load("bm25_searcher")   # 词语级
+  tokenizers = loader.load_all()                # dict[str, BaseTokenizer]
+  tokenizers["llm_counter"].count_tokens(...)
+  tokenizers["bm25_searcher"].tokenize(...)
 """
 
 import os
@@ -23,7 +24,7 @@ from src.com.damon.ming.ai.tokenizer.base_tokenizer import TokenizerParams
 class TokenizerConfigLoader:
     """从 YAML 文件加载分词器配置，返回 BaseTokenizer / BaseWordTokenizer 实例。
 
-    同名分词器缓存复用，避免重复加载（如 jieba 词典只加载一次）。
+    启动时全量加载，所有分词器在服务启动阶段初始化完毕。
     """
 
     _cache: dict[str, object] = {}
@@ -34,11 +35,24 @@ class TokenizerConfigLoader:
             config_path = os.path.join(base_dir, "tokenizer-config.yaml")
         self._config_path = config_path
 
+    def load_all(self) -> dict[str, object]:
+        """一次性加载 YAML 中所有配置的分词器实例。
+
+        Returns:
+            dict[配置名, BaseTokenizer / BaseWordTokenizer 实例]
+        """
+        if self._cache:
+            return self._cache
+
+        for name in self._list_names():
+            self._cache[name] = self._build_one(name)
+        return self._cache
+
     def load(self, name: str):
-        """加载指定名称的分词器配置，同名返回缓存实例。
+        """加载指定名称的分词器，未缓存则构建。
 
         Args:
-            name: tokenizers 下的键名，如 "llm_counter" / "bm25_searcher"
+            name: tokenizers 下的键名
 
         Returns:
             BaseTokenizer 或 BaseWordTokenizer 实例
@@ -46,6 +60,22 @@ class TokenizerConfigLoader:
         if name in self._cache:
             return self._cache[name]
 
+        instance = self._build_one(name)
+        self._cache[name] = instance
+        return instance
+
+    # ---- 私有 -------------------------------------------------------------
+
+    def _list_names(self) -> list[str]:
+        if not os.path.exists(self._config_path):
+            raise FileNotFoundError(f"分词器配置文件不存在: {self._config_path}")
+        with open(self._config_path, "r", encoding="utf-8") as f:
+            raw_cfg = yaml.safe_load(f)
+        if raw_cfg is None or "tokenizers" not in raw_cfg:
+            raise ValueError("配置文件格式错误：缺少 'tokenizers' 根节点")
+        return list(raw_cfg["tokenizers"].keys())
+
+    def _build_one(self, name: str):
         raw = self._read_yaml(name)
         params_raw = raw.get("params", {})
 
@@ -59,11 +89,7 @@ class TokenizerConfigLoader:
             raise ValueError("配置缺少 tokenizer_engine 字段")
         tokenizer_class = resolve_tokenizer(engine)
 
-        instance = tokenizer_class(params)
-        self._cache[name] = instance
-        return instance
-
-    # ---- 私有 -------------------------------------------------------------
+        return tokenizer_class(params)
 
     def _read_yaml(self, name: str) -> dict:
         if not os.path.exists(self._config_path):

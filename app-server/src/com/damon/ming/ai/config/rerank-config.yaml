@@ -1,0 +1,55 @@
+# 重排器配置 —— 支持多个命名实例并存，上层按业务逻辑路由选择
+#
+# 工业场景典型用法：
+#   1. 多语言分区：中文走 bge-reranker-v2-gemma，英文走 bge-reranker-v2-mini
+#   2. 领域特化：法律/医疗/金融各一个微调 rerank 模型
+#   3. AB 实验：同时部署两个模型按用户分流
+#   4. 级联：轻量模型先粗排，重量级再精排
+#   5. 主备降级：主力 GPU 模型 + CPU 轻量 fallback
+#
+# 上层通过 RerankerConfigLoader().load("<name>") 获取指定实例。
+rerankers:
+  # ── 主力模型（中文场景）────────────────────────────
+  zh_primary:
+    rerank_engine: cross_encoder
+    params:
+      model_name: ./models/bge-reranker-v2-gemma
+      batch_size: 16
+      max_seq_len: 384
+      device: null
+
+  # ── 轻量模型（降级 / 高并发场景）────────────────────
+  zh_light:
+    rerank_engine: cross_encoder
+    params:
+      model_name: ./models/bge-reranker-v2-m3
+      batch_size: 32
+      max_seq_len: 256
+      device: null
+
+  # ── CPU fallback（GPU 不可用）─────────────────────
+  cpu_fallback:
+    rerank_engine: cross_encoder
+    params:
+      model_name: ./models/bge-reranker-v2-m3
+      batch_size: 8
+      max_seq_len: 256
+      device: cpu
+
+  # ── 英文模型（多语言场景示例）──────────────────────
+  # en_primary:
+  #   rerank_engine: cross_encoder
+  #   params:
+  #     model_name: ./models/bge-reranker-v2-mini
+  #     batch_size: 16
+  #     max_seq_len: 512
+  #     device: null
+
+  # ── 领域特化（法律场景示例）──────────────────────
+  # legal_specialized:
+  #   rerank_engine: cross_encoder
+  #   params:
+  #     model_name: ./models/legal-reranker-v1
+  #     batch_size: 8
+  #     max_seq_len: 512
+  #     device: null

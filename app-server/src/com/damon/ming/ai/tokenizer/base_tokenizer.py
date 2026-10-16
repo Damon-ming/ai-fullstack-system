@@ -25,17 +25,9 @@ from typing import Any
 
 @dataclass(frozen=True)
 class TokenizerParams:
-    """
-    分词器参数（纯数据类）。
+    """分词器参数（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
-    通用字段：
-      encoding_name: 编码名称（tiktoken 用）
-
-    扩展字段：
-      extra: 各引擎特有参数透传
-    """
-
-    encoding_name: str = "cl100k_base"
+    encoding_name: str
     extra: dict[str, Any] = field(default_factory=dict)
 
 
