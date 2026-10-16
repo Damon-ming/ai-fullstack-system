@@ -3,10 +3,16 @@
 import threading
 from pathlib import Path
 
-from src.com.damon.ming.ai.config.embedding_config_loader import EmbeddingConfigLoader
-from src.com.damon.ming.ai.config.rerank_config_loader import RerankerConfigLoader
-from src.com.damon.ming.ai.config.tokenizer_config_loader import TokenizerConfigLoader
-from src.com.damon.ming.ai.config.vector_config_loader import VectorConfigLoader
+from src.com.damon.ming.ai.config.embedding.embedding_config_loader import (
+    EmbeddingConfigLoader,
+)
+from src.com.damon.ming.ai.config.rerank.rerank_config_loader import (
+    RerankerConfigLoader,
+)
+from src.com.damon.ming.ai.config.tokenizer.tokenizer_config_loader import (
+    TokenizerConfigLoader,
+)
+from src.com.damon.ming.ai.config.vector.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
