@@ -1,7 +1,7 @@
 # app-server/src/com/damon/ming/ai/constructor/constructor.py
 
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.summary import BaseSummarizer
+from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.log import pin
@@ -9,16 +9,40 @@ from src.com.damon.ming.log import pin
 logger = pin("SectionReconstructor")
 
 
+SUMMARY_PROMPT_TEMPLATE = """你是文本摘要助手，精简下面文档内容，保留全部关键数据、结论、条款，不要冗余描述。
+摘要控制在{max_tokens}token以内，直接输出摘要，不要多余解释：
+文档内容：
+{content}
+"""
+
+
 class SectionReconstructor:
     def __init__(
-        self, tokenizer: BaseTokenizer, summarizer: BaseSummarizer | None = None
+        self,
+        tokenizer: BaseTokenizer,
+        inference: BaseInferenceService | None = None,
+        summary_model: str = "",
+        summary_options: dict | None = None,
     ):
         self.tokenizer = tokenizer
-        self.summarizer = summarizer
+        self.inference = inference
+        self.summary_model = summary_model
+        self.summary_options = summary_options or {}
         # 单个章节的摘要触发阈值（token数）
         self.section_summary_threshold = 1000
         # 摘要生成的目标长度
         self.summary_max_tokens = 1200
+
+    async def _run_summary(self, text: str, max_tokens: int) -> str:
+        """调用推理引擎执行摘要压缩。"""
+        prompt = SUMMARY_PROMPT_TEMPLATE.format(max_tokens=max_tokens, content=text)
+        opts = {"temperature": 0.1, "num_predict": max_tokens}
+        opts.update(self.summary_options)
+        return await self.inference.text_generation(
+            model_name=self.summary_model,
+            messages=[{"role": "user", "content": prompt}],
+            options=opts,
+        )
 
     def debug_memory_reconstruct(
         self, chunks: list[TextNode], section_id: str
@@ -71,7 +95,7 @@ class SectionReconstructor:
             return text
         return self.tokenizer.decode(tokens[:max_tokens])
 
-    def reconstruct_sections_to_text(
+    async def reconstruct_sections_to_text(
         self,
         vector_store: BaseVectorStore,
         hit_nodes: list[TextNode],
@@ -172,15 +196,15 @@ class SectionReconstructor:
 
             # 检查是否需要摘要
             token_cnt = self.tokenizer.count_tokens(full_section)
-            if token_cnt > self.section_summary_threshold and self.summarizer:
+            if token_cnt > self.section_summary_threshold and self.inference:
                 logger.info(
                     f"需要summary | tokens={token_cnt} | threshold={self.section_summary_threshold}"
                 )
                 logger.info(
                     f"before:\n{full_section[:500]}..."
                 )  # 只打印前500字符，避免日志太大
-                compressed_text = self.summarizer.summarize(
-                    text=full_section, max_summary_tokens=self.summary_max_tokens
+                compressed_text = await self._run_summary(
+                    text=full_section, max_tokens=self.summary_max_tokens
                 )
                 logger.info(f"after:\n{compressed_text[:500]}...")
                 contexts.append(compressed_text)
@@ -189,7 +213,7 @@ class SectionReconstructor:
 
         return contexts
 
-    def reconstruct_sections_to_nodes(
+    async def reconstruct_sections_to_nodes(
         self,
         vector_store: BaseVectorStore,
         hit_nodes: list[TextNode],
@@ -220,13 +244,13 @@ class SectionReconstructor:
         # 2、对合并后的章节，超长执行summary
         for node in full_nodes:
             token_cnt = self.tokenizer.count_tokens(node.text)
-            if token_cnt > self.section_summary_threshold and self.summarizer:
+            if token_cnt > self.section_summary_threshold and self.inference:
                 logger.info(
                     f"需要summary | tokens={token_cnt} | threshold={self.section_summary_threshold}"
                 )
                 logger.info(f"before:\n{node.text[:500]}...")
-                compressed_text = self.summarizer.summarize(
-                    text=node.text, max_summary_tokens=self.summary_max_tokens
+                compressed_text = await self._run_summary(
+                    text=node.text, max_tokens=self.summary_max_tokens
                 )
                 logger.info(f"after:\n{compressed_text[:500]}...")
                 node.text = compressed_text
@@ -262,7 +286,7 @@ class SectionReconstructor:
             result_nodes.append(merged_node)
         return result_nodes
 
-    def merge_nodes_to_single_text(
+    async def merge_nodes_to_single_text(
         self,
         nodes: list[TextNode],
         max_context_tokens: int,
@@ -297,18 +321,20 @@ class SectionReconstructor:
         if total_tokens <= max_context_tokens:
             return full_text
 
-        # 超限：有摘要器则全局摘要；没有就硬截断
-        if self.summarizer is not None:
+        # 超限：有推理引擎则全局摘要；没有就硬截断
+        if self.inference is not None:
             logger.info(
                 f"全局触发summary，总tokens={total_tokens}，压缩到 {max_context_tokens}"
             )
             logger.info(f"global summary before: {full_text[:600]}...")
-            compressed = self.summarizer.summarize(
-                text=full_text, max_summary_tokens=max_context_tokens
+            compressed = await self._run_summary(
+                text=full_text, max_tokens=max_context_tokens
             )
             logger.info(f"global summary after: {compressed[:600]}...")
             return compressed
         else:
-            # 无摘要器兜底：按token截断
-            logger.warning("merge_nodes_to_single_text 无summarizer，执行硬token截断")
+            # 无推理引擎兜底：按token截断
+            logger.warning(
+                "merge_nodes_to_single_text 无inference引擎，执行硬token截断"
+            )
             return self.truncate_by_token(full_text, max_context_tokens)

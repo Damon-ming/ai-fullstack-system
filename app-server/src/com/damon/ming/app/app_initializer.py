@@ -38,7 +38,9 @@ class AppInitializer:
         self.key_manager = None
         self.rag_app = None
         self.infer_service = None
+        self.inference: dict = {}
         self.llm_model_name: str = ""
+        self.llm_options: dict = {}
 
     # -----------------------------------------------------------------------
     # 生命周期
@@ -88,7 +90,9 @@ class AppInitializer:
             try:
                 import sqlalchemy.exc
 
-                register_exception(sqlalchemy.exc.SQLAlchemyError, ServerSubSystem.DATABASE)
+                register_exception(
+                    sqlalchemy.exc.SQLAlchemyError, ServerSubSystem.DATABASE
+                )
             except ImportError:
                 pass
 
@@ -248,7 +252,9 @@ class AppInitializer:
 
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""
-        from src.com.damon.ming.ai.inference.config import InferenceConfig
+        from src.com.damon.ming.ai.config.inference.inference_config_loader import (
+            InferenceConfigLoader,
+        )
         from src.com.damon.ming.ai.rag_tool import get_rag_container
         from src.com.damon.ming.ai.registry.inference_registry import (
             register_all_inferences,
@@ -257,10 +263,19 @@ class AppInitializer:
         register_all_inferences()
         self.rag_app = get_rag_container()
 
-        infer_config = InferenceConfig()
-        self.infer_service = infer_config.create_infer_client(profile="default")
-        self.llm_model_name = infer_config.get_llm_model_name("default")
-        logger.info("RAG、LLM客户端初始化完成")
+        # 全量加载推理引擎和模型
+        _loader = InferenceConfigLoader()
+        _loaded = _loader.load_all()
+        self.inference = _loaded
+        _chat_engine, _chat_entry = _loader.get_engine_for_model("chat")
+        self.infer_service = _chat_engine
+        self.llm_model_name = _chat_entry.model_name
+        self.llm_options = _chat_entry.options
+        logger.info(
+            "RAG、LLM客户端初始化完成 | model=%s | engine=%s",
+            self.llm_model_name,
+            _chat_entry.engine_type,
+        )
 
 
 # ---------------------------------------------------------------------------

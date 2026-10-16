@@ -28,14 +28,6 @@ INFER_WAIT_TIMEOUT = 30
 # SSE 重连等待毫秒数
 RETRY_MS = 3000
 
-# todo 后期加上
-# 加载配置，创建意图识别器
-# intention_cfg = IntentionConfig()
-# classifier = intention_cfg.create_classifier("default")
-# intentions = ["chat_闲聊", "doc_query_知识库检索", "file_upload_上传文件"]
-# user_query = "帮我查一下项目方案内容"
-# res = classifier.classify(user_query, intention_list=intentions)
-
 SYSTEM_PROMPT_TPL = """
 你是严格基于知识库的问答助手，必须遵守以下硬性规则，绝对不能违反：
 1. 只能使用【参考知识库】内存在的内容回答用户问题；
@@ -64,9 +56,7 @@ async def chat(req: Request, body: ChatRequest):
                 logger.debug("开始执行同步 RAG 检索")
 
                 # 1. 调用RAG检索，获取拼接完整章节上下文
-                ref_content = await asyncio.to_thread(
-                    req.app.state.rag_app.query_rag(body.query)
-                )
+                ref_content = await req.app.state.rag_app.query_rag(body.query)
 
                 schema = get_chat_schema(body.reason)
 
@@ -82,6 +72,7 @@ async def chat(req: Request, body: ChatRequest):
                     messages=prompt_messages,
                     reason=body.reason,
                     response_schema=schema,
+                    options=req.app.state.llm_options,
                 )
 
             # 4. 组装返回结构体，think控制是否携带思考过程（当前固定空）
@@ -132,9 +123,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
             try:
                 async with asyncio.timeout(INFER_WAIT_TIMEOUT):
                     logger.debug("开始执行流式 RAG 检索")
-                    ref_content = await asyncio.to_thread(
-                        req.app.state.rag_app.query_rag(body.query)
-                    )
+                    ref_content = await req.app.state.rag_app.query_rag(body.query)
 
                     system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
                     prompt_messages = [
@@ -159,6 +148,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
                             model_name=req.app.state.llm_model_name,
                             messages=prompt_messages,
                             reason=body.reason,
+                            options=req.app.state.llm_options,
                         ):
                             # 根据 token 类型发射不同事件：
                             #   reasoning → event: "reasoning"（推理过程）

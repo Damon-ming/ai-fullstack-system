@@ -134,6 +134,7 @@ logger.info("应用路由初始化完成")
 app.state.rag_app = initializer.rag_app
 app.state.infer_service = initializer.infer_service
 app.state.llm_model_name = initializer.llm_model_name
+app.state.llm_options = initializer.llm_options
 
 # ---- 全局异常处理器 ---------------------------------------------------
 register_exception_handler(app)

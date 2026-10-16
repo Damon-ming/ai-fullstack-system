@@ -1,0 +1,43 @@
+# app-server/src/com/damon/ming/ai/config/inference/inference-config.yaml
+# 推理引擎配置 —— 单引擎 + 多模型
+#
+# engine：推理后端基础设施（连接参数），启动时全量加载
+#         type 映射到 @register_engine 注册的实现类
+# models：按业务用途命名，数组格式，无需声明 engine（继承上层）
+#
+# 引擎名称与实现类的映射在 inference/__init__.py 中通过 @register_engine 维护。
+
+engine:
+  # type: ollama
+  # base_url: http://ollama-server:11434
+  # timeout: 180
+  # max_retries: 3
+  # api_key: ""
+
+  type: vllm
+  base_url: http://vllm-server:8000/v1
+  timeout: 90
+  max_retries: 3
+  api_key: dummy
+
+models:
+  intent:
+    - model_name: qwen:0.5b
+
+  rewrite:
+    - model_name: qwen:1.8b
+
+  chat:
+    - model_name: qwen2.5:7b-instruct
+      temperature: 0.1
+      top_p: 0.9
+      num_ctx: 4096
+    # - model_name: qwen2.5:14b-instruct
+    #   temperature: 0.1
+    #   top_p: 0.9
+    #   num_ctx: 8192
+
+  summary:
+    - model_name: qwen2.5:1.5b
+      temperature: 0.1
+      num_ctx: 4096

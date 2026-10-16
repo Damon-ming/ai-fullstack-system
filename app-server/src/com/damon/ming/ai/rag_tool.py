@@ -6,6 +6,9 @@ from pathlib import Path
 from src.com.damon.ming.ai.config.embedding.embedding_config_loader import (
     EmbeddingConfigLoader,
 )
+from src.com.damon.ming.ai.config.inference.inference_config_loader import (
+    InferenceConfigLoader,
+)
 from src.com.damon.ming.ai.config.rerank.rerank_config_loader import (
     RerankerConfigLoader,
 )
@@ -17,7 +20,6 @@ from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
-from src.com.damon.ming.ai.registry.summary_registry import register_all_summarizers
 from src.com.damon.ming.ai.registry.tokenizer_registry import register_all_tokenizers
 from src.com.damon.ming.ai.rerank.base_reranker import BaseReranker
 from src.com.damon.ming.ai.retriever.base_retriever import (
@@ -28,8 +30,6 @@ from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.retriever.hybrid_retriever import HybridRetriever
 from src.com.damon.ming.ai.source.ref_sources import LocalPDFDataSource
 from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
-from src.com.damon.ming.ai.summary import BaseSummarizer
-from src.com.damon.ming.ai.summary.config import SummarizerConfig
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.log import pin
@@ -56,7 +56,6 @@ class RAGContainer:
     def __init__(self):
         logger.info("RAG 容器初始化开始")
         # 步骤1：执行所有模块注册
-        register_all_summarizers()
         register_all_rerankers()
         register_all_tokenizers()
         register_all_embeddings()
@@ -81,15 +80,14 @@ class RAGContainer:
         # 步骤3：初始化向量库
         self.vector_store: BaseVectorStore = VectorConfigLoader().load("chroma")
 
-        # 新增：轻量文本摘要器
-        self.summary_config = SummarizerConfig()
-        self.summarizer: BaseSummarizer = self.summary_config.create_summarizer(
-            profile="default"
-        )
-
-        # 步骤4：初始化章节重构工具（用于召回后合并完整章节）
+        # 步骤4：初始化章节重构工具（摘要功能复用推理引擎的 summary 模型）
+        _infer_loader = InferenceConfigLoader()
+        _infer_engine, _summary_entry = _infer_loader.get_engine_for_model("summary")
         self.section_recon = SectionReconstructor(
-            tokenizer=self.tokenizer, summarizer=self.summarizer
+            tokenizer=self.tokenizer,
+            inference=_infer_engine,
+            summary_model=_summary_entry.model_name,
+            summary_options=_summary_entry.options,
         )
 
         # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）
@@ -215,7 +213,7 @@ class RAGContainer:
             )
         return {"indexed": accepted, "skipped": skipped}
 
-    def query_rag(
+    async def query_rag(
         self,
         query: str,
         top_k: int = 5,
@@ -231,7 +229,7 @@ class RAGContainer:
             return ""
 
         # 3. 重构完整章节上下文（所有逻辑已封装到 SectionReconstructor）
-        reconstructed_nodes = self.section_recon.reconstruct_sections_to_nodes(
+        reconstructed_nodes = await self.section_recon.reconstruct_sections_to_nodes(
             vector_store=self.vector_store,
             hit_nodes=raw_nodes,
         )
@@ -244,7 +242,7 @@ class RAGContainer:
             logger.info("RAG 重排后无有效结果")
             return ""
 
-        final_text = self.section_recon.merge_nodes_to_single_text(
+        final_text = await self.section_recon.merge_nodes_to_single_text(
             nodes=rerank_nodes, max_context_tokens=max_context_tokens
         )
 

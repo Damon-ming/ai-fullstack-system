@@ -8,35 +8,38 @@ from typing import Any
 from openai import AsyncOpenAI
 from src.com.damon.ming.ai.inference.base_inference import (
     BaseInferenceService,
+    InferenceParams,
     StreamToken,
+    register_engine,
 )
 from src.com.damon.ming.log import pin
 
 logger = pin("VLLMInference")
 
 
+def _map_options(options: dict[str, Any] | None) -> dict[str, Any]:
+    """将统一的模型级参数映射为 OpenAI API 字段。
+
+    num_ctx → max_tokens（OpenAI 兼容接口的 token 上限参数名）
+    """
+    if not options:
+        return {}
+    mapped = dict(options)
+    if "num_ctx" in mapped:
+        mapped["max_tokens"] = mapped.pop("num_ctx")
+    return mapped
+
+
+@register_engine("vllm")
 class VLLMInference(BaseInferenceService):
-    def __init__(
-        self,
-        base_url: str = "http://vllm:8000/v1",
-        api_key: str = "dummy",
-        timeout: int = 90,
-        max_retries: int = 3,
-        temperature: float = 0.1,
-        top_p: float = 0.9,
-        num_ctx: int = 4096,
-    ):
-        self.client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
-        self.base_url = base_url
-        self.api_key = api_key
-        self.timeout = timeout
-        self.max_retries = max_retries
-        self.default_options = {
-            "temperature": temperature,
-            "top_p": top_p,
-            "max_tokens": num_ctx,
-        }
-        logger.info(f"VLLM推理客户端初始化 | url={base_url}")
+    def __init__(self, params: InferenceParams):
+        super().__init__(params)
+        self.client = AsyncOpenAI(
+            base_url=params.base_url,
+            api_key=params.api_key,
+            timeout=params.timeout,
+        )
+        logger.info(f"VLLM推理客户端初始化 | url={params.base_url}")
 
     async def text_generation(
         self,
@@ -46,12 +49,9 @@ class VLLMInference(BaseInferenceService):
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
     ) -> str:
-        run_opts = self.default_options.copy()
-        if options:
-            run_opts.update(options)
+        run_opts = _map_options(options)
 
         create_kwargs = {"model": model_name, "messages": messages, **run_opts}
-        # VLLM OpenAI兼容json schema输出
         if response_schema:
             create_kwargs["response_format"] = {
                 "type": "json_object",
@@ -59,7 +59,7 @@ class VLLMInference(BaseInferenceService):
             }
 
         err_msg = ""
-        for attempt in range(self.max_retries):
+        for attempt in range(self.params.max_retries):
             try:
                 resp = await self.client.chat.completions.create(**create_kwargs)
                 return resp.choices[0].message.content
@@ -67,7 +67,7 @@ class VLLMInference(BaseInferenceService):
                 err_msg = f"VLLM调用异常: {e!s}"
                 wait = 2**attempt
                 logger.warning(
-                    f"推理重试 {attempt + 1}/{self.max_retries}, wait {wait}s | {err_msg}"
+                    f"推理重试 {attempt + 1}/{self.params.max_retries}, wait {wait}s | {err_msg}"
                 )
                 time.sleep(wait)
 
@@ -88,15 +88,12 @@ class VLLMInference(BaseInferenceService):
         reason: bool = False,
         options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamToken, None]:
-        run_opts = self.default_options.copy()
-        if options:
-            run_opts.update(options)
+        run_opts = _map_options(options)
         stream = await self.client.chat.completions.create(
             model=model_name, messages=messages, stream=True, **run_opts
         )
         async for chunk in stream:
             delta = chunk.choices[0].delta
-            # 部分 reasoning 模型通过 reasoning_content 返回推理过程
             reasoning = getattr(delta, "reasoning_content", None)
             if reasoning:
                 yield StreamToken(content=reasoning, type="reasoning")
@@ -116,7 +113,6 @@ class VLLMInference(BaseInferenceService):
     def get_model_info(self) -> dict[str, Any]:
         return {
             "provider": "vllm",
-            "base_url": self.base_url,
-            "timeout": self.timeout,
-            "default_options": self.default_options,
+            "base_url": self.params.base_url,
+            "timeout": self.params.timeout,
         }
