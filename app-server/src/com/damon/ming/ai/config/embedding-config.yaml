@@ -1,0 +1,25 @@
+# app-server/src/com/damon/ming/ai/config/embedding-config.yaml
+# Embedding 配置 —— 由 EmbeddingConfigLoader 读取，注入 embedding 模块。
+# embedding 模块本身不包含任何配置文件，纯参数化调用。
+#
+# 上层调用方必须显式指定引擎名：EmbeddingConfigLoader().load("ollama")
+# 引擎名称与实现类的映射在 embedding/__init__.py 中通过 @register_engine 维护。
+#
+# 可选引擎：
+#   ollama      → OllamaEmbedding（Ollama 服务）
+#   huggingface → HuggingFaceEmbedding（本地 GPU/CPU）
+
+embedding_engines:
+  ollama:
+    params:
+      model_name: bge-m3
+      base_url: http://ollama-server:11434
+      timeout: 60
+      max_retries: 3
+
+  # 切换到 HuggingFace 时取消注释：
+  # huggingface:
+  #   params:
+  #     model_name: BAAI/bge-m3
+  #     device: cpu
+  #     normalize_embeddings: true

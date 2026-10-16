@@ -3,12 +3,11 @@
 import threading
 from pathlib import Path
 
+from src.com.damon.ming.ai.config.embedding_config_loader import EmbeddingConfigLoader
 from src.com.damon.ming.ai.config.tokenizer_config_loader import TokenizerConfigLoader
 from src.com.damon.ming.ai.config.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
-from src.com.damon.ming.ai.embedding.config import EmbeddingConfig
-from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.registry.summary_registry import register_all_summarizers
 from src.com.damon.ming.ai.rerank.config import RerankerConfig
@@ -48,7 +47,6 @@ class RAGContainer:
     def __init__(self):
         logger.info("RAG 容器初始化开始")
         # 步骤1：执行所有模块注册
-        register_all_embeddings()
         register_all_summarizers()
         register_all_rerankers()
 
@@ -60,10 +58,7 @@ class RAGContainer:
         self.word_tokenizer = TokenizerConfigLoader().load("bm25_searcher")
 
         # 步骤2：加载配置，初始化Embedding
-        self.emb_config = EmbeddingConfig()
-        self.embedder: BaseEmbeddingService = self.emb_config.create_embedder(
-            profile="default"
-        )
+        self.embedder: BaseEmbeddingService = EmbeddingConfigLoader().load("ollama")
 
         # 步骤3：初始化向量库
         self.vector_store: BaseVectorStore = VectorConfigLoader().load("chroma")
