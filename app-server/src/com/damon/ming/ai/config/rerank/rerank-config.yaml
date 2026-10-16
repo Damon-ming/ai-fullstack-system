@@ -15,7 +15,7 @@ rerankers:
     params:
       model_name: ./models/bge-reranker-v2-gemma
       batch_size: 16
-      max_seq_len: 384
+      max_seq_len: 1024
       device: null
 
   # ── 轻量模型（降级 / 高并发场景）────────────────────
@@ -24,7 +24,7 @@ rerankers:
     params:
       model_name: ./models/bge-reranker-v2-m3
       batch_size: 32
-      max_seq_len: 256
+      max_seq_len: 512
       device: null
 
   # ── CPU fallback（GPU 不可用）─────────────────────
@@ -33,7 +33,7 @@ rerankers:
     params:
       model_name: ./models/bge-reranker-v2-m3
       batch_size: 8
-      max_seq_len: 256
+      max_seq_len: 512
       device: cpu
 
   # ── 英文模型（多语言场景示例）──────────────────────

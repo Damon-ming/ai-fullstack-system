@@ -30,6 +30,7 @@ from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.retriever.hybrid_retriever import HybridRetriever
 from src.com.damon.ming.ai.source.ref_sources import LocalPDFDataSource
 from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
+from src.com.damon.ming.ai.summary import SummaryService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.log import pin
@@ -80,10 +81,11 @@ class RAGContainer:
         # 步骤3：初始化向量库
         self.vector_store: BaseVectorStore = VectorConfigLoader().load("chroma")
 
-        # 步骤4：初始化章节重构工具（摘要功能复用推理引擎的 summary 模型）
+        # 步骤4：初始化章节重构 + 摘要服务
         _infer_loader = InferenceConfigLoader()
         _infer_engine, _summary_entry = _infer_loader.get_engine_for_model("summary")
-        self.section_recon = SectionReconstructor(
+        self.section_recon = SectionReconstructor()
+        self.summary = SummaryService(
             tokenizer=self.tokenizer,
             inference=_infer_engine,
             summary_model=_summary_entry.model_name,
@@ -228,13 +230,17 @@ class RAGContainer:
             logger.info("RAG 检索无结果")
             return ""
 
-        # 3. 重构完整章节上下文（所有逻辑已封装到 SectionReconstructor）
+        # 3. 重构完整章节上下文（合并分片，不做摘要）
         reconstructed_nodes = await self.section_recon.reconstruct_sections_to_nodes(
             vector_store=self.vector_store,
             hit_nodes=raw_nodes,
         )
 
-        # 2. CrossEncoder 重排过滤低相关文档
+        # 4. rerank 前预处理：超 max_seq_len 的章节摘要压缩，原文存 metadata
+        max_seq_len = self.reranker.params.max_seq_len
+        await self.summary.compress_nodes_for_rerank(reconstructed_nodes, max_seq_len)
+
+        # 5. CrossEncoder 重排过滤低相关文档
         rerank_nodes = self.reranker.rerank(
             query=query, nodes=reconstructed_nodes, top_k=top_k
         )
@@ -242,9 +248,23 @@ class RAGContainer:
             logger.info("RAG 重排后无有效结果")
             return ""
 
-        final_text = await self.section_recon.merge_nodes_to_single_text(
-            nodes=rerank_nodes, max_context_tokens=max_context_tokens
-        )
+        # 6. rerank 后恢复原文（摘要仅用于重排评分，最终 context 使用原文）
+        self.summary.restore_node_originals(rerank_nodes)
 
-        logger.info("RAG 检索完成 | context_length=%s", len(final_text))
-        return final_text
+        # 7. 拼接所有章节文本
+        full_text = self.section_recon.merge_nodes_to_text(rerank_nodes)
+
+        # 8. 全局超限则摘要压缩
+        total_tokens = self.summary.tokenizer.count_tokens(full_text)
+        if total_tokens > max_context_tokens:
+            if self.summary.inference is not None:
+                full_text = await self.summary.run_summary(
+                    text=full_text, max_tokens=max_context_tokens
+                )
+            else:
+                full_text = self.summary.truncate_by_token(
+                    full_text, max_context_tokens
+                )
+
+        logger.info("RAG 检索完成 | context_length=%s", len(full_text))
+        return full_text
