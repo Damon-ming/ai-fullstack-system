@@ -1,0 +1,36 @@
+# app-server/src/com/damon/ming/ai/config/tokenizer-config.yaml
+# 分词器配置 —— 支持多个分词器实例，各组件按需选用。
+#
+# Token ID 级（LLM 上下文管理）：
+#   tiktoken: OpenAI/GPT 系列 token 计数
+#
+# 词语级（关键词检索）：
+#   jieba: 中文词语切分，用于 BM25
+#
+# 引擎名称与实现类的映射在 tokenizer/__init__.py 中通过 @register_engine 维护。
+#
+# 新增分词器只需：写实现类 → 加 @register_engine("name") → 在下方添加配置
+
+tokenizers:
+  # LLM token 计数（用于上下文窗口管理）
+  llm_counter:
+    tokenizer_engine: tiktoken
+    params:
+      encoding_name: cl100k_base
+
+  # BM25 中文词语切分（用于关键词检索）
+  bm25_searcher:
+    tokenizer_engine: jieba
+    params: {}
+
+  # 备用 GPT-3.5 编码（与 GPT-4 的 cl100k 不同）
+  # gpt35_counter:
+  #   tokenizer_engine: tiktoken
+  #   params:
+  #     encoding_name: p50k_base
+
+  # HuggingFace 分词器（与特定模型对齐）
+  # qwen_counter:
+  #   tokenizer_engine: huggingface
+  #   params:
+  #     model_name: Qwen/Qwen2.5-7B

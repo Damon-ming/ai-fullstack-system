@@ -1,16 +1,23 @@
 # app-server/src/com/damon/ming/ai/tokenizer/tiktoken_tokenizer.py
 
 import tiktoken
-from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
+from src.com.damon.ming.ai.tokenizer import register_engine
+from src.com.damon.ming.ai.tokenizer.base_tokenizer import (
+    BaseTokenizer,
+    TokenizerParams,
+)
 from src.com.damon.ming.log import pin
 
 logger = pin("TiktokenTokenizer")
 
 
+@register_engine("tiktoken")
 class TiktokenTokenizer(BaseTokenizer):
-    def __init__(self, encoding_name: str = "cl100k_base"):
-        self.encoding_name = encoding_name
-        self.enc = tiktoken.get_encoding(encoding_name)
+    """tiktoken 分词器 — 适用于 OpenAI/GPT 系列模型的 token 计数"""
+
+    def __init__(self, params: TokenizerParams):
+        super().__init__(params)
+        self.enc = tiktoken.get_encoding(params.encoding_name)
 
     def encode(self, text: str) -> list[int]:
         return self.enc.encode(text)
@@ -22,4 +29,4 @@ class TiktokenTokenizer(BaseTokenizer):
         return len(self.encode(text))
 
     def get_encoding_name(self) -> str:
-        return self.encoding_name
+        return self.params.encoding_name

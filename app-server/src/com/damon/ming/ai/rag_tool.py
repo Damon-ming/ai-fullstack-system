@@ -3,6 +3,7 @@
 import threading
 from pathlib import Path
 
+from src.com.damon.ming.ai.config.tokenizer_config_loader import TokenizerConfigLoader
 from src.com.damon.ming.ai.config.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
@@ -10,7 +11,6 @@ from src.com.damon.ming.ai.embedding.config import EmbeddingConfig
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.registry.summary_registry import register_all_summarizers
-from src.com.damon.ming.ai.registry.tokenizer_registry import register_all_tokenizers
 from src.com.damon.ming.ai.rerank.config import RerankerConfig
 from src.com.damon.ming.ai.retriever.base_retriever import (
     DenseRetriever,
@@ -23,7 +23,6 @@ from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
 from src.com.damon.ming.ai.summary import BaseSummarizer
 from src.com.damon.ming.ai.summary.config import SummarizerConfig
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
-from src.com.damon.ming.ai.tokenizer.config import TokenizerConfig
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.log import pin
 
@@ -50,17 +49,15 @@ class RAGContainer:
         logger.info("RAG 容器初始化开始")
         # 步骤1：执行所有模块注册
         register_all_embeddings()
-        register_all_tokenizers()
         register_all_summarizers()
         register_all_rerankers()
 
         # 全局缓存全部分块节点，避免每次上传全量解析PDF
         self.all_nodes = []
 
-        self.token_config = TokenizerConfig()
-        self.tokenizer: BaseTokenizer = self.token_config.create_tokenizer(
-            profile="default"
-        )
+        self.tokenizer: BaseTokenizer = TokenizerConfigLoader().load("llm_counter")
+        # BM25 词语分词器（中文关键词检索）
+        self.word_tokenizer = TokenizerConfigLoader().load("bm25_searcher")
 
         # 步骤2：加载配置，初始化Embedding
         self.emb_config = EmbeddingConfig()
@@ -94,7 +91,7 @@ class RAGContainer:
         )
 
         # 步骤7：初始化稀疏BM25索引（启动时预加载所有节点构建）
-        self.bm25_index = BM25Index()
+        self.bm25_index = BM25Index(tokenizer=self.word_tokenizer.tokenize)
         self._knowledge_lock = threading.RLock()
         self.sparse_retriever = SparseRetriever(bm25_index=self.bm25_index)
 
