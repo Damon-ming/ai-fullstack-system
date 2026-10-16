@@ -3,10 +3,10 @@
 import threading
 from pathlib import Path
 
+from src.com.damon.ming.ai.config.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
 from src.com.damon.ming.ai.embedding.config import EmbeddingConfig
-from src.com.damon.ming.ai.registry.db_registry import register_all_vector_dbs
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.registry.summary_registry import register_all_summarizers
@@ -25,7 +25,6 @@ from src.com.damon.ming.ai.summary.config import SummarizerConfig
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.tokenizer.config import TokenizerConfig
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
-from src.com.damon.ming.ai.vector_db.config import VectorStoreConfig
 from src.com.damon.ming.log import pin
 
 logger = pin("ai.rag")
@@ -50,7 +49,6 @@ class RAGContainer:
     def __init__(self):
         logger.info("RAG 容器初始化开始")
         # 步骤1：执行所有模块注册
-        register_all_vector_dbs()
         register_all_embeddings()
         register_all_tokenizers()
         register_all_summarizers()
@@ -70,9 +68,8 @@ class RAGContainer:
             profile="default"
         )
 
-        # 步骤3：初始化向量库（本地Chroma）
-        self.vector_config = VectorStoreConfig()
-        self.vector_store: BaseVectorStore = self.vector_config.create_store(
+        # 步骤3：初始化向量库
+        self.vector_store: BaseVectorStore = VectorConfigLoader().load(
             profile="default"
         )
 

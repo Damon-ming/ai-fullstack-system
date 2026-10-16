@@ -1,0 +1,29 @@
+# app-server/src/com/damon/ming/ai/config/vector-config.yaml
+# 向量存储配置 —— 由 VectorConfigLoader 读取，注入 vector_db 模块。
+# vector_db 模块本身不包含任何配置文件，纯参数化调用。
+#
+# 切换向量库只需修改 vector_engine，上层代码零感知。
+# 引擎名称与实现类的映射在 vector_db/__init__.py 中通过 @register_engine 维护。
+#
+# 支持的环境变量占位符: ${ENV_VAR}
+#
+# 可选引擎：
+#   chroma   → ChromaDBStore（本地/远程）
+#   pgvector → PGVectorStore（PostgreSQL + pgvector，待实现）
+#
+# 示例 — 切换到 PGVector：
+#   vector_engine: pgvector
+#   params:
+#     embedding_dimension: 768
+#     connection_string: ${DB_URL}
+#     table_name: documents
+#     pool_min_conn: 2
+#     pool_max_conn: 10
+
+vector_store:
+  vector_engine: chroma
+
+  params:
+    collection_name: rag_collection
+    persist_directory: ./chroma_data
+    embedding_dimension: 1024
