@@ -21,7 +21,12 @@ from src.com.damon.ming.ai.tokenizer.base_tokenizer import TokenizerParams
 
 
 class TokenizerConfigLoader:
-    """从 YAML 文件加载分词器配置，返回 BaseTokenizer / BaseWordTokenizer 实例。"""
+    """从 YAML 文件加载分词器配置，返回 BaseTokenizer / BaseWordTokenizer 实例。
+
+    同名分词器缓存复用，避免重复加载（如 jieba 词典只加载一次）。
+    """
+
+    _cache: dict[str, object] = {}
 
     def __init__(self, config_path: str | None = None):
         if config_path is None:
@@ -29,15 +34,18 @@ class TokenizerConfigLoader:
             config_path = os.path.join(base_dir, "tokenizer-config.yaml")
         self._config_path = config_path
 
-    def load(self, name: str = "default"):
-        """加载指定名称的分词器配置，返回实例。
+    def load(self, name: str):
+        """加载指定名称的分词器配置，同名返回缓存实例。
 
         Args:
-            name: tokenizers 下的键名，如 "default" / "bm25"
+            name: tokenizers 下的键名，如 "llm_counter" / "bm25_searcher"
 
         Returns:
             BaseTokenizer 或 BaseWordTokenizer 实例
         """
+        if name in self._cache:
+            return self._cache[name]
+
         raw = self._read_yaml(name)
         params_raw = raw.get("params", {})
 
@@ -51,7 +59,9 @@ class TokenizerConfigLoader:
             raise ValueError("配置缺少 tokenizer_engine 字段")
         tokenizer_class = resolve_tokenizer(engine)
 
-        return tokenizer_class(params)
+        instance = tokenizer_class(params)
+        self._cache[name] = instance
+        return instance
 
     # ---- 私有 -------------------------------------------------------------
 

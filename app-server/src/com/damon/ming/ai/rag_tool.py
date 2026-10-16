@@ -66,9 +66,7 @@ class RAGContainer:
         )
 
         # 步骤3：初始化向量库
-        self.vector_store: BaseVectorStore = VectorConfigLoader().load(
-            profile="default"
-        )
+        self.vector_store: BaseVectorStore = VectorConfigLoader().load("chroma")
 
         # 新增：轻量文本摘要器
         self.summary_config = SummarizerConfig()
