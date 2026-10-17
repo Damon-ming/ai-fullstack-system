@@ -134,6 +134,7 @@ class _Chat:
 
     TIMEOUT = _build(detail=1, business=Business.CHAT)  # 200005001
     UNKNOWN = _build(detail=2, business=Business.CHAT)  # 200005002
+    GUARDRAIL_BLOCKED = _build(detail=3, business=Business.CHAT)  # 200005003
 
 
 class _Upload:

@@ -39,6 +39,7 @@ class AppInitializer:
         self.pool_mgr = None
         self.rag_app = None
         self.infer_service = None
+        self.guardrail = None
         self.inference: dict = {}
         self.llm_model_name: str = ""
         self.llm_options: dict = {}
@@ -60,6 +61,7 @@ class AppInitializer:
         self._init_encryption()
         self._init_sign_context()
         self._init_ai()
+        self._init_guardrail()
         self._init_chat()
 
         logger.info("应用启动完成")
@@ -71,6 +73,7 @@ class AppInitializer:
         """
         app.state.rag_app = self.rag_app
         app.state.infer_service = self.infer_service
+        app.state.guardrail = self.guardrail
         app.state.llm_model_name = self.llm_model_name
         app.state.llm_options = self.llm_options
         app.state.pool_mgr = self.pool_mgr
@@ -342,6 +345,17 @@ class AppInitializer:
             self.llm_model_name,
             _chat_entry.engine_type,
         )
+
+    def _init_guardrail(self) -> None:
+        """护栏系统：加载配置，初始化护栏引擎（复用推理引擎）。"""
+        from src.com.damon.ming.ai.config.guardrail.guardrail_config_loader import (
+            GuardrailConfigLoader,
+        )
+
+        loader = GuardrailConfigLoader()
+        loaded = loader.load_all(inference=self.infer_service)
+        self.guardrail = loaded["engine"]
+        logger.info("护栏系统初始化完成 | engine=%s", type(self.guardrail).__name__)
 
 
 # ---------------------------------------------------------------------------

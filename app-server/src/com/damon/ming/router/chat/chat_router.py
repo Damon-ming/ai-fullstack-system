@@ -22,6 +22,22 @@ logger = pin("chat.router")
 router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
 
 
+async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None:
+    """执行护栏检测，不通过时返回失败响应，通过时返回 None。"""
+    guardrail = getattr(app_state, "guardrail", None)
+    if guardrail is None:
+        return None
+
+    result = await guardrail.check(query)
+    if not result.passed:
+        logger.warning("护栏拦截用户输入 | reason=%s", result.reason)
+        return BaseLLMFailedResponse[BaseLLMFailedData](
+            code=ErrorCode.CHAT.GUARDRAIL_BLOCKED,
+            data=BaseLLMFailedData(error_msg=result.reason or "输入内容被安全策略拦截"),
+        )
+    return None
+
+
 @router.post("/send/v1")
 async def chat(req: Request, body: ChatRequest):
     logger.info(
@@ -33,11 +49,16 @@ async def chat(req: Request, body: ChatRequest):
     # 创建请求级上下文，绑定 CancellationToken
     ctx = req.app.state.pool_mgr.create_request_context()
 
-    infer_sem = req.app.state.infer_sem
-    infer_timeout = req.app.state.infer_timeout
-    system_prompt_tpl = req.app.state.system_prompt_tpl
-
     try:
+        # ── 第 1 步：护栏检测（信号量外，快速拒绝） ──
+        blocked = await _check_guardrail(req.app.state, body.query)
+        if blocked is not None:
+            return blocked
+
+        infer_sem = req.app.state.infer_sem
+        infer_timeout = req.app.state.infer_timeout
+        system_prompt_tpl = req.app.state.system_prompt_tpl
+
         async with infer_sem:
             async with asyncio.timeout(infer_timeout):
                 logger.debug("开始执行同步 RAG 检索")
@@ -130,6 +151,22 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             ),
             retry=True,
         )
+
+        # ── 第 1 步：护栏检测（信号量外，快速拒绝） ──
+        blocked_resp = await _check_guardrail(req.app.state, body.query)
+        if blocked_resp is not None:
+            yield emitter.emit(
+                "error",
+                SseMessageFactory.error(
+                    ErrorCode.CHAT.GUARDRAIL_BLOCKED,
+                    BaseLLMFailedData(
+                        error_msg=blocked_resp.data.error_msg
+                        if blocked_resp.data
+                        else "输入内容被安全策略拦截"
+                    ),
+                ),
+            )
+            return
 
         infer_sem = req.app.state.infer_sem
         infer_timeout = req.app.state.infer_timeout
