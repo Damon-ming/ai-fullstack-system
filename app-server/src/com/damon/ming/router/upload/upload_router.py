@@ -30,6 +30,9 @@ async def save_files(
         len(files),
         [file.filename for file in files],
     )
+    # 创建请求级上下文，绑定 CancellationToken
+    ctx = request.state.pool_mgr.create_request_context()
+
     try:
         # 优先从加密中间件注入的 decrypted_meta 读取（加密模式）
         # 否则回退到明文 meta_json（兼容未加密场景）
@@ -39,7 +42,9 @@ async def save_files(
 
         req_data = FileUploadRequest(**meta) if meta else FileUploadRequest()
 
-        saved_files = await UploadService.batch_save_files(files, req_data)
+        saved_files = await UploadService.batch_save_files(
+            files, req_data, cancellation_token=ctx.cancellation_token
+        )
         logger.info("文件上传请求完成 | saved_count=%s", len(saved_files))
 
         success_data = FileUploadSuccessData(
@@ -54,3 +59,6 @@ async def save_files(
         logger.exception("文件上传请求失败")
         fail_data = FileUploadFailedData(error_msg=str(e))
         return BaseFailedResponse(code=ErrorCode.UPLOAD.UPLOAD_FAILED, data=fail_data)
+    finally:
+        # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
+        ctx.cleanup()

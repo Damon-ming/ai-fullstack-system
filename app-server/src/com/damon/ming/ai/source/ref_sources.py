@@ -1,9 +1,15 @@
 # app-server/src/com/damon/ming/ai/source/ref_sources.py
+"""
+PDF 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+
+本模块只负责"给定 PDF 文件路径，返回 Document 列表"，
+不感知线程池、取消令牌等基础设施。
+"""
+
 import hashlib
 import os
 import threading
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pymupdf4llm
@@ -24,7 +30,11 @@ class BaseDataSource(ABC):
 
 
 class LocalPDFDataSource(BaseDataSource):
-    """PDF文件加载实现，支持并发加载"""
+    """PDF 文件加载实现，同步处理。
+
+    上层 RAGContainer 使用 asyncio.to_thread 或 ThreadPoolExecutor
+    将本类的调用提交到线程池，本类不感知线程环境。
+    """
 
     # 类级别锁，用于统计信息同步
     _stats_lock = threading.Lock()
@@ -33,12 +43,9 @@ class LocalPDFDataSource(BaseDataSource):
         self,
         folder_path: str,
         enable_image_extract: bool = False,
-        max_workers: int | None = None,
     ):
         self.folder_path = folder_path
         self.enable_image_extract = enable_image_extract
-        # 默认使用CPU核心数*2作为线程数
-        self.max_workers = max_workers or min(os.cpu_count() * 2, 8)
         self.logger = pin("LocalPDFDataSource")
         self._ensure_dir_exists()
 
@@ -50,7 +57,7 @@ class LocalPDFDataSource(BaseDataSource):
             "total_pages": 0,
         }
 
-    def _ensure_dir_exists(self):
+    def _ensure_dir_exists(self) -> None:
         if not os.path.exists(self.folder_path):
             os.makedirs(self.folder_path)
             self.logger.info(f"[PDFDataSource] 创建知识库目录: {self.folder_path}")
@@ -65,7 +72,7 @@ class LocalPDFDataSource(BaseDataSource):
         return hash_sha256.hexdigest()
 
     def _process_single_pdf(self, file_path: str) -> list[Document]:
-        """处理单个PDF文件（线程安全）"""
+        """处理单个PDF文件"""
         file_name = os.path.basename(file_path)
 
         try:
@@ -134,7 +141,7 @@ class LocalPDFDataSource(BaseDataSource):
             return []
 
     def load_documents(self) -> list[Document]:
-        """加载所有文档（使用线程池并发）"""
+        """加载目录下所有 PDF 文件（同步）"""
         self.logger.info(f"[PDFDataSource] 开始加载目录: {self.folder_path}")
 
         # 收集所有文件
@@ -158,31 +165,14 @@ class LocalPDFDataSource(BaseDataSource):
             self._stats["total_pages"] = 0
 
         self.logger.info(
-            f"[PDFDataSource] 发现 {len(pdf_files)} 个PDF文件，使用 {self.max_workers} 个线程并发处理"
+            f"[PDFDataSource] 发现 {len(pdf_files)} 个PDF文件，逐个同步处理"
         )
 
         all_docs = []
 
-        # 使用线程池并发处理
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # 提交所有任务
-            future_to_file = {
-                executor.submit(self._process_single_pdf, file_path): file_path
-                for file_path in pdf_files
-            }
-
-            # 收集结果（按完成顺序）
-            for future in as_completed(future_to_file):
-                file_path = future_to_file[future]
-                try:
-                    docs = future.result(timeout=300)  # 5分钟超时
-                    all_docs.extend(docs)
-                except Exception as e:
-                    self.logger.error(
-                        f"[PDFDataSource] 处理文件异常 | file={file_path} | error={e}"
-                    )
-                    with self._stats_lock:
-                        self._stats["failed_files"] += 1
+        for file_path in pdf_files:
+            docs = self._process_single_pdf(file_path)
+            all_docs.extend(docs)
 
         # 输出最终统计
         with self._stats_lock:
@@ -198,7 +188,7 @@ class LocalPDFDataSource(BaseDataSource):
         return all_docs
 
     def load_specific_files(self, file_paths: list[str]) -> list[Document]:
-        """只加载指定的一批PDF文件，用于增量上传，不扫描整个知识库目录"""
+        """加载指定的一批 PDF 文件，用于增量上传（同步）"""
         self.logger.info(f"[PDFDataSource] 增量加载指定文件 count={len(file_paths)}")
         pdf_files = []
         for fp in file_paths:
@@ -219,22 +209,9 @@ class LocalPDFDataSource(BaseDataSource):
             self._stats["total_pages"] = 0
 
         all_docs = []
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_file = {
-                executor.submit(self._process_single_pdf, file_path): file_path
-                for file_path in pdf_files
-            }
-            for future in as_completed(future_to_file):
-                file_path = future_to_file[future]
-                try:
-                    docs = future.result(timeout=300)
-                    all_docs.extend(docs)
-                except Exception as e:
-                    self.logger.error(
-                        f"[PDFDataSource] 增量处理文件异常 | file={file_path} | error={e}"
-                    )
-                    with self._stats_lock:
-                        self._stats["failed_files"] += 1
+        for file_path in pdf_files:
+            docs = self._process_single_pdf(file_path)
+            all_docs.extend(docs)
 
         with self._stats_lock:
             self.logger.info(

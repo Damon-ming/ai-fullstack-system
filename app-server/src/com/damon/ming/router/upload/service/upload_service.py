@@ -11,6 +11,7 @@ from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadRequest,
     UploadInProgressError,
 )
+from src.com.damon.ming.thread import CancellationToken
 
 logger = pin("upload.service")
 
@@ -38,21 +39,29 @@ class UploadService:
 
     @staticmethod
     async def batch_save_files(
-        file_list: list[UploadFile], req: FileUploadRequest
+        file_list: list[UploadFile],
+        req: FileUploadRequest,
+        cancellation_token: CancellationToken | None = None,
     ) -> list[dict]:
         # 非阻塞获取：浏览器关闭后重新请求时立即返回业务失败，不排队等待。
         if not UploadService._processing_lock.acquire(blocking=False):
             raise UploadInProgressError("资料库还在更新中，请稍等")
         try:
-            return await UploadService._batch_save_files_locked(file_list)
+            return await UploadService._batch_save_files_locked(
+                file_list, cancellation_token
+            )
         finally:
             UploadService._processing_lock.release()
 
     @staticmethod
-    async def _batch_save_files_locked(file_list: list[UploadFile]) -> list[dict]:
+    async def _batch_save_files_locked(
+        file_list: list[UploadFile],
+        cancellation_token: CancellationToken | None = None,
+    ) -> list[dict]:
         """
         批量保存文件
         :param file_list: 上传文件数组
+        :param cancellation_token: 请求级取消令牌
         :return: 文件信息列表
         """
         saved_files = []
@@ -130,7 +139,9 @@ class UploadService:
             # 这里不回滚磁盘文件：如果后续索引失败，保留文件并打印日志，
             # 下次服务启动时由启动同步逻辑补齐向量库和 BM25。
             try:
-                index_result = get_rag_container().ingest_files(files_to_index)
+                index_result = get_rag_container().ingest_files(
+                    files_to_index, cancellation_token=cancellation_token
+                )
                 indexed_by_md5 = {item["file_md5"] for item in index_result["indexed"]}
                 skipped_by_md5 = {item["file_md5"] for item in index_result["skipped"]}
                 for item in saved_files:

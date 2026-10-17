@@ -1,10 +1,16 @@
 # app-server/src/com/damon/ming/ai/spliter/spliter.py
+"""
+文档分块器 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+
+本模块只负责"给定 Document 列表，返回切分后的 TextNode 列表"，
+不感知线程池、取消令牌等基础设施。
+"""
+
 import hashlib
 import os
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from llama_index.core import Document
 from llama_index.core.node_parser import MarkdownNodeParser, TokenTextSplitter
@@ -25,6 +31,11 @@ class BaseDocumentSplitter(ABC):
 
 
 class MarkdownDocumentSplitter(BaseDocumentSplitter):
+    """Markdown 文档分块器，同步处理。
+
+    上层 RAGContainer 使用 asyncio.to_thread 将本类的调用提交到线程池。
+    """
+
     # 类级别锁，用于统计同步
     _stats_lock = threading.Lock()
 
@@ -33,13 +44,10 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         tokenizer: BaseTokenizer,
         max_chunk_token_size: int = 1024,
         chunk_overlap: int = 120,
-        max_workers: int | None = None,
     ):
         self.max_chunk_token_size = max_chunk_token_size
         self.chunk_overlap = chunk_overlap
         self.tokenizer = tokenizer
-        # 默认使用CPU核心数作为线程数
-        self.max_workers = max_workers or min(os.cpu_count(), 8)
         self.logger = pin("MarkdownDocumentSplitter")
         self.md_parser = MarkdownNodeParser()
         self.token_splitter = TokenTextSplitter(
@@ -126,7 +134,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
     def _process_single_document(
         self, doc: Document, page_offset_list: list, max_chunk_size: int | None = None
     ) -> list[TextNode]:
-        """处理单个文档（线程安全）"""
+        """处理单个文档（同步）"""
         limit = max_chunk_size or self.max_chunk_token_size
         doc_nodes = []
         doc_text = doc.text.strip()
@@ -237,9 +245,18 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         return doc_nodes
 
     def split(
-        self, docs: list[Document], max_chunk_size: int | None = None
+        self,
+        docs: list[Document],
+        max_chunk_size: int | None = None,
     ) -> list[TextNode]:
-        """分割文档列表（使用线程池并发）"""
+        """分割文档列表（同步）。
+
+        注意：本方法本身是同步的。当需要并行处理多个文档时，
+        上层 RAGContainer 应将每个文档的分割作为独立任务提交到线程池，
+        而非在本方法内部做并行。这样可以保证：
+        - RAGContainer 控制线程生命周期
+        - 取消时 RAGContainer 只需取消未开始的 future
+        """
         if not docs:
             return []
 
@@ -258,38 +275,29 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         merged_docs, file_page_mapping = self._merge_documents_by_file(docs)
         self.logger.info(f"[Splitter] 合并为 {len(merged_docs)} 个文档")
 
-        # 2. 并发处理每个文档
+        # 2. 逐个同步处理每个文档（无内部并行）
+        #    并行由 RAGContainer 在更高层编排（按文件粒度提交到线程池）
         all_nodes = []
         errors = 0
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # 提交所有任务
-            future_to_doc = {
-                executor.submit(
-                    self._process_single_document,
+        for doc in merged_docs:
+            try:
+                nodes = self._process_single_document(
                     doc,
                     file_page_mapping[doc.metadata["file_md5"]],
                     max_chunk_size,
-                ): doc
-                for doc in merged_docs
-            }
-
-            # 收集结果
-            for future in as_completed(future_to_doc):
-                doc = future_to_doc[future]
-                try:
-                    nodes = future.result(timeout=300)  # 5分钟超时
-                    all_nodes.extend(nodes)
-                except Exception as e:
-                    errors += 1
-                    self.logger.error(
-                        f"[Splitter] 处理文档失败 | "
-                        f"file={doc.metadata.get('file_name', 'unknown')} | "
-                        f"error={e}",
-                        exc_info=True,
-                    )
-                    with self._stats_lock:
-                        self.stats["errors"] += 1
+                )
+                all_nodes.extend(nodes)
+            except Exception as e:
+                errors += 1
+                self.logger.error(
+                    f"[Splitter] 处理文档失败 | "
+                    f"file={doc.metadata.get('file_name', 'unknown')} | "
+                    f"error={e}",
+                    exc_info=True,
+                )
+                with self._stats_lock:
+                    self.stats["errors"] += 1
 
         # 更新统计
         with self._stats_lock:

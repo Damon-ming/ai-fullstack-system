@@ -36,6 +36,7 @@ class AppInitializer:
         # 子系统状态（startup 后填充）
         self.db_conn = None
         self.key_manager = None
+        self.pool_mgr = None
         self.rag_app = None
         self.infer_service = None
         self.inference: dict = {}
@@ -53,6 +54,7 @@ class AppInitializer:
         )
 
         self._register_exception_types()
+        self._init_thread_pool()
         self._init_upload_service()
         self._init_database()
         self._init_encryption()
@@ -64,6 +66,9 @@ class AppInitializer:
     def shutdown(self) -> None:
         """关闭所有子系统，释放资源。"""
         logger.info("应用关闭，释放资源")
+        if self.pool_mgr is not None:
+            self.pool_mgr.shutdown(wait=True, cancel_futures=True)
+            logger.info("线程池管理器已关闭")
         if self.db_conn is not None:
             self.db_conn.close()
             logger.info("数据库连接池已关闭")
@@ -71,6 +76,25 @@ class AppInitializer:
     # -----------------------------------------------------------------------
     # 子系统初始化
     # -----------------------------------------------------------------------
+
+    def _init_thread_pool(self) -> None:
+        """线程池管理器：从 YAML 加载配置，初始化所有线程池。"""
+        from src.com.damon.ming.config.thread import ThreadPoolConfigLoader
+        from src.com.damon.ming.thread import ThreadPoolManager
+
+        # 尝试从 YAML 加载配置，失败时使用默认值
+        pool_configs: dict[str, int] | None = None
+        try:
+            loader = ThreadPoolConfigLoader()
+            pool_configs = loader.load()
+            if pool_configs:
+                logger.info("线程池配置已从 YAML 加载: %s", pool_configs)
+        except Exception as e:
+            logger.warning("线程池配置加载失败，使用默认值: %s", e)
+
+        self.pool_mgr = ThreadPoolManager()
+        self.pool_mgr.startup(pool_configs=pool_configs)
+        logger.info("线程池管理器初始化完成")
 
     def _register_exception_types(self) -> None:
         """注册子系统异常类型到全局异常分类器。"""
@@ -261,7 +285,7 @@ class AppInitializer:
         )
 
         register_all_inferences()
-        self.rag_app = get_rag_container()
+        self.rag_app = get_rag_container(pool_mgr=self.pool_mgr)
 
         # 全量加载推理引擎和模型
         _loader = InferenceConfigLoader()

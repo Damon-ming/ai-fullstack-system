@@ -50,13 +50,24 @@ async def chat(req: Request, body: ChatRequest):
         body.reason,
     )
 
+    # 创建请求级上下文，绑定 CancellationToken
+    ctx = req.app.state.pool_mgr.create_request_context()
+
     try:
         async with INFER_SEM:
             async with asyncio.timeout(INFER_WAIT_TIMEOUT):
                 logger.debug("开始执行同步 RAG 检索")
 
-                # 1. 调用RAG检索，获取拼接完整章节上下文
-                ref_content = await req.app.state.rag_app.query_rag(body.query)
+                # 1. 调用RAG检索，获取拼接完整章节上下文（传递取消令牌）
+                ref_content = await req.app.state.rag_app.query_rag(
+                    body.query,
+                    cancellation_token=ctx.cancellation_token,
+                )
+
+                # 检查取消信号
+                if ctx.cancellation_token.is_cancelled():
+                    logger.warning("同步聊天：RAG 检索后被取消")
+                    raise asyncio.CancelledError()
 
                 schema = get_chat_schema(body.reason)
 
@@ -97,13 +108,20 @@ async def chat(req: Request, body: ChatRequest):
             code=ErrorCode.CHAT.UNKNOWN,
             data=BaseLLMFailedData(error_msg=str(e)),
         )
+    finally:
+        # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
+        ctx.cleanup()
 
 
 @router.post("/chat/v1")
 async def chat_stream(req: Request, body: ChatRequest):
     """流式问答接口，SSE流式输出（W3C EventSource 标准格式）"""
     logger.info("流式聊天请求开始 | query_length=%s", len(body.query))
-    generator = stream_chat_generator(req, body)
+
+    # 创建请求级上下文，绑定 CancellationToken
+    ctx = req.app.state.pool_mgr.create_request_context()
+
+    generator = stream_chat_generator(req, body, ctx)
     return EventSourceResponse(
         generator,
         headers={
@@ -114,8 +132,13 @@ async def chat_stream(req: Request, body: ChatRequest):
     )
 
 
-async def stream_chat_generator(req: Request, body: ChatRequest):
-    """流式问答 SSE 生成器 —— 主流程只关心业务，协议细节交给 SseEmitter"""
+async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
+    """流式问答 SSE 生成器 —— 主流程只关心业务，协议细节交给 SseEmitter
+
+    Args:
+        ctx: 请求上下文，包含 CancellationToken。
+             请求结束（包括客户端断开）时自动 cleanup。
+    """
     emitter = SseEmitter(retry_ms=RETRY_MS)
 
     try:
@@ -123,7 +146,15 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
             try:
                 async with asyncio.timeout(INFER_WAIT_TIMEOUT):
                     logger.debug("开始执行流式 RAG 检索")
-                    ref_content = await req.app.state.rag_app.query_rag(body.query)
+                    ref_content = await req.app.state.rag_app.query_rag(
+                        body.query,
+                        cancellation_token=ctx.cancellation_token,
+                    )
+
+                    # 检查取消信号
+                    if ctx.cancellation_token.is_cancelled():
+                        logger.warning("流式聊天：RAG 检索后被取消")
+                        raise asyncio.CancelledError()
 
                     system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
                     prompt_messages = [
@@ -190,3 +221,6 @@ async def stream_chat_generator(req: Request, body: ChatRequest):
                 ErrorCode.CHAT.UNKNOWN, BaseLLMFailedData(error_msg=str(e))
             ),
         )
+    finally:
+        # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
+        ctx.cleanup()

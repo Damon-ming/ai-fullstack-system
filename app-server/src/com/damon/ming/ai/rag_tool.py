@@ -1,5 +1,22 @@
 # app-server/src/com/damon/ming/ai/rag_tool.py
+"""
+RAG 容器 —— 线程编排层 + 业务入口。
 
+职责：
+  - 编排 AI 模块的执行顺序（检索 → 重构 → 重排 → 压缩）
+  - 管理线程池使用（将同步 AI 函数提交到 ThreadPoolManager）
+  - 检查 CancellationToken，取消时停止提交新任务并清理
+  - AI 模块本身不感知线程/取消
+
+线程模型（executor 注入模式）：
+  - RAGContainer 是 ThreadPoolManager 的唯一持有者
+  - 同步 AI 函数通过 loop.run_in_executor(pool, fn, ...) 提交到线程池
+  - AI 模块（HybridRetriever/SectionReconstructor）通过参数接收 executor 用于内部并行
+  - 异步 AI 函数（SummaryService）直接调用，取消时 cancel 其 tasks
+  - 每次操作前检查 cancellation_token，已取消则提前返回
+"""
+
+import asyncio
 import threading
 from pathlib import Path
 
@@ -34,6 +51,7 @@ from src.com.damon.ming.ai.summary import SummaryService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.thread import CancellationToken, CancelResult, ThreadPoolManager
 
 logger = pin("ai.rag")
 
@@ -42,20 +60,27 @@ _rag_instance = None
 _rag_instance_lock = threading.Lock()
 
 
-def get_rag_container():
-    """进程级单例，上传和聊天共用同一个向量库/BM25实例。"""
+def get_rag_container(pool_mgr: ThreadPoolManager | None = None):
+    """进程级单例，上传和聊天共用同一个向量库/BM25实例。
+
+    Args:
+        pool_mgr: 由 AppInitializer 注入的全局线程池管理器。
+                  不为 None 时直接使用，否则退化为单例获取（向后兼容）。
+    """
     global _rag_instance
     if _rag_instance is None:
         with _rag_instance_lock:
             if _rag_instance is None:
-                _rag_instance = RAGContainer()
+                _rag_instance = RAGContainer(pool_mgr=pool_mgr)
     return _rag_instance
 
 
 # 1. 全局单例容器
 class RAGContainer:
-    def __init__(self):
+    def __init__(self, pool_mgr: ThreadPoolManager | None = None):
         logger.info("RAG 容器初始化开始")
+        # 线程池管理器：优先使用注入的全局实例，否则回退单例
+        self._pool_mgr = pool_mgr if pool_mgr is not None else ThreadPoolManager()
         # 步骤1：执行所有模块注册
         register_all_rerankers()
         register_all_tokenizers()
@@ -115,15 +140,12 @@ class RAGContainer:
             fuse_k=40,
         )
 
-        # 文本切块器，补充缺失的分块逻辑
+        # 文本切块器
         self.splitter = MarkdownDocumentSplitter(
             tokenizer=self.tokenizer, max_chunk_token_size=1024, chunk_overlap=0
         )
 
-        # 首次启动自动建立随项目发布的知识库，已有持久化数据时不重复写入。
-        # 检查向量数据库中是否没有任何数据
-        # 向量库负责持久化；BM25 是内存索引，服务每次启动只恢复 BM25。
-        # 向量入库统一走 ingest_files，避免启动时重复 add_documents。
+        # 首次启动自动建立知识库
         docs = LocalPDFDataSource(KNOWLEDGES_DIR).load_documents()
         bm25_nodes = self.splitter.split(docs)
         self.all_nodes = bm25_nodes
@@ -134,9 +156,6 @@ class RAGContainer:
         if self.vector_store.count() == 0 and bm25_nodes:
             self._index_nodes(bm25_nodes, rebuild_bm25=False)
         elif self.vector_store.count() > 0:
-            # 服务异常退出或人工拷贝了新 PDF 时，启动阶段补齐缺失向量；
-            # ingest_files 会按 file_md5 跳过已经入库的文件。
-
             pdf_paths = [str(path.resolve()) for path in KNOWLEDGES_DIR.rglob("*.pdf")]
             if pdf_paths:
                 self.ingest_files(pdf_paths)
@@ -160,16 +179,44 @@ class RAGContainer:
             self.bm25_index.build(all_nodes)
         return node_ids
 
-    def ingest_files(self, file_paths: list[str]) -> dict:
-        """增量处理上传文件，按 file_md5 保证本地文件和索引幂等。"""
+    # ── ingest_files：上传线程编排 ────────────────────────────────────
+
+    async def ingest_files(
+        self,
+        file_paths: list[str],
+        cancellation_token: CancellationToken | None = None,
+    ) -> dict:
+        """增量处理上传文件。
+
+        线程编排层：将同步的 PDF 加载和文档分割提交到线程池，
+        定期检查取消令牌，已取消时停止处理并返回部分结果。
+        """
+        loop = asyncio.get_running_loop()
+        pool_mgr = self._pool_mgr
+
         with self._knowledge_lock:
             accepted = []
             skipped = []
-            # 只初始化一次数据源，不要循环内反复创建
             source_root = LocalPDFDataSource(KNOWLEDGES_DIR)
-            upload_docs = source_root.load_specific_files(file_paths)
 
-            # 构建 path -> docs 的映射，方便快速查找
+            # 1. 提交 PDF 加载到线程池
+            if cancellation_token is not None and cancellation_token.is_cancelled():
+                logger.warning("ingest_files | 启动前检测到取消信号")
+                return {"indexed": accepted, "skipped": skipped}
+
+            # PDF 加载是 CPU 密集型，提交到 document 池
+            document_pool = pool_mgr.get_pool("document")
+            try:
+                upload_docs = await loop.run_in_executor(
+                    document_pool,
+                    source_root.load_specific_files,
+                    file_paths,
+                )
+            except asyncio.CancelledError:
+                logger.warning("ingest_files | PDF 加载阶段被取消")
+                raise
+
+            # 构建 path -> docs 的映射
             path_to_docs = {}
             for d in upload_docs:
                 fp = d.metadata["file_path"]
@@ -179,11 +226,17 @@ class RAGContainer:
 
         new_nodes = []
         for file_path in file_paths:
+            # 检查取消信号
+            if cancellation_token is not None and cancellation_token.is_cancelled():
+                logger.warning(
+                    f"ingest_files | 检测到取消信号，停止处理 | 已处理={len(accepted)}"
+                )
+                break
+
             p = Path(file_path).resolve()
             key = str(p)
             docs = path_to_docs.get(key, [])
             if not docs:
-                # 不抛异常，收集错误，跳过当前文件，继续下一个
                 logger.error(f"无法解析文件: {p.name}")
                 skipped.append(
                     {
@@ -201,7 +254,17 @@ class RAGContainer:
                 skipped.append({"file_md5": file_md5, "reason": "already_indexed"})
                 continue
 
-            nodes = self.splitter.split(docs)
+            # 提交文档分割到线程池
+            try:
+                nodes = await loop.run_in_executor(
+                    document_pool,
+                    self.splitter.split,
+                    docs,
+                )
+            except asyncio.CancelledError:
+                logger.warning("ingest_files | 文档分割阶段被取消")
+                raise
+
             self._index_nodes(nodes, rebuild_bm25=False)
             accepted.append({"file_md5": file_md5, "chunks": len(nodes)})
             new_nodes.extend(nodes)
@@ -215,32 +278,129 @@ class RAGContainer:
             )
         return {"indexed": accepted, "skipped": skipped}
 
+    # ── query_rag：检索线程编排 ────────────────────────────────────────
+
     async def query_rag(
         self,
         query: str,
         top_k: int = 5,
         max_context_tokens: int = 4096,
-    ):
+        cancellation_token: CancellationToken | None = None,
+    ) -> str:
+        """RAG 检索主流程。
+
+        线程编排层（executor 注入模式）：
+          1. HybridRetriever → 线程池注入，内部并行执行稠密+稀疏检索
+          2. SectionReconstructor → 线程池注入，内部并发获取章节分片
+          3. SummaryService.compress → 纯 asyncio，内部使用 create_task
+          4. 每个阶段后检查取消信号，已取消则提前返回
+
+        Executor 注入模式：
+          - RAGContainer 是 ThreadPoolManager 的唯一使用者
+          - AI 模块通过参数接收 executor，不创建/不持有线程池
+          - 取消时 RAGContainer 只需取消 future，AI 模块无需感知
+
+        Returns:
+            检索结果文本。取消时返回空字符串。
+
+        Raises:
+            asyncio.CancelledError: 外部取消时向上传播。
+        """
+        # 取消追踪器 —— 精确记录到哪一步取消
+        cancel_result = CancelResult()
+
         logger.info("RAG 检索开始 | query_length=%s | top_k=%s", len(query), top_k)
-        # 1. 混合稠密+稀疏召回
-        raw_nodes = self.hybrid_retriever.retrieve(
-            query=query, top_k=top_k, dense_top_k=10, sparse_top_k=10
-        )
+
+        loop = asyncio.get_running_loop()
+        pool_mgr = self._pool_mgr
+
+        # ── 阶段 1: 混合检索（线程池注入到模块内部，模块自行并行） ──
+        # HybridRetriever 是同步函数，run_in_executor 提交到线程池避免阻塞事件循环。
+        # executor=retrieval_pool 同时注入到模块内部，供稠密/稀疏并行使用。
+        # 内部并行的两个子任务也在同一个池中执行，不额外占用外层线程。
+        retrieval_pool = pool_mgr.get_pool("retrieval")
+
+        if cancellation_token is not None and cancellation_token.is_cancelled():
+            cancel_result.step = "before_retrieval"
+            logger.info("RAG 检索取消 | %s", cancel_result.describe())
+            return ""
+
+        try:
+            raw_nodes = await loop.run_in_executor(
+                retrieval_pool,
+                lambda: self.hybrid_retriever.retrieve(
+                    query=query,
+                    top_k=top_k,
+                    dense_top_k=10,
+                    sparse_top_k=10,
+                    metadata_filter=None,
+                    executor=retrieval_pool,
+                ),
+            )
+        except asyncio.CancelledError:
+            cancel_result.step = "hybrid_retrieval"
+            logger.info("RAG 检索取消 | %s", cancel_result.describe())
+            raise
+
+        cancel_result.mark_completed("hybrid_retrieval")
+
+        # 检查取消信号
+        if cancellation_token is not None and cancellation_token.is_cancelled():
+            cancel_result.step = "after_retrieval"
+            logger.info("RAG 检索取消 | %s", cancel_result.describe())
+            return ""
+
         if not raw_nodes:
             logger.info("RAG 检索无结果")
             return ""
 
-        # 3. 重构完整章节上下文（合并分片，不做摘要）
-        reconstructed_nodes = await self.section_recon.reconstruct_sections_to_nodes(
-            vector_store=self.vector_store,
-            hit_nodes=raw_nodes,
-        )
+        # ── 阶段 2: 章节重构（线程池注入，内部并发获取分片） ──
+        try:
+            reconstructed_nodes = (
+                await self.section_recon.reconstruct_sections_to_nodes(
+                    vector_store=self.vector_store,
+                    hit_nodes=raw_nodes,
+                    executor=retrieval_pool,  # 注入线程池，内部并发查 vector_store
+                )
+            )
+        except asyncio.CancelledError:
+            cancel_result.step = "section_reconstruct"
+            logger.info("RAG 检索取消 | %s", cancel_result.describe())
+            raise
 
-        # 4. rerank 前预处理：超 max_seq_len 的章节摘要压缩，原文存 metadata
+        cancel_result.mark_completed("section_reconstruct")
+
+        # 检查取消信号
+        if cancellation_token is not None and cancellation_token.is_cancelled():
+            cancel_result.step = "after_reconstruct"
+            logger.info("RAG 检索取消 | %s", cancel_result.describe())
+            return ""
+
+        # ── 阶段 3: rerank 前压缩（SummaryService 内部并发 + 取消感知） ──
         max_seq_len = self.reranker.params.max_seq_len
-        await self.summary.compress_nodes_for_rerank(reconstructed_nodes, max_seq_len)
 
-        # 5. CrossEncoder 重排过滤低相关文档
+        try:
+            compress_result = await self.summary.compress_nodes_cancellable(
+                reconstructed_nodes, max_seq_len, cancellation_token
+            )
+            if compress_result.was_cancelled():
+                cancel_result.step = compress_result.step
+                cancel_result.completed_steps.extend(compress_result.completed_steps)
+                logger.info("RAG 检索取消 | %s", cancel_result.describe())
+                return ""
+        except asyncio.CancelledError:
+            cancel_result.step = "compress_nodes"
+            logger.info("RAG 检索取消 | %s", cancel_result.describe())
+            raise
+
+        cancel_result.mark_completed("compress_nodes")
+
+        # ── 阶段 4: 重排 ──
+        if cancellation_token is not None and cancellation_token.is_cancelled():
+            cancel_result.step = "before_rerank"
+            logger.info("RAG 检索取消 | %s", cancel_result.describe())
+            return ""
+
         rerank_nodes = self.reranker.rerank(
             query=query, nodes=reconstructed_nodes, top_k=top_k
         )
@@ -248,23 +408,36 @@ class RAGContainer:
             logger.info("RAG 重排后无有效结果")
             return ""
 
-        # 6. rerank 后恢复原文（摘要仅用于重排评分，最终 context 使用原文）
+        cancel_result.mark_completed("rerank")
+
+        # ── 阶段 5: 恢复原文 ──
         self.summary.restore_node_originals(rerank_nodes)
 
-        # 7. 拼接所有章节文本
+        # ── 阶段 6: 拼接 ──
         full_text = self.section_recon.merge_nodes_to_text(rerank_nodes)
 
-        # 8. 全局超限则摘要压缩
+        # ── 阶段 7: 全局超限摘要 ──
         total_tokens = self.summary.tokenizer.count_tokens(full_text)
         if total_tokens > max_context_tokens:
+            if cancellation_token is not None and cancellation_token.is_cancelled():
+                cancel_result.step = "before_summary"
+                logger.info("RAG 检索取消 | %s", cancel_result.describe())
+                return ""
+
             if self.summary.inference is not None:
-                full_text = await self.summary.run_summary(
-                    text=full_text, max_tokens=max_context_tokens
-                )
+                try:
+                    full_text = await self.summary.run_summary_cancellable(
+                        full_text, max_context_tokens, cancellation_token
+                    )
+                except asyncio.CancelledError:
+                    cancel_result.step = "global_summary"
+                    logger.info("RAG 检索取消 | %s", cancel_result.describe())
+                    raise
             else:
                 full_text = self.summary.truncate_by_token(
                     full_text, max_context_tokens
                 )
 
+        cancel_result.mark_completed("summary")
         logger.info("RAG 检索完成 | context_length=%s", len(full_text))
         return full_text
