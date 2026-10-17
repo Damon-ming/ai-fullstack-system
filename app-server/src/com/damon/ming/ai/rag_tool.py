@@ -397,9 +397,13 @@ class RAGContainer:
             if nodes_to_compress:
                 await self.summary.compress_nodes(nodes_to_compress, max_seq_len)
 
-            # ── 阶段 4: rerank 重排 ──
-            ranked_nodes = self.reranker.rerank(
-                query=query, nodes=reconstructed_nodes, top_k=effective_top_k
+            # ── 阶段 4: rerank 重排（CPU/GPU 密集，提交到线程池避免阻塞事件循环） ──
+            ranked_nodes = await loop.run_in_executor(
+                retrieval_pool,
+                self.reranker.rerank,
+                query,
+                reconstructed_nodes,
+                effective_top_k,
             )
             if not ranked_nodes:
                 logger.info("RAG 重排后无有效结果")

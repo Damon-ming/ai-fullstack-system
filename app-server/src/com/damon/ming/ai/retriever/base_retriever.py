@@ -137,11 +137,8 @@ class SparseRetriever(BaseRetriever):
         if top_k < 1:
             return []
 
-        scores = self.bm25_index.get_scores(query)
-        top_indices = scores.argsort()[-top_k:][::-1]
-        candidates = [
-            (self.bm25_index.corpus[i], float(scores[i])) for i in top_indices
-        ]
+        # 使用 get_top_k 保证 corpus 访问在锁内完成，避免并发 build 导致的索引错位
+        candidates = self.bm25_index.get_top_k(query, top_k)
 
         # 元数据过滤：BM25 内存索引只能检索后过滤
         if metadata_filter:

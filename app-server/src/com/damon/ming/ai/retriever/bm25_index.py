@@ -48,3 +48,16 @@ class BM25Index:
                 raise ValueError("索引未初始化，请先执行 build()")
             tokenized_query = self.tokenizer(query)
             return self.index.get_scores(tokenized_query)
+
+    def get_top_k(self, query: str, top_k: int) -> list[tuple[TextNode, float]]:
+        """获取 top-k 节点及分数（读锁保护，corpus 访问在锁内完成）。
+
+        避免 get_scores 后锁释放、corpus 被并发 build 替换导致的索引错位。
+        """
+        with self._rw_lock:
+            if self.index is None:
+                raise ValueError("索引未初始化，请先执行 build()")
+            tokenized_query = self.tokenizer(query)
+            scores = self.index.get_scores(tokenized_query)
+            top_indices = scores.argsort()[-top_k:][::-1]
+            return [(self.corpus[i], float(scores[i])) for i in top_indices]
