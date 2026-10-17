@@ -173,8 +173,9 @@ class ChromaDBStore(BaseVectorStore):
             return False
 
     def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
-        if node_id in self._node_cache:
-            return self._node_cache[node_id]
+        cached = self._node_cache.get(node_id)
+        if cached is not None:
+            return cached
         try:
             result = self.collection.get(ids=[node_id])
             if result["ids"]:
