@@ -382,15 +382,20 @@ class RAGContainer:
                     node.text = original
             full_text = self.section_recon.merge_nodes_to_text(ranked_nodes)
 
-            # ── 阶段 7: 全局超限摘要 ──
+            # ── 阶段 6: 全局超限摘要 ──
             total_tokens = self.summary.tokenizer.count_tokens(full_text)
             if total_tokens > max_context_tokens:
-                if self.summary.inference is not None:
-                    full_text = await self.summary.run_summary(
-                        full_text, max_context_tokens
+                full_text = await self.summary.run_summary(
+                    full_text, max_context_tokens
+                )
+                # 摘要后仍超限则截断兜底
+                if self.summary.tokenizer.count_tokens(full_text) > max_context_tokens:
+                    logger.warning(
+                        "全局摘要后仍超限 | 摘要tokens=%d | max=%d | 截断兜底",
+                        self.summary.tokenizer.count_tokens(full_text),
+                        max_context_tokens,
                     )
-                else:
-                    full_text = self.summary.truncate_by_token(
+                    full_text = self.summary.C_by_token(
                         full_text, max_context_tokens
                     )
 

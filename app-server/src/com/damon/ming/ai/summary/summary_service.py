@@ -82,7 +82,16 @@ class SummaryService:
                 )
 
         for node, task in tasks:
-            node.text = await task  # CancelledError 传播时自动丢弃
+            text = await task  # CancelledError 传播时自动丢弃
+            # LLM 输出可能略微超出 max_tokens，截断兜底保证不超限
+            if self.tokenizer.count_tokens(text) > max_tokens:
+                logger.warning(
+                    "LLM摘要后仍超限 | 摘要tokens=%d | max=%d | 截断兜底",
+                    self.tokenizer.count_tokens(text),
+                    max_tokens,
+                )
+                text = self.truncate_by_token(text, max_tokens)
+            node.text = text
         return nodes
 
     # ── 取消说明 ────────────────────────────────────────────────────────
