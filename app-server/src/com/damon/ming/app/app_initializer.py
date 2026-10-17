@@ -60,8 +60,28 @@ class AppInitializer:
         self._init_encryption()
         self._init_sign_context()
         self._init_ai()
+        self._init_chat()
 
         logger.info("应用启动完成")
+
+    def attach_to_app(self, app) -> None:
+        """将初始化完成的子系统挂载到 FastAPI app.state，供路由层使用。
+
+        必须在 startup() 之后调用，确保所有子系统已初始化。
+        """
+        app.state.rag_app = self.rag_app
+        app.state.infer_service = self.infer_service
+        app.state.llm_model_name = self.llm_model_name
+        app.state.llm_options = self.llm_options
+        app.state.pool_mgr = self.pool_mgr
+
+        # 聊天配置（Semaphore 在 lifespan 内创建，绑定到正确的事件循环）
+        app.state.infer_sem = self.chat_sem
+        app.state.infer_timeout = self.chat_timeout
+        app.state.retry_ms = self.chat_retry_ms
+        app.state.system_prompt_tpl = self.chat_system_prompt_tpl
+
+        logger.info("子系统已挂载到 app.state")
 
     def shutdown(self) -> None:
         """关闭所有子系统，释放资源。"""
@@ -202,7 +222,9 @@ class AppInitializer:
     def _load_encryption_config(self):
         """加载加密配置（可选，失败用默认值）。"""
         try:
-            from src.com.damon.ming.app.config.encryption.encryption_config_loader import EncryptionConfigLoader
+            from src.com.damon.ming.app.config.encryption.encryption_config_loader import (
+                EncryptionConfigLoader,
+            )
 
             config = EncryptionConfigLoader().load(profile=self._profile)
             logger.info(
@@ -273,6 +295,26 @@ class AppInitializer:
             logger.info("HKDF sign_context 已从配置注入")
         else:
             logger.warning("sign_context 未配置，签名密钥派生将使用空 context")
+
+    def _init_chat(self) -> None:
+        """聊天配置：加载 YAML 中的并发控制、超时、系统 prompt。"""
+        import asyncio
+
+        from src.com.damon.ming.app.config.ai.chat_config_loader import ChatConfigLoader
+
+        configs = ChatConfigLoader().load_all()
+        cfg = configs.get("common") or configs[next(iter(configs.keys()))]
+
+        self.chat_sem = asyncio.Semaphore(cfg.infer_concurrency)
+        self.chat_timeout = cfg.infer_timeout
+        self.chat_retry_ms = cfg.retry_ms
+        self.chat_system_prompt_tpl = cfg.system_prompt
+
+        logger.info(
+            "聊天配置初始化完成 | concurrency=%d | timeout=%ds",
+            cfg.infer_concurrency,
+            cfg.infer_timeout,
+        )
 
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""

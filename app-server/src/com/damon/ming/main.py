@@ -130,21 +130,8 @@ app.include_router(history_router.router)
 app.include_router(chat_router.router)
 logger.info("应用路由初始化完成")
 
-# ---- 挂载 AI 子系统到 app.state ----------------------------------------
-app.state.rag_app = initializer.rag_app
-app.state.infer_service = initializer.infer_service
-app.state.llm_model_name = initializer.llm_model_name
-app.state.llm_options = initializer.llm_options
-app.state.pool_mgr = initializer.pool_mgr
-
-# ---- 聊天配置（Semaphore 在 lifespan 内初始化，绑定到正确的事件循环）----
-_chat_sem, _chat_timeout, _chat_retry, _chat_prompt_tpl = (
-    chat_router.init_chat_config()
-)
-app.state.infer_sem = _chat_sem
-app.state.infer_timeout = _chat_timeout
-app.state.retry_ms = _chat_retry
-app.state.system_prompt_tpl = _chat_prompt_tpl
+# ---- 初始化器将所有子系统挂载到 app.state --------------------------
+initializer.attach_to_app(app)
 
 # ---- 全局异常处理器 ---------------------------------------------------
 register_exception_handler(app)

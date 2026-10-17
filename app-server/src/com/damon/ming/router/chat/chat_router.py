@@ -11,7 +11,6 @@ from src.com.damon.ming.ai.schemas.response import (
     BaseLLMSuccessResponse,
     ChatDeltaData,
 )
-from src.com.damon.ming.app.config.ai.chat_config_loader import ChatConfigLoader
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
@@ -21,17 +20,6 @@ from sse_starlette.sse import EventSourceResponse
 logger = pin("chat.router")
 
 router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
-
-
-def init_chat_config() -> tuple[asyncio.Semaphore, int, int, str]:
-    """从 YAML 加载聊天配置，返回 (信号量, 超时秒数, 重连毫秒数, 系统prompt)。
-
-    在 FastAPI lifespan 中调用，确保 Semaphore 绑定到正确的事件循环。
-    """
-    configs = ChatConfigLoader().load_all()
-    cfg = configs.get("common") or configs[next(iter(configs.keys()))]
-    sem = asyncio.Semaphore(cfg.infer_concurrency)
-    return sem, cfg.infer_timeout, cfg.retry_ms, cfg.system_prompt
 
 
 @router.post("/send/v1")
