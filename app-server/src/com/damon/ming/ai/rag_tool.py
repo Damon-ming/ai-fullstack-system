@@ -296,7 +296,8 @@ class RAGContainer:
         # 只把本次新增节点追加到内存节点列表，然后用全部内存节点重建BM25
         if new_nodes:
             self.all_nodes.extend(new_nodes)
-            self.bm25_index.build(self.all_nodes)
+            # 传副本，避免 BM25Index 持有 all_nodes 别名导致后续 extend 静默腐败索引
+            self.bm25_index.build(list(self.all_nodes))
             logger.info(
                 f"BM25增量更新完成，新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
             )

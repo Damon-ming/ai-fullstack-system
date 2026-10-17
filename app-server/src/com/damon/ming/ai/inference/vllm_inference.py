@@ -103,8 +103,9 @@ class VLLMInference(BaseInferenceService):
                     yield StreamToken(content=content, type="content")
         except asyncio.CancelledError:
             logger.warning("VLLM stream 收到取消信号，关闭流")
-            await stream.close()
             raise
+        finally:
+            await stream.close()
 
     async def check_model_ready(self, model_name: str) -> bool:
         try:

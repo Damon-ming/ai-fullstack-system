@@ -62,14 +62,16 @@ class BM25Index:
             return self.index.get_scores(tokenized_query)
 
     def get_top_k(self, query: str, top_k: int) -> list[tuple[TextNode, float]]:
-        """获取 top-k 节点及分数（读锁保护，corpus 访问在锁内完成）。
+        """获取 top-k 节点及分数。
 
-        避免 get_scores 后锁释放、corpus 被并发 build 替换导致的索引错位。
+        锁内仅做 scores 计算 + corpus 引用快照（build 原子替换，引用安全），
+        argsort 和 tuple 构建在锁外完成，允许并发查询并行执行。
         """
         with self._rw_lock:
             if self.index is None:
                 raise ValueError("索引未初始化，请先执行 build()")
             tokenized_query = self.tokenizer(query)
             scores = self.index.get_scores(tokenized_query)
-            top_indices = scores.argsort()[-top_k:][::-1]
-            return [(self.corpus[i], float(scores[i])) for i in top_indices]
+            corpus = self.corpus  # 原子替换，快照引用安全
+        top_indices = scores.argsort()[-top_k:][::-1]
+        return [(corpus[i], float(scores[i])) for i in top_indices]

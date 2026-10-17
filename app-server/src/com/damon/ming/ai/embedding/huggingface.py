@@ -1,5 +1,6 @@
 # app-server/src/com/damon/ming/ai/embedding/huggingface.py
 
+import threading
 
 from src.com.damon.ming.ai.embedding import register_engine
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
@@ -29,26 +30,30 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
             device=params.device,
             cache_folder=params.cache_folder or None,
         )
+        # SentenceTransformer.encode 底层为 PyTorch forward，非线程安全
+        self._infer_lock = threading.Lock()
         logger.info(
             f"[HuggingFaceEmbedding] 初始化成功 | model={params.model_name} | device={params.device}"
         )
 
     def embed_query(self, text: str) -> list[float]:
         try:
-            embedding = self.model.encode(
-                text, normalize_embeddings=self.params.normalize_embeddings
-            )
+            with self._infer_lock:
+                embedding = self.model.encode(
+                    text, normalize_embeddings=self.params.normalize_embeddings
+                )
             return embedding.tolist()
         except Exception as e:
             raise RuntimeError(f"HuggingFace embedding failed: {e}")
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         try:
-            embeddings = self.model.encode(
-                texts,
-                normalize_embeddings=self.params.normalize_embeddings,
-                show_progress_bar=False,
-            )
+            with self._infer_lock:
+                embeddings = self.model.encode(
+                    texts,
+                    normalize_embeddings=self.params.normalize_embeddings,
+                    show_progress_bar=False,
+                )
             return embeddings.tolist()
         except Exception as e:
             raise RuntimeError(f"HuggingFace batch embedding failed: {e}")

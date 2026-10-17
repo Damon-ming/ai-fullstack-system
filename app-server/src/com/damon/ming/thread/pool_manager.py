@@ -99,23 +99,26 @@ class ThreadPoolManager:
             pool_configs: 自定义线程池配置，覆盖默认值。
                          格式：{"pool_name": max_workers, ...}
         """
-        if self._initialized:
-            logger.warning("ThreadPoolManager 已初始化，跳过重复 startup")
-            return
+        with self._instance_lock:
+            if self._initialized:
+                logger.warning("ThreadPoolManager 已初始化，跳过重复 startup")
+                return
 
-        self._pool_configs = {**self.DEFAULT_POOLS, **(pool_configs or {})}
-        self._pools: dict[str, ThreadPoolExecutor] = {}
-        self._token_registry = _TokenRegistry()
+            self._pool_configs = {**self.DEFAULT_POOLS, **(pool_configs or {})}
+            self._pools: dict[str, ThreadPoolExecutor] = {}
+            self._token_registry = _TokenRegistry()
 
-        for name, max_workers in self._pool_configs.items():
-            self._pools[name] = ThreadPoolExecutor(
-                max_workers=max_workers,
-                thread_name_prefix=f"AI-{name}",
-            )
-            logger.info("线程池已创建 | name=%s | max_workers=%d", name, max_workers)
+            for name, max_workers in self._pool_configs.items():
+                self._pools[name] = ThreadPoolExecutor(
+                    max_workers=max_workers,
+                    thread_name_prefix=f"AI-{name}",
+                )
+                logger.info(
+                    "线程池已创建 | name=%s | max_workers=%d", name, max_workers
+                )
 
-        self._initialized = True
-        logger.info("ThreadPoolManager 初始化完成 | pools=%d", len(self._pools))
+            self._initialized = True
+            logger.info("ThreadPoolManager 初始化完成 | pools=%d", len(self._pools))
 
     def shutdown(self, wait: bool = True, cancel_futures: bool = True) -> None:
         """关闭所有线程池。
@@ -163,23 +166,29 @@ class ThreadPoolManager:
         if pool is not None:
             return pool
 
-        # 按需创建：优先使用传入的 max_workers，回退到默认配置
-        workers = max_workers
-        if workers is None:
-            workers = self.DEFAULT_POOLS.get(name)
-        if workers is None:
-            raise ValueError(
-                f"未知线程池名称 '{name}' 且未指定 max_workers。"
-                f"已注册: {list(self._pools.keys())}"
-            )
+        # 加锁防止并发创建同名池导致 ThreadPoolExecutor 泄漏
+        with self._instance_lock:
+            pool = self._pools.get(name)
+            if pool is not None:
+                return pool
 
-        pool = ThreadPoolExecutor(
-            max_workers=workers,
-            thread_name_prefix=f"AI-{name}",
-        )
-        self._pools[name] = pool
-        logger.info("按需创建线程池 | name=%s | max_workers=%d", name, workers)
-        return pool
+            # 按需创建：优先使用传入的 max_workers，回退到默认配置
+            workers = max_workers
+            if workers is None:
+                workers = self.DEFAULT_POOLS.get(name)
+            if workers is None:
+                raise ValueError(
+                    f"未知线程池名称 '{name}' 且未指定 max_workers。"
+                    f"已注册: {list(self._pools.keys())}"
+                )
+
+            pool = ThreadPoolExecutor(
+                max_workers=workers,
+                thread_name_prefix=f"AI-{name}",
+            )
+            self._pools[name] = pool
+            logger.info("按需创建线程池 | name=%s | max_workers=%d", name, workers)
+            return pool
 
     def create_request_context(self, request_id: str | None = None) -> RequestContext:
         """创建请求级上下文，绑定一个 CancellationToken。

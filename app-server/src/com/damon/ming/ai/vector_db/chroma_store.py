@@ -231,9 +231,9 @@ class ChromaDBStore(BaseVectorStore):
 
     def clear(self, **kwargs) -> bool:
         try:
-            self.client.delete_collection(self.params.collection_name)
-            self.collection = self._get_or_create_collection()
             with self._cache_lock:
+                self.client.delete_collection(self.params.collection_name)
+                self.collection = self._get_or_create_collection()
                 self._node_cache.clear()
             return True
         except Exception as e:
@@ -266,9 +266,9 @@ class ChromaDBStore(BaseVectorStore):
             return False
 
     def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
         with self._cache_lock:
+            if self._closed:
+                return
+            self._closed = True
             self._node_cache.clear()
         self.logger.info("[ChromaDBStore] 资源已释放")

@@ -14,6 +14,7 @@
 """
 
 import asyncio
+import copy
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
@@ -64,24 +65,24 @@ class SummaryService:
     async def compress_nodes(
         self, nodes: list[TextNode], max_tokens: int
     ) -> list[TextNode]:
-        """批量压缩超长节点（原地修改）。
+        """批量压缩超长节点（返回新节点，不修改输入）。
 
         对超过 max_tokens 的节点并发调用 run_summary 压缩。
-        调用方传入原节点或克隆副本均可，本方法不做区分。
+        返回深拷贝节点，避免并发请求间写共享 TextNode。
         取消时由 CancelledError 自然传播，结果直接丢弃。
         """
-        tasks: list[tuple[TextNode, asyncio.Task]] = []
-        for node in nodes:
+        tasks: list[tuple[int, asyncio.Task]] = []
+        for idx, node in enumerate(nodes):
             token_cnt = self.tokenizer.count_tokens(node.text)
             if token_cnt > max_tokens:
                 logger.info(f"节点压缩 | tokens={token_cnt} | max_tokens={max_tokens}")
                 tasks.append(
-                    (node, asyncio.create_task(
+                    (idx, asyncio.create_task(
                         self.run_summary(text=node.text, max_tokens=max_tokens)
                     ))
                 )
 
-        for node, task in tasks:
+        for idx, task in tasks:
             text = await task  # CancelledError 传播时自动丢弃
             # LLM 输出可能略微超出 max_tokens，截断兜底保证不超限
             if self.tokenizer.count_tokens(text) > max_tokens:
@@ -91,7 +92,9 @@ class SummaryService:
                     max_tokens,
                 )
                 text = self.truncate_by_token(text, max_tokens)
-            node.text = text
+            new_node = copy.deepcopy(nodes[idx])
+            new_node.text = text
+            nodes[idx] = new_node
         return nodes
 
     # ── 取消说明 ────────────────────────────────────────────────────────

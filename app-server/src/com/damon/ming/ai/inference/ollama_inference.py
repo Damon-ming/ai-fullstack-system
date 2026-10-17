@@ -121,8 +121,9 @@ class OllamaInference(BaseInferenceService):
                     yield StreamToken(content=content, type="content")
         except asyncio.CancelledError:
             logger.warning("Ollama stream 收到取消信号，关闭ollama流")
-            await stream.close()
             raise
+        finally:
+            await stream.close()
 
     async def warmup(self, model_name: str) -> None:
         try:

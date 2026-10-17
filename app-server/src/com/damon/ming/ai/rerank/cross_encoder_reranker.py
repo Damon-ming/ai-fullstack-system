@@ -1,5 +1,6 @@
 # app-server/src/com/damon/ming/ai/rerank/cross_encoder_reranker.py
 
+import copy
 import threading
 
 import torch
@@ -112,6 +113,8 @@ class CrossEncoderReranker(BaseReranker):
 
         out_nodes = []
         for node, score in node_with_score:
+            # 浅拷贝节点 + 复制 metadata，避免并发写共享 TextNode 对象
+            node = copy.deepcopy(node)
             node.metadata["_rerank_score"] = float(score)
             out_nodes.append(node)
 

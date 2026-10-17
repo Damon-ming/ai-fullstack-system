@@ -1,6 +1,7 @@
 # app-server/src/com/damon/ming/ai/embedding/ollama.py
 
 import hashlib
+import threading
 import time
 
 from src.com.damon.ming.ai.embedding import register_engine
@@ -26,6 +27,7 @@ class OllamaEmbedding(BaseEmbeddingService):
 
         self.client = ollama.Client(host=params.base_url, timeout=params.timeout)
         self._cache: dict[str, list[float]] = {}
+        self._cache_lock = threading.Lock()
 
         # 验证模型是否可用
         try:
@@ -40,8 +42,9 @@ class OllamaEmbedding(BaseEmbeddingService):
 
     def embed_query(self, text: str) -> list[float]:
         cache_key = hashlib.md5(text.encode("utf-8")).hexdigest()
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        with self._cache_lock:
+            if cache_key in self._cache:
+                return self._cache[cache_key]
 
         for attempt in range(self.params.max_retries):
             try:
@@ -49,7 +52,8 @@ class OllamaEmbedding(BaseEmbeddingService):
                     model=self.params.model_name, prompt=text
                 )
                 vector = response["embedding"]
-                self._cache[cache_key] = vector
+                with self._cache_lock:
+                    self._cache[cache_key] = vector
                 return vector
             except Exception as e:
                 if attempt == self.params.max_retries - 1:
