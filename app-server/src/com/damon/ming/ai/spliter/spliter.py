@@ -298,11 +298,10 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 all_nodes.extend(nodes)
             except Exception as e:
                 errors += 1
-                self.logger.error(
+                self.logger.exception(
                     f"[Splitter] 处理文档失败 | "
                     f"file={doc.metadata.get('file_name', 'unknown')} | "
                     f"error={e}",
-                    exc_info=True,
                 )
                 with self._stats_lock:
                     self.stats["errors"] += 1

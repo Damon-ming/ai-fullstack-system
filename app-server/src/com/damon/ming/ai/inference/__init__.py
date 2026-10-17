@@ -14,6 +14,7 @@
 
 引擎注册表由各实现类通过 @register_engine 自动注册。
 """
+
 from src.com.damon.ming.ai.inference.base_inference import (
     BaseInferenceService,
     InferenceParams,
@@ -30,10 +31,10 @@ __all__ = [
     "BaseInferenceService",
     "InferenceParams",
     "ModelOptions",
-    "StreamToken",
     "OllamaInference",
+    "StreamToken",
     "VLLMInference",
+    "list_engines",
     "register_engine",
     "resolve_engine",
-    "list_engines",
 ]

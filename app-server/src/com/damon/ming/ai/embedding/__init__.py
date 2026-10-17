@@ -10,6 +10,7 @@ Embedding 服务抽象层 —— 纯技术模块。
 
 配置加载见 ai/config/embedding_config_loader.py，本模块不感知配置来源。
 """
+
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
     EmbeddingParams,
@@ -28,11 +29,13 @@ def register_engine(name: str):
         @register_engine("ollama")
         class OllamaEmbedding(BaseEmbeddingService): ...
     """
+
     def decorator(cls):
         if not issubclass(cls, BaseEmbeddingService):
             raise TypeError(f"{cls} 必须继承 BaseEmbeddingService")
         _name_to_class[name] = cls
         return cls
+
     return decorator
 
 
@@ -52,9 +55,9 @@ def list_engines() -> list[str]:
 __all__ = [
     "BaseEmbeddingService",
     "EmbeddingParams",
-    "OllamaEmbedding",
     "HuggingFaceEmbedding",
+    "OllamaEmbedding",
+    "list_engines",
     "register_engine",
     "resolve_embedding",
-    "list_engines",
 ]

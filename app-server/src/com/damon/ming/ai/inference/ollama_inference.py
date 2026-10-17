@@ -143,7 +143,7 @@ class OllamaInference(BaseInferenceService):
             model_list = [m["name"] for m in res.get("models", [])]
             return model_name in model_list
         except Exception as e:
-            logger.error("模型检测失败:", str(e))
+            logger.error("模型检测失败: %s", e)
             return False
 
     def get_model_info(self) -> dict[str, Any]:

@@ -134,9 +134,8 @@ class LocalPDFDataSource(BaseDataSource):
             with self._stats_lock:
                 self._stats["failed_files"] += 1
 
-            self.logger.error(
+            self.logger.exception(
                 f"[PDFDataSource] 解析失败 | file={file_name} | error={e!s}",
-                exc_info=True,
             )
             return []
 

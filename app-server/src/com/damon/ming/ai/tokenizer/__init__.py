@@ -13,6 +13,7 @@
 
 引擎注册表由各实现类通过 @register_engine 自动注册。
 """
+
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import (
     BaseTokenizer,
     BaseWordTokenizer,
@@ -35,11 +36,13 @@ def register_engine(name: str):
         @register_engine("jieba")
         class JiebaTokenizer(BaseWordTokenizer): ...
     """
+
     def decorator(cls):
         if not (issubclass(cls, BaseTokenizer) or issubclass(cls, BaseWordTokenizer)):
             raise TypeError(f"{cls} 必须继承 BaseTokenizer 或 BaseWordTokenizer")
         _name_to_class[name] = cls
         return cls
+
     return decorator
 
 
@@ -59,9 +62,9 @@ def list_engines() -> list[str]:
 __all__ = [
     "BaseTokenizer",
     "BaseWordTokenizer",
-    "TokenizerParams",
     "TiktokenTokenizer",
+    "TokenizerParams",
+    "list_engines",
     "register_engine",
     "resolve_tokenizer",
-    "list_engines",
 ]

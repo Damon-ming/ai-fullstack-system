@@ -115,7 +115,7 @@ class VLLMInference(BaseInferenceService):
             model_names = [m.id for m in models.data]
             return model_name in model_names
         except Exception as e:
-            logger.error("VLLM模型检测失败:", str(e))
+            logger.error("VLLM模型检测失败: %s", e)
             return False
 
     def get_model_info(self) -> dict[str, Any]:
