@@ -358,8 +358,6 @@ class RAGContainer:
                     dedup_by_section=cfg.dedup_by_section,
                     dense_top_k=cfg.dense_top_k,
                     sparse_top_k=cfg.sparse_top_k,
-                    max_multiplier=cfg.max_section_oversample_multiplier,
-                    rrf_multiplier=cfg.rrf_oversample_multiplier,
                     metadata_filter=None,
                     executor=retrieval_pool,
                 ),

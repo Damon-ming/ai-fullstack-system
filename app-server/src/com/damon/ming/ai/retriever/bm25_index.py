@@ -1,5 +1,6 @@
 # app-server/src/com/damon/ming/ai/retriever/bm25_index.py
 
+import numpy as np
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.log import pin
 
@@ -33,7 +34,7 @@ class BM25Index:
         self.index = BM25Okapi(tokenized_corpus)
         self.logger.info(f"[BM25Index] 索引构建完成 | 文档数: {len(nodes)}")
 
-    def get_scores(self, query: str) -> list[float]:
+    def get_scores(self, query: str) -> np.ndarray:
         """获取查询对全部文档的BM25分数数组，和corpus一一对应"""
         if self.index is None:
             raise ValueError("索引未初始化，请先执行 build()")

@@ -5,6 +5,19 @@ from typing import Any
 from llama_index.core.schema import TextNode
 
 
+def _extract_section_key(node: TextNode) -> tuple[str, str] | None:
+    """提取节点的 section 去重键。
+
+    Returns:
+        (file_md5, section_id) 元组，元数据缺失时返回 None。
+    """
+    file_md5 = node.metadata.get("file_md5", "")
+    section_id = node.metadata.get("section_id", "")
+    if not file_md5 or not section_id:
+        return None
+    return (file_md5, section_id)
+
+
 class BaseRetriever(ABC):
     """检索器抽象基类"""
 
@@ -42,11 +55,9 @@ class BaseRetriever(ABC):
         seen: set[tuple[str, str]] = set()
         result: list[tuple[TextNode, float]] = []
         for node, score in scored_nodes:
-            file_md5 = node.metadata.get("file_md5", "")
-            section_id = node.metadata.get("section_id", "")
-            if not file_md5 or not section_id:
+            key = _extract_section_key(node)
+            if key is None:
                 continue
-            key = (file_md5, section_id)
             if key in seen:
                 continue
             seen.add(key)
@@ -122,6 +133,10 @@ class SparseRetriever(BaseRetriever):
         dedup_by_section: bool,
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[tuple[TextNode, float]]:
+        # P2 修复：top_k <= 0 时 argsort[-0:] 会返回整个语料库
+        if top_k < 1:
+            return []
+
         scores = self.bm25_index.get_scores(query)
         top_indices = scores.argsort()[-top_k:][::-1]
         candidates = [
