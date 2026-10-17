@@ -59,32 +59,32 @@ async def chat(req: Request, body: ChatRequest):
         infer_timeout = req.app.state.infer_timeout
         system_prompt_tpl = req.app.state.system_prompt_tpl
 
-        async with infer_sem:
-            async with asyncio.timeout(infer_timeout):
-                logger.debug("开始执行同步 RAG 检索")
+        async with asyncio.timeout(infer_timeout):
+            logger.debug("开始执行同步 RAG 检索")
 
-                # 1. 调用RAG检索，获取拼接完整章节上下文（传递取消令牌）
-                #    取消时 query_rag 直接抛出 CancelledError，被下方 except 捕获
-                ref_content = await req.app.state.rag_app.query_rag(
-                    body.query,
-                    cancellation_token=ctx.cancellation_token,
-                )
+            # 1. RAG 检索在信号量外执行（自身有线程池保护），不占用推理并发槽
+            ref_content = await req.app.state.rag_app.query_rag(
+                body.query,
+                cancellation_token=ctx.cancellation_token,
+            )
 
-                schema = get_chat_schema(body.reason)
+            schema = get_chat_schema(body.reason)
 
-                # 2. 填充固定Prompt，构造标准messages数组
-                system_prompt = system_prompt_tpl.format(ref_content=ref_content)
-                prompt_messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": body.query},
-                ]
+            # 2. 填充固定Prompt，构造标准messages数组
+            system_prompt = system_prompt_tpl.format(ref_content=ref_content)
+            prompt_messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": body.query},
+            ]
 
+            # 3. 仅推理段进入信号量，释放 RAG 等待期间的并发槽
+            async with infer_sem:
                 llm_raw = await req.app.state.infer_service.text_generation(
                     model_name=req.app.state.llm_model_name,
                     messages=prompt_messages,
                     reason=body.reason,
                     response_schema=schema,
-                    options=req.app.state.llm_options,
+                    options=dict(req.app.state.llm_options),
                 )
 
             # 4. 组装返回结构体，think控制是否携带思考过程（当前固定空）
@@ -172,59 +172,67 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
         infer_timeout = req.app.state.infer_timeout
         system_prompt_tpl = req.app.state.system_prompt_tpl
 
-        async with infer_sem:
-            try:
-                async with asyncio.timeout(infer_timeout):
-                    logger.debug("开始执行流式 RAG 检索")
-                    # 取消时 query_rag 直接抛出 CancelledError，被下方 except 捕获
-                    ref_content = await req.app.state.rag_app.query_rag(
-                        body.query,
-                        cancellation_token=ctx.cancellation_token,
+        async with asyncio.timeout(infer_timeout):
+            logger.debug("开始执行流式 RAG 检索")
+            # RAG 在信号量外执行（自身有线程池保护），不占用推理并发槽
+            ref_content = await req.app.state.rag_app.query_rag(
+                body.query,
+                cancellation_token=ctx.cancellation_token,
+            )
+
+            system_prompt = system_prompt_tpl.format(ref_content=ref_content)
+            prompt_messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": body.query},
+            ]
+            logger.debug("prompt_messages:\n%s", prompt_messages)
+
+            # 仅推理段进入信号量，释放 RAG 等待期间的并发槽
+            async with infer_sem:
+                try:
+                    async for token in req.app.state.infer_service.stream_generate(
+                        model_name=req.app.state.llm_model_name,
+                        messages=prompt_messages,
+                        reason=body.reason,
+                        options=dict(req.app.state.llm_options),
+                    ):
+                        # 根据 token 类型发射不同事件：
+                        #   reasoning → event: "reasoning"（推理过程）
+                        #   content   → event: "delta"（正文回答）
+                        event_name = (
+                            "reasoning" if token.type == "reasoning" else "delta"
+                        )
+                        yield emitter.emit(
+                            event_name,
+                            SseMessageFactory.delta(
+                                ChatDeltaData(content=token.content)
+                            ),
+                        )
+                except asyncio.CancelledError:
+                    logger.warning("SSE客户端主动断开连接，取消推理任务")
+                    raise
+                except TimeoutError as e:
+                    logger.warning("流式聊天请求超时")
+                    yield emitter.emit(
+                        "error",
+                        SseMessageFactory.error(
+                            ErrorCode.CHAT.TIMEOUT, BaseLLMFailedData(error_msg=str(e))
+                        ),
                     )
-
-                    system_prompt = system_prompt_tpl.format(ref_content=ref_content)
-                    prompt_messages = [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": body.query},
-                    ]
-                    logger.debug("prompt_messages:\n%s", prompt_messages)
-
-                    try:
-                        async for token in req.app.state.infer_service.stream_generate(
-                            model_name=req.app.state.llm_model_name,
-                            messages=prompt_messages,
-                            reason=body.reason,
-                            options=req.app.state.llm_options,
-                        ):
-                            # 根据 token 类型发射不同事件：
-                            #   reasoning → event: "reasoning"（推理过程）
-                            #   content   → event: "delta"（正文回答）
-                            event_name = (
-                                "reasoning" if token.type == "reasoning" else "delta"
-                            )
-                            yield emitter.emit(
-                                event_name,
-                                SseMessageFactory.delta(
-                                    ChatDeltaData(content=token.content)
-                                ),
-                            )
-                    except asyncio.CancelledError:
-                        logger.warning("SSE客户端主动断开连接，取消推理任务")
-                        raise
-            except TimeoutError as e:
-                logger.warning("流式聊天请求超时")
-                yield emitter.emit(
-                    "error",
-                    SseMessageFactory.error(
-                        ErrorCode.CHAT.TIMEOUT, BaseLLMFailedData(error_msg=str(e))
-                    ),
-                )
-                return
+                    return
 
         # ── done 事件（结束包） ──
         yield emitter.emit("done", SseMessageFactory.done())
         logger.info("流式聊天请求完成 | lastEventId=%s", emitter.last_event_id)
 
+    except TimeoutError as e:
+        logger.warning("流式聊天请求超时")
+        yield emitter.emit(
+            "error",
+            SseMessageFactory.error(
+                ErrorCode.CHAT.TIMEOUT, BaseLLMFailedData(error_msg=str(e))
+            ),
+        )
     except asyncio.CancelledError:
         logger.warning("【统计】流式SSE请求被客户端主动取消")
         raise

@@ -63,6 +63,8 @@ class VLLMInference(BaseInferenceService):
             try:
                 resp = await self.client.chat.completions.create(**create_kwargs)
                 return resp.choices[0].message.content
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 err_msg = f"VLLM调用异常: {e!s}"
                 wait = 2**attempt
