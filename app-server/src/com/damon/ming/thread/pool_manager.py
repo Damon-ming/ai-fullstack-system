@@ -70,6 +70,7 @@ class ThreadPoolManager:
         "retrieval"  : max_workers=4  —— HybridRetriever 稠密+稀疏并发
         "document"   : max_workers=8  —— PDF 加载 / 文档分割
         "inference"  : max_workers=2  —— 推理辅助线程（如有）
+        "rerank"     : max_workers=2  —— CrossEncoder 重排专用（与 retrieval 隔离，避免 rerank 长耗时占用检索线程）
     """
 
     # 默认线程池配置：名称 → 最大线程数
@@ -77,6 +78,7 @@ class ThreadPoolManager:
         "retrieval": 4,  # HybridRetriever (2) + 余量
         "document": 8,  # PDF 加载 / 文档分割
         "inference": 2,  # 推理辅助
+        "rerank": 2,  # CrossEncoder 专用（配合 _infer_lock 串行化推理）
     }
 
     _instance: ThreadPoolManager | None = None

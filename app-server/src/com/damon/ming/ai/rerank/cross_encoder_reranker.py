@@ -102,18 +102,24 @@ class CrossEncoderReranker(BaseReranker):
             return []
 
         texts = [node.text for node in nodes]
+        # score_pairs 内部持 _infer_lock 保护 PyTorch 推理，返回后锁已释放
         scores = self.model.score_pairs(query, texts, cancel_event)
 
         # 取消时 score_pairs 返回空列表，直接短路
         if not scores:
             return []
 
-        node_with_score = list(zip(nodes, scores))
-        node_with_score.sort(key=lambda x: x[1], reverse=True)
+        # 锁外排序 + deepcopy：nodes 是 rerank() 局部参数，RAGContainer 顺序调用，
+        # 执行期间不会并发修改这些节点对象，锁外操作安全。
+        scored_pairs = sorted(
+            zip(nodes, scores),
+            key=lambda x: x[1],
+            reverse=True,
+        )
 
         out_nodes = []
-        for node, score in node_with_score:
-            # 浅拷贝节点 + 复制 metadata，避免并发写共享 TextNode 对象
+        for node, score in scored_pairs:
+            # deepcopy 节点 + 写分数，避免并发写共享 TextNode 对象
             node = copy.deepcopy(node)
             node.metadata["_rerank_score"] = float(score)
             out_nodes.append(node)

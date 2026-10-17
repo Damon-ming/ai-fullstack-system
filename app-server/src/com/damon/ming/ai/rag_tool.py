@@ -365,6 +365,7 @@ class RAGContainer:
         loop = asyncio.get_running_loop()
         pool_mgr = self._pool_mgr
         retrieval_pool = pool_mgr.get_pool("retrieval")
+        rerank_pool = pool_mgr.get_pool("rerank")
 
         # 协作取消信号：超时或客户端断开时通知线程池中的 rerank 提前退出
         cancel_event = threading.Event()
@@ -409,10 +410,11 @@ class RAGContainer:
             if nodes_to_compress:
                 await self.summary.compress_nodes(nodes_to_compress, max_seq_len)
 
-            # ── 阶段 4: rerank 重排（CPU/GPU 密集，提交到线程池避免阻塞事件循环） ──
+            # ── 阶段 4: rerank 重排（CPU/GPU 密集，提交到独立 rerank 池） ──
+            # 使用独立池避免 rerank 长耗时占用 retrieval 线程（与 Stage 1/2 隔离）
             # 传入 cancel_event，使 rerank 内部可在取消信号下提前退出
             ranked_nodes = await loop.run_in_executor(
-                retrieval_pool,
+                rerank_pool,
                 self.reranker.rerank,
                 query,
                 reconstructed_nodes,

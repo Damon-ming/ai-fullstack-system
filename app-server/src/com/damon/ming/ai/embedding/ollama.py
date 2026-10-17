@@ -2,7 +2,6 @@
 
 import hashlib
 import threading
-import time
 
 from src.com.damon.ming.ai.embedding import register_engine
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
@@ -16,7 +15,13 @@ logger = pin("OllamaEmbedding")
 
 @register_engine("ollama")
 class OllamaEmbedding(BaseEmbeddingService):
-    """Ollama embedding — 适用于 Ollama 服务托管的 embedding 模型"""
+    """Ollama embedding — 适用于 Ollama 服务托管的 embedding 模型
+
+    设计说明：
+      - embed_query 自身不做 sleep 重试（避免阻塞线程池 worker），
+        失败立即抛 RuntimeError，由上层调用方（DenseRetriever）做短退避重试。
+      - 缓存只增不减，注意内存上限（当前场景 query 多样性可控）。
+    """
 
     def __init__(self, params: EmbeddingParams):
         super().__init__(params)
@@ -41,32 +46,26 @@ class OllamaEmbedding(BaseEmbeddingService):
             )
 
     def embed_query(self, text: str) -> list[float]:
+        """单条文本向量化（快速失败，不做 sleep 重试）。
+
+        失败时立即抛 RuntimeError，由上层 DenseRetriever 做短退避重试，
+        避免在 run_in_executor 的线程池 worker 内阻塞其他请求。
+        """
         cache_key = hashlib.md5(text.encode("utf-8")).hexdigest()
         with self._cache_lock:
             if cache_key in self._cache:
                 return self._cache[cache_key]
 
-        for attempt in range(self.params.max_retries):
-            try:
-                response = self.client.embeddings(
-                    model=self.params.model_name, prompt=text
-                )
-                vector = response["embedding"]
-                with self._cache_lock:
-                    self._cache[cache_key] = vector
-                return vector
-            except Exception as e:
-                if attempt == self.params.max_retries - 1:
-                    raise RuntimeError(
-                        f"Ollama embedding failed after {self.params.max_retries} attempts: {e}"
-                    )
-                wait_time = 2**attempt
-                logger.warning(
-                    f"重试 {attempt + 1}/{self.params.max_retries}，等待 {wait_time}s"
-                )
-                time.sleep(wait_time)
-
-        raise RuntimeError("Unexpected error in embed_query")
+        try:
+            response = self.client.embeddings(
+                model=self.params.model_name, prompt=text
+            )
+            vector = response["embedding"]
+            with self._cache_lock:
+                self._cache[cache_key] = vector
+            return vector
+        except Exception as e:
+            raise RuntimeError(f"Ollama embedding failed: {e}")
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [self.embed_query(text) for text in texts]

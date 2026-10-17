@@ -54,24 +54,32 @@ class BM25Index:
         self.logger.info(f"[BM25Index] 索引构建完成 | 文档数: {len(nodes)}")
 
     def get_scores(self, query: str) -> np.ndarray:
-        """获取查询对全部文档的BM25分数数组，和corpus一一对应（读锁保护）"""
-        with self._rw_lock:
-            if self.index is None:
-                raise ValueError("索引未初始化，请先执行 build()")
-            tokenized_query = self.tokenizer(query)
-            return self.index.get_scores(tokenized_query)
+        """获取查询对全部文档的BM25分数数组，和corpus一一对应。
 
-    def get_top_k(self, query: str, top_k: int) -> list[tuple[TextNode, float]]:
-        """获取 top-k 节点及分数。
-
-        锁内仅做 scores 计算 + corpus 引用快照（build 原子替换，引用安全），
-        argsort 和 tuple 构建在锁外完成，允许并发查询并行执行。
+        锁内仅做 index 引用快照，评分计算在锁外。
+        BM25Okapi.get_scores 是纯只读计算，无需持锁。
         """
         with self._rw_lock:
             if self.index is None:
                 raise ValueError("索引未初始化，请先执行 build()")
-            tokenized_query = self.tokenizer(query)
-            scores = self.index.get_scores(tokenized_query)
+            index = self.index  # 引用快照（build 原子替换，保证一致性）
+        # 锁外纯计算
+        tokenized_query = self.tokenizer(query)
+        return index.get_scores(tokenized_query)
+
+    def get_top_k(self, query: str, top_k: int) -> list[tuple[TextNode, float]]:
+        """获取 top-k 节点及分数。
+
+        锁内仅做 index + corpus 引用快照（build 原子替换，引用安全），
+        评分计算、argsort 和 tuple 构建全部在锁外，允许并发查询并行执行。
+        """
+        with self._rw_lock:
+            if self.index is None:
+                raise ValueError("索引未初始化，请先执行 build()")
+            index = self.index  # 引用快照
             corpus = self.corpus  # 原子替换，快照引用安全
+        # 锁外纯计算
+        tokenized_query = self.tokenizer(query)
+        scores = index.get_scores(tokenized_query)
         top_indices = scores.argsort()[-top_k:][::-1]
         return [(corpus[i], float(scores[i])) for i in top_indices]
