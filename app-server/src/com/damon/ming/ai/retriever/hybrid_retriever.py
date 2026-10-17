@@ -20,30 +20,43 @@ class HybridRetriever:
       - 取消由上层 RAGContainer 在 future 层面处理（取消后不再调用 retrieve）。
 
     纯业务逻辑：本类只做检索 + RRF 融合，不管理线程生命周期。
+
+    多样性保证（由 dedup_by_section 开关控制）：
+      True：Dense/Sparse 各自去重 + RRF 后去重 + 循环扩大，尽力填满 top_k。
+      False：跳过所有 section 去重和循环扩大，直接返回 RRF 原始结果。
+
+    注意：dedup_by_section 无默认值，调用方必须显式传入。
     """
 
     def __init__(
         self,
         dense_retriever: DenseRetriever,
         sparse_retriever: SparseRetriever,
-        dense_weight: float = 0.7,
-        sparse_weight: float = 0.3,
-        fuse_k: int = 60,
+        dense_weight: float,
+        sparse_weight: float,
+        fuse_k: int,
+        max_section_oversample_multiplier: int,
+        rrf_oversample_multiplier: int,
     ):
         self.dense_retriever = dense_retriever
         self.sparse_retriever = sparse_retriever
         self.dense_weight = dense_weight
         self.sparse_weight = sparse_weight
         self.fuser = ReciprocalRankFusion(k=fuse_k)
+        self.max_section_oversample_multiplier = max_section_oversample_multiplier
+        self.rrf_oversample_multiplier = rrf_oversample_multiplier
         self._lock = threading.Lock()
         self.logger = pin("HybridRetriever")
 
     def retrieve(
         self,
         query: str,
-        top_k: int = 10,
-        dense_top_k: int = 50,
-        sparse_top_k: int = 50,
+        top_k: int,
+        dedup_by_section: bool,
+        dense_top_k: int,
+        sparse_top_k: int,
+        max_multiplier: int,
+        rrf_multiplier: int,
         metadata_filter: dict[str, Any] | None = None,
         executor: ThreadPoolExecutor | None = None,
     ) -> list[TextNode]:
@@ -51,26 +64,82 @@ class HybridRetriever:
         混合检索主入口（并发执行稠密和稀疏检索）。
 
         Args:
+            query: 查询文本。
+            top_k: 返回结果数量上限。
+            dedup_by_section: True 时保证 section 多样性并尽力填满 top_k；
+                              False 时跳过所有 section 去重，直接返回 RRF 原始结果。
+                              必须显式传入，无默认值。
+            dense_top_k: 稠密检索候选数。
+            sparse_top_k: 稀疏检索候选数。
+            max_multiplier: section 去重不足时的最大放大倍数。
+            rrf_multiplier: RRF 融合时的过采样倍数。
+            metadata_filter: 元数据过滤条件。
             executor: 由 RAGContainer 注入的线程池。
-                      不为 None 时，通过它并发执行稠密/稀疏检索；
-                      None 时退化为串行执行（用于初始化等无池场景）。
 
         Returns:
             融合后的检索结果列表。
         """
-        self.logger.info(f"[HybridRetriever] 开始混合检索 | query={query[:50]}...")
+        self.logger.info(
+            f"[HybridRetriever] 开始混合检索 | query={query[:50]} | dedup_by_section={dedup_by_section}"
+        )
 
         if executor is not None:
+            return self._retrieve_with_executor(
+                query,
+                top_k,
+                dense_top_k,
+                sparse_top_k,
+                max_multiplier,
+                rrf_multiplier,
+                metadata_filter,
+                executor,
+                dedup_by_section,
+            )
+        else:
+            return self._retrieve_serial(
+                query,
+                top_k,
+                dense_top_k,
+                sparse_top_k,
+                metadata_filter,
+                dedup_by_section,
+            )
+
+    # ── 有 executor：并发检索 + 可选循环扩大 ─────────────────────────
+
+    def _retrieve_with_executor(
+        self,
+        query: str,
+        top_k: int,
+        dense_top_k: int,
+        sparse_top_k: int,
+        max_multiplier: int,
+        rrf_multiplier: int,
+        metadata_filter: dict[str, Any] | None,
+        executor: ThreadPoolExecutor,
+        dedup_by_section: bool,
+    ) -> list[TextNode]:
+        """并发检索路径。dedup_by_section=False 时不做循环扩大。"""
+
+        multiplier = 1
+
+        while multiplier <= max_multiplier:
+            cur_dense_top_k = dense_top_k * multiplier
+            cur_sparse_top_k = sparse_top_k * multiplier
+
+            # ① 并发提交稠密 + 稀疏检索（dedup_by_section 透传）
             dense_future = executor.submit(
                 self.dense_retriever.retrieve_with_score,
                 query,
-                dense_top_k,
+                cur_dense_top_k,
+                dedup_by_section,
                 metadata_filter,
             )
             sparse_future = executor.submit(
                 self.sparse_retriever.retrieve_with_score,
                 query,
-                sparse_top_k,
+                cur_sparse_top_k,
+                dedup_by_section,
                 metadata_filter,
             )
 
@@ -92,30 +161,90 @@ class HybridRetriever:
                 )
             except Exception as e:
                 self.logger.error(f"[HybridRetriever] 稀疏检索失败: {e}")
-        else:
-            # 无注入 executor：串行执行（初始化等场景）
-            try:
-                dense_results = self.dense_retriever.retrieve_with_score(
-                    query, dense_top_k, metadata_filter
-                )
-            except Exception as e:
-                self.logger.error(f"[HybridRetriever] 稠密检索失败: {e}")
-                dense_results = []
 
-            try:
-                sparse_results = self.sparse_retriever.retrieve_with_score(
-                    query, sparse_top_k, metadata_filter
-                )
-            except Exception as e:
-                self.logger.error(f"[HybridRetriever] 稀疏检索失败: {e}")
-                sparse_results = []
+            # 如果都失败了，返回空
+            if not dense_results and not sparse_results:
+                self.logger.warning("[HybridRetriever] 所有检索都失败")
+                return []
 
-        # 如果都失败了，返回空
+            # ② RRF 融合
+            self.logger.info("[HybridRetriever] 执行 RRF 融合")
+            if dedup_by_section:
+                # 过采样，给 section 去重留余量
+                rrf_top_k = top_k * rrf_multiplier
+            else:
+                rrf_top_k = top_k
+            fused_results = self.fuser.fuse_with_weights(
+                results_list=[dense_results, sparse_results],
+                weights=[self.dense_weight, self.sparse_weight],
+                top_k=rrf_top_k,
+            )
+
+            # ③ 不要求 section 多样性 → 直接返回
+            if not dedup_by_section:
+                self.logger.info(
+                    f"[HybridRetriever] 检索完成（dedup_by_section=False） | 返回 {len(fused_results)} 个结果"
+                )
+                return fused_results[:top_k]
+
+            # ④ section 去重（处理跨检索器的 section 重复）
+            deduped = self._dedup_by_section(fused_results, top_k)
+
+            # ⑤ 够了就返回
+            if len(deduped) >= top_k:
+                self.logger.info(
+                    f"[HybridRetriever] 检索完成 | 返回 {len(deduped)} 个不同 section"
+                )
+                return deduped[:top_k]
+
+            # ⑥ 不够 → 扩大检索范围再试
+            self.logger.info(
+                f"[HybridRetriever] section 去重后仅 {len(deduped)} 个，"
+                f"扩大检索 | multiplier={multiplier}"
+            )
+            multiplier += 1
+
+        # 兜底：放大到最大倍数仍不够，诚实返回已收集的
+        self.logger.info(
+            f"[HybridRetriever] 达到最大放大倍数 | 返回 {len(deduped)} 个不同 section"
+        )
+        return deduped[:top_k]
+
+    # ── 无 executor：串行检索（不循环扩大） ──────────────────────────
+
+    def _retrieve_serial(
+        self,
+        query: str,
+        top_k: int,
+        dense_top_k: int,
+        sparse_top_k: int,
+        metadata_filter: dict[str, Any] | None,
+        dedup_by_section: bool,
+    ) -> list[TextNode]:
+        """无注入 executor：串行执行（初始化等场景），不做循环扩大。"""
+        dense_results: list = []
+        sparse_results: list = []
+
+        try:
+            dense_results = self.dense_retriever.retrieve_with_score(
+                query, dense_top_k, dedup_by_section, metadata_filter
+            )
+        except Exception as e:
+            self.logger.error(f"[HybridRetriever] 稠密检索失败: {e}")
+            dense_results = []
+
+        try:
+            sparse_results = self.sparse_retriever.retrieve_with_score(
+                query, sparse_top_k, dedup_by_section, metadata_filter
+            )
+        except Exception as e:
+            self.logger.error(f"[HybridRetriever] 稀疏检索失败: {e}")
+            sparse_results = []
+
         if not dense_results and not sparse_results:
             self.logger.warning("[HybridRetriever] 所有检索都失败")
             return []
 
-        # RRF 融合
         self.logger.info("[HybridRetriever] 执行 RRF 融合")
         fused_results = self.fuser.fuse_with_weights(
             results_list=[dense_results, sparse_results],
@@ -123,7 +252,28 @@ class HybridRetriever:
             top_k=top_k,
         )
 
-        self.logger.info(
-            f"[HybridRetriever] 检索完成 | 返回 {len(fused_results)} 个结果"
-        )
-        return fused_results
+        # dedup_by_section=False 时直接返回；True 时去重
+        if not dedup_by_section:
+            return fused_results[:top_k]
+        return self._dedup_by_section(fused_results, top_k)
+
+    # ── section 去重 ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _dedup_by_section(nodes: list[TextNode], top_k: int) -> list[TextNode]:
+        """按 (file_md5, section_id) 去重，保留 RRF 排序靠前的 chunk。"""
+        seen: set[tuple[str, str]] = set()
+        result: list[TextNode] = []
+        for node in nodes:
+            file_md5 = node.metadata.get("file_md5", "")
+            section_id = node.metadata.get("section_id", "")
+            if not file_md5 or not section_id:
+                continue
+            key = (file_md5, section_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(node)
+            if len(result) >= top_k:
+                break
+        return result

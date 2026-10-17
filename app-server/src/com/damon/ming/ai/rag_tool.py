@@ -26,7 +26,6 @@ import threading
 from pathlib import Path
 
 from llama_index.core.schema import TextNode
-
 from src.com.damon.ming.ai.config.embedding.embedding_config_loader import (
     EmbeddingConfigLoader,
 )
@@ -35,6 +34,9 @@ from src.com.damon.ming.ai.config.inference.inference_config_loader import (
 )
 from src.com.damon.ming.ai.config.rerank.rerank_config_loader import (
     RerankerConfigLoader,
+)
+from src.com.damon.ming.ai.config.retriever.retriever_config_loader import (
+    RetrieverConfigLoader,
 )
 from src.com.damon.ming.ai.config.tokenizer.tokenizer_config_loader import (
     TokenizerConfigLoader,
@@ -128,23 +130,29 @@ class RAGContainer:
         self.rerankers: dict[str, BaseReranker] = RerankerConfigLoader().load_all()
         self.reranker: BaseReranker = self.rerankers["zh_primary"]
 
-        # 步骤6：初始化稠密检索器
+        # 步骤6：加载检索器配置（top_k/weights/fuse_k 全部由 YAML 驱动）
+        _retriever_cfgs = RetrieverConfigLoader().load_all()
+        self.retriever_config = _retriever_cfgs["primary"]
+
+        # 步骤7：初始化稠密检索器
         self.dense_retriever = DenseRetriever(
             vector_store=self.vector_store, embedding_service=self.embedder
         )
 
-        # 步骤7：初始化稀疏BM25索引（启动时预加载所有节点构建）
+        # 步骤8：初始化稀疏BM25索引（启动时预加载所有节点构建）
         self.bm25_index = BM25Index(tokenizer=self.word_tokenizer.tokenize)
         self._knowledge_lock = threading.RLock()
         self.sparse_retriever = SparseRetriever(bm25_index=self.bm25_index)
 
-        # 步骤8：混合检索器（稠密+稀疏RRF融合）
+        # 步骤9：混合检索器（稠密+稀疏RRF融合，参数来自 YAML）
         self.hybrid_retriever = HybridRetriever(
             dense_retriever=self.dense_retriever,
             sparse_retriever=self.sparse_retriever,
-            dense_weight=0.7,
-            sparse_weight=0.3,
-            fuse_k=40,
+            dense_weight=self.retriever_config.dense_weight,
+            sparse_weight=self.retriever_config.sparse_weight,
+            fuse_k=self.retriever_config.fuse_k,
+            max_section_oversample_multiplier=self.retriever_config.max_section_oversample_multiplier,
+            rrf_oversample_multiplier=self.retriever_config.rrf_oversample_multiplier,
         )
 
         # 文本切块器
@@ -290,7 +298,7 @@ class RAGContainer:
     async def query_rag(
         self,
         query: str,
-        top_k: int = 5,
+        top_k: int | None = None,
         max_context_tokens: int = 4096,
         cancellation_token: CancellationToken | None = None,
     ) -> str:
@@ -314,6 +322,10 @@ class RAGContainer:
           - cancellation_token.register_task(asyncio.current_task()) 使 token.cancel()
             能直接取消当前协程，实现毫秒级中断
 
+        参数：
+          - top_k: 为 None 时使用 YAML 配置的 retriever_config.top_k；
+                   传入具体值时覆盖（用于业务动态调整）。
+
         Returns:
             检索结果文本。取消时抛出 asyncio.CancelledError。
 
@@ -324,21 +336,30 @@ class RAGContainer:
         if cancellation_token is not None:
             cancellation_token.register_task(asyncio.current_task())
 
-        logger.info("RAG 检索开始 | query_length=%s | top_k=%s", len(query), top_k)
+        cfg = self.retriever_config
+        # top_k 优先取传入值，否则使用 YAML 配置
+        effective_top_k = top_k if top_k is not None else cfg.top_k
+
+        logger.info(
+            "RAG 检索开始 | query_length=%s | top_k=%s", len(query), effective_top_k
+        )
 
         loop = asyncio.get_running_loop()
         pool_mgr = self._pool_mgr
         retrieval_pool = pool_mgr.get_pool("retrieval")
 
         try:
-            # ── 阶段 1: 混合检索 ──
+            # ── 阶段 1: 混合检索（参数全部来自 YAML 配置） ──
             raw_nodes = await loop.run_in_executor(
                 retrieval_pool,
                 lambda: self.hybrid_retriever.retrieve(
                     query=query,
-                    top_k=top_k,
-                    dense_top_k=10,
-                    sparse_top_k=10,
+                    top_k=effective_top_k,
+                    dedup_by_section=cfg.dedup_by_section,
+                    dense_top_k=cfg.dense_top_k,
+                    sparse_top_k=cfg.sparse_top_k,
+                    max_multiplier=cfg.max_section_oversample_multiplier,
+                    rrf_multiplier=cfg.rrf_oversample_multiplier,
                     metadata_filter=None,
                     executor=retrieval_pool,
                 ),
@@ -348,10 +369,12 @@ class RAGContainer:
                 return ""
 
             # ── 阶段 2: 章节重构 ──
-            reconstructed_nodes = await self.section_recon.reconstruct_sections_to_nodes(
-                vector_store=self.vector_store,
-                hit_nodes=raw_nodes,
-                executor=retrieval_pool,
+            reconstructed_nodes = (
+                await self.section_recon.reconstruct_sections_to_nodes(
+                    vector_store=self.vector_store,
+                    hit_nodes=raw_nodes,
+                    executor=retrieval_pool,
+                )
             )
 
             # ── 阶段 3: 超长章节压缩（仅处理超 max_seq_len 的节点） ──
@@ -369,7 +392,7 @@ class RAGContainer:
 
             # ── 阶段 4: rerank 重排 ──
             ranked_nodes = self.reranker.rerank(
-                query=query, nodes=reconstructed_nodes, top_k=top_k
+                query=query, nodes=reconstructed_nodes, top_k=effective_top_k
             )
             if not ranked_nodes:
                 logger.info("RAG 重排后无有效结果")
@@ -395,9 +418,7 @@ class RAGContainer:
                         self.summary.tokenizer.count_tokens(full_text),
                         max_context_tokens,
                     )
-                    full_text = self.summary.C_by_token(
-                        full_text, max_context_tokens
-                    )
+                    full_text = self.summary.C_by_token(full_text, max_context_tokens)
 
             logger.info("RAG 检索完成 | context_length=%s", len(full_text))
             return full_text

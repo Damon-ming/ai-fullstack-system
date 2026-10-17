@@ -1,0 +1,14 @@
+retrievers:
+  primary:
+    top_k: 5
+    dense_top_k: 10
+    sparse_top_k: 10
+    dedup_by_section: true
+    dense_weight: 0.7
+    sparse_weight: 0.3
+    fuse_k: 40
+    params:
+      # section 去重不足时的最大放大倍数（循环扩大检索范围上限）
+      max_section_oversample_multiplier: 5
+      # RRF 融合时的过采样倍数（给后续 section 去重留余量）
+      rrf_oversample_multiplier: 3

@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/retriever/base_retriver.py
+# app-server/src/com/damon/ming/ai/retriever/base_retriever.py
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -10,15 +10,50 @@ class BaseRetriever(ABC):
 
     @abstractmethod
     def retrieve(
-        self, query: str, top_k: int = 10, metadata_filter: dict[str, Any] | None = None
+        self,
+        query: str,
+        top_k: int,
+        dedup_by_section: bool,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[TextNode]:
         pass
 
     @abstractmethod
     def retrieve_with_score(
-        self, query: str, top_k: int = 10, metadata_filter: dict[str, Any] | None = None
+        self,
+        query: str,
+        top_k: int,
+        dedup_by_section: bool,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[tuple[TextNode, float]]:
         pass
+
+    @staticmethod
+    def dedup_by_section(
+        scored_nodes: list[tuple[TextNode, float]],
+        top_k: int,
+    ) -> list[tuple[TextNode, float]]:
+        """按 (file_md5, section_id) 去重，保留排序靠前的 chunk。
+
+        保证输出中每个 section 只出现一次，最大化 section 多样性。
+        返回数量 <= top_k（取决于输入中有多少不同 section）。
+        没有 section 元数据的 chunk 会被跳过（不进入结果）。
+        """
+        seen: set[tuple[str, str]] = set()
+        result: list[tuple[TextNode, float]] = []
+        for node, score in scored_nodes:
+            file_md5 = node.metadata.get("file_md5", "")
+            section_id = node.metadata.get("section_id", "")
+            if not file_md5 or not section_id:
+                continue
+            key = (file_md5, section_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append((node, score))
+            if len(result) >= top_k:
+                break
+        return result
 
 
 class DenseRetriever(BaseRetriever):
@@ -29,23 +64,37 @@ class DenseRetriever(BaseRetriever):
         self.embedding_service = embedding_service
 
     def retrieve(
-        self, query: str, top_k: int = 50, metadata_filter: dict[str, Any] | None = None
+        self,
+        query: str,
+        top_k: int,
+        dedup_by_section: bool,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[TextNode]:
-        scored_nodes = self.retrieve_with_score(query, top_k, metadata_filter)
+        scored_nodes = self.retrieve_with_score(
+            query, top_k, dedup_by_section, metadata_filter
+        )
         return [node for node, _ in scored_nodes]
 
     def retrieve_with_score(
-        self, query: str, top_k: int = 50, metadata_filter: dict[str, Any] | None = None
+        self,
+        query: str,
+        top_k: int,
+        dedup_by_section: bool,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[tuple[TextNode, float]]:
         # 1. 生成查询向量
         query_vector = self.embedding_service.embed_query(query)
 
-        # 2. 向量检索，透传filter到向量库
+        # 2. 向量检索，透传 filter 到向量库
         nodes = self.vector_store.similarity_search_by_vector(
             query_vector=query_vector, k=top_k, metadata_filter=metadata_filter
         )
-        # 提取分数
-        return [(node, node.metadata.get("_score", 0.0)) for node in nodes]
+        scored = [(node, node.metadata.get("_score", 0.0)) for node in nodes]
+
+        # 3. 可选的 section 去重
+        if dedup_by_section:
+            return self.dedup_by_section(scored, top_k)
+        return scored
 
 
 class SparseRetriever(BaseRetriever):
@@ -55,13 +104,23 @@ class SparseRetriever(BaseRetriever):
         self.bm25_index = bm25_index
 
     def retrieve(
-        self, query: str, top_k: int = 50, metadata_filter: dict[str, Any] | None = None
+        self,
+        query: str,
+        top_k: int,
+        dedup_by_section: bool,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[TextNode]:
-        scored_nodes = self.retrieve_with_score(query, top_k, metadata_filter)
+        scored_nodes = self.retrieve_with_score(
+            query, top_k, dedup_by_section, metadata_filter
+        )
         return [node for node, _ in scored_nodes]
 
     def retrieve_with_score(
-        self, query: str, top_k: int = 50, metadata_filter: dict[str, Any] | None = None
+        self,
+        query: str,
+        top_k: int,
+        dedup_by_section: bool,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[tuple[TextNode, float]]:
         scores = self.bm25_index.get_scores(query)
         top_indices = scores.argsort()[-top_k:][::-1]
@@ -69,7 +128,7 @@ class SparseRetriever(BaseRetriever):
             (self.bm25_index.corpus[i], float(scores[i])) for i in top_indices
         ]
 
-        # 元数据过滤：BM25内存索引只能检索后过滤
+        # 元数据过滤：BM25 内存索引只能检索后过滤
         if metadata_filter:
             filtered = []
             for node, score in candidates:
@@ -82,4 +141,7 @@ class SparseRetriever(BaseRetriever):
                     filtered.append((node, score))
             candidates = filtered
 
+        # 可选的 section 去重
+        if dedup_by_section:
+            return self.dedup_by_section(candidates, top_k)
         return candidates
