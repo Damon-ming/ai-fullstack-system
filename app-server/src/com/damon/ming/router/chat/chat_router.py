@@ -59,15 +59,11 @@ async def chat(req: Request, body: ChatRequest):
                 logger.debug("开始执行同步 RAG 检索")
 
                 # 1. 调用RAG检索，获取拼接完整章节上下文（传递取消令牌）
+                #    取消时 query_rag 直接抛出 CancelledError，被下方 except 捕获
                 ref_content = await req.app.state.rag_app.query_rag(
                     body.query,
                     cancellation_token=ctx.cancellation_token,
                 )
-
-                # 检查取消信号
-                if ctx.cancellation_token.is_cancelled():
-                    logger.warning("同步聊天：RAG 检索后被取消")
-                    raise asyncio.CancelledError()
 
                 schema = get_chat_schema(body.reason)
 
@@ -146,15 +142,11 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             try:
                 async with asyncio.timeout(INFER_WAIT_TIMEOUT):
                     logger.debug("开始执行流式 RAG 检索")
+                    # 取消时 query_rag 直接抛出 CancelledError，被下方 except 捕获
                     ref_content = await req.app.state.rag_app.query_rag(
                         body.query,
                         cancellation_token=ctx.cancellation_token,
                     )
-
-                    # 检查取消信号
-                    if ctx.cancellation_token.is_cancelled():
-                        logger.warning("流式聊天：RAG 检索后被取消")
-                        raise asyncio.CancelledError()
 
                     system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
                     prompt_messages = [

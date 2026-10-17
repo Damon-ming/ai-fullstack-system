@@ -7,7 +7,6 @@
 """
 
 import hashlib
-import os
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict

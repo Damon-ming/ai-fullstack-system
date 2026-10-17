@@ -4,14 +4,13 @@
 
 职责：
   - 单文本摘要（含分段和容错）
-  - 批量压缩超长节点
-  - 取消感知的压缩：接收 CancellationToken，取消时恢复原文、停止提交新任务
+  - rerank 前压缩（操作副本，不碰原数据）
   - 不持有线程池，纯 asyncio 并发
 
 取消策略：
-  - 方法接收 CancellationToken，在节点间/段间检查
-  - 取消时：清理未完成任务、恢复已压缩节点的原文
-  - 不包含线程池或线程池管理的直接引用
+  - 不感知取消——由上层 RAGContainer 通过 asyncio.CancelledError 统一处理
+  - compress_nodes / run_summary 中的 await 点被 CancelledError 自然中断
+  - 中断时直接抛弃所有中间结果（副本、压缩文本等），不做任何保存/恢复
 """
 
 import asyncio
@@ -20,7 +19,6 @@ from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.thread import CancellationToken, CancelResult
 
 logger = pin("SummaryService")
 
@@ -33,9 +31,6 @@ SUMMARY_PROMPT_TEMPLATE = """你是文本摘要助手，精简下面文档内容
 
 # 摘要输入占模型上下文窗口的最大比例，留出空间给 prompt 模板和输出
 SUMMARY_INPUT_MAX_RATIO = 0.6
-
-# 标记原文的 metadata key，用于压缩后恢复
-_ORIGINAL_TEXT_KEY = "_original_text"
 
 
 class SummaryService:
@@ -69,129 +64,31 @@ class SummaryService:
     async def compress_nodes(
         self, nodes: list[TextNode], max_tokens: int
     ) -> list[TextNode]:
-        """批量压缩超长节点。并发摘要，原地修改。"""
+        """批量压缩超长节点（原地修改）。
+
+        对超过 max_tokens 的节点并发调用 run_summary 压缩。
+        调用方传入原节点或克隆副本均可，本方法不做区分。
+        取消时由 CancelledError 自然传播，结果直接丢弃。
+        """
         tasks: list[tuple[TextNode, asyncio.Task]] = []
         for node in nodes:
             token_cnt = self.tokenizer.count_tokens(node.text)
             if token_cnt > max_tokens:
                 logger.info(f"节点压缩 | tokens={token_cnt} | max_tokens={max_tokens}")
                 tasks.append(
-                    (
-                        node,
-                        asyncio.create_task(
-                            self.run_summary(text=node.text, max_tokens=max_tokens)
-                        ),
-                    )
+                    (node, asyncio.create_task(
+                        self.run_summary(text=node.text, max_tokens=max_tokens)
+                    ))
                 )
 
         for node, task in tasks:
-            node.text = await task
+            node.text = await task  # CancelledError 传播时自动丢弃
         return nodes
 
-    async def compress_nodes_for_rerank(
-        self, nodes: list[TextNode], max_seq_len: int
-    ) -> list[TextNode]:
-        """
-        压缩超长节点供 reranker 评分。并发摘要。
-        原文存入 metadata[_original_text]，rerank 后需调用 restore_node_originals() 恢复。
-        """
-        tasks: list[tuple[TextNode, asyncio.Task]] = []
-        for node in nodes:
-            token_cnt = self.tokenizer.count_tokens(node.text)
-            if token_cnt > max_seq_len:
-                logger.info(
-                    f"rerank前压缩 | tokens={token_cnt} | max_seq_len={max_seq_len}"
-                )
-                node.metadata[_ORIGINAL_TEXT_KEY] = node.text
-                tasks.append(
-                    (
-                        node,
-                        asyncio.create_task(
-                            self.run_summary(text=node.text, max_tokens=max_seq_len)
-                        ),
-                    )
-                )
-
-        for node, task in tasks:
-            node.text = await task
-        return nodes
-
-    async def compress_nodes_cancellable(
-        self,
-        nodes: list[TextNode],
-        max_seq_len: int,
-        cancellation_token: CancellationToken | None = None,
-    ) -> CancelResult:
-        """
-        带取消检查的节点压缩。
-
-        遍历节点，为超长节点创建摘要任务，节点间检查取消信号。
-        取消时：清理未完成任务。节点是内存副本，不碰 vector_db，无需恢复原文。
-
-        Returns:
-            CancelResult —— 包含取消位置信息。
-        """
-        result = CancelResult()
-        tasks: list[tuple[TextNode, asyncio.Task]] = []
-
-        for i, node in enumerate(nodes):
-            # 检查取消信号（每个节点前检查）
-            if cancellation_token is not None and cancellation_token.is_cancelled():
-                result.step = f"compress_node_{i}/{len(nodes)}"
-                logger.warning(
-                    "compress_nodes 取消 | %s | 已启动=%d 总=%d",
-                    result.describe(),
-                    len(tasks),
-                    len(nodes),
-                )
-                # 取消所有 pending 的 task，释放资源
-                for _, t in tasks:
-                    t.cancel()
-                await asyncio.gather(*[t for _, t in tasks], return_exceptions=True)
-                # 取消后节点直接丢弃，不需要恢复原文（不碰 vector_db）
-                return result
-
-            token_cnt = self.tokenizer.count_tokens(node.text)
-            if token_cnt > max_seq_len:
-                node.metadata[_ORIGINAL_TEXT_KEY] = node.text
-                task = asyncio.create_task(
-                    self.run_summary(text=node.text, max_tokens=max_seq_len)
-                )
-                tasks.append((node, task))
-
-        # 等待所有压缩任务完成
-        for node, task in tasks:
-            try:
-                node.text = await task
-                result.mark_completed(
-                    f"compress_{node.metadata.get('chunk_id', '?')}"
-                )
-            except asyncio.CancelledError:
-                # 取消后节点直接丢弃，不需要恢复原文（不碰 vector_db）
-                raise
-
-        return result
-
-    async def run_summary_cancellable(
-        self,
-        text: str,
-        max_tokens: int,
-        cancellation_token: CancellationToken | None = None,
-    ) -> str:
-        """带取消检查的摘要调用。取消时降级到硬截断。"""
-        if cancellation_token is not None and cancellation_token.is_cancelled():
-            return self.truncate_by_token(text, max_tokens)
-
-        return await self.run_summary(text=text, max_tokens=max_tokens)
-
-    @staticmethod
-    def restore_node_originals(nodes: list[TextNode]) -> list[TextNode]:
-        """恢复被 compress 压缩的节点原文。"""
-        for node in nodes:
-            original = node.metadata.pop(_ORIGINAL_TEXT_KEY, None)
-            if original:
-                node.text = original
-        return nodes
+    # ── 取消说明 ────────────────────────────────────────────────────────
+    # 取消由上层 RAGContainer 通过 asyncio.CancelledError 统一处理，
+    # compress_nodes / run_summary 中的 await 点被自然中断，
+    # 压缩结果直接丢弃，无需任何清理或恢复操作。
 
     def truncate_by_token(self, text: str, max_tokens: int) -> str:
         """按 token 数硬截断文本。"""

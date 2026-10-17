@@ -62,7 +62,13 @@ class CancellationToken:
       create → is_cancelled()=False
               │ cancel() → is_cancelled()=True
               │          线程体检测后退出
+              │          注册的 asyncio Task 立即取消
               │          token.dispose() → 管理器移除
+
+    用法（异步场景）：
+      token = CancellationToken(...)
+      token.register_task(asyncio.current_task())
+      # 当 cancel() 被调用时，current_task() 会立即在 await 点抛出 CancelledError
     """
 
     def __init__(self, token_id: str, registry: _TokenRegistry) -> None:
@@ -70,6 +76,8 @@ class CancellationToken:
         self._registry = registry
         self._cancelled = threading.Event()
         self._created_at = time.monotonic()
+        self._task: object | None = None
+        self._task_lock = threading.Lock()
 
     @property
     def token_id(self) -> str:
@@ -83,14 +91,42 @@ class CancellationToken:
         """阻塞等待取消信号。返回 True 表示已取消。"""
         return self._cancelled.wait(timeout)
 
+    def register_task(self, task: object) -> None:
+        """注册一个 asyncio.Task，cancel() 时自动取消该 task。
+
+        应在协程开始处调用：token.register_task(asyncio.current_task())
+        若 cancel() 先于注册到达，注册后立即取消 task。
+        """
+        with self._task_lock:
+            self._task = task
+            if self._cancelled.is_set() and hasattr(task, "cancel"):
+                task.cancel()
+                logger.info(
+                    "取消令牌(已触发)注册新任务时立即取消 | token_id=%s",
+                    self._token_id,
+                )
+
     def cancel(self) -> None:
-        """发送取消信号。幂等——多次调用无副作用。"""
+        """发送取消信号。幂等——多次调用无副作用。
+
+        同时取消已注册的 asyncio Task（如有），使当前 await 点立即中断。
+        """
         self._cancelled.set()
-        logger.info(
-            "取消令牌已触发 | token_id=%s | age=%.1fs",
-            self._token_id,
-            time.monotonic() - self._created_at,
-        )
+        with self._task_lock:
+            task = self._task
+        if task is not None and hasattr(task, "cancel"):
+            task.cancel()
+            logger.info(
+                "取消令牌已触发(联动 Task 取消) | token_id=%s | age=%.1fs",
+                self._token_id,
+                time.monotonic() - self._created_at,
+            )
+        else:
+            logger.info(
+                "取消令牌已触发 | token_id=%s | age=%.1fs",
+                self._token_id,
+                time.monotonic() - self._created_at,
+            )
 
     def dispose(self) -> None:
         """请求结束后的清理：从注册表移除，释放引用。"""
