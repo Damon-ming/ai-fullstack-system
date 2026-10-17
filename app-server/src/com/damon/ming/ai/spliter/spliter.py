@@ -327,6 +327,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         text_hash = hashlib.md5(node.text.encode("utf-8")).hexdigest()[:16]
         chunk_id = f"chunk_{file_md5}_{text_hash}"
 
+        node.node_id = chunk_id
         node.metadata["chunk_id"] = chunk_id
         node.metadata["file_name"] = file_name
         node.metadata["file_md5"] = file_md5
