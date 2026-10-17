@@ -38,6 +38,22 @@ async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | Non
     return None
 
 
+async def _guardrail_check_with_timeout(
+    app_state, query: str
+) -> BaseLLMFailedResponse | None:
+    """护栏检测 + 独立超时（超时 fail-open 放行）。
+
+    抽取为独立函数，供同步 / 流式接口复用，避免重复代码。
+    """
+    guardrail_timeout = app_state.guardrail_timeout
+    try:
+        async with asyncio.timeout(guardrail_timeout):
+            return await _check_guardrail(app_state, query)
+    except TimeoutError:
+        logger.warning("护栏检测超时，fail-open 放行 | timeout=%ds", guardrail_timeout)
+        return None
+
+
 @router.post("/send/v1")
 async def chat(req: Request, body: ChatRequest):
     logger.info(
@@ -50,23 +66,26 @@ async def chat(req: Request, body: ChatRequest):
     ctx = req.app.state.pool_mgr.create_request_context()
 
     try:
-        # ── 第 1 步：护栏检测（信号量外，快速拒绝） ──
-        blocked = await _check_guardrail(req.app.state, body.query)
+        # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
+        blocked = await _guardrail_check_with_timeout(req.app.state, body.query)
         if blocked is not None:
             return blocked
 
         infer_sem = req.app.state.infer_sem
+        rag_sem = req.app.state.rag_sem
         infer_timeout = req.app.state.infer_timeout
         system_prompt_tpl = req.app.state.system_prompt_tpl
 
+        # ── Phase 2: RAG + 推理（共享完整超时预算） ──
         async with asyncio.timeout(infer_timeout):
             logger.debug("开始执行同步 RAG 检索")
 
-            # 1. RAG 检索在信号量外执行（自身有线程池保护），不占用推理并发槽
-            ref_content = await req.app.state.rag_app.query_rag(
-                body.query,
-                cancellation_token=ctx.cancellation_token,
-            )
+            # 1. RAG 检索在推理信号量外执行（自身有线程池保护 + rag_sem 反压）
+            async with rag_sem:
+                ref_content = await req.app.state.rag_app.query_rag(
+                    body.query,
+                    cancellation_token=ctx.cancellation_token,
+                )
 
             schema = get_chat_schema(body.reason)
 
@@ -152,8 +171,8 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             retry=True,
         )
 
-        # ── 第 1 步：护栏检测（信号量外，快速拒绝） ──
-        blocked_resp = await _check_guardrail(req.app.state, body.query)
+        # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
+        blocked_resp = await _guardrail_check_with_timeout(req.app.state, body.query)
         if blocked_resp is not None:
             yield emitter.emit(
                 "error",
@@ -169,16 +188,19 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             return
 
         infer_sem = req.app.state.infer_sem
+        rag_sem = req.app.state.rag_sem
         infer_timeout = req.app.state.infer_timeout
         system_prompt_tpl = req.app.state.system_prompt_tpl
 
+        # ── Phase 2: RAG + 推理（共享完整超时预算） ──
         async with asyncio.timeout(infer_timeout):
             logger.debug("开始执行流式 RAG 检索")
-            # RAG 在信号量外执行（自身有线程池保护），不占用推理并发槽
-            ref_content = await req.app.state.rag_app.query_rag(
-                body.query,
-                cancellation_token=ctx.cancellation_token,
-            )
+            # RAG 在推理信号量外执行（自身有线程池保护 + rag_sem 反压）
+            async with rag_sem:
+                ref_content = await req.app.state.rag_app.query_rag(
+                    body.query,
+                    cancellation_token=ctx.cancellation_token,
+                )
 
             system_prompt = system_prompt_tpl.format(ref_content=ref_content)
             prompt_messages = [

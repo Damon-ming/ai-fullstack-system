@@ -80,7 +80,9 @@ class AppInitializer:
 
         # 聊天配置（Semaphore 在 lifespan 内创建，绑定到正确的事件循环）
         app.state.infer_sem = self.chat_sem
+        app.state.rag_sem = self.rag_sem
         app.state.infer_timeout = self.chat_timeout
+        app.state.guardrail_timeout = self.guardrail_timeout
         app.state.retry_ms = self.chat_retry_ms
         app.state.system_prompt_tpl = self.chat_system_prompt_tpl
 
@@ -101,19 +103,16 @@ class AppInitializer:
     # -----------------------------------------------------------------------
 
     def _init_thread_pool(self) -> None:
-        """线程池管理器：从 YAML 加载配置，初始化所有线程池。"""
+        """线程池管理器：从 YAML 加载配置，初始化所有线程池。
+
+        线程池是核心依赖，配置加载失败直接抛出异常（不做静默降级）。
+        """
         from src.com.damon.ming.app.config.thread import ThreadPoolConfigLoader
         from src.com.damon.ming.thread import ThreadPoolManager
 
-        # 尝试从 YAML 加载配置，失败时使用默认值
-        pool_configs: dict[str, int] | None = None
-        try:
-            loader = ThreadPoolConfigLoader()
-            pool_configs = loader.load()
-            if pool_configs:
-                logger.info("线程池配置已从 YAML 加载: %s", pool_configs)
-        except Exception as e:
-            logger.warning("线程池配置加载失败，使用默认值: %s", e)
+        loader = ThreadPoolConfigLoader()
+        pool_configs = loader.load()
+        logger.info("线程池配置已从 YAML 加载: %s", pool_configs)
 
         self.pool_mgr = ThreadPoolManager()
         self.pool_mgr.startup(pool_configs=pool_configs)
@@ -309,13 +308,17 @@ class AppInitializer:
         cfg = configs.get("common") or configs[next(iter(configs.keys()))]
 
         self.chat_sem = asyncio.Semaphore(cfg.infer_concurrency)
+        self.rag_sem = asyncio.Semaphore(cfg.rag_concurrency)
         self.chat_timeout = cfg.infer_timeout
+        self.guardrail_timeout = cfg.guardrail_timeout
         self.chat_retry_ms = cfg.retry_ms
         self.chat_system_prompt_tpl = cfg.system_prompt
 
         logger.info(
-            "聊天配置初始化完成 | concurrency=%d | timeout=%ds",
+            "聊天配置初始化完成 | infer_concurrency=%d | rag_concurrency=%d | guardrail_timeout=%ds | infer_timeout=%ds",
             cfg.infer_concurrency,
+            cfg.rag_concurrency,
+            cfg.guardrail_timeout,
             cfg.infer_timeout,
         )
 

@@ -19,10 +19,10 @@
 用法：
   # 在 AppInitializer 中：
   pool_mgr = ThreadPoolManager()
-  pool_mgr.startup()
+  pool_mgr.startup(pool_configs={"retrieval": 4, "document": 8, ...})
 
   # AI 模块获取命名线程池：
-  executor = pool_mgr.get_pool("retrieval", max_workers=4)
+  executor = pool_mgr.get_pool("retrieval")
 
   # 请求级上下文（在路由入口处）：
   ctx = pool_mgr.create_request_context()
@@ -54,32 +54,21 @@ logger = pin("thread.pool_manager")
 class ThreadPoolManager:
     """进程级线程池管理器 —— 统一管理所有 AI 子系统线程资源。
 
+    所有线程池配置由 YAML 文件驱动（thread-config.yaml），
+    启动时固化，运行期通过 get_pool(name) 获取。
+
     使用方式：
         # AppInitializer.startup 中：
         self.pool_mgr = ThreadPoolManager()
-        self.pool_mgr.startup()
+        self.pool_mgr.startup(pool_configs={"retrieval": 4, "document": 8, ...})
 
         # AI 模块中获取线程池：
-        executor = self.pool_mgr.get_pool("retrieval", max_workers=4)
+        executor = self.pool_mgr.get_pool("retrieval")
         future = executor.submit(work, cancellation_token, ...)
 
         # AppInitializer.shutdown 中：
         self.pool_mgr.shutdown()
-
-    线程池配置（启动时固化）：
-        "retrieval"  : max_workers=4  —— HybridRetriever 稠密+稀疏并发
-        "document"   : max_workers=8  —— PDF 加载 / 文档分割
-        "inference"  : max_workers=2  —— 推理辅助线程（如有）
-        "rerank"     : max_workers=2  —— CrossEncoder 重排专用（与 retrieval 隔离，避免 rerank 长耗时占用检索线程）
     """
-
-    # 默认线程池配置：名称 → 最大线程数
-    DEFAULT_POOLS: dict[str, int] = {
-        "retrieval": 4,  # HybridRetriever (2) + 余量
-        "document": 8,  # PDF 加载 / 文档分割
-        "inference": 2,  # 推理辅助
-        "rerank": 2,  # CrossEncoder 专用（配合 _infer_lock 串行化推理）
-    }
 
     _instance: ThreadPoolManager | None = None
     _instance_lock = threading.Lock()
@@ -94,19 +83,19 @@ class ThreadPoolManager:
                     cls._instance = instance
         return cls._instance
 
-    def startup(self, pool_configs: dict[str, int] | None = None) -> None:
+    def startup(self, pool_configs: dict[str, int]) -> None:
         """初始化所有命名线程池。
 
         Args:
-            pool_configs: 自定义线程池配置，覆盖默认值。
-                         格式：{"pool_name": max_workers, ...}
+            pool_configs: 线程池配置，格式：{"pool_name": max_workers, ...}
+                         由 ThreadPoolConfigLoader 从 YAML 加载后传入。
         """
         with self._instance_lock:
             if self._initialized:
                 logger.warning("ThreadPoolManager 已初始化，跳过重复 startup")
                 return
 
-            self._pool_configs = {**self.DEFAULT_POOLS, **(pool_configs or {})}
+            self._pool_configs = dict(pool_configs)
             self._pools: dict[str, ThreadPoolExecutor] = {}
             self._token_registry = _TokenRegistry()
 
@@ -150,16 +139,18 @@ class ThreadPoolManager:
         ThreadPoolManager._instance = None
         logger.info("ThreadPoolManager 已关闭")
 
-    def get_pool(self, name: str, max_workers: int | None = None) -> ThreadPoolExecutor:
-        """获取命名线程池，不存在则按 max_workers 创建。
+    def get_pool(self, name: str) -> ThreadPoolExecutor:
+        """获取命名线程池。
 
         Args:
-            name: 线程池名称（如 "retrieval", "document"）。
-            max_workers: 线程池不存在时的创建参数。
-                        为 None 且未找到时回退到默认配置。
+            name: 线程池名称（如 "retrieval", "document", "rerank"）。
 
         Returns:
             ThreadPoolExecutor 实例。
+
+        Raises:
+            RuntimeError: 管理器未初始化。
+            ValueError: 线程池不存在（未在 YAML 中配置）。
         """
         if not self._initialized:
             raise RuntimeError("ThreadPoolManager 未初始化，请先调用 startup()")
@@ -168,29 +159,7 @@ class ThreadPoolManager:
         if pool is not None:
             return pool
 
-        # 加锁防止并发创建同名池导致 ThreadPoolExecutor 泄漏
-        with self._instance_lock:
-            pool = self._pools.get(name)
-            if pool is not None:
-                return pool
-
-            # 按需创建：优先使用传入的 max_workers，回退到默认配置
-            workers = max_workers
-            if workers is None:
-                workers = self.DEFAULT_POOLS.get(name)
-            if workers is None:
-                raise ValueError(
-                    f"未知线程池名称 '{name}' 且未指定 max_workers。"
-                    f"已注册: {list(self._pools.keys())}"
-                )
-
-            pool = ThreadPoolExecutor(
-                max_workers=workers,
-                thread_name_prefix=f"AI-{name}",
-            )
-            self._pools[name] = pool
-            logger.info("按需创建线程池 | name=%s | max_workers=%d", name, workers)
-            return pool
+        raise ValueError(f"线程池 '{name}' 不存在。已注册: {list(self._pools.keys())}")
 
     def create_request_context(self, request_id: str | None = None) -> RequestContext:
         """创建请求级上下文，绑定一个 CancellationToken。

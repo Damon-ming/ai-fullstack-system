@@ -4,6 +4,8 @@
 # 包含：
 #   system_prompt —— RAG 问答的系统模板（{ref_content} 为知识库占位符）
 #   infer_concurrency —— 同时执行 LLM 推理的并发上限
+#   rag_concurrency —— RAG 检索段的并发上限（建议 = infer_concurrency × 2，防止线程池过载）
+#   guardrail_timeout —— 护栏检测独立超时（秒），超时 fail-open 放行
 #   infer_timeout —— 单次推理+检索的最大等待秒数
 #   retry_ms —— SSE 重连等待毫秒数
 
@@ -21,5 +23,7 @@ chat:
       【参考知识库】
       {ref_content}
     infer_concurrency: 4
+    rag_concurrency: 8
+    guardrail_timeout: 5
     infer_timeout: 30
     retry_ms: 3000

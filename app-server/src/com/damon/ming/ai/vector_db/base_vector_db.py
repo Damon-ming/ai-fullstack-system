@@ -122,6 +122,17 @@ class BaseVectorStore(ABC):
         ...
 
     @abstractmethod
+    def get_by_metadata_batch(
+        self, filters: list[dict[str, Any]], **kwargs,
+    ) -> list[TextNode]:
+        """批量元数据查询（OR 语义：匹配任意一个 filter 的文档）。
+
+        默认实现：逐个调用 get_by_metadata 后合并。
+        具体实现可覆盖为原生批量查询（如 ChromaDB 的 $or），减少 SQLite 扫描次数。
+        """
+        ...
+
+    @abstractmethod
     def count(self, **kwargs) -> int:
         """获取文档总数，失败返回 0"""
         ...

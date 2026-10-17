@@ -11,7 +11,7 @@ pool_manager 通过 ThreadPoolConfigLoader().load() 接收参数，
   2. THREAD_CONFIG_PATH 环境变量
   3. 默认路径：本目录下的 thread-config.yaml
 
-加载失败时返回 None，调用方使用默认值降级。
+加载失败时抛出异常（线程池是核心依赖，不做静默降级）。
 """
 
 import os
@@ -35,18 +35,17 @@ class ThreadPoolConfigLoader:
             config_path = os.path.join(base_dir, "thread-config.yaml")
         self._config_path = config_path
 
-    def load(self) -> dict[str, int] | None:
+    def load(self) -> dict[str, int]:
         """加载线程池配置。
 
-        返回: {"retrieval": 4, "document": 8, "inference": 2}
-        加载失败时返回 None（调用方使用默认值）。
+        返回: {"retrieval": 4, "document": 8, "inference": 2, ...}
+        加载失败时抛出异常（线程池是核心依赖，不做静默降级）。
         """
-        try:
-            raw = self._read_yaml()
-            pools = {k: int(v) for k, v in raw.items() if isinstance(v, (int, float))}
-            return pools if pools else None
-        except Exception:
-            return None
+        raw = self._read_yaml()
+        pools = {k: int(v) for k, v in raw.items() if isinstance(v, (int, float))}
+        if not pools:
+            raise ValueError(f"线程池配置文件为空或格式错误: {self._config_path}")
+        return pools
 
     def _read_yaml(self) -> dict:
         if not os.path.exists(self._config_path):

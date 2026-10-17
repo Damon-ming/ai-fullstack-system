@@ -17,9 +17,11 @@ class ChatConfig:
     """聊天模块配置参数。所有参数无默认值，必须由 YAML 显式提供。"""
 
     __slots__ = (
+        "guardrail_timeout",
         "infer_concurrency",
         "infer_timeout",
         "name",
+        "rag_concurrency",
         "retry_ms",
         "system_prompt",
     )
@@ -29,12 +31,16 @@ class ChatConfig:
         name: str,
         system_prompt: str,
         infer_concurrency: int,
+        rag_concurrency: int,
+        guardrail_timeout: int,
         infer_timeout: int,
         retry_ms: int,
     ):
         self.name = name
         self.system_prompt = system_prompt
         self.infer_concurrency = infer_concurrency
+        self.rag_concurrency = rag_concurrency
+        self.guardrail_timeout = guardrail_timeout
         self.infer_timeout = infer_timeout
         self.retry_ms = retry_ms
 
@@ -87,6 +93,8 @@ class ChatConfigLoader:
                 name=name,
                 system_prompt=section["system_prompt"],
                 infer_concurrency=int(section["infer_concurrency"]),
+                rag_concurrency=int(section["rag_concurrency"]),
+                guardrail_timeout=int(section["guardrail_timeout"]),
                 infer_timeout=int(section["infer_timeout"]),
                 retry_ms=int(section["retry_ms"]),
             )

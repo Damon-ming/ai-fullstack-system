@@ -222,6 +222,41 @@ class ChromaDBStore(BaseVectorStore):
             self.logger.error(f"[ChromaDBStore] 元数据查询失败: {e}")
             return []
 
+    def get_by_metadata_batch(
+        self,
+        filters: list[dict[str, Any]],
+        **kwargs,
+    ) -> list[TextNode]:
+        """批量元数据查询：$or 合并多个 filter，单次 collection.get。
+
+        将 N 个独立查询合并为 1 次 SQLite 扫描，SectionReconstructor 场景下
+        显著减少 ChromaDB 查询耗时。
+        """
+        if not filters:
+            return []
+        # 单条件直接走原接口，避免 $or 开销
+        if len(filters) == 1:
+            return self.get_by_metadata(filters[0])
+        try:
+            results = self.collection.get(where={"$or": filters})
+            if not results["ids"]:
+                return []
+            nodes = []
+            for i, node_id in enumerate(results["ids"]):
+                node = TextNode(
+                    id_=node_id,
+                    text=results["documents"][i],
+                    metadata=results["metadatas"][i],
+                )
+                nodes.append(node)
+            with self._cache_lock:
+                for node in nodes:
+                    self._node_cache[node.node_id] = node
+            return nodes
+        except Exception as e:
+            self.logger.error(f"[ChromaDBStore] 批量元数据查询失败: {e}")
+            return []
+
     def count(self, **kwargs) -> int:
         try:
             return self.collection.count()

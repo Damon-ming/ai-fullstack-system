@@ -77,31 +77,30 @@ class SectionReconstructor:
         section_keys: set[tuple[str, str]],
         executor: ThreadPoolExecutor,
     ) -> list[TextNode]:
-        """批量获取所有章节的完整分片（并发执行）。
+        """批量获取所有章节的完整分片。
 
+        通过 vector_store.get_by_metadata_batch 合并为单次 $or 查询，
+        将 N 次 SQLite 扫描降为 1 次，显著减少 ChromaDB 查询耗时。
         executor 由上层 RAGContainer 注入，通过 run_in_executor 提交到集中式线程池。
         """
         if not section_keys:
             return []
 
-        loop = asyncio.get_running_loop()
-        tasks = [
-            loop.run_in_executor(
-                executor,
-                vector_store.get_by_metadata,
-                {"file_sha256": file_sha256, "section_id": section_id},
-            )
+        filters = [
+            {"file_sha256": file_sha256, "section_id": section_id}
             for file_sha256, section_id in section_keys
         ]
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        all_nodes: list[TextNode] = []
-        for nodes in results:
-            if isinstance(nodes, Exception):
-                logger.warning(f"章节分片查询失败: {nodes}")
-                continue
-            all_nodes.extend(nodes)
+        loop = asyncio.get_running_loop()
+        try:
+            all_nodes = await loop.run_in_executor(
+                executor,
+                vector_store.get_by_metadata_batch,
+                filters,
+            )
+        except Exception as e:
+            logger.warning(f"章节分片批量查询失败: {e}")
+            return []
         return all_nodes
 
     def _group_chunks_by_section(
