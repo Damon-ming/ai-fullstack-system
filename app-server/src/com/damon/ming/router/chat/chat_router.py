@@ -115,7 +115,7 @@ async def chat(req: Request, body: ChatRequest):
             schema = get_chat_schema(body.reason)
 
             # 2. 填充固定Prompt，构造标准messages数组
-            system_prompt = system_prompt_tpl.format(ref_content=ref_content)
+            system_prompt = system_prompt_tpl.replace("{ref_content}", ref_content, 1)
             prompt_messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": body.query},
@@ -243,7 +243,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                     cancellation_token=ctx.cancellation_token,
                 )
 
-            system_prompt = system_prompt_tpl.format(ref_content=ref_content)
+            system_prompt = system_prompt_tpl.replace("{ref_content}", ref_content, 1)
             prompt_messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": body.query},

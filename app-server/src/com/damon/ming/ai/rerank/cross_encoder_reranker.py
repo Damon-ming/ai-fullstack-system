@@ -55,15 +55,16 @@ class CrossEncoderModel:
             return []
 
         all_scores = []
-        # 分批推理，避免OOM；整体持锁，保证 PyTorch 模型推理线程安全
-        with self._infer_lock:
-            for start in range(0, len(texts), self.batch_size):
-                # 协作取消：批次之间检查信号，已取消则放弃剩余批次
-                if cancel_event is not None and cancel_event.is_set():
-                    return []
-                batch_texts = texts[start : start + self.batch_size]
-                pairs = [[query, text] for text in batch_texts]
+        # 分批推理，避免OOM；每个 batch 独立持锁，允许 rerank 线程交替使用 GPU
+        for start in range(0, len(texts), self.batch_size):
+            # 协作取消：批次之间检查信号，已取消则放弃剩余批次
+            if cancel_event is not None and cancel_event.is_set():
+                return []
+            batch_texts = texts[start : start + self.batch_size]
+            pairs = [[query, text] for text in batch_texts]
 
+            # 锁内：tokenizer + GPU 推理（PyTorch 线程安全要求）
+            with self._infer_lock:
                 inputs = self.tokenizer(
                     pairs,
                     padding=True,
@@ -75,7 +76,9 @@ class CrossEncoderModel:
                 with torch.no_grad():
                     outputs = self.model(**inputs)
                     scores = outputs.logits[:, 0].float()
-                    all_scores.extend(scores.cpu().numpy().tolist())
+
+            # 锁外：CPU 后处理（numpy 转换不依赖 GPU，可并发）
+            all_scores.extend(scores.cpu().numpy().tolist())
         return all_scores
 
 

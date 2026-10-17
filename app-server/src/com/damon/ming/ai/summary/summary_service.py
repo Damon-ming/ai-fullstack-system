@@ -145,6 +145,11 @@ class SummaryService:
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        # 取消信号不能被静默吞掉——优先检查并向上传播
+        for r in results:
+            if isinstance(r, asyncio.CancelledError):
+                raise r
+
         summaries: list[str] = []
         for i, r in enumerate(results):
             if isinstance(r, Exception):
