@@ -210,48 +210,46 @@ class RAGContainer:
     ) -> dict:
         """增量处理上传文件。
 
-        线程编排层：将同步的 PDF 加载和文档分割提交到线程池，
-        定期检查取消令牌，已取消时停止处理并返回部分结果。
+        线程编排层：
+          1. 锁外：PDF 加载 + 文档分割（IO/CPU 密集，不访问共享状态）
+          2. 锁内：去重检查 + 入库 + BM25 重建（所有共享状态读写）
         """
         loop = asyncio.get_running_loop()
         pool_mgr = self._pool_mgr
 
-        with self._knowledge_lock:
-            accepted = []
-            skipped = []
-            source_root = LocalPDFDataSource(KNOWLEDGES_DIR)
+        # ── 阶段 1：锁外 PDF 加载（无共享状态访问）──
+        document_pool = pool_mgr.get_pool("document")
+        source_root = LocalPDFDataSource(KNOWLEDGES_DIR)
 
-            # 1. 提交 PDF 加载到线程池
-            if cancellation_token is not None and cancellation_token.is_cancelled():
-                logger.warning("ingest_files | 启动前检测到取消信号")
-                return {"indexed": accepted, "skipped": skipped}
+        if cancellation_token is not None and cancellation_token.is_cancelled():
+            logger.warning("ingest_files | 启动前检测到取消信号")
+            return {"indexed": [], "skipped": []}
 
-            # PDF 加载是 CPU 密集型，提交到 document 池
-            document_pool = pool_mgr.get_pool("document")
-            try:
-                upload_docs = await loop.run_in_executor(
-                    document_pool,
-                    source_root.load_specific_files,
-                    file_paths,
-                )
-            except asyncio.CancelledError:
-                logger.warning("ingest_files | PDF 加载阶段被取消")
-                raise
+        try:
+            upload_docs = await loop.run_in_executor(
+                document_pool,
+                source_root.load_specific_files,
+                file_paths,
+            )
+        except asyncio.CancelledError:
+            logger.warning("ingest_files | PDF 加载阶段被取消")
+            raise
 
-            # 构建 path -> docs 的映射
-            path_to_docs = {}
-            for d in upload_docs:
-                fp = d.metadata["file_path"]
-                if fp not in path_to_docs:
-                    path_to_docs[fp] = []
-                path_to_docs[fp].append(d)
+        # 构建 path -> docs 的映射
+        path_to_docs: dict[str, list] = {}
+        for d in upload_docs:
+            fp = d.metadata["file_path"]
+            path_to_docs.setdefault(fp, []).append(d)
 
-        new_nodes = []
+        # ── 阶段 2：锁外文档分割（splitter 自身线程安全，无共享状态访问）──
+        # 收集结果后统一在锁内做去重和入库，避免并发上传重复索引同一文件
+        parsed: list[tuple[str, list, str]] = []  # (key, docs, file_sha256)
+        skipped: list[dict] = []
+
         for file_path in file_paths:
-            # 检查取消信号
             if cancellation_token is not None and cancellation_token.is_cancelled():
                 logger.warning(
-                    f"ingest_files | 检测到取消信号，停止处理 | 已处理={len(accepted)}"
+                    f"ingest_files | 检测到取消信号，停止处理 | 已解析={len(parsed)}"
                 )
                 break
 
@@ -263,22 +261,14 @@ class RAGContainer:
                 skipped.append(
                     {
                         "file_sha256": None,
-                        "file_path": str(p),
+                        "file_path": key,
                         "reason": "parse_failed",
                     }
                 )
                 continue
 
-            file_sha256 = docs[0].metadata.get("file_sha256")
-            existing = self.vector_store.get_by_metadata({"file_sha256": file_sha256})
+            file_sha256 = docs[0].metadata.get("file_sha256", "")
 
-            if existing:
-                skipped.append(
-                    {"file_sha256": file_sha256, "reason": "already_indexed"}
-                )
-                continue
-
-            # 提交文档分割到线程池
             try:
                 nodes = await loop.run_in_executor(
                     document_pool,
@@ -289,18 +279,36 @@ class RAGContainer:
                 logger.warning("ingest_files | 文档分割阶段被取消")
                 raise
 
-            self._index_nodes(nodes, rebuild_bm25=False)
-            accepted.append({"file_sha256": file_sha256, "chunks": len(nodes)})
-            new_nodes.extend(nodes)
+            if nodes:
+                parsed.append((key, nodes, file_sha256))
 
-        # 只把本次新增节点追加到内存节点列表，然后用全部内存节点重建BM25
-        if new_nodes:
-            self.all_nodes.extend(new_nodes)
-            # 传副本，避免 BM25Index 持有 all_nodes 别名导致后续 extend 静默腐败索引
-            self.bm25_index.build(list(self.all_nodes))
-            logger.info(
-                f"BM25增量更新完成，新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
-            )
+        # ── 阶段 3：锁内共享状态（去重检查 + 入库 + BM25 重建）──
+        with self._knowledge_lock:
+            accepted: list[dict] = []
+            new_nodes: list[TextNode] = []
+
+            for key, nodes, file_sha256 in parsed:
+                existing = self.vector_store.get_by_metadata(
+                    {"file_sha256": file_sha256}
+                )
+                if existing:
+                    skipped.append(
+                        {"file_sha256": file_sha256, "reason": "already_indexed"}
+                    )
+                    continue
+
+                self._index_nodes(nodes, rebuild_bm25=False)
+                accepted.append({"file_sha256": file_sha256, "chunks": len(nodes)})
+                new_nodes.extend(nodes)
+
+            if new_nodes:
+                self.all_nodes.extend(new_nodes)
+                # 传副本，避免 BM25Index 持有 all_nodes 别名导致后续 extend 静默腐败索引
+                self.bm25_index.build(list(self.all_nodes))
+                logger.info(
+                    f"BM25增量更新完成，新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
+                )
+
         return {"indexed": accepted, "skipped": skipped}
 
     # ── query_rag：检索线程编排 ────────────────────────────────────────

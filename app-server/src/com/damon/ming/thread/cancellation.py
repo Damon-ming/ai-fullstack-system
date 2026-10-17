@@ -35,7 +35,7 @@ class CancelResult:
         # → result.completed_steps == ["query_parse", "vector_search"]
     """
 
-    step: str = ""                        # 取消发生的步骤名
+    step: str = ""  # 取消发生的步骤名
     completed_steps: list[str] = field(default_factory=list)  # 已完成的步骤
     cancelled_at: float = field(default_factory=time.monotonic)
 
@@ -76,7 +76,7 @@ class CancellationToken:
         self._registry = registry
         self._cancelled = threading.Event()
         self._created_at = time.monotonic()
-        self._task: object | None = None
+        self._tasks: set[object] = set()
         self._task_lock = threading.Lock()
 
     @property
@@ -92,41 +92,41 @@ class CancellationToken:
         return self._cancelled.wait(timeout)
 
     def register_task(self, task: object) -> None:
-        """注册一个 asyncio.Task，cancel() 时自动取消该 task。
+        """注册一个 asyncio.Task，cancel() 时自动取消所有已注册 task。
 
         应在协程开始处调用：token.register_task(asyncio.current_task())
         若 cancel() 先于注册到达，注册后立即取消 task。
+        支持多次注册（fan-out 场景：gather 内的每个子 task 独立注册）。
         """
         with self._task_lock:
-            self._task = task
+            self._tasks.add(task)
             if self._cancelled.is_set() and hasattr(task, "cancel"):
                 task.cancel()
                 logger.info(
-                    "取消令牌(已触发)注册新任务时立即取消 | token_id=%s",
+                    "取消令牌(已触发)注册新任务时立即取消 | token_id=%s | tasks=%d",
                     self._token_id,
+                    len(self._tasks),
                 )
 
     def cancel(self) -> None:
         """发送取消信号。幂等——多次调用无副作用。
 
-        同时取消已注册的 asyncio Task（如有），使当前 await 点立即中断。
+        同时取消所有已注册的 asyncio Task，使当前 await 点立即中断。
         """
         self._cancelled.set()
         with self._task_lock:
-            task = self._task
-        if task is not None and hasattr(task, "cancel"):
-            task.cancel()
-            logger.info(
-                "取消令牌已触发(联动 Task 取消) | token_id=%s | age=%.1fs",
-                self._token_id,
-                time.monotonic() - self._created_at,
-            )
-        else:
-            logger.info(
-                "取消令牌已触发 | token_id=%s | age=%.1fs",
-                self._token_id,
-                time.monotonic() - self._created_at,
-            )
+            tasks = self._tasks.copy()
+        cancelled_count = 0
+        for task in tasks:
+            if hasattr(task, "cancel"):
+                task.cancel()
+                cancelled_count += 1
+        logger.info(
+            "取消令牌已触发 | token_id=%s | age=%.1fs | tasks=%d",
+            self._token_id,
+            time.monotonic() - self._created_at,
+            cancelled_count,
+        )
 
     def dispose(self) -> None:
         """请求结束后的清理：从注册表移除，释放引用。"""
