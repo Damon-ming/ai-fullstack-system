@@ -1,5 +1,7 @@
 # app-server/src/com/damon/ming/ai/rerank/cross_encoder_reranker.py
 
+import threading
+
 import torch
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.rerank import register_reranker
@@ -40,13 +42,21 @@ class CrossEncoderModel:
         self.model.to(self.device)
         self.model.eval()
 
-    def score_pairs(self, query: str, texts: list[str]) -> list[float]:
+    def score_pairs(
+        self,
+        query: str,
+        texts: list[str],
+        cancel_event: threading.Event | None = None,
+    ) -> list[float]:
         if not texts:
             return []
 
         all_scores = []
         # 分批推理，避免OOM
         for start in range(0, len(texts), self.batch_size):
+            # 协作取消：批次之间检查信号，已取消则放弃剩余批次
+            if cancel_event is not None and cancel_event.is_set():
+                return []
             batch_texts = texts[start : start + self.batch_size]
             pairs = [[query, text] for text in batch_texts]
 
@@ -78,13 +88,21 @@ class CrossEncoderReranker(BaseReranker):
         self.model = CrossEncoderModel(params=params)
 
     def rerank(
-        self, query: str, nodes: list[TextNode], top_k: int | None = None
+        self,
+        query: str,
+        nodes: list[TextNode],
+        top_k: int | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> list[TextNode]:
         if not nodes:
             return []
 
         texts = [node.text for node in nodes]
-        scores = self.model.score_pairs(query, texts)
+        scores = self.model.score_pairs(query, texts, cancel_event)
+
+        # 取消时 score_pairs 返回空列表，直接短路
+        if not scores:
+            return []
 
         node_with_score = list(zip(nodes, scores))
         node_with_score.sort(key=lambda x: x[1], reverse=True)

@@ -357,6 +357,9 @@ class RAGContainer:
         pool_mgr = self._pool_mgr
         retrieval_pool = pool_mgr.get_pool("retrieval")
 
+        # 协作取消信号：超时或客户端断开时通知线程池中的 rerank 提前退出
+        cancel_event = threading.Event()
+
         try:
             # ── 阶段 1: 混合检索（参数全部来自 YAML 配置） ──
             raw_nodes = await loop.run_in_executor(
@@ -398,12 +401,14 @@ class RAGContainer:
                 await self.summary.compress_nodes(nodes_to_compress, max_seq_len)
 
             # ── 阶段 4: rerank 重排（CPU/GPU 密集，提交到线程池避免阻塞事件循环） ──
+            # 传入 cancel_event，使 rerank 内部可在取消信号下提前退出
             ranked_nodes = await loop.run_in_executor(
                 retrieval_pool,
                 self.reranker.rerank,
                 query,
                 reconstructed_nodes,
                 effective_top_k,
+                cancel_event,
             )
             if not ranked_nodes:
                 logger.info("RAG 重排后无有效结果")
@@ -437,5 +442,7 @@ class RAGContainer:
             return full_text
 
         except asyncio.CancelledError:
+            # 通知线程池中的 rerank 提前退出，避免无效计算
+            cancel_event.set()
             logger.warning("RAG 检索被取消（客户端断开或超时）")
             raise

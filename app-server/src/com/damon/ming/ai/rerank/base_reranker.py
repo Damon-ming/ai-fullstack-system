@@ -11,6 +11,7 @@
 引擎注册表由各实现类通过 @register_reranker 自动注册。
 """
 
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -37,12 +38,19 @@ class BaseReranker(ABC):
 
     @abstractmethod
     def rerank(
-        self, query: str, nodes: list[TextNode], top_k: int | None = None
+        self,
+        query: str,
+        nodes: list[TextNode],
+        top_k: int | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> list[TextNode]:
         """
-        对候选文档进行重排序
+        对候选文档进行重排序。
+
         :param query: 用户原始查询
         :param nodes: 召回得到的候选TextNode列表
         :param top_k: 重排后保留多少条；不传则返回全部重排结果
+        :param cancel_event: 协作取消信号。实现方应在循环中定期检查，
+                            已设置时立即返回空列表（不写入任何分数）。
         :return: 重排后的TextNode（在metadata写入重排分数 _rerank_score）
         """
