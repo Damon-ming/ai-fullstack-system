@@ -42,7 +42,7 @@ import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Self
 
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread.cancellation import _TokenRegistry
@@ -73,7 +73,7 @@ class ThreadPoolManager:
     _instance: ThreadPoolManager | None = None
     _instance_lock = threading.Lock()
 
-    def __new__(cls) -> ThreadPoolManager:
+    def __new__(cls) -> Self:
         """进程单例 —— 所有模块共享同一个管理器。"""
         if cls._instance is None:
             with cls._instance_lock:

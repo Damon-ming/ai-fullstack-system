@@ -153,7 +153,7 @@ class _TokenRegistry:
     def remove(self, token_id: str) -> None:
         with self._lock:
             self._tokens.pop(token_id, None)
-            for req_id, tokens in list(self._request_map.items()):
+            for req_id, tokens in self._request_map.items():
                 tokens.discard(token_id)
                 if not tokens:
                     del self._request_map[req_id]

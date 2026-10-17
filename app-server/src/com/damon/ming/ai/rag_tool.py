@@ -282,7 +282,7 @@ class RAGContainer:
             if nodes:
                 parsed.append((key, nodes, file_sha256))
 
-        # ── 阶段 3：锁内共享状态（去重检查 + 入库 + BM25 重建）──
+        # ── 阶段 3：锁内共享状态（去重检查 + 入库）──
         with self._knowledge_lock:
             accepted: list[dict] = []
             new_nodes: list[TextNode] = []
@@ -303,11 +303,14 @@ class RAGContainer:
 
             if new_nodes:
                 self.all_nodes.extend(new_nodes)
-                # 传副本，避免 BM25Index 持有 all_nodes 别名导致后续 extend 静默腐败索引
-                self.bm25_index.build(list(self.all_nodes))
-                logger.info(
-                    f"BM25增量更新完成，新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
-                )
+
+        # ── BM25 重建（锁外，纯计算，不阻塞 chat 稀疏检索）──
+        # 传副本，避免 BM25Index 持有 all_nodes 别名导致后续 extend 静默腐败索引
+        if new_nodes:
+            self.bm25_index.build(list(self.all_nodes))
+            logger.info(
+                f"BM25增量更新完成，新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
+            )
 
         return {"indexed": accepted, "skipped": skipped}
 
@@ -372,6 +375,7 @@ class RAGContainer:
 
         try:
             # ── 阶段 1: 混合检索（参数全部来自 YAML 配置） ──
+            # 传入 cancel_event，使稠密/稀疏检索之间可感知取消信号
             raw_nodes = await loop.run_in_executor(
                 retrieval_pool,
                 lambda: self.hybrid_retriever.retrieve(
@@ -380,13 +384,17 @@ class RAGContainer:
                     dedup_by_section=cfg.dedup_by_section,
                     dense_top_k=cfg.dense_top_k,
                     sparse_top_k=cfg.sparse_top_k,
-                    metadata_filter=None,
                     executor=retrieval_pool,
+                    metadata_filter=None,
+                    cancel_event=cancel_event,
                 ),
             )
             if not raw_nodes:
                 logger.info("RAG 检索无结果")
                 return ""
+
+            # 阶段间 yield：让出控制权，允许 CancelledError 在阶段间隙传播
+            await asyncio.sleep(0)
 
             # ── 阶段 2: 章节重构 ──
             reconstructed_nodes = (
@@ -396,6 +404,9 @@ class RAGContainer:
                     executor=retrieval_pool,
                 )
             )
+
+            # 阶段间 yield
+            await asyncio.sleep(0)
 
             # ── 阶段 3: 超长章节压缩（仅处理超 max_seq_len 的节点） ──
             # 压缩前保存原文映射，rerank 后用于恢复。只记录被压缩的节点，
@@ -409,6 +420,9 @@ class RAGContainer:
                     nodes_to_compress.append(node)
             if nodes_to_compress:
                 await self.summary.compress_nodes(nodes_to_compress, max_seq_len)
+
+            # 阶段间 yield
+            await asyncio.sleep(0)
 
             # ── 阶段 4: rerank 重排（CPU/GPU 密集，提交到独立 rerank 池） ──
             # 使用独立池避免 rerank 长耗时占用 retrieval 线程（与 Stage 1/2 隔离）

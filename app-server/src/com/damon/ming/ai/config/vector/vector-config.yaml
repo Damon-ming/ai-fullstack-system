@@ -15,6 +15,7 @@ vector_engines:
       collection_name: rag_collection
       persist_directory: ./chroma_data
       embedding_dimension: 1024
+      cache_max: 5000
 
   # 切换到 PGVector 时取消注释：
   # pgvector:

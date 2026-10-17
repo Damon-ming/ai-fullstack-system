@@ -2,6 +2,7 @@
 
 import threading
 import uuid
+from collections import OrderedDict
 from typing import Any
 
 from llama_index.core.schema import TextNode
@@ -26,8 +27,9 @@ class ChromaDBStore(BaseVectorStore):
         super().__init__(params)
         self.logger = pin("ChromaDBStore")
         self._closed = False
-        self._node_cache: dict[str, TextNode] = {}
+        self._node_cache: OrderedDict[str, TextNode] = OrderedDict()
         self._cache_lock = threading.Lock()
+        self._CACHE_MAX = params.extra.get("cache_max", 5000)  # LRU 上限（YAML 可配）
 
         try:
             import chromadb
@@ -74,6 +76,22 @@ class ChromaDBStore(BaseVectorStore):
             self.logger.error(f"[ChromaDBStore] 获取/创建 collection 失败: {e}")
             raise
 
+    # ── LRU 缓存辅助 ───────────────────────────────────────────────
+
+    def _cache_put(self, node_id: str, node: TextNode) -> None:
+        """写入缓存 + LRU 淘汰（超上限时移除最久未用条目）。"""
+        self._node_cache[node_id] = node
+        self._node_cache.move_to_end(node_id)
+        if len(self._node_cache) > self._CACHE_MAX:
+            self._node_cache.popitem(last=False)
+
+    def _cache_get(self, node_id: str) -> TextNode | None:
+        """读取缓存并更新 LRU 顺序。"""
+        node = self._node_cache.get(node_id)
+        if node is not None:
+            self._node_cache.move_to_end(node_id)
+        return node
+
     # ── 核心 CRUD ──────────────────────────────────────────────────
 
     def add_documents(
@@ -104,7 +122,7 @@ class ChromaDBStore(BaseVectorStore):
 
         with self._cache_lock:
             for node, node_id in zip(nodes, ids):
-                self._node_cache[node_id] = node
+                self._cache_put(node_id, node)
 
         try:
             self.collection.add(
@@ -180,7 +198,7 @@ class ChromaDBStore(BaseVectorStore):
 
     def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
         with self._cache_lock:
-            cached = self._node_cache.get(node_id)
+            cached = self._cache_get(node_id)
         if cached is not None:
             return cached
         try:
@@ -192,7 +210,7 @@ class ChromaDBStore(BaseVectorStore):
                     metadata=result["metadatas"][0],
                 )
                 with self._cache_lock:
-                    self._node_cache[node_id] = node
+                    self._cache_put(node_id, node)
                 return node
             return None
         except Exception as e:
@@ -216,7 +234,7 @@ class ChromaDBStore(BaseVectorStore):
                 nodes.append(node)
             with self._cache_lock:
                 for node in nodes:
-                    self._node_cache[node.node_id] = node
+                    self._cache_put(node.node_id, node)
             return nodes
         except Exception as e:
             self.logger.error(f"[ChromaDBStore] 元数据查询失败: {e}")
@@ -251,7 +269,7 @@ class ChromaDBStore(BaseVectorStore):
                 nodes.append(node)
             with self._cache_lock:
                 for node in nodes:
-                    self._node_cache[node.node_id] = node
+                    self._cache_put(node.node_id, node)
             return nodes
         except Exception as e:
             self.logger.error(f"[ChromaDBStore] 批量元数据查询失败: {e}")
