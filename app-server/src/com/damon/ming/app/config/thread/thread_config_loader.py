@@ -1,8 +1,8 @@
-# app-server/src/com/damon/ming/config/thread/thread_config_loader.py
+# app-server/src/com/damon/ming/app/config/thread/thread_config_loader.py
 """
 线程池配置加载器 —— 从 YAML 文件读取线程池参数。
 
-本模块属于 config/thread/ 配置子模块。
+本模块属于 app/config/thread/ 配置子模块。
 pool_manager 通过 ThreadPoolConfigLoader().load() 接收参数，
 不感知配置来源。
 

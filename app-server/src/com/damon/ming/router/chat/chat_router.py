@@ -11,6 +11,7 @@ from src.com.damon.ming.ai.schemas.response import (
     BaseLLMSuccessResponse,
     ChatDeltaData,
 )
+from src.com.damon.ming.app.config.ai.chat_config_loader import ChatConfigLoader
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
@@ -21,25 +22,16 @@ logger = pin("chat.router")
 
 router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
 
-# ========== 全局信号量：控制同时执行LLM推理的并发数量，4090可以调到3~6，看模型大小 ==========
-INFER_SEM = asyncio.Semaphore(4)
-INFER_WAIT_TIMEOUT = 30
 
-# SSE 重连等待毫秒数
-RETRY_MS = 3000
+def _init_chat_config() -> tuple[asyncio.Semaphore, int, int, str]:
+    """从 YAML 加载聊天配置，返回 (信号量, 超时秒数, 重连毫秒数, 系统prompt)。"""
+    configs = ChatConfigLoader().load_all()
+    cfg = configs.get("default") or configs[next(iter(configs.keys()))]
+    sem = asyncio.Semaphore(cfg.infer_concurrency)
+    return sem, cfg.infer_timeout, cfg.retry_ms, cfg.system_prompt
 
-SYSTEM_PROMPT_TPL = """
-你是严格基于知识库的问答助手，必须遵守以下硬性规则，绝对不能违反：
-1. 只能使用【参考知识库】内存在的内容回答用户问题；
-2. 如果参考知识库为空、或者没有和用户问题相关的内容，直接只输出：语料库没有相关资料。；
-3. 禁止使用你自身内置常识、禁止脑补、禁止推测、禁止编造任何原文不存在的信息；
-4. 回答使用标准Markdown格式输出，存在多条内容用有序/无序列表，重点内容加粗，表格原样保留；
-5. 回答精简，不要多余解释、不要分析、不要思考过程；
-6. 不允许输出无关内容，严格遵守知识库边界。
 
-【参考知识库】
-{ref_content}
-"""
+INFER_SEM, INFER_WAIT_TIMEOUT, RETRY_MS, SYSTEM_PROMPT_TPL = _init_chat_config()
 
 
 @router.post("/send/v1")
@@ -138,6 +130,15 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
     emitter = SseEmitter(retry_ms=RETRY_MS)
 
     try:
+        # ── start 事件在信号量外立即发送，客户端无需排队等待即可感知连接建立 ──
+        yield emitter.emit(
+            "start",
+            SseMessageFactory.start(
+                SseMessageFactory.get_start_data(req.app.state.llm_model_name)
+            ),
+            retry=True,
+        )
+
         async with INFER_SEM:
             try:
                 async with asyncio.timeout(INFER_WAIT_TIMEOUT):
@@ -154,17 +155,6 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                         {"role": "user", "content": body.query},
                     ]
                     logger.debug("prompt_messages:\n%s", prompt_messages)
-
-                    # ── start 事件（携带元信息 + retry） ──
-                    yield emitter.emit(
-                        "start",
-                        SseMessageFactory.start(
-                            SseMessageFactory.get_start_data(
-                                req.app.state.llm_model_name
-                            )
-                        ),
-                        retry=True,
-                    )
 
                     try:
                         async for token in req.app.state.infer_service.stream_generate(

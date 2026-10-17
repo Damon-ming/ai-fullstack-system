@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/config/thread/thread-config.yaml
+# app-server/src/com/damon/ming/app/config/thread/thread-config.yaml
 # 线程池配置 —— 由 ThreadPoolConfigLoader 读取，注入 pool_manager。
 # 三个命名池：retrieval（检索）/ document（文档处理）/ inference（推理辅助）
 

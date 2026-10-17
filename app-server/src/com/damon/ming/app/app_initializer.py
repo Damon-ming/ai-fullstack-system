@@ -79,7 +79,7 @@ class AppInitializer:
 
     def _init_thread_pool(self) -> None:
         """线程池管理器：从 YAML 加载配置，初始化所有线程池。"""
-        from src.com.damon.ming.config.thread import ThreadPoolConfigLoader
+        from src.com.damon.ming.app.config.thread import ThreadPoolConfigLoader
         from src.com.damon.ming.thread import ThreadPoolManager
 
         # 尝试从 YAML 加载配置，失败时使用默认值

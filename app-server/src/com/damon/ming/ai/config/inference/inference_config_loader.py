@@ -44,11 +44,10 @@ class ModelEntry:
 class InferenceConfigLoader:
     """从 YAML 加载推理引擎和模型配置。"""
 
-    _engine: BaseInferenceService | None = None
-    _engine_type: str = ""
-    _models: dict[str, ModelEntry] = {}
-
     def __init__(self, config_path: str | None = None):
+        self._engine: BaseInferenceService | None = None
+        self._engine_type: str = ""
+        self._models: dict[str, ModelEntry] = {}
         if config_path is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "inference-config.yaml")

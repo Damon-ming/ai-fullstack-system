@@ -273,7 +273,9 @@ class RAGContainer:
             existing = self.vector_store.get_by_metadata({"file_sha256": file_sha256})
 
             if existing:
-                skipped.append({"file_sha256": file_sha256, "reason": "already_indexed"})
+                skipped.append(
+                    {"file_sha256": file_sha256, "reason": "already_indexed"}
+                )
                 continue
 
             # 提交文档分割到线程池
@@ -423,7 +425,9 @@ class RAGContainer:
                         self.summary.tokenizer.count_tokens(full_text),
                         max_context_tokens,
                     )
-                    full_text = self.summary.C_by_token(full_text, max_context_tokens)
+                    full_text = self.summary.truncate_by_token(
+                        full_text, max_context_tokens
+                    )
 
             logger.info("RAG 检索完成 | context_length=%s", len(full_text))
             return full_text
