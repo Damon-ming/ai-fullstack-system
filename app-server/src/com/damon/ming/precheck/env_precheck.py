@@ -29,16 +29,18 @@ def _check_encryption_config(is_debug: bool) -> None:
     缺失任何一个字段都直接抛异常，不使用默认值降级——
     空的 salt/info/context 会导致加密/签名静默失败，比不启动更危险。
     """
-    from src.com.damon.ming.app.config import EncryptionConfigLoader
+    from src.com.damon.ming.app.config.encryption.encryption_config_loader import (
+        EncryptionConfigLoader,
+    )
 
     try:
         config = EncryptionConfigLoader().load(
-            profile="default" if is_debug else "production"
+            profile="common" if is_debug else "production"
         )
     except FileNotFoundError:
         raise RuntimeError(
             "加密配置文件不存在，启动终止。"
-            "请确保 app/config/encryption-config.yaml 文件存在。"
+            "请确保 app/config/encryption/encryption-config.yaml 文件存在。"
         )
     except Exception as e:
         raise RuntimeError(f"加密配置文件加载失败，启动终止：{e}") from e
@@ -56,7 +58,7 @@ def _check_encryption_config(is_debug: bool) -> None:
     if missing:
         raise RuntimeError(
             f"加密配置缺失必要字段，启动终止：{', '.join(missing)}。"
-            f"请检查 app/config/encryption-config.yaml 的 {'default' if is_debug else 'production'} 剖面。"
+            f"请检查 app/config/encryption/encryption-config.yaml 的 {'common' if is_debug else 'production'} 剖面。"
         )
 
 
@@ -66,13 +68,13 @@ def _check_database(is_debug: bool) -> list[str]:
     缺失直接报错，不做环境变量回退。
     """
     try:
-        from src.com.damon.ming.app.config import DbConfigLoader
+        from src.com.damon.ming.app.config.db.db_config_loader import DbConfigLoader
 
         loader = DbConfigLoader()
-        db_config = loader.load(profile="default" if is_debug else "production")
+        db_config = loader.load(profile="common" if is_debug else "production")
         if not db_config.url and not db_config.host:
             return [
-                f"数据库配置缺少连接信息（url 或 host），请检查 db-config.yaml 的 {'default' if is_debug else 'production'} 剖面"
+                f"数据库配置缺少连接信息（url 或 host），请检查 db/db-config.yaml 的 {'common' if is_debug else 'production'} 剖面"
             ]
     except FileNotFoundError as e:
         return [f"数据库配置文件不存在：{e}"]

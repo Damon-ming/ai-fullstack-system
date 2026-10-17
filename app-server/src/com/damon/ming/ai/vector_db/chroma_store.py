@@ -1,5 +1,6 @@
 # app-server/src/com/damon/ming/ai/vector_db/chroma_store.py
 
+import threading
 import uuid
 from typing import Any
 
@@ -26,6 +27,7 @@ class ChromaDBStore(BaseVectorStore):
         self.logger = pin("ChromaDBStore")
         self._closed = False
         self._node_cache: dict[str, TextNode] = {}
+        self._cache_lock = threading.Lock()
 
         try:
             import chromadb
@@ -99,7 +101,10 @@ class ChromaDBStore(BaseVectorStore):
             documents.append(node.text)
             embeddings.append(node.embedding)
             metadatas.append(node.metadata)
-            self._node_cache[node_id] = node
+
+        with self._cache_lock:
+            for node, node_id in zip(nodes, ids):
+                self._node_cache[node_id] = node
 
         try:
             self.collection.add(
@@ -165,15 +170,17 @@ class ChromaDBStore(BaseVectorStore):
     def delete(self, node_ids: list[str], **kwargs) -> bool:
         try:
             self.collection.delete(ids=node_ids)
-            for node_id in node_ids:
-                self._node_cache.pop(node_id, None)
+            with self._cache_lock:
+                for node_id in node_ids:
+                    self._node_cache.pop(node_id, None)
             return True
         except Exception as e:
             self.logger.error(f"[ChromaDBStore] 删除失败: {e}")
             return False
 
     def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
-        cached = self._node_cache.get(node_id)
+        with self._cache_lock:
+            cached = self._node_cache.get(node_id)
         if cached is not None:
             return cached
         try:
@@ -184,7 +191,8 @@ class ChromaDBStore(BaseVectorStore):
                     text=result["documents"][0],
                     metadata=result["metadatas"][0],
                 )
-                self._node_cache[node_id] = node
+                with self._cache_lock:
+                    self._node_cache[node_id] = node
                 return node
             return None
         except Exception as e:
@@ -206,7 +214,9 @@ class ChromaDBStore(BaseVectorStore):
                     metadata=results["metadatas"][i],
                 )
                 nodes.append(node)
-                self._node_cache[node_id] = node
+            with self._cache_lock:
+                for node in nodes:
+                    self._node_cache[node.node_id] = node
             return nodes
         except Exception as e:
             self.logger.error(f"[ChromaDBStore] 元数据查询失败: {e}")
@@ -223,7 +233,8 @@ class ChromaDBStore(BaseVectorStore):
         try:
             self.client.delete_collection(self.params.collection_name)
             self.collection = self._get_or_create_collection()
-            self._node_cache.clear()
+            with self._cache_lock:
+                self._node_cache.clear()
             return True
         except Exception as e:
             self.logger.error(f"[ChromaDBStore] 清空失败: {e}")
@@ -258,5 +269,6 @@ class ChromaDBStore(BaseVectorStore):
         if self._closed:
             return
         self._closed = True
-        self._node_cache.clear()
+        with self._cache_lock:
+            self._node_cache.clear()
         self.logger.info("[ChromaDBStore] 资源已释放")

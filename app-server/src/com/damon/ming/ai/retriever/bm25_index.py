@@ -28,18 +28,30 @@ class BM25Index:
         return text.lower().split()
 
     def build(self, nodes: list[TextNode]):
-        """构建 BM25 内存索引（写锁保护，阻塞并发查询）"""
+        """构建 BM25 内存索引（双 buffer 原子替换，不阻塞并发查询）。
+
+        构建过程在锁外完成，仅在最终替换指针时持锁（微秒级），
+        避免 upload 重建 BM25 期间阻塞所有 chat 请求的稀疏检索。
+        """
         from rank_bm25 import BM25Okapi
 
-        with self._rw_lock:
-            self.corpus = nodes
-            if not nodes:
+        if not nodes:
+            with self._rw_lock:
+                self.corpus = nodes
                 self.index = None
                 self.logger.warning("[BM25Index] 没有可建立索引的文档")
                 return
-            tokenized_corpus = [self.tokenizer(node.text) for node in nodes]
-            self.index = BM25Okapi(tokenized_corpus)
-            self.logger.info(f"[BM25Index] 索引构建完成 | 文档数: {len(nodes)}")
+
+        # 锁外构建新索引（耗时操作不阻塞读）
+        tokenized_corpus = [self.tokenizer(node.text) for node in nodes]
+        new_index = BM25Okapi(tokenized_corpus)
+
+        # 锁内原子替换（微秒级引用赋值）
+        with self._rw_lock:
+            self.corpus = nodes
+            self.index = new_index
+
+        self.logger.info(f"[BM25Index] 索引构建完成 | 文档数: {len(nodes)}")
 
     def get_scores(self, query: str) -> np.ndarray:
         """获取查询对全部文档的BM25分数数组，和corpus一一对应（读锁保护）"""

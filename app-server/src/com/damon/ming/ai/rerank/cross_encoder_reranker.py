@@ -41,6 +41,8 @@ class CrossEncoderModel:
         )
         self.model.to(self.device)
         self.model.eval()
+        # PyTorch 模型推理非线程安全，加锁串行化多线程并发 rerank
+        self._infer_lock = threading.Lock()
 
     def score_pairs(
         self,
@@ -52,26 +54,27 @@ class CrossEncoderModel:
             return []
 
         all_scores = []
-        # 分批推理，避免OOM
-        for start in range(0, len(texts), self.batch_size):
-            # 协作取消：批次之间检查信号，已取消则放弃剩余批次
-            if cancel_event is not None and cancel_event.is_set():
-                return []
-            batch_texts = texts[start : start + self.batch_size]
-            pairs = [[query, text] for text in batch_texts]
+        # 分批推理，避免OOM；整体持锁，保证 PyTorch 模型推理线程安全
+        with self._infer_lock:
+            for start in range(0, len(texts), self.batch_size):
+                # 协作取消：批次之间检查信号，已取消则放弃剩余批次
+                if cancel_event is not None and cancel_event.is_set():
+                    return []
+                batch_texts = texts[start : start + self.batch_size]
+                pairs = [[query, text] for text in batch_texts]
 
-            inputs = self.tokenizer(
-                pairs,
-                padding=True,
-                truncation=True,
-                max_length=self.max_seq_len,
-                return_tensors="pt",
-            ).to(self.device)
+                inputs = self.tokenizer(
+                    pairs,
+                    padding=True,
+                    truncation=True,
+                    max_length=self.max_seq_len,
+                    return_tensors="pt",
+                ).to(self.device)
 
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-                scores = outputs.logits[:, 0].float()
-                all_scores.extend(scores.cpu().numpy().tolist())
+                with torch.no_grad():
+                    outputs = self.model(**inputs)
+                    scores = outputs.logits[:, 0].float()
+                    all_scores.extend(scores.cpu().numpy().tolist())
         return all_scores
 
 

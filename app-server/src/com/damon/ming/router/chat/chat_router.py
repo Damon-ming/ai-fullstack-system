@@ -23,15 +23,15 @@ logger = pin("chat.router")
 router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
 
 
-def _init_chat_config() -> tuple[asyncio.Semaphore, int, int, str]:
-    """从 YAML 加载聊天配置，返回 (信号量, 超时秒数, 重连毫秒数, 系统prompt)。"""
+def init_chat_config() -> tuple[asyncio.Semaphore, int, int, str]:
+    """从 YAML 加载聊天配置，返回 (信号量, 超时秒数, 重连毫秒数, 系统prompt)。
+
+    在 FastAPI lifespan 中调用，确保 Semaphore 绑定到正确的事件循环。
+    """
     configs = ChatConfigLoader().load_all()
-    cfg = configs.get("default") or configs[next(iter(configs.keys()))]
+    cfg = configs.get("common") or configs[next(iter(configs.keys()))]
     sem = asyncio.Semaphore(cfg.infer_concurrency)
     return sem, cfg.infer_timeout, cfg.retry_ms, cfg.system_prompt
-
-
-INFER_SEM, INFER_WAIT_TIMEOUT, RETRY_MS, SYSTEM_PROMPT_TPL = _init_chat_config()
 
 
 @router.post("/send/v1")
@@ -45,9 +45,13 @@ async def chat(req: Request, body: ChatRequest):
     # 创建请求级上下文，绑定 CancellationToken
     ctx = req.app.state.pool_mgr.create_request_context()
 
+    infer_sem = req.app.state.infer_sem
+    infer_timeout = req.app.state.infer_timeout
+    system_prompt_tpl = req.app.state.system_prompt_tpl
+
     try:
-        async with INFER_SEM:
-            async with asyncio.timeout(INFER_WAIT_TIMEOUT):
+        async with infer_sem:
+            async with asyncio.timeout(infer_timeout):
                 logger.debug("开始执行同步 RAG 检索")
 
                 # 1. 调用RAG检索，获取拼接完整章节上下文（传递取消令牌）
@@ -60,7 +64,7 @@ async def chat(req: Request, body: ChatRequest):
                 schema = get_chat_schema(body.reason)
 
                 # 2. 填充固定Prompt，构造标准messages数组
-                system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
+                system_prompt = system_prompt_tpl.format(ref_content=ref_content)
                 prompt_messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": body.query},
@@ -127,7 +131,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
         ctx: 请求上下文，包含 CancellationToken。
              请求结束（包括客户端断开）时自动 cleanup。
     """
-    emitter = SseEmitter(retry_ms=RETRY_MS)
+    emitter = SseEmitter(retry_ms=req.app.state.retry_ms)
 
     try:
         # ── start 事件在信号量外立即发送，客户端无需排队等待即可感知连接建立 ──
@@ -139,9 +143,13 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             retry=True,
         )
 
-        async with INFER_SEM:
+        infer_sem = req.app.state.infer_sem
+        infer_timeout = req.app.state.infer_timeout
+        system_prompt_tpl = req.app.state.system_prompt_tpl
+
+        async with infer_sem:
             try:
-                async with asyncio.timeout(INFER_WAIT_TIMEOUT):
+                async with asyncio.timeout(infer_timeout):
                     logger.debug("开始执行流式 RAG 检索")
                     # 取消时 query_rag 直接抛出 CancelledError，被下方 except 捕获
                     ref_content = await req.app.state.rag_app.query_rag(
@@ -149,7 +157,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                         cancellation_token=ctx.cancellation_token,
                     )
 
-                    system_prompt = SYSTEM_PROMPT_TPL.format(ref_content=ref_content)
+                    system_prompt = system_prompt_tpl.format(ref_content=ref_content)
                     prompt_messages = [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": body.query},

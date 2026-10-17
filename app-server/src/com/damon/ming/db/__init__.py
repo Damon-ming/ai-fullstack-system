@@ -16,7 +16,7 @@
   - query / execute: 底层 SQL 执行工具
 
 不提供（它们属于业务层 app/）：
-  - 配置加载 → 见 app/config/db_config_loader.py
+  - 配置加载 → 见 app/config/db/db_config_loader.py
   - 表结构迁移 → 暂无（后续独立模块）
 
 用法：

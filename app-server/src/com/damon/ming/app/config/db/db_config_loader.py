@@ -32,7 +32,7 @@ class DbConfigLoader:
             config_path = os.path.join(base_dir, "db-config.yaml")
         self._config_path = config_path
 
-    def load(self, profile: str = "default"):
+    def load(self, profile: str = "common"):
         """加载指定剖面的配置，返回 DbConfig。
 
         加载失败时直接抛出异常（FileNotFoundError / ValueError），

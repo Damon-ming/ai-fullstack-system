@@ -50,7 +50,7 @@ class EncryptionConfigLoader:
             config_path = os.path.join(base_dir, "encryption-config.yaml")
         self._config_path = config_path
 
-    def load(self, profile: str = "default") -> EncryptionConfig:
+    def load(self, profile: str = "common") -> EncryptionConfig:
         """加载指定剖面的配置。"""
         raw = self._read_yaml(profile)
         return EncryptionConfig(raw)

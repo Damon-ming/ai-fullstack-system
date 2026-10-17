@@ -14,7 +14,7 @@
   - 全局注入点（globals.py：set_key_manager / set_sign_context 等）
 
 不提供（它们属于业务层 app/）：
-  - 配置加载 → 见 app/config/encryption_config_loader.py
+  - 配置加载 → 见 app/config/encryption/encryption_config_loader.py
   - 数据库存储实现 → 见 router/encryption/key_store.py
   - 中间件 → 见 middleware/encryption_middleware.py
   - 路由 → 见 router/encryption/encryption_router.py

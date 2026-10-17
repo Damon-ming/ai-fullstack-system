@@ -3,8 +3,8 @@
 # encryption 模块本身不包含任何配置文件，纯参数化调用。
 
 encryption:
-  # 开发环境
-  default:
+  # 通用环境
+  common:
     rsa_key_size: 2048
     session_ttl_hours: 24
     sign_context: "ai-fullstack-signature-v1"

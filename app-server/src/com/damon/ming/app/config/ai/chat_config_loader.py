@@ -45,7 +45,7 @@ class ChatConfigLoader:
     用法：
         loader = ChatConfigLoader()
         configs = loader.load_all()
-        configs["default"].system_prompt
+        configs["common"].system_prompt
     """
 
     def __init__(self, config_path: str | None = None):

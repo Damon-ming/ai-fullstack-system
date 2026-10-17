@@ -8,8 +8,8 @@
 #   SQLite:      dialect: sqlite  dbname: /path/to/db.sqlite
 
 db:
-  # 开发环境：本地 PostgreSQL
-  default:
+  # 通用环境：本地 PostgreSQL
+  common:
     dialect: postgresql
     driver: psycopg2
     host: localhost
@@ -22,18 +22,3 @@ db:
     connect_timeout: 10
     retry: 3
     backoff: 0.1
-
-  # 生产环境
-  production:
-    dialect: postgresql
-    driver: psycopg2
-    host: localhost
-    port: 5432
-    dbname: damon_prod
-    user: postgres
-    password: ""
-    pool_size: 5
-    max_overflow: 10
-    connect_timeout: 15
-    retry: 5
-    backoff: 0.5

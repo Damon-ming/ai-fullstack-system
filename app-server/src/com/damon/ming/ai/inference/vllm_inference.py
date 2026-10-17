@@ -1,7 +1,7 @@
 # app-server/src/com/damon/ming/ai/inference/vllm_inference.py
 
+import asyncio
 import json
-import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -69,7 +69,7 @@ class VLLMInference(BaseInferenceService):
                 logger.warning(
                     f"推理重试 {attempt + 1}/{self.params.max_retries}, wait {wait}s | {err_msg}"
                 )
-                time.sleep(wait)
+                await asyncio.sleep(wait)
 
         logger.error(f"VLLM推理全部重试失败: {err_msg}")
         if response_schema is not None:
@@ -92,14 +92,19 @@ class VLLMInference(BaseInferenceService):
         stream = await self.client.chat.completions.create(
             model=model_name, messages=messages, stream=True, **run_opts
         )
-        async for chunk in stream:
-            delta = chunk.choices[0].delta
-            reasoning = getattr(delta, "reasoning_content", None)
-            if reasoning:
-                yield StreamToken(content=reasoning, type="reasoning")
-            content = delta.content
-            if content:
-                yield StreamToken(content=content, type="content")
+        try:
+            async for chunk in stream:
+                delta = chunk.choices[0].delta
+                reasoning = getattr(delta, "reasoning_content", None)
+                if reasoning:
+                    yield StreamToken(content=reasoning, type="reasoning")
+                content = delta.content
+                if content:
+                    yield StreamToken(content=content, type="content")
+        except asyncio.CancelledError:
+            logger.warning("VLLM stream 收到取消信号，关闭流")
+            await stream.close()
+            raise
 
     async def check_model_ready(self, model_name: str) -> bool:
         try:

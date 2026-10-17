@@ -31,7 +31,7 @@ class AppInitializer:
 
     def __init__(self, is_debug: bool = True) -> None:
         self._is_debug = is_debug
-        self._profile = "default" if is_debug else "production"
+        self._profile = "common" if is_debug else "production"
 
         # 子系统状态（startup 后填充）
         self.db_conn = None
@@ -145,7 +145,7 @@ class AppInitializer:
         加载失败（文件不存在、格式错误、连接失败）直接抛出异常，
         不做静默降级——数据库是核心依赖，启动失败应明确报错。
         """
-        from src.com.damon.ming.app.config import DbConfigLoader
+        from src.com.damon.ming.app.config.db.db_config_loader import DbConfigLoader
         from src.com.damon.ming.db import (
             DbConnection,
             set_default_db,
@@ -202,7 +202,7 @@ class AppInitializer:
     def _load_encryption_config(self):
         """加载加密配置（可选，失败用默认值）。"""
         try:
-            from src.com.damon.ming.app.config import EncryptionConfigLoader
+            from src.com.damon.ming.app.config.encryption.encryption_config_loader import EncryptionConfigLoader
 
             config = EncryptionConfigLoader().load(profile=self._profile)
             logger.info(
