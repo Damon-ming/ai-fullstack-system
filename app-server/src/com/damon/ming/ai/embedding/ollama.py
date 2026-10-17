@@ -2,6 +2,7 @@
 
 import hashlib
 import threading
+from collections import OrderedDict
 
 from src.com.damon.ming.ai.embedding import register_engine
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
@@ -20,7 +21,8 @@ class OllamaEmbedding(BaseEmbeddingService):
     设计说明：
       - embed_query 自身不做 sleep 重试（避免阻塞线程池 worker），
         失败立即抛 RuntimeError，由上层调用方（DenseRetriever）做短退避重试。
-      - 缓存只增不减，注意内存上限（当前场景 query 多样性可控）。
+      - 缓存使用 OrderedDict 实现 LRU 淘汰（上限通过 YAML cache_max 配置，默认 2000 条），
+        防止长期运行后内存无界增长。
     """
 
     def __init__(self, params: EmbeddingParams):
@@ -31,8 +33,10 @@ class OllamaEmbedding(BaseEmbeddingService):
             raise ImportError("请安装 ollama: pip install ollama")
 
         self.client = ollama.Client(host=params.base_url, timeout=params.timeout)
-        self._cache: dict[str, list[float]] = {}
+        self._cache: OrderedDict[str, list[float]] = OrderedDict()
         self._cache_lock = threading.Lock()
+        # LRU 上限（YAML embedding-config.yaml params.cache_max 透传，默认 2000 条）
+        self._cache_max = params.extra.get("cache_max", 2000)
 
         # 验证模型是否可用
         try:
@@ -54,15 +58,17 @@ class OllamaEmbedding(BaseEmbeddingService):
         cache_key = hashlib.md5(text.encode("utf-8")).hexdigest()
         with self._cache_lock:
             if cache_key in self._cache:
+                self._cache.move_to_end(cache_key)
                 return self._cache[cache_key]
 
         try:
-            response = self.client.embeddings(
-                model=self.params.model_name, prompt=text
-            )
+            response = self.client.embeddings(model=self.params.model_name, prompt=text)
             vector = response["embedding"]
             with self._cache_lock:
                 self._cache[cache_key] = vector
+                self._cache.move_to_end(cache_key)
+                if len(self._cache) > self._cache_max:
+                    self._cache.popitem(last=False)
             return vector
         except Exception as e:
             raise RuntimeError(f"Ollama embedding failed: {e}")
@@ -71,10 +77,13 @@ class OllamaEmbedding(BaseEmbeddingService):
         return [self.embed_query(text) for text in texts]
 
     def get_model_info(self) -> dict:
+        with self._cache_lock:
+            cache_size = len(self._cache)
         return {
             "provider": "ollama",
             "model": self.params.model_name,
             "base_url": self.params.base_url,
             "dimension": None,
-            "cache_size": len(self._cache),
+            "cache_size": cache_size,
+            "cache_max": self._cache_max,
         }

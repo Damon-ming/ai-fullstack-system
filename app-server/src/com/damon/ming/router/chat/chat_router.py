@@ -11,6 +11,7 @@ from src.com.damon.ming.ai.schemas.response import (
     BaseLLMSuccessResponse,
     ChatDeltaData,
 )
+from src.com.damon.ming.ai.security import InputValidator
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
@@ -20,6 +21,25 @@ from sse_starlette.sse import EventSourceResponse
 logger = pin("chat.router")
 
 router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
+
+# 轻量级输入校验器（模块级单例，无状态，可并发）
+_input_validator = InputValidator()
+
+
+def _check_input(query: str) -> BaseLLMFailedResponse | None:
+    """前置输入校验（纯本地规则，零 IO，微秒级）。
+
+    在调用 LLM 护栏之前快速拦截无效/攻击性输入，避免浪费护栏推理资源。
+    校验通过返回 None，不通过返回失败响应。
+    """
+    result = _input_validator.validate(query)
+    if not result.passed:
+        logger.warning("输入校验拦截 | rule=%s | reason=%s", result.rule, result.reason)
+        return BaseLLMFailedResponse[BaseLLMFailedData](
+            code=ErrorCode.CHAT.GUARDRAIL_BLOCKED,
+            data=BaseLLMFailedData(error_msg=result.reason),
+        )
+    return None
 
 
 async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None:
@@ -66,6 +86,11 @@ async def chat(req: Request, body: ChatRequest):
     ctx = req.app.state.pool_mgr.create_request_context()
 
     try:
+        # ── Phase 0: 前置输入校验（纯本地规则，零 IO，拦截无效/攻击输入） ──
+        input_blocked = _check_input(body.query)
+        if input_blocked is not None:
+            return input_blocked
+
         # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
         blocked = await _guardrail_check_with_timeout(req.app.state, body.query)
         if blocked is not None:
@@ -170,6 +195,22 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             ),
             retry=True,
         )
+
+        # ── Phase 0: 前置输入校验（纯本地规则，零 IO，拦截无效/攻击输入） ──
+        input_blocked = _check_input(body.query)
+        if input_blocked is not None:
+            yield emitter.emit(
+                "error",
+                SseMessageFactory.error(
+                    ErrorCode.CHAT.GUARDRAIL_BLOCKED,
+                    BaseLLMFailedData(
+                        error_msg=input_blocked.data.error_msg
+                        if input_blocked.data
+                        else "输入校验未通过"
+                    ),
+                ),
+            )
+            return
 
         # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
         blocked_resp = await _guardrail_check_with_timeout(req.app.state, body.query)

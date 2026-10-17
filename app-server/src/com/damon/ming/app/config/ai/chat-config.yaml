@@ -23,7 +23,7 @@ chat:
       【参考知识库】
       {ref_content}
     infer_concurrency: 4
-    rag_concurrency: 8
+    rag_concurrency: 3
     guardrail_timeout: 5
     infer_timeout: 30
     retry_ms: 3000

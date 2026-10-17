@@ -16,6 +16,7 @@ embedding_engines:
       base_url: http://ollama-server:11434
       timeout: 60
       max_retries: 3
+      cache_max: 2000  # 查询缓存 LRU 上限（约 16MB）
 
   # 切换到 HuggingFace 时取消注释：
   # huggingface:
