@@ -16,7 +16,7 @@ class FileUploadItem(BaseModel):
     filename: str = Field(..., description="原始文件名")
     save_path: str = Field(..., description="服务端保存路径")
     file_size: int = Field(..., description="文件大小(字节)")
-    file_md5: str = Field(..., description="文件内容指纹")
+    file_sha256: str = Field(..., description="文件内容指纹")
     duplicate: bool = Field(False, description="是否为已存在文件")
     indexed: bool = Field(True, description="是否已完成知识库索引")
 

@@ -3,9 +3,9 @@ from typing import Any
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.retriever.base_retriever import (
+    BaseRetriever,
     DenseRetriever,
     SparseRetriever,
-    _extract_section_key,
 )
 from src.com.damon.ming.ai.retriever.rrf import ReciprocalRankFusion
 from src.com.damon.ming.log import pin
@@ -259,17 +259,9 @@ class HybridRetriever:
 
     @staticmethod
     def _dedup_by_section(nodes: list[TextNode], top_k: int) -> list[TextNode]:
-        """按 (file_md5, section_id) 去重，保留 RRF 排序靠前的 chunk。"""
-        seen: set[tuple[str, str]] = set()
-        result: list[TextNode] = []
-        for node in nodes:
-            key = _extract_section_key(node)
-            if key is None:
-                continue
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append(node)
-            if len(result) >= top_k:
-                break
-        return result
+        """按 (file_sha256, section_id) 去重，保留 RRF 排序靠前的 chunk。
+
+        委托给 BaseRetriever.dedup_by_section 统一实现，避免逻辑分散。
+        """
+        scored = [(node, 0.0) for node in nodes]
+        return [node for node, _ in BaseRetriever.dedup_by_section(scored, top_k)]

@@ -4,7 +4,7 @@ export interface UploadResponse {
     filename: string;
     save_path: string;
     file_size: number;
-    file_md5: string;
+    file_sha256: string;
     duplicate: boolean;
     indexed: boolean;
   }>;

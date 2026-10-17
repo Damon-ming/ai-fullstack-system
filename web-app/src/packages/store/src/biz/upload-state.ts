@@ -7,7 +7,7 @@ export type UploadStatus = "idle" | "uploading" | "success" | "error";
 
 export interface ChatUploadFileResult {
   filename: string;
-  file_md5: string;
+  file_sha256: string;
   file_size: number;
   duplicate: boolean;
   indexed: boolean;

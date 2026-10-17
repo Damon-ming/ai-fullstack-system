@@ -225,7 +225,7 @@ export const ChatPage: React.FC = () => {
               <div className="mt-4 max-h-[150px] overflow-auto rounded-xl border border-gray-100 bg-gray-50 p-2 text-left">
                 {upload.files.map((file) => (
                   <div
-                    key={file.file_md5}
+                    key={file.file_sha256}
                     className="flex items-center gap-2 px-2 py-2 text-xs text-gray-500"
                   >
                     <span className="text-base text-emerald-500">

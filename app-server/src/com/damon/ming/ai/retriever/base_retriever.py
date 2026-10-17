@@ -9,13 +9,13 @@ def _extract_section_key(node: TextNode) -> tuple[str, str] | None:
     """提取节点的 section 去重键。
 
     Returns:
-        (file_md5, section_id) 元组，元数据缺失时返回 None。
+        (file_sha256, section_id) 元组，元数据缺失时返回 None。
     """
-    file_md5 = node.metadata.get("file_md5", "")
+    file_sha256 = node.metadata.get("file_sha256", "")
     section_id = node.metadata.get("section_id", "")
-    if not file_md5 or not section_id:
+    if not file_sha256 or not section_id:
         return None
-    return (file_md5, section_id)
+    return (file_sha256, section_id)
 
 
 class BaseRetriever(ABC):
@@ -46,7 +46,7 @@ class BaseRetriever(ABC):
         scored_nodes: list[tuple[TextNode, float]],
         top_k: int,
     ) -> list[tuple[TextNode, float]]:
-        """按 (file_md5, section_id) 去重，保留排序靠前的 chunk。
+        """按 (file_sha256, section_id) 去重，保留排序靠前的 chunk。
 
         保证输出中每个 section 只出现一次，最大化 section 多样性。
         返回数量 <= top_k（取决于输入中有多少不同 section）。

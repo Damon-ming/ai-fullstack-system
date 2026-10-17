@@ -1,5 +1,5 @@
 retrievers:
-  primary:
+  common:
     top_k: 5
     dense_top_k: 10
     sparse_top_k: 10

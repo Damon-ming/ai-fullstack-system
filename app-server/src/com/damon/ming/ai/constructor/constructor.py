@@ -62,13 +62,13 @@ class SectionReconstructor:
     # ── 私有：合并逻辑 ────────────────────────────────────────────────
 
     def _extract_section_keys(self, nodes: list[TextNode]) -> set[tuple[str, str]]:
-        """从节点列表中提取唯一的 (file_md5, section_id) 键"""
+        """从节点列表中提取唯一的 (file_sha256, section_id) 键"""
         section_keys = set()
         for node in nodes:
-            file_md5 = node.metadata.get("file_md5")
+            file_sha256 = node.metadata.get("file_sha256")
             section_id = node.metadata.get("section_id")
-            if file_md5 and section_id:
-                section_keys.add((file_md5, section_id))
+            if file_sha256 and section_id:
+                section_keys.add((file_sha256, section_id))
         return section_keys
 
     async def _fetch_all_section_chunks(
@@ -89,9 +89,9 @@ class SectionReconstructor:
             loop.run_in_executor(
                 executor,
                 vector_store.get_by_metadata,
-                {"file_md5": file_md5, "section_id": section_id},
+                {"file_sha256": file_sha256, "section_id": section_id},
             )
-            for file_md5, section_id in section_keys
+            for file_sha256, section_id in section_keys
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -107,14 +107,14 @@ class SectionReconstructor:
     def _group_chunks_by_section(
         self, chunks: list[TextNode]
     ) -> dict[tuple[str, str], list[TextNode]]:
-        """按 (file_md5, section_id) 分组所有 chunk 分片"""
+        """按 (file_sha256, section_id) 分组所有 chunk 分片"""
         group_map: dict[tuple[str, str], list[TextNode]] = {}
         for chunk in chunks:
-            file_md5 = chunk.metadata.get("file_md5")
+            file_sha256 = chunk.metadata.get("file_sha256")
             section_id = chunk.metadata.get("section_id")
-            if file_md5 is None or section_id is None:
+            if file_sha256 is None or section_id is None:
                 continue
-            key = (file_md5, section_id)
+            key = (file_sha256, section_id)
             if key not in group_map:
                 group_map[key] = []
             group_map[key].append(chunk)

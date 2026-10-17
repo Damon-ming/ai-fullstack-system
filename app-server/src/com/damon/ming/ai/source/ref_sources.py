@@ -36,9 +36,6 @@ class LocalPDFDataSource(BaseDataSource):
     将本类的调用提交到线程池，本类不感知线程环境。
     """
 
-    # 类级别锁，用于统计信息同步
-    _stats_lock = threading.Lock()
-
     def __init__(
         self,
         folder_path: str,
@@ -48,6 +45,9 @@ class LocalPDFDataSource(BaseDataSource):
         self.enable_image_extract = enable_image_extract
         self.logger = pin("LocalPDFDataSource")
         self._ensure_dir_exists()
+
+        # 实例级别锁，避免多实例竞争
+        self._stats_lock = threading.Lock()
 
         # 统计信息（线程安全）
         self._stats = {
@@ -76,7 +76,7 @@ class LocalPDFDataSource(BaseDataSource):
         file_name = os.path.basename(file_path)
 
         try:
-            file_md5 = self._get_file_sha256(file_path)
+            file_sha256 = self._get_file_sha256(file_path)
             md_pages = pymupdf4llm.to_markdown(
                 file_path,
                 page_chunks=True,
@@ -102,15 +102,15 @@ class LocalPDFDataSource(BaseDataSource):
                             f"当前PDF块无法解析页码，原始数据：{page_item}"
                         )
 
-                page_text = page_item["text"]
+                page_text = page_item.get("text", "")
 
                 doc = Document(
                     text=page_text.strip(),
                     metadata={
                         "file_name": file_name,
                         "file_path": file_path,
-                        "file_md5": file_md5,
-                        "source_refId": file_md5,
+                        "file_sha256": file_sha256,
+                        "source_refId": file_sha256,
                         "page": page_no,
                         "page_index": page_idx,
                         "total_pages": total_page_count,
@@ -125,7 +125,7 @@ class LocalPDFDataSource(BaseDataSource):
 
             self.logger.info(
                 f"[PDFDataSource] 解析成功 | file={file_name} | "
-                f"pages={total_page_count} | md5={file_md5[:8]}..."
+                f"pages={total_page_count} | sha256={file_sha256[:8]}..."
             )
             return docs
 
@@ -140,7 +140,7 @@ class LocalPDFDataSource(BaseDataSource):
             )
             return []
 
-    def load_documents(self) -> list[Document]:
+    def load_documents(self, reset_stats: bool = True) -> list[Document]:
         """加载目录下所有 PDF 文件（同步）"""
         self.logger.info(f"[PDFDataSource] 开始加载目录: {self.folder_path}")
 
@@ -157,12 +157,13 @@ class LocalPDFDataSource(BaseDataSource):
             )
             return []
 
-        # 重置统计
-        with self._stats_lock:
-            self._stats["total_files"] = len(pdf_files)
-            self._stats["success_files"] = 0
-            self._stats["failed_files"] = 0
-            self._stats["total_pages"] = 0
+        # 重置统计（默认行为）或累加（reset_stats=False）
+        if reset_stats:
+            with self._stats_lock:
+                self._stats["total_files"] = len(pdf_files)
+                self._stats["success_files"] = 0
+                self._stats["failed_files"] = 0
+                self._stats["total_pages"] = 0
 
         self.logger.info(
             f"[PDFDataSource] 发现 {len(pdf_files)} 个PDF文件，逐个同步处理"
@@ -187,7 +188,9 @@ class LocalPDFDataSource(BaseDataSource):
 
         return all_docs
 
-    def load_specific_files(self, file_paths: list[str]) -> list[Document]:
+    def load_specific_files(
+        self, file_paths: list[str], reset_stats: bool = True
+    ) -> list[Document]:
         """加载指定的一批 PDF 文件，用于增量上传（同步）"""
         self.logger.info(f"[PDFDataSource] 增量加载指定文件 count={len(file_paths)}")
         pdf_files = []
@@ -201,12 +204,13 @@ class LocalPDFDataSource(BaseDataSource):
         if not pdf_files:
             return []
 
-        # 重置统计
-        with self._stats_lock:
-            self._stats["total_files"] = len(pdf_files)
-            self._stats["success_files"] = 0
-            self._stats["failed_files"] = 0
-            self._stats["total_pages"] = 0
+        # 重置统计（默认行为）或累加（reset_stats=False）
+        if reset_stats:
+            with self._stats_lock:
+                self._stats["total_files"] = len(pdf_files)
+                self._stats["success_files"] = 0
+                self._stats["failed_files"] = 0
+                self._stats["total_pages"] = 0
 
         all_docs = []
         for file_path in pdf_files:

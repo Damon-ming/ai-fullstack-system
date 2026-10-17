@@ -41,8 +41,8 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
     def __init__(
         self,
         tokenizer: BaseTokenizer,
-        max_chunk_token_size: int = 1024,
-        chunk_overlap: int = 120,
+        max_chunk_token_size: int,
+        chunk_overlap: int,
     ):
         self.max_chunk_token_size = max_chunk_token_size
         self.chunk_overlap = chunk_overlap
@@ -61,15 +61,17 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             "errors": 0,
         }
 
-    def _gen_section_id(self, file_md5: str, node_text: str):
+    def _gen_section_id(self, file_sha256: str, node_text: str):
         seg_hash = hashlib.md5(node_text.encode("utf-8")).hexdigest()[:16]
-        return f"section_{file_md5}_{seg_hash}"
+        return f"section_{file_sha256}_{seg_hash}"
 
     def _count_tokens(self, text: str) -> int:
         try:
             return self.tokenizer.count_tokens(text)
         except Exception:
-            return len(text)
+            # tokenizer 异常时保守估算：中文场景 1 字符 ≈ 1-3 token，
+            # 取 len//2 确保不会因为低估而漏掉需要分割的超大章节
+            return max(len(text) // 2, 1)
 
     def _merge_documents_by_file(
         self, docs: list[Document]
@@ -77,7 +79,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         """合并同一文件的页面为一个Document"""
         file_groups = defaultdict(list)
         for d in docs:
-            fm5 = d.metadata.get("file_md5")
+            fm5 = d.metadata.get("file_sha256")
             if fm5:
                 file_groups[fm5].append(d)
 
@@ -86,7 +88,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         sep = "\n\n"
         sep_len = len(sep)
 
-        for file_md5, page_doc_list in file_groups.items():
+        for file_sha256, page_doc_list in file_groups.items():
             # 页面按页码排序
             page_doc_list.sort(key=lambda x: x.metadata["page_index"])
             sample_meta = page_doc_list[0].metadata
@@ -113,13 +115,13 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 text=merged_full_text.strip(),
                 metadata={
                     "file_name": sample_meta["file_name"],
-                    "file_md5": file_md5,
+                    "file_sha256": file_sha256,
                     "file_path": sample_meta["file_path"],
                     "total_pages": sample_meta["total_pages"],
                 },
             )
             merged_docs.append(merged_doc)
-            file_page_mapping[file_md5] = offset_records
+            file_page_mapping[file_sha256] = offset_records
 
         return merged_docs, file_page_mapping
 
@@ -141,7 +143,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         if not doc_text:
             return doc_nodes
 
-        file_md5 = doc.metadata.get("file_md5", "unknown")
+        file_sha256 = doc.metadata.get("file_sha256", "unknown")
         file_name = doc.metadata.get("file_name", "unknown")
         doc_total_len = len(doc_text)
 
@@ -166,7 +168,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             with self._stats_lock:
                 self.stats["total_sections"] += 1
 
-            section_id = self._gen_section_id(file_md5, section_raw_text)
+            section_id = self._gen_section_id(file_sha256, section_raw_text)
             section_start = section_node.start_char_idx or 0
             section_end = section_node.end_char_idx or len(section_raw_text)
             section_tokens = self._count_tokens(section_raw_text)
@@ -201,7 +203,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
 
                     self._attach_metadata(
                         node=sub_node,
-                        file_md5=file_md5,
+                        file_sha256=file_sha256,
                         file_name=file_name,
                         section_id=section_id,
                         section_seq=seq,
@@ -223,7 +225,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 # 不分割
                 self._attach_metadata(
                     node=section_node,
-                    file_md5=file_md5,
+                    file_sha256=file_sha256,
                     file_name=file_name,
                     section_id=section_id,
                     section_seq=0,
@@ -247,6 +249,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         self,
         docs: list[Document],
         max_chunk_size: int | None = None,
+        reset_stats: bool = True,
     ) -> list[TextNode]:
         """分割文档列表（同步）。
 
@@ -255,20 +258,26 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         而非在本方法内部做并行。这样可以保证：
         - RAGContainer 控制线程生命周期
         - 取消时 RAGContainer 只需取消未开始的 future
+
+        Args:
+            docs: 待分割的 Document 列表。
+            max_chunk_size: 最大 chunk token 大小，None 时使用构造时默认值。
+            reset_stats: True 时重置统计后开始（默认），False 时累加到已有统计。
         """
         if not docs:
             return []
 
         self.logger.info(f"[Splitter] 开始分割 {len(docs)} 个Document")
 
-        # 重置统计
-        with self._stats_lock:
-            self.stats = {
-                "total_chunks": 0,
-                "total_sections": 0,
-                "split_sections": 0,
-                "errors": 0,
-            }
+        # 统计重置（默认行为）或累加（reset_stats=False）
+        if reset_stats:
+            with self._stats_lock:
+                self.stats = {
+                    "total_chunks": 0,
+                    "total_sections": 0,
+                    "split_sections": 0,
+                    "errors": 0,
+                }
 
         # 1. 按文件合并页面
         merged_docs, file_page_mapping = self._merge_documents_by_file(docs)
@@ -283,7 +292,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             try:
                 nodes = self._process_single_document(
                     doc,
-                    file_page_mapping[doc.metadata["file_md5"]],
+                    file_page_mapping[doc.metadata["file_sha256"]],
                     max_chunk_size,
                 )
                 all_nodes.extend(nodes)
@@ -315,7 +324,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
     def _attach_metadata(
         self,
         node: TextNode,
-        file_md5: str,
+        file_sha256: str,
         file_name: str,
         section_id: str,
         section_seq: int,
@@ -325,12 +334,12 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
     ):
         """附加元数据到节点"""
         text_hash = hashlib.md5(node.text.encode("utf-8")).hexdigest()[:16]
-        chunk_id = f"chunk_{file_md5}_{text_hash}"
+        chunk_id = f"chunk_{file_sha256}_{text_hash}"
 
         node.node_id = chunk_id
         node.metadata["chunk_id"] = chunk_id
         node.metadata["file_name"] = file_name
-        node.metadata["file_md5"] = file_md5
+        node.metadata["file_sha256"] = file_sha256
         node.metadata["section_id"] = section_id
         node.metadata["section_seq"] = section_seq
         node.metadata["total_chunks_in_section"] = total_chunks_in_section

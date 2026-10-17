@@ -38,6 +38,9 @@ from src.com.damon.ming.ai.config.rerank.rerank_config_loader import (
 from src.com.damon.ming.ai.config.retriever.retriever_config_loader import (
     RetrieverConfigLoader,
 )
+from src.com.damon.ming.ai.config.splitter.splitter_config_loader import (
+    SplitterConfigLoader,
+)
 from src.com.damon.ming.ai.config.tokenizer.tokenizer_config_loader import (
     TokenizerConfigLoader,
 )
@@ -132,7 +135,7 @@ class RAGContainer:
 
         # 步骤6：加载检索器配置（top_k/weights/fuse_k 全部由 YAML 驱动）
         _retriever_cfgs = RetrieverConfigLoader().load_all()
-        self.retriever_config = _retriever_cfgs["primary"]
+        self.retriever_config = _retriever_cfgs["common"]
 
         # 步骤7：初始化稠密检索器
         self.dense_retriever = DenseRetriever(
@@ -155,9 +158,13 @@ class RAGContainer:
             rrf_oversample_multiplier=self.retriever_config.rrf_oversample_multiplier,
         )
 
-        # 文本切块器
+        # 步骤10：加载分割器参数并构造切块器
+        _splitter_cfgs = SplitterConfigLoader().load_all()
+        self.splitter_config = _splitter_cfgs["common"]
         self.splitter = MarkdownDocumentSplitter(
-            tokenizer=self.tokenizer, max_chunk_token_size=1024, chunk_overlap=0
+            tokenizer=self.tokenizer,
+            max_chunk_token_size=self.splitter_config.max_chunk_token_size,
+            chunk_overlap=self.splitter_config.chunk_overlap,
         )
 
         # 首次启动自动建立知识库
@@ -178,7 +185,7 @@ class RAGContainer:
         logger.info("RAG 容器初始化完成")
 
     def _index_nodes(self, all_nodes, rebuild_bm25: bool = True) -> list[str]:
-        """向量入库的唯一入口；调用方应确保节点已按 file_md5 去重。"""
+        """向量入库的唯一入口；调用方应确保节点已按 file_sha256 去重。"""
         if not all_nodes:
             return []
         # 批量向量化
@@ -255,18 +262,18 @@ class RAGContainer:
                 logger.error(f"无法解析文件: {p.name}")
                 skipped.append(
                     {
-                        "file_md5": None,
+                        "file_sha256": None,
                         "file_path": str(p),
                         "reason": "parse_failed",
                     }
                 )
                 continue
 
-            file_md5 = docs[0].metadata.get("file_md5")
-            existing = self.vector_store.get_by_metadata({"file_md5": file_md5})
+            file_sha256 = docs[0].metadata.get("file_sha256")
+            existing = self.vector_store.get_by_metadata({"file_sha256": file_sha256})
 
             if existing:
-                skipped.append({"file_md5": file_md5, "reason": "already_indexed"})
+                skipped.append({"file_sha256": file_sha256, "reason": "already_indexed"})
                 continue
 
             # 提交文档分割到线程池
@@ -281,7 +288,7 @@ class RAGContainer:
                 raise
 
             self._index_nodes(nodes, rebuild_bm25=False)
-            accepted.append({"file_md5": file_md5, "chunks": len(nodes)})
+            accepted.append({"file_sha256": file_sha256, "chunks": len(nodes)})
             new_nodes.extend(nodes)
 
         # 只把本次新增节点追加到内存节点列表，然后用全部内存节点重建BM25

@@ -71,9 +71,8 @@ class RetrieverConfigLoader:
     启动时全量加载，所有配置在服务启动阶段初始化完毕。
     """
 
-    _cache: dict[str, RetrieverConfig] = {}
-
     def __init__(self, config_path: str | None = None):
+        self._cache: dict[str, RetrieverConfig] = {}
         if config_path is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "retriever-config.yaml")

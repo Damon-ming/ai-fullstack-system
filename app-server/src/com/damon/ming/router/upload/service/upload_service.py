@@ -99,10 +99,10 @@ class UploadService:
             )
 
             digest = hashlib.sha256(content)
-            file_md5 = digest.hexdigest()
+            file_sha256 = digest.hexdigest()
 
             with UploadService._sha_cache_lock:
-                existing = UploadService._sha_cache.get(file_md5)
+                existing = UploadService._sha_cache.get(file_sha256)
 
             if existing:
                 saved_files.append(
@@ -110,7 +110,7 @@ class UploadService:
                         "filename": origin_name,
                         "save_path": str(existing),
                         "file_size": existing.stat().st_size,
-                        "file_md5": file_md5,
+                        "file_sha256": file_sha256,
                         "duplicate": True,
                     }
                 )
@@ -121,14 +121,14 @@ class UploadService:
                 f.write(content)
 
             with UploadService._sha_cache_lock:
-                UploadService._sha_cache[file_md5] = file_path
+                UploadService._sha_cache[file_sha256] = file_path
 
             saved_files.append(
                 {
                     "filename": origin_name,
                     "save_path": str(file_path),
                     "file_size": len(content),
-                    "file_md5": file_md5,
+                    "file_sha256": file_sha256,
                     "duplicate": False,
                 }
             )
@@ -142,12 +142,12 @@ class UploadService:
                 index_result = get_rag_container().ingest_files(
                     files_to_index, cancellation_token=cancellation_token
                 )
-                indexed_by_md5 = {item["file_md5"] for item in index_result["indexed"]}
-                skipped_by_md5 = {item["file_md5"] for item in index_result["skipped"]}
+                indexed_by_md5 = {item["file_sha256"] for item in index_result["indexed"]}
+                skipped_by_md5 = {item["file_sha256"] for item in index_result["skipped"]}
                 for item in saved_files:
-                    item["duplicate"] = item.get("file_md5") in skipped_by_md5
+                    item["duplicate"] = item.get("file_sha256") in skipped_by_md5
                     item["indexed"] = (
-                        item.get("file_md5") in indexed_by_md5 or item["duplicate"]
+                        item.get("file_sha256") in indexed_by_md5 or item["duplicate"]
                     )
             except Exception:
                 logger.exception(
