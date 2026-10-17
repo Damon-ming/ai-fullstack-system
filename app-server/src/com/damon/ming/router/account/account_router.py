@@ -26,6 +26,7 @@ import secrets
 from fastapi import APIRouter, Request
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.middleware.request_context import get_ua_profile
 from src.com.damon.ming.middleware.ua_fingerprint import (
     compute_device_id,
@@ -54,6 +55,7 @@ router = APIRouter(prefix="/api/account", tags=["账号体系"])
 
 
 @router.post("/login/v1", response_model=BaseSuccessResponse[TokenResponseData])
+@limiter.limit("5/minute")
 async def login(body: TokenRequest, request: Request):
     """
     登录 —— 签发用户 Token。
@@ -135,6 +137,7 @@ async def login(body: TokenRequest, request: Request):
 
 
 @router.get("/profile/v1", response_model=BaseSuccessResponse[ProfileResponseData])
+@limiter.limit("20/minute")
 async def get_profile(request: Request):
     """
     获取当前用户资料。
@@ -159,6 +162,7 @@ async def get_profile(request: Request):
 
 
 @router.post("/profile/v1", response_model=BaseSuccessResponse[ProfileResponseData])
+@limiter.limit("20/minute")
 async def update_profile(body: ProfileResponseData, request: Request):
     """
     更新当前用户昵称。

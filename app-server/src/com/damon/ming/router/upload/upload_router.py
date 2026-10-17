@@ -5,6 +5,7 @@ import json
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadFailedData,
     FileUploadRequest,
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/api/files", tags=["文件管理"])
 
 
 @router.post("/upload/v1", response_model=None)
+@limiter.limit("5/minute")
 async def save_files(
     request: Request,
     files: list[UploadFile] = File(..., description="多文件"),  # noqa: B008

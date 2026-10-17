@@ -14,6 +14,7 @@ from src.com.damon.ming.ai.schemas.response import (
 from src.com.damon.ming.ai.security import InputValidator
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
 from src.com.damon.ming.router.chat.sse import SseEmitter, SseMessageFactory
 from sse_starlette.sse import EventSourceResponse
@@ -75,6 +76,7 @@ async def _guardrail_check_with_timeout(
 
 
 @router.post("/send/v1")
+@limiter.limit("10/minute")
 async def chat(req: Request, body: ChatRequest):
     logger.info(
         "同步聊天请求开始 | query_length=%s | reason=%s",
@@ -159,6 +161,7 @@ async def chat(req: Request, body: ChatRequest):
 
 
 @router.post("/chat/v1")
+@limiter.limit("10/minute")
 async def chat_stream(req: Request, body: ChatRequest):
     """流式问答接口，SSE流式输出（W3C EventSource 标准格式）"""
     logger.info("流式聊天请求开始 | query_length=%s", len(body.query))

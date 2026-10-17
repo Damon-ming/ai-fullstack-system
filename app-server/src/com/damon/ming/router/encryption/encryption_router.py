@@ -19,6 +19,7 @@ from fastapi import APIRouter, Body, Request
 from src.com.damon.ming.encryption.globals import get_key_manager
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.account.token_store import get_session, is_token_valid
 from src.com.damon.ming.schemas.response import (
     BaseFailedResponse,
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/api/encryption", tags=["加密体系"])
 
 
 @router.get("/key/v1")
+@limiter.limit("30/minute")
 async def get_public_key():
     """
     获取服务端 RSA 公钥。
@@ -50,6 +52,7 @@ async def get_public_key():
 
 
 @router.post("/session/v1")
+@limiter.limit("10/minute")
 async def register_session(
     request: Request,
     encrypted_aes_key: str = Body(
@@ -88,7 +91,9 @@ async def register_session(
     if session is None:
         return BaseFailedResponse(
             code=ErrorCode.AUTH.INVALID_SESSION,
-            data={"error_msg": "Session not found or expired, please obtain token first"},
+            data={
+                "error_msg": "Session not found or expired, please obtain token first"
+            },
         )
 
     # 3. 防伪造：session 必须属于该 token

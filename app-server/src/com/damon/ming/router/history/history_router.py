@@ -13,6 +13,7 @@
 from fastapi import APIRouter, Path, Query, Request
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.history.schemas.bean import (
     HistoryDeleteSuccessData,
     HistoryFailedData,
@@ -40,6 +41,7 @@ def _token(request: Request) -> str:
 
 
 @router.get("/list/v1", response_model=None)
+@limiter.limit("30/minute")
 async def list_history(
     request: Request,
     page: int = Query(1, ge=1, description="页码（从1开始）"),
@@ -73,6 +75,7 @@ async def list_history(
 
 
 @router.get("/v1/{conversation_id}", response_model=None)
+@limiter.limit("30/minute")
 async def get_history(
     request: Request,
     conversation_id: str = Path(..., description="对话 ID"),
@@ -106,6 +109,7 @@ async def get_history(
 
 
 @router.post("/save/v1", response_model=None)
+@limiter.limit("10/minute")
 async def save_history(
     request: Request,
     body: HistorySaveRequest,
@@ -137,6 +141,7 @@ async def save_history(
 
 
 @router.delete("/v1/{conversation_id}", response_model=None)
+@limiter.limit("10/minute")
 async def delete_history(
     request: Request,
     conversation_id: str = Path(..., description="对话 ID"),
