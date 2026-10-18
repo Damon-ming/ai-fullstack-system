@@ -1,15 +1,17 @@
 # app-server/src/com/damon/ming/upload/service/upload_service.py
+import asyncio
 import hashlib
 import threading
 import uuid
+from collections import OrderedDict
 from pathlib import Path
+from typing import ClassVar
 
 from fastapi import UploadFile
 from src.com.damon.ming.ai.rag_tool import get_rag_container
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadRequest,
-    UploadInProgressError,
 )
 from src.com.damon.ming.thread import CancellationToken
 
@@ -20,19 +22,28 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class UploadService:
-    _processing_lock = threading.Lock()
-    _sha_cache: dict[str, Path] = {}
-    _sha_cache_lock = threading.Lock()
+    _sha_cache: ClassVar[OrderedDict[str, Path]] = OrderedDict()
+    _sha_cache_lock: ClassVar[threading.Lock] = threading.Lock()
+    _sha_cache_max: ClassVar[int] = 0  # 由 init_sha_cache() 从配置注入
 
     @classmethod
-    def init_sha_cache(cls):
-        """服务启动时，一次性扫描知识库构建sha缓存，在main.py lifespan调用"""
-        logger.info("初始化文件sha256缓存")
-        cache = {}
+    def init_sha_cache(cls, sha_cache_max: int = 10000):
+        """服务启动时，一次性扫描知识库构建sha缓存，在main.py lifespan调用。
+
+        Args:
+            sha_cache_max: sha_cache LRU 上限，由上传配置注入。
+        """
+        cls._sha_cache_max = sha_cache_max
+        logger.info("初始化文件sha256缓存 | sha_cache_max=%d", sha_cache_max)
+        cache: OrderedDict[str, Path] = OrderedDict()
         for p in UPLOAD_DIR.rglob("*"):
             if p.is_file():
                 sha = _file_sha256(p)
                 cache[sha] = p
+                # 启动扫描也受 LRU 上限约束，避免超大知识库启动时内存爆炸
+                if len(cache) > sha_cache_max:
+                    evicted_sha, _ = cache.popitem(last=False)
+                    logger.debug("sha_cache 启动扫描LRU淘汰 | sha=%s", evicted_sha[:16])
         with cls._sha_cache_lock:
             cls._sha_cache = cache
         logger.info(f"sha缓存初始化完成，共{len(cache)}个文件")
@@ -44,15 +55,14 @@ class UploadService:
         upload_config,
         cancellation_token: CancellationToken | None = None,
     ) -> list[dict]:
-        # 非阻塞获取：浏览器关闭后重新请求时立即返回业务失败，不排队等待。
-        if not UploadService._processing_lock.acquire(blocking=False):
-            raise UploadInProgressError("资料库还在更新中，请稍等")
-        try:
-            return await UploadService._batch_save_files_locked(
-                file_list, upload_config, cancellation_token
-            )
-        finally:
-            UploadService._processing_lock.release()
+        # 移除全局 _processing_lock：各层已有细粒度锁保护
+        #   - sha_cache 读写 → _sha_cache_lock
+        #   - 向量库去重 + 入库 → RAGContainer._knowledge_lock
+        #   - BM25 索引重建 → BM25Index._rw_lock (RLock)
+        # 并发上传同一文件的边界：各自写 UUID 副本 → ingest_files 向量库去重只索引一份
+        return await UploadService._batch_save_files_locked(
+            file_list, upload_config, cancellation_token
+        )
 
     @staticmethod
     async def _batch_save_files_locked(
@@ -85,7 +95,6 @@ class UploadService:
 
             # 大小校验：按类型匹配上限（边读边校验，超限立即中断，
             # 避免恶意大文件一次性读入内存导致 OOM）
-            #TODO:性能待定
             max_size = upload_config.get_max_size_for_ext(suffix)
             chunks: list[bytes] = []
             total = 0
@@ -111,6 +120,8 @@ class UploadService:
             )
             prepared_files.append((file, origin_name, content))
 
+        loop = asyncio.get_running_loop()
+
         for file, origin_name, content in prepared_files:
             file_uid = uuid.uuid4().hex
             # 磁盘文件名完全不使用用户文件名，只保留随机标识和安全扩展名。
@@ -134,26 +145,40 @@ class UploadService:
             digest = hashlib.sha256(content)
             file_sha256 = digest.hexdigest()
 
-            # check + write + cache 在同一锁内，避免并发上传同一文件产生磁盘副本
+            # M5: 锁仅覆盖 sha_cache 读写，写盘移到锁外 + executor
+            # 先检查缓存，命中则跳过写盘
+            cache_hit = False
             with UploadService._sha_cache_lock:
                 existing = UploadService._sha_cache.get(file_sha256)
                 if existing:
-                    saved_files.append(
-                        {
-                            "filename": origin_name,
-                            "save_path": str(existing),
-                            "file_size": existing.stat().st_size,
-                            "file_sha256": file_sha256,
-                            "duplicate": True,
-                        }
-                    )
-                    # 即使本地文件已存在，也交给幂等入库流程检查一次，修复 “文件已保存但服务重启前入库失败”的半成品状态。
-                    files_to_index.append(str(existing.resolve()))
-                    continue
+                    cache_hit = True
+                    # M3: 更新 LRU 顺序（命中 → 移到末尾）
+                    UploadService._sha_cache.move_to_end(file_sha256)
 
-                with file_path.open("wb") as f:
-                    f.write(content)
+            if cache_hit:
+                saved_files.append(
+                    {
+                        "filename": origin_name,
+                        "save_path": str(existing),
+                        "file_size": existing.stat().st_size,
+                        "file_sha256": file_sha256,
+                        "duplicate": True,
+                    }
+                )
+                # 即使本地文件已存在，也交给幂等入库流程检查一次，修复 "文件已保存但服务重启前入库失败"的半成品状态。
+                files_to_index.append(str(existing.resolve()))
+                continue
+
+            # M2: 同步写盘提交到线程池，不阻塞事件循环
+            await loop.run_in_executor(None, _write_file_sync, file_path, content)
+
+            # M3 + M5: 锁仅覆盖 cache 更新，含 LRU 淘汰
+            with UploadService._sha_cache_lock:
                 UploadService._sha_cache[file_sha256] = file_path
+                UploadService._sha_cache.move_to_end(file_sha256)
+                if len(UploadService._sha_cache) > UploadService._sha_cache_max:
+                    evicted_sha, _ = UploadService._sha_cache.popitem(last=False)
+                    logger.debug("sha_cache LRU 淘汰 | sha=%s", evicted_sha[:16])
 
             saved_files.append(
                 {
@@ -193,6 +218,12 @@ class UploadService:
                 raise
         logger.info("文件保存完成 | count=%s", len(saved_files))
         return saved_files
+
+
+def _write_file_sync(path: Path, content: bytes) -> None:
+    """同步写盘（在 run_in_executor 中调用，不阻塞事件循环）"""
+    with path.open("wb") as f:
+        f.write(content)
 
 
 def _file_sha256(path: Path) -> str:

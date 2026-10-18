@@ -23,6 +23,9 @@ import yaml
 class UploadConfig:
     """上传配置（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
+    # sha256 内存缓存 LRU 上限（超出时淘汰最久未用条目）
+    sha_cache_max: int
+
     # 文件类型配置：扩展名(小写, 无点号) → {max_size_bytes, description}
     allowed_types: dict[str, dict] = field(default_factory=dict)
 
@@ -84,19 +87,23 @@ class UploadConfigLoader:
                 f"上传配置文件格式错误：缺少 'upload' 根节点 | path={self._config_path}"
             )
 
+        sha_cache_max = upload_section.get("sha_cache_max")
+        if not sha_cache_max or not isinstance(sha_cache_max, int) or sha_cache_max < 1:
+            raise ValueError(
+                f"上传配置中 sha_cache_max 必须为正整数 | path={self._config_path}"
+            )
+
         allowed_types = upload_section.get("allowed_types", {})
         if not allowed_types:
             raise ValueError(
                 f"上传配置中 allowed_types 不能为空 | path={self._config_path}"
             )
 
-        return UploadConfig(allowed_types=allowed_types)
+        return UploadConfig(sha_cache_max=sha_cache_max, allowed_types=allowed_types)
 
     def _read_yaml(self) -> dict:
         if not os.path.exists(self._config_path):
-            raise FileNotFoundError(
-                f"上传配置文件不存在: {self._config_path}"
-            )
+            raise FileNotFoundError(f"上传配置文件不存在: {self._config_path}")
         with open(self._config_path, "r", encoding="utf-8") as f:
             raw_cfg = yaml.safe_load(f)
         if not raw_cfg or not isinstance(raw_cfg, dict):

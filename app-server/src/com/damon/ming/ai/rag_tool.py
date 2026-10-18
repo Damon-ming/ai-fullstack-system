@@ -318,15 +318,31 @@ class RAGContainer:
             if new_nodes:
                 self.all_nodes.extend(new_nodes)
 
-        # ── BM25 重建（锁外，纯计算，不阻塞 chat 稀疏检索）──
-        # 传副本，避免 BM25Index 持有 all_nodes 别名导致后续 extend 静默腐败索引
+        # ── BM25 重建（锁外，线程池异步，不阻塞上传响应）──
+        # BM25Okapi 不支持增量添加，仍需全量重建。
+        # 提交到线程池后上传立即返回，重建期间 chat 稀疏检索使用旧索引（优雅降级）。
+        # BM25Index.build 内部 _rw_lock 保证读写安全（锁外构建 + 锁内原子替换）。
         if new_nodes:
-            self.bm25_index.build(list(self.all_nodes))
+            retrieval_pool = pool_mgr.get_pool("retrieval")
+            build_args = (list(self.all_nodes), len(new_nodes), len(self.all_nodes))
+            loop.run_in_executor(retrieval_pool, self._rebuild_bm25, *build_args)
             logger.info(
-                f"BM25增量更新完成，新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
+                f"BM25后台重建已提交 | 新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
             )
 
         return {"indexed": accepted, "skipped": skipped}
+
+    def _rebuild_bm25(self, all_nodes: list, new_count: int, total_count: int) -> None:
+        """后台线程中重建 BM25 索引（CPU 密集，不阻塞事件循环）。
+
+        BM25Index.build 内部使用 _rw_lock 的锁外构建 + 锁内原子替换模式，
+        并发查询的 get_scores / get_top_k 不受影响（读到旧索引或新索引均为一致状态）。
+        多个重建任务并发时后者覆盖前者，最终一致，无数据损坏。
+        """
+        self.bm25_index.build(all_nodes)
+        logger.info(
+            f"BM25后台重建完成 | 新增{new_count}个节点，总节点数：{total_count}"
+        )
 
     # ── query_rag：检索线程编排 ────────────────────────────────────────
 
