@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from fastapi import UploadFile
+from src.com.damon.ming.ai.rag_tool import RAGContainer
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadRequest,
@@ -52,7 +53,7 @@ class UploadService:
         file_list: list[UploadFile],
         req: FileUploadRequest,
         upload_config,
-        rag_app,
+        rag_app: RAGContainer,
         cancellation_token: CancellationToken | None = None,
         executor=None,
     ) -> list[dict]:

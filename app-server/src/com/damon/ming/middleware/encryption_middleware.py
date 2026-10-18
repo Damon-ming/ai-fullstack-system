@@ -315,6 +315,11 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             response_body += chunk
 
         body_json = json.loads(response_body)
+        logger.debug(
+            "响应加密 | path=%s | body_bytes=%d",
+            request.url.path,
+            len(response_body),
+        )
         active_session = session or getattr(request.state, "enc_session", None)
         if active_session is None:
             # 协议层面不应发生（encrypt_response=True 时 session 必须存在），
