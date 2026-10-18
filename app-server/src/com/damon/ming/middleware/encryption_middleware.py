@@ -305,36 +305,33 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         response: Response,
         session: SessionKey | None,
     ) -> Response:
-        """加密 JSON 响应。"""
-        try:
-            response_body = b""
-            async for chunk in response.body_iterator:
-                response_body += chunk
+        """加密 JSON 响应。
 
-            body_json = json.loads(response_body)
-            active_session = session or getattr(request.state, "enc_session", None)
-            if active_session is None:
-                return Response(
-                    content=response_body,
-                    status_code=response.status_code,
-                    headers=dict(response.headers),
-                    media_type=response.media_type,
-                )
+        加密是安全关键路径，失败时拒绝返回（抛异常→500），
+        不降级返回明文，避免加密模式被静默绕过。
+        """
+        response_body = b""
+        async for chunk in response.body_iterator:
+            response_body += chunk
 
-            encrypted_payload = AesGcmEngine.encrypt_json(
-                json.dumps(body_json, ensure_ascii=False),
-                active_session.aes_key,
-                active_session.key_id,
-            )
-            return JSONResponse(content=encrypted_payload.to_dict())
-        except Exception as e:
-            logger.warning("响应加密失败: %s", e)
+        body_json = json.loads(response_body)
+        active_session = session or getattr(request.state, "enc_session", None)
+        if active_session is None:
+            # 协议层面不应发生（encrypt_response=True 时 session 必须存在），
+            # 作为最后的安全网直接返回原始体。
             return Response(
                 content=response_body,
                 status_code=response.status_code,
                 headers=dict(response.headers),
                 media_type=response.media_type,
             )
+
+        encrypted_payload = AesGcmEngine.encrypt_json(
+            json.dumps(body_json, ensure_ascii=False),
+            active_session.aes_key,
+            active_session.key_id,
+        )
+        return JSONResponse(content=encrypted_payload.to_dict())
 
 
 def _is_encrypted_body(body: dict) -> bool:

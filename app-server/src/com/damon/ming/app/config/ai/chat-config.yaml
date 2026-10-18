@@ -11,6 +11,7 @@
 
 chat:
   common:
+    config_ttl_seconds: 60    # ChatConfigLoader 缓存 TTL（秒），0=每次请求都读磁盘
     system_prompt: |
       你是基于知识库的问答助手，严格遵守规则：
       1. 仅使用【参考知识库】内容回答；

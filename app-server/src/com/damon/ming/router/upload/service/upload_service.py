@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import ClassVar
 
 from fastapi import UploadFile
-from src.com.damon.ming.ai.rag_tool import get_rag_container
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadRequest,
@@ -53,22 +52,24 @@ class UploadService:
         file_list: list[UploadFile],
         req: FileUploadRequest,
         upload_config,
+        rag_app,
         cancellation_token: CancellationToken | None = None,
         executor=None,
     ) -> list[dict]:
         # 移除全局 _processing_lock：各层已有细粒度锁保护
         #   - sha_cache 读写 → _sha_cache_lock
         #   - 向量库去重 + 入库 → RAGContainer._knowledge_lock
-        #   - BM25 索引重建 → BM25Index._rw_lock (RLock)
+        #   - BM25 索引重建 → BM25Index._rw_lock (Lock)
         # 并发上传同一文件的边界：各自写 UUID 副本 → ingest_files 向量库去重只索引一份
         return await UploadService._batch_save_files_locked(
-            file_list, upload_config, cancellation_token, executor
+            file_list, upload_config, rag_app, cancellation_token, executor
         )
 
     @staticmethod
     async def _batch_save_files_locked(
         file_list: list[UploadFile],
         upload_config,
+        rag_app,
         cancellation_token: CancellationToken | None = None,
         executor=None,
     ) -> list[dict]:
@@ -198,7 +199,7 @@ class UploadService:
             # 这里不回滚磁盘文件：如果后续索引失败，保留文件并打印日志，
             # 下次服务启动时由启动同步逻辑补齐向量库和 BM25。
             try:
-                index_result = get_rag_container().ingest_files(
+                index_result = rag_app.ingest_files(
                     files_to_index, cancellation_token=cancellation_token
                 )
                 indexed_by_md5 = {

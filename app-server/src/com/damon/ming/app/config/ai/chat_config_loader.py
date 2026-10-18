@@ -59,23 +59,34 @@ class ChatConfigLoader:
 
     def __init__(self, config_path: str | None = None):
         self._cache: dict[str, ChatConfig] = {}
+        self._cache_loaded_at: float = 0.0
+        self._cache_ttl_seconds: float = 0.0  # 由 _build_one() 首次加载时设置
         if config_path is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(base_dir, "chat-config.yaml")
         self._config_path = config_path
 
     def load_all(self) -> dict[str, ChatConfig]:
-        if self._cache:
+        import time
+
+        now = time.monotonic()
+        if self._cache and (now - self._cache_loaded_at) < self._cache_ttl_seconds:
             return self._cache
+        self._cache.clear()
         for name in self._list_profiles():
             self._cache[name] = self._build_one(name)
+        self._cache_loaded_at = now
         return self._cache
 
     def load(self, name: str) -> ChatConfig:
-        if name in self._cache:
+        import time
+
+        now = time.monotonic()
+        if self._cache and (now - self._cache_loaded_at) < self._cache_ttl_seconds:
             return self._cache[name]
         config = self._build_one(name)
         self._cache[name] = config
+        self._cache_loaded_at = now
         return config
 
     # ---- 私有 -------------------------------------------------------------
@@ -91,6 +102,8 @@ class ChatConfigLoader:
         section = raw["chat"].get(name, {})
         if not section:
             raise ValueError(f"配置文件中未找到剖面: {name}")
+        # TTL 每次构建时刷新（config_ttl_seconds 变化后下次缓存过期即生效）
+        self._cache_ttl_seconds = float(section.get("config_ttl_seconds", 60))
         try:
             return ChatConfig(
                 name=name,

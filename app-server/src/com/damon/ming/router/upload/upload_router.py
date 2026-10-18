@@ -51,6 +51,7 @@ async def save_files(
             files,
             req_data,
             upload_config=request.app.state.upload_config,
+            rag_app=request.app.state.rag_app,
             cancellation_token=ctx.cancellation_token,
             executor=document_pool,
         )

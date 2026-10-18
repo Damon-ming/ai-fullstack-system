@@ -73,15 +73,14 @@ _rag_instance_lock = threading.Lock()
 
 
 def get_rag_container(
-    pool_mgr: ThreadPoolManager | None = None,
-    infer_sem: asyncio.Semaphore | None = None,
+    pool_mgr: ThreadPoolManager,
+    infer_sem: asyncio.Semaphore,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
     Args:
-        pool_mgr: 由 AppInitializer 注入的全局线程池管理器。
-                  不为 None 时直接使用，否则退化为单例获取（向后兼容）。
-        infer_sem: 推理信号量（与主推理共用），首次创建时设置。
+        pool_mgr: 由 AppInitializer 注入的全局线程池管理器（必填）。
+        infer_sem: 推理信号量（与主推理共用，必填）。
     """
     global _rag_instance
     if _rag_instance is None:
