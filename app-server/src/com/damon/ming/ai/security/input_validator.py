@@ -45,7 +45,7 @@ _INJECTION_PATTERNS = [
     re.compile(r"disregard\s+(instructions?|rules?|prompts?)", re.IGNORECASE),
     re.compile(r"you\s+are\s+now\s+(a|an|the)\s+", re.IGNORECASE),
     re.compile(r"new\s+persona", re.IGNORECASE),
-    re.compile(r"system\s*:\s*", re.IGNORECASE),
+    re.compile(r"^\s*system\s*:\s*", re.IGNORECASE | re.MULTILINE),
     re.compile(r"<\s*/\s*instruction\s*>", re.IGNORECASE),
     re.compile(r"<\s*script", re.IGNORECASE),
     # 中文常见注入指令
@@ -78,9 +78,9 @@ def _check_charset(query: str) -> ValidationResult:
         return ValidationResult(
             passed=False, reason="输入包含非法字符", rule="CharsetRule"
         )
-    # 控制字符比例检测（超过 30% 为异常）
+    # 控制字符检测：任何非 \n\r\t 的控制字符都拒绝（零容忍）
     ctrl_count = sum(1 for ch in query if ord(ch) < 32 and ch not in "\n\r\t")
-    if len(query) > 10 and ctrl_count / len(query) > 0.3:
+    if ctrl_count > 0:
         return ValidationResult(
             passed=False, reason="输入包含异常字符", rule="CharsetRule"
         )

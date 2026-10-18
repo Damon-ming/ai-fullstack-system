@@ -61,18 +61,14 @@ class SummaryService:
         if self._sem is None:
             return await self._run_single_summary(text, max_tokens)
 
-        # 检测竞争：信号量值 <= 0 时说明需要排队等待
-        contended = self._sem._value <= 0
+        # 检测竞争：信号量已锁说明需要排队等待
+        contended = self._sem.locked()
         wait_start = time.monotonic() if contended else 0
 
         async with self._sem:
             if contended:
                 wait_ms = (time.monotonic() - wait_start) * 1000
-                logger.info(
-                    "摘要等待推理槽 | wait_ms=%.0f | avail_after=%d",
-                    wait_ms,
-                    self._sem._value,
-                )
+                logger.info("摘要等待推理槽 | wait_ms=%.0f", wait_ms)
             return await self._run_single_summary(text, max_tokens)
 
     async def run_summary(self, text: str, max_tokens: int) -> str:
