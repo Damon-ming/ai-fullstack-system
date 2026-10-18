@@ -114,11 +114,9 @@ class SummaryService:
         try:
             compressed_texts = await asyncio.gather(*tasks)
         except asyncio.CancelledError:
-            # 取消所有未完成的任务，避免孤儿
+            # CancelledError 从 gather 直接传播，tasks 已被取消，无需二次 gather
             for t in tasks:
                 t.cancel()
-            # 等待所有任务完成取消（吞掉 CancelledError）
-            await asyncio.gather(*tasks, return_exceptions=True)
             raise
         except Exception:
             # 非取消异常（如 LLM 调用失败）：清理已创建的任务

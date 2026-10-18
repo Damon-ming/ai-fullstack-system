@@ -37,8 +37,8 @@ class ValidationResult:
 # ── 规则引擎 ──────────────────────────────────────────────────────────
 
 
-# 已知 prompt injection 高频模式（仅匹配最明显的简单攻击）
-# 注意：这是粗粒度过滤，复杂注入仍需 LLM 护栏兜底
+# Prompt injection 高频模式（仅匹配最明显的简单攻击）
+# 不覆盖编码绕过、角色扮演变体、多语言混淆等复杂注入（由 LLM 护栏兜底）
 _INJECTION_PATTERNS = [
     # 英文常见注入指令
     re.compile(r"ignore\s+(previous|all|above|prior)", re.IGNORECASE),
@@ -72,13 +72,16 @@ def _check_length(query: str) -> ValidationResult:
 
 
 def _check_charset(query: str) -> ValidationResult:
-    """字符集校验：检测异常控制字符（二进制注入 / null byte 攻击）。"""
+    """字符集校验：拦截含 null byte 或异常控制字符的输入。
+
+    这是粗粒度字符层过滤，不覆盖编码绕过、多语言混淆等语义级攻击（由 LLM 护栏兜底）。
+    """
     # null byte 检测（文本协议中不应出现）
     if "\x00" in query:
         return ValidationResult(
             passed=False, reason="输入包含非法字符", rule="CharsetRule"
         )
-    # 控制字符检测：任何非 \n\r\t 的控制字符都拒绝（零容忍）
+    # 控制字符检测：任何非 \n\r\t 的控制字符都拒绝
     ctrl_count = sum(1 for ch in query if ord(ch) < 32 and ch not in "\n\r\t")
     if ctrl_count > 0:
         return ValidationResult(
