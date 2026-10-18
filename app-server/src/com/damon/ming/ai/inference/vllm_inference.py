@@ -95,7 +95,13 @@ class VLLMInference(BaseInferenceService):
             logger.warning("VLLM stream 收到取消信号，关闭流")
             raise
         finally:
-            await stream.close()
+            # 取消时事件循环可能不再调度 await，加容错避免 finally 异常
+            try:
+                await stream.close()
+            except asyncio.CancelledError:
+                logger.warning("VLLM stream 取消后关闭被中断，跳过")
+            except Exception as e:
+                logger.warning("VLLM stream 关闭异常 | error=%s", e)
 
     async def check_model_ready(self, model_name: str) -> bool:
         try:

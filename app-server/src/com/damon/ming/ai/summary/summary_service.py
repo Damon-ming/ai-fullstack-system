@@ -129,6 +129,8 @@ class SummaryService:
             raise
 
         # 所有任务成功：一次性替换节点（原子性，避免部分修改）
+        # 先浅拷贝输入列表，再在新列表上替换，保持输入列表不被修改。
+        result_nodes = list(nodes)
         for i, idx in enumerate(compress_indices):
             text = compressed_texts[i]
             # LLM 输出可能略微超出 max_tokens，截断兜底保证不超限
@@ -141,8 +143,8 @@ class SummaryService:
                 text = self.truncate_by_token(text, max_tokens)
             new_node = copy.deepcopy(nodes[idx])
             new_node.text = text
-            nodes[idx] = new_node
-        return nodes
+            result_nodes[idx] = new_node
+        return result_nodes
 
     # ── 取消说明 ────────────────────────────────────────────────────────
     # 取消由上层 RAGContainer 通过 asyncio.CancelledError 统一处理，

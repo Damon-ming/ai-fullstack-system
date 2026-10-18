@@ -14,6 +14,8 @@ Qwen 护栏引擎 —— 利用小模型对用户输入进行安全分类。
 
 import asyncio
 import threading
+import time
+from collections import deque
 
 from pydantic import BaseModel, ValidationError
 from src.com.damon.ming.ai.guardrail import register_engine
@@ -28,31 +30,38 @@ from src.com.damon.ming.log import pin
 logger = pin("QwenGuardrail")
 
 # ── 护栏健康监控 ─────────────────────────────────────────────────
-# fail-open 连续次数阈值，达到后输出告警日志（便于运维感知护栏异常）
+# 滑动时间窗口计数器：记录最近 WINDOW 秒内的 fail-open 次数，
+# 超阈值时输出告警（便于运维感知护栏异常）。
+# 多 worker 部署时各进程独立计数，未来升级可替换为 Redis Sorted Set。
 _FAIL_OPEN_ALERT_THRESHOLD = 5
-_fail_open_count = 0
+_FAIL_OPEN_WINDOW_SECONDS = 60  # 时间窗口（秒）
+_fail_open_timestamps: deque[float] = deque()
 _fail_open_lock = threading.Lock()
 
 
 def _record_fail_open(reason: str) -> None:
-    """记录一次 fail-open 事件，连续超阈值时输出告警。"""
-    global _fail_open_count
+    """记录一次 fail-open 事件，窗口内连续超阈值时输出告警。"""
+    now = time.monotonic()
     with _fail_open_lock:
-        _fail_open_count += 1
-        count = _fail_open_count
+        _fail_open_timestamps.append(now)
+        # 滑动窗口：移除窗口外的旧记录
+        cutoff = now - _FAIL_OPEN_WINDOW_SECONDS
+        while _fail_open_timestamps and _fail_open_timestamps[0] < cutoff:
+            _fail_open_timestamps.popleft()
+        count = len(_fail_open_timestamps)
     if count >= _FAIL_OPEN_ALERT_THRESHOLD:
         logger.warning(
-            "护栏连续 fail-open 告警 | 连续次数=%d | 最近原因=%s | 请检查护栏模型是否正常",
+            "护栏连续 fail-open 告警 | 窗口内次数=%d | 窗口=%ds | 最近原因=%s | 请检查护栏模型是否正常",
             count,
+            _FAIL_OPEN_WINDOW_SECONDS,
             reason,
         )
 
 
 def _record_guardrail_success() -> None:
-    """护栏正常工作时重置计数器（检测完成且未触发 fail-open）。"""
-    global _fail_open_count
+    """护栏正常工作时清空窗口内的 fail-open 记录。"""
     with _fail_open_lock:
-        _fail_open_count = 0
+        _fail_open_timestamps.clear()
 
 
 # ── 结构化输出模型 ────────────────────────────────────────────────

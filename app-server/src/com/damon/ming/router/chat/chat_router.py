@@ -140,7 +140,14 @@ async def chat(req: Request, body: ChatRequest):
                 )
 
             # 4. 组装返回结构体，think控制是否携带思考过程（当前固定空）
-            resp_inner = json.loads(llm_raw)
+            try:
+                resp_inner = json.loads(llm_raw)
+            except json.JSONDecodeError:
+                logger.exception("LLM 返回非法 JSON | raw=%.200s", llm_raw)
+                return BaseLLMFailedResponse[BaseLLMFailedData](
+                    code=ErrorCode.CHAT.UNKNOWN,
+                    data=BaseLLMFailedData(error_msg="模型返回内容格式异常"),
+                )
             logger.info("同步聊天请求完成")
             # 外层统一返回
             return BaseLLMSuccessResponse[BaseLLMSuccessData](
@@ -263,30 +270,28 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             schema = get_chat_schema(body.reason)
 
             # 仅推理段进入信号量，释放 RAG 等待期间的并发槽
+            # CancelledError 不加内层捕获，直接穿透到外层统一处理，
+            # 避免重复日志并确保 infer_service 内部 finally 能正确关闭 vLLM 流。
             async with infer_sem:
-                try:
-                    async for token in req.app.state.infer_service.stream_generate(
-                        model_name=req.app.state.llm_model_name,
-                        messages=prompt_messages,
-                        reason=body.reason,
-                        response_schema=schema,
-                        options=dict(req.app.state.llm_options),
-                    ):
-                        # 根据 token 类型发射不同事件：
-                        #   reasoning → event: "reasoning"（推理过程）
-                        #   content   → event: "delta"（正文回答）
-                        event_name = (
-                            "reasoning" if token.type == "reasoning" else "delta"
-                        )
-                        yield emitter.emit(
-                            event_name,
-                            SseMessageFactory.delta(
-                                ChatDeltaData(content=token.content)
-                            ),
-                        )
-                except asyncio.CancelledError:
-                    logger.warning("SSE客户端主动断开连接，取消推理任务")
-                    raise
+                async for token in req.app.state.infer_service.stream_generate(
+                    model_name=req.app.state.llm_model_name,
+                    messages=prompt_messages,
+                    reason=body.reason,
+                    response_schema=schema,
+                    options=dict(req.app.state.llm_options),
+                ):
+                    # 根据 token 类型发射不同事件：
+                    #   reasoning → event: "reasoning"（推理过程）
+                    #   content   → event: "delta"（正文回答）
+                    event_name = (
+                        "reasoning" if token.type == "reasoning" else "delta"
+                    )
+                    yield emitter.emit(
+                        event_name,
+                        SseMessageFactory.delta(
+                            ChatDeltaData(content=token.content)
+                        ),
+                    )
 
         # ── done 事件（结束包） ──
         yield emitter.emit("done", SseMessageFactory.done())
