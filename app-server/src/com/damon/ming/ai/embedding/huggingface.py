@@ -37,16 +37,21 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
             device=params.device,
             cache_folder=params.cache_folder or None,
         )
+        # BGE-M3 等模型要求的编码前缀（与训练分布对齐）
+        self._query_prefix = params.extra.get("query_prefix", "")
+        self._passage_prefix = params.extra.get("passage_prefix", "")
         # 批量推理并发控制（仅 batch 模式使用，单条 embed_query 无锁）
         self._batch_sem = threading.Semaphore(params.concurrency)
         logger.info(
             f"[HuggingFaceEmbedding] 初始化成功 | model={params.model_name} | "
-            f"device={params.device} | concurrency={params.concurrency}"
+            f"device={params.device} | concurrency={params.concurrency} | "
+            f"query_prefix={self._query_prefix!r} | passage_prefix={self._passage_prefix!r}"
         )
 
     def embed_query(self, text: str) -> list[float]:
-        """单条推理无锁，依赖 PyTorch 内部线程安全。"""
+        """单条推理无锁，自动加 query_prefix。"""
         try:
+            text = self._query_prefix + text
             embedding = self.model.encode(
                 text, normalize_embeddings=self.params.normalize_embeddings
             )
@@ -55,8 +60,9 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
             raise RuntimeError(f"HuggingFace embedding failed: {e}")
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """批量推理受 concurrency 信号量限流，防止多 batch 争抢 GPU。"""
+        """批量推理受 concurrency 信号量限流，每条自动加 passage_prefix。"""
         try:
+            texts = [self._passage_prefix + t for t in texts]
             with self._batch_sem:
                 embeddings = self.model.encode(
                     texts,
@@ -74,4 +80,6 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
             "device": self.params.device,
             "dimension": self.model.get_sentence_embedding_dimension(),
             "normalize": self.params.normalize_embeddings,
+            "query_prefix": self._query_prefix,
+            "passage_prefix": self._passage_prefix,
         }

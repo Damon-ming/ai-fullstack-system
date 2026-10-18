@@ -14,7 +14,8 @@ embedding_engines:
     params:
       model_name: bge-m3
       base_url: http://ollama-server:11434
-      timeout: 60
+      # ollama 服务端无本地推理问题
+      timeout: 30
       max_retries: 3
       # Ollama 为远程服务，无本地推理并发问题；concurrency 仅作占位必填
       concurrency: 4
@@ -25,14 +26,15 @@ embedding_engines:
       query_prefix: "query: "      # BGE-M3 等模型要求 query 编码加前缀（分布对齐）
       passage_prefix: "passage: "  # 文档编码前缀（与训练时一致）
 
-  # 切换到 HuggingFace 时取消注释：
-  # huggingface:
-  #   params:
-  #     model_name: BAAI/bge-m3
-  #     base_url: ""
-  #     timeout: 0
-  #     max_retries: 0
-#     concurrency: 2              # 本地 GPU 推理并发上限（与 inference 池一致）
-#     device: cpu
-#     normalize_embeddings: true
-#     cache_folder: ""
+  huggingface:
+    params:
+      model_name: BAAI/bge-m3
+      base_url: ""
+      timeout: 0                   # 本地推理无网络超时，保留字段占位
+      max_retries: 0
+      concurrency: 2              # 本地 GPU 推理并发上限（与 inference 池一致）
+      device: cpu                 # cpu 或 cuda（本机有 GPU 时改为 cuda）
+      normalize_embeddings: true
+      cache_folder: ""            # 模型下载缓存目录，空=默认 ~/.cache/huggingface
+      query_prefix: "query: "     # BGE-M3 等模型要求 query 编码加前缀（分布对齐）
+      passage_prefix: "passage: " # 文档编码前缀（与训练时一致）

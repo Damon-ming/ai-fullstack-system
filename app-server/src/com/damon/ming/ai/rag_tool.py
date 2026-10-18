@@ -123,7 +123,7 @@ class RAGContainer:
 
         # 步骤2：全量加载所有 embedding（启动时一次性加载，避免响应延迟）
         _embedders = EmbeddingConfigLoader().load_all()
-        self.embedder: BaseEmbeddingService = _embedders["ollama"]
+        self.embedder: BaseEmbeddingService = _embedders["huggingface"]
         # 所有 embedding 实例，外部按名字直接引用
         self.embedders = _embedders
 
