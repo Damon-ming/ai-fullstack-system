@@ -11,13 +11,11 @@ engine:
   # type: ollama
   # base_url: http://ollama-server:11434
   # timeout: 180
-  # max_retries: 3
   # api_key: ""
 
   type: vllm
   base_url: http://vllm-server:8000/v1
   timeout: 90
-  max_retries: 3
   api_key: dummy
 
 models:

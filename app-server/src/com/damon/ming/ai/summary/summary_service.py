@@ -70,7 +70,8 @@ class SummaryService:
                 wait_ms = (time.monotonic() - wait_start) * 1000
                 logger.info(
                     "摘要等待推理槽 | wait_ms=%.0f | avail_after=%d",
-                    wait_ms, self._sem._value,
+                    wait_ms,
+                    self._sem._value,
                 )
             return await self._run_single_summary(text, max_tokens)
 
@@ -92,21 +93,48 @@ class SummaryService:
 
         对超过 max_tokens 的节点并发调用 run_summary 压缩。
         返回深拷贝节点，避免并发请求间写共享 TextNode。
-        取消时由 CancelledError 自然传播，结果直接丢弃。
-        """
-        tasks: list[tuple[int, asyncio.Task]] = []
-        for idx, node in enumerate(nodes):
-            token_cnt = self.tokenizer.count_tokens(node.text)
-            if token_cnt > max_tokens:
-                logger.info(f"节点压缩 | tokens={token_cnt} | max_tokens={max_tokens}")
-                tasks.append(
-                    (idx, asyncio.create_task(
-                        self._guarded_summary(text=node.text, max_tokens=max_tokens)
-                    ))
-                )
 
-        for idx, task in tasks:
-            text = await task  # CancelledError 传播时自动丢弃
+        取消安全：取消时显式清理所有未完成任务，原始 nodes 不被修改。
+        """
+        # 收集需要压缩的节点索引，避免迭代过程中 nodes 被修改
+        compress_indices: list[int] = []
+        for idx, node in enumerate(nodes):
+            if self.tokenizer.count_tokens(node.text) > max_tokens:
+                compress_indices.append(idx)
+
+        if not compress_indices:
+            return nodes
+
+        # 并发执行所有压缩任务
+        tasks = [
+            asyncio.create_task(
+                self._guarded_summary(text=nodes[idx].text, max_tokens=max_tokens)
+            )
+            for idx in compress_indices
+        ]
+
+        # 收集结果，取消时显式清理孤儿 task
+        compressed_texts: list[str] = []
+        try:
+            compressed_texts = await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            # 取消所有未完成的任务，避免孤儿
+            for t in tasks:
+                t.cancel()
+            # 等待所有任务完成取消（吞掉 CancelledError）
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+        except Exception:
+            # 非取消异常（如 LLM 调用失败）：清理已创建的任务
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+
+        # 所有任务成功：一次性替换节点（原子性，避免部分修改）
+        for i, idx in enumerate(compress_indices):
+            text = compressed_texts[i]
             # LLM 输出可能略微超出 max_tokens，截断兜底保证不超限
             if self.tokenizer.count_tokens(text) > max_tokens:
                 logger.warning(

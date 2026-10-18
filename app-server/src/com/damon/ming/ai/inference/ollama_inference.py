@@ -44,54 +44,39 @@ class OllamaInference(BaseInferenceService):
             ollama_kwargs["format"] = response_schema
         ollama_kwargs["stream"] = True
 
-        err_msg = ""
-        for attempt in range(self.params.max_retries):
-            stream = None
-            try:
-                stream = await self.client.chat(**ollama_kwargs)
-                thinking_parts: list[str] = []
-                content_parts: list[str] = []
-                async for chunk in stream:
-                    msg = chunk.get("message", {})
-                    thinking = msg.get("thinking", "")
-                    if thinking:
-                        thinking_parts.append(thinking)
-                    content = msg.get("content", "")
-                    if content:
-                        content_parts.append(content)
-                await stream.close()
-                if reason and thinking_parts:
-                    thinking_text = "".join(thinking_parts)
-                    answer_text = "".join(content_parts)
-                    return json.dumps(
-                        {
-                            "reasoning_process": thinking_text,
-                            "answer_content": answer_text,
-                        },
-                        ensure_ascii=False,
-                    )
-                return "".join(content_parts)
-            except asyncio.CancelledError:
-                logger.warning("text_generation 任务被取消，关闭ollama流")
-                if stream is not None:
-                    await stream.close()
-                raise
-            except Exception as e:
-                err_msg = f"Ollama调用异常: {e!s}"
-                wait = 2**attempt
-                logger.warning(
-                    f"推理重试 {attempt + 1}/{self.params.max_retries}, wait {wait}s | {err_msg}"
+        # 无重试：异常直接抛给上层，由前端自行重试请求
+        stream = await self.client.chat(**ollama_kwargs)
+        try:
+            thinking_parts: list[str] = []
+            content_parts: list[str] = []
+            async for chunk in stream:
+                msg = chunk.get("message", {})
+                thinking = msg.get("thinking", "")
+                if thinking:
+                    thinking_parts.append(thinking)
+                content = msg.get("content", "")
+                if content:
+                    content_parts.append(content)
+            await stream.close()
+            if reason and thinking_parts:
+                thinking_text = "".join(thinking_parts)
+                answer_text = "".join(content_parts)
+                return json.dumps(
+                    {
+                        "reasoning_process": thinking_text,
+                        "answer_content": answer_text,
+                    },
+                    ensure_ascii=False,
                 )
-                await asyncio.sleep(wait)
-        logger.error(f"Ollama推理全部重试失败: {err_msg}")
-        if response_schema is not None:
-            fallback_dict: dict[str, Any] = {
-                "answer_content": f"系统调用失败: {err_msg}",
-            }
-            if reason:
-                fallback_dict["reasoning_process"] = ""
-            return json.dumps(fallback_dict, ensure_ascii=False)
-        return json.dumps({"error": err_msg})
+            return "".join(content_parts)
+        except asyncio.CancelledError:
+            logger.warning("text_generation 任务被取消，关闭ollama流")
+            await stream.close()
+            raise
+        except Exception:
+            logger.exception("Ollama推理失败")
+            await stream.close()
+            raise
 
     async def stream_generate(
         self,

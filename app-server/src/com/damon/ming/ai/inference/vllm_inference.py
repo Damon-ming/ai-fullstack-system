@@ -1,7 +1,6 @@
 # app-server/src/com/damon/ming/ai/inference/vllm_inference.py
 
 import asyncio
-import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -58,30 +57,9 @@ class VLLMInference(BaseInferenceService):
                 "schema": response_schema,
             }
 
-        err_msg = ""
-        for attempt in range(self.params.max_retries):
-            try:
-                resp = await self.client.chat.completions.create(**create_kwargs)
-                return resp.choices[0].message.content
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                err_msg = f"VLLM调用异常: {e!s}"
-                wait = 2**attempt
-                logger.warning(
-                    f"推理重试 {attempt + 1}/{self.params.max_retries}, wait {wait}s | {err_msg}"
-                )
-                await asyncio.sleep(wait)
-
-        logger.error(f"VLLM推理全部重试失败: {err_msg}")
-        if response_schema is not None:
-            fallback_dict = {
-                "answer_content": f"系统调用失败: {err_msg}",
-            }
-            if reason:
-                fallback_dict["reasoning_process"] = ""
-            return json.dumps(fallback_dict, ensure_ascii=False)
-        return json.dumps({"error": err_msg})
+        # 无重试：异常直接抛给上层，由前端自行重试请求
+        resp = await self.client.chat.completions.create(**create_kwargs)
+        return resp.choices[0].message.content
 
     async def stream_generate(
         self,

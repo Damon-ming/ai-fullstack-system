@@ -77,7 +77,6 @@ class InferenceConfigLoader:
         params = InferenceParams(
             base_url=engine_cfg["base_url"],
             timeout=engine_cfg["timeout"],
-            max_retries=engine_cfg["max_retries"],
             api_key=engine_cfg.get("api_key", ""),
         )
 
@@ -87,7 +86,7 @@ class InferenceConfigLoader:
         # 2. 加载模型层 —— 统一数组格式，继承上层 engine
         for model_role, model_cfg in raw_cfg.get("models", {}).items():
             if not isinstance(model_cfg, list):
-                raise ValueError(
+                raise ValueError(  # noqa: TRY004
                     f"模型 '{model_role}' 配置格式错误：期望数组，"
                     f"实际为 {type(model_cfg).__name__}"
                 )

@@ -35,11 +35,12 @@ class InferenceParams:
     仅包含引擎级（连接）参数。
     模型级参数（temperature / top_p / num_ctx）在 YAML 的 models 层配置，
     调用时通过 options 传入。
+
+    无服务端重试：异常直接抛给上层，由前端自行重试请求。
     """
 
     base_url: str
     timeout: int
-    max_retries: int
     api_key: str
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -126,6 +127,7 @@ class BaseInferenceService(ABC):
         pred = result.strip()
         if pred not in intention_list:
             from src.com.damon.ming.log import pin
+
             pin("Intention").warning(
                 f"意图不在允许列表 | query={query} | output={pred}"
             )
