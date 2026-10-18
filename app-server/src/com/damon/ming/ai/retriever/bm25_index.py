@@ -21,7 +21,7 @@ class BM25Index:
         self.index = None
         self.corpus: list[TextNode] = []
         self.logger = pin("BM25Index")
-        self._rw_lock = threading.RLock()
+        self._rw_lock = threading.Lock()
 
     def _default_tokenizer(self, text: str) -> list[str]:
         """默认简单空格分词，中文场景建议外部传入jieba等分词器"""

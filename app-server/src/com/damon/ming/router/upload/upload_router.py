@@ -34,7 +34,7 @@ async def save_files(
     )
 
     # 创建请求级上下文，绑定 CancellationToken
-    ctx = request.state.pool_mgr.create_request_context()
+    ctx = request.app.state.pool_mgr.create_request_context()
 
     try:
         # 优先从加密中间件注入的 decrypted_meta 读取（加密模式）

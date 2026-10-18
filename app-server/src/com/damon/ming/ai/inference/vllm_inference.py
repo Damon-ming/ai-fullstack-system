@@ -93,15 +93,19 @@ class VLLMInference(BaseInferenceService):
                     yield StreamToken(content=content, type="content")
         except asyncio.CancelledError:
             logger.warning("VLLM stream 收到取消信号，关闭流")
-            raise
-        finally:
-            # 取消时事件循环可能不再调度 await，加容错避免 finally 异常
+            # 在 CancelledError 传播前主动关闭流，避免依赖 finally
+            # 在已取消的上下文中 await 可能无法被调度
             try:
                 await stream.close()
-            except asyncio.CancelledError:
-                logger.warning("VLLM stream 取消后关闭被中断，跳过")
-            except Exception as e:
-                logger.warning("VLLM stream 关闭异常 | error=%s", e)
+            except Exception:
+                pass
+            raise
+        finally:
+            # 兜底：非取消路径下的正常关闭，或取消路径关闭失败时的二次尝试
+            try:
+                await stream.close()
+            except Exception:
+                pass
 
     async def check_model_ready(self, model_name: str) -> bool:
         try:
