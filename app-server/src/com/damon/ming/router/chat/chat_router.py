@@ -13,6 +13,7 @@ from src.com.damon.ming.ai.schemas.response import (
 )
 from src.com.damon.ming.ai.security import InputValidator
 from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
@@ -153,11 +154,11 @@ async def chat(req: Request, body: ChatRequest):
             return BaseLLMSuccessResponse[BaseLLMSuccessData](
                 code=ErrorCode.OK, data=BaseLLMSuccessData(data=resp_inner)
             )
-    except TimeoutError as e:
+    except TimeoutError:
         logger.warning("同步聊天请求超时")
         return BaseLLMFailedResponse[BaseLLMFailedData](
             code=ErrorCode.CHAT.TIMEOUT,
-            data=BaseLLMFailedData(error_msg=str(e)),
+            data=BaseLLMFailedData(error_msg="请求超时，请稍后重试"),
         )
     except asyncio.CancelledError:
         logger.warning("【统计】同步聊天请求被客户端主动取消")
@@ -166,7 +167,7 @@ async def chat(req: Request, body: ChatRequest):
         logger.exception("同步聊天请求未知异常")
         return BaseLLMFailedResponse[BaseLLMFailedData](
             code=ErrorCode.CHAT.UNKNOWN,
-            data=BaseLLMFailedData(error_msg=str(e)),
+            data=BaseLLMFailedData(error_msg=get_safe_error_message(e)),
         )
     finally:
         # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
@@ -283,26 +284,23 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                     # 根据 token 类型发射不同事件：
                     #   reasoning → event: "reasoning"（推理过程）
                     #   content   → event: "delta"（正文回答）
-                    event_name = (
-                        "reasoning" if token.type == "reasoning" else "delta"
-                    )
+                    event_name = "reasoning" if token.type == "reasoning" else "delta"
                     yield emitter.emit(
                         event_name,
-                        SseMessageFactory.delta(
-                            ChatDeltaData(content=token.content)
-                        ),
+                        SseMessageFactory.delta(ChatDeltaData(content=token.content)),
                     )
 
         # ── done 事件（结束包） ──
         yield emitter.emit("done", SseMessageFactory.done())
         logger.info("流式聊天请求完成 | lastEventId=%s", emitter.last_event_id)
 
-    except TimeoutError as e:
+    except TimeoutError:
         logger.warning("流式聊天请求超时")
         yield emitter.emit(
             "error",
             SseMessageFactory.error(
-                ErrorCode.CHAT.TIMEOUT, BaseLLMFailedData(error_msg=str(e))
+                ErrorCode.CHAT.TIMEOUT,
+                BaseLLMFailedData(error_msg="请求超时，请稍后重试"),
             ),
         )
     except asyncio.CancelledError:
@@ -313,7 +311,8 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
         yield emitter.emit(
             "error",
             SseMessageFactory.error(
-                ErrorCode.CHAT.UNKNOWN, BaseLLMFailedData(error_msg=str(e))
+                ErrorCode.CHAT.UNKNOWN,
+                BaseLLMFailedData(error_msg=get_safe_error_message(e)),
             ),
         )
     finally:

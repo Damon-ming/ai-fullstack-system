@@ -423,17 +423,26 @@ class RAGContainer:
             await asyncio.sleep(0)
 
             # ── 阶段 3: 超长章节压缩（仅处理超 max_seq_len 的节点） ──
-            # 压缩前保存原文映射，rerank 后用于恢复。只记录被压缩的节点，
-            # 比全量 clone 节省内存。中断时直接抛弃，无需恢复。
+            # 压缩前保存原文到 metadata（deepcopy 后仍保留），再替换节点。
+            # 中断时直接抛弃，无需恢复。
             max_seq_len = self.reranker.params.max_seq_len
-            original_texts: dict[int, str] = {}  # id(node) → 原文
             nodes_to_compress: list[TextNode] = []
             for node in reconstructed_nodes:
                 if self.summary.tokenizer.count_tokens(node.text) > max_seq_len:
-                    original_texts[id(node)] = node.text
                     nodes_to_compress.append(node)
             if nodes_to_compress:
-                await self.summary.compress_nodes(nodes_to_compress, max_seq_len)
+                compressed = await self.summary.compress_nodes(
+                    nodes_to_compress, max_seq_len
+                )
+                # 原文存入 metadata（rerank deepcopy 后仍保留），再替换节点
+                for orig, comp in zip(nodes_to_compress, compressed):
+                    comp.metadata["_original_text"] = orig.text
+                compress_map = {
+                    id(orig): comp for orig, comp in zip(nodes_to_compress, compressed)
+                }
+                reconstructed_nodes = [
+                    compress_map.get(id(n), n) for n in reconstructed_nodes
+                ]
 
             # 阶段间 yield
             await asyncio.sleep(0)
@@ -455,7 +464,7 @@ class RAGContainer:
 
             # ── 阶段 5: 恢复原文 + 拼接 ──
             for node in ranked_nodes:
-                original = original_texts.get(id(node))
+                original = node.metadata.pop("_original_text", None)
                 if original is not None:
                     node.text = original
             full_text = self.section_recon.merge_nodes_to_text(ranked_nodes)

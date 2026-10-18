@@ -77,3 +77,12 @@ def get_safe_message(subsystem_code: int) -> str:
         ServerSubSystem.UNKNOWN: "服务暂不可用，请稍后重试",
     }
     return _MESSAGES.get(subsystem_code, _MESSAGES[ServerSubSystem.UNKNOWN])
+
+
+def get_safe_error_message(exc: Exception) -> str:
+    """将异常转换为对客户端安全的错误描述（不含内部细节）。
+
+    组合 classify_exception + get_safe_message，供路由层统一调用。
+    服务端日志仍记录完整堆栈，客户端只收到脱敏描述。
+    """
+    return get_safe_message(classify_exception(exc))

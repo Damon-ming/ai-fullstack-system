@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from src.com.damon.ming.exception.error_codes import ErrorCode, format_code
 from src.com.damon.ming.exception.server_error import (
     classify_exception,
+    get_safe_error_message,
     get_safe_message,
 )
 from src.com.damon.ming.log import pin
@@ -52,7 +53,7 @@ def register_exception_handler(app: FastAPI) -> None:
         biz_code = getattr(exc, "biz_code", None)
         if biz_code is not None:
             code = biz_code
-            safe_msg = get_safe_message(classify_exception(exc))
+            safe_msg = get_safe_error_message(exc)
         else:
             # 兜底：按异常类型分类到子系统
             code = classify_exception(exc)

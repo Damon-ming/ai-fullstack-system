@@ -83,14 +83,25 @@ class UploadService:
                     f"仅允许: {', '.join(allowed_exts)}"
                 )
 
-            # 大小校验：按类型匹配上限
+            # 大小校验：按类型匹配上限（边读边校验，超限立即中断，
+            # 避免恶意大文件一次性读入内存导致 OOM）
+            #TODO:性能待定
             max_size = upload_config.get_max_size_for_ext(suffix)
-            content = await file.read()
-            if len(content) > max_size:
-                raise ValueError(
-                    f"文件过大: {origin_name}（{len(content) // (1024 * 1024)}MB），"
-                    f"该类型上限 {max_size // (1024 * 1024)}MB"
-                )
+            chunks: list[bytes] = []
+            total = 0
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB 分块
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_size:
+                    raise ValueError(
+                        f"文件过大: {origin_name}（>"
+                        f"{max_size // (1024 * 1024)}MB），"
+                        f"该类型上限 {max_size // (1024 * 1024)}MB"
+                    )
+                chunks.append(chunk)
+            content = b"".join(chunks)
 
             logger.info(
                 "收到用户上传文件 | original_filename=%s | size=%s | type=%s",
