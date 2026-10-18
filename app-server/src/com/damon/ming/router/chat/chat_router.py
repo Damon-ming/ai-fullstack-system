@@ -62,14 +62,20 @@ async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | Non
 async def _guardrail_check_with_timeout(
     app_state, query: str
 ) -> BaseLLMFailedResponse | None:
-    """护栏检测 + 独立超时（超时 fail-open 放行）。
+    """护栏检测 + 独立超时 + 信号量限流（超时 fail-open 放行）。
 
     抽取为独立函数，供同步 / 流式接口复用，避免重复代码。
+    guardrail_sem 保护护栏 LLM 调用不被打爆。
     """
     guardrail_timeout = app_state.guardrail_timeout
+    guardrail_sem = getattr(app_state, "guardrail_sem", None)
     try:
         async with asyncio.timeout(guardrail_timeout):
-            return await _check_guardrail(app_state, query)
+            if guardrail_sem is not None:
+                async with guardrail_sem:
+                    return await _check_guardrail(app_state, query)
+            else:
+                return await _check_guardrail(app_state, query)
     except TimeoutError:
         logger.warning("护栏检测超时，fail-open 放行 | timeout=%ds", guardrail_timeout)
         return None

@@ -1,8 +1,0 @@
-# app-server/src/com/damon/ming/app/config/thread/thread-config.yaml
-# 线程池配置 —— 由 ThreadPoolConfigLoader 读取，注入 pool_manager。
-# 三个命名池：retrieval（检索）/ document（文档处理）/ inference（推理辅助）
-
-retrieval: 4      # HybridRetriever 稠密+稀疏并发 + 余量
-document: 8       # PDF 加载 / 文档分割
-inference: 2      # 推理辅助线程
-rerank: 2         # CrossEncoder 重排专用池（与 retrieval 隔离）

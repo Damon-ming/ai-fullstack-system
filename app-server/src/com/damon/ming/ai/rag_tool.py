@@ -72,27 +72,40 @@ _rag_instance = None
 _rag_instance_lock = threading.Lock()
 
 
-def get_rag_container(pool_mgr: ThreadPoolManager | None = None):
+def get_rag_container(
+    pool_mgr: ThreadPoolManager | None = None,
+    infer_sem: asyncio.Semaphore | None = None,
+):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
     Args:
         pool_mgr: 由 AppInitializer 注入的全局线程池管理器。
                   不为 None 时直接使用，否则退化为单例获取（向后兼容）。
+        infer_sem: 推理信号量（与主推理共用），首次创建时设置。
     """
     global _rag_instance
     if _rag_instance is None:
         with _rag_instance_lock:
             if _rag_instance is None:
-                _rag_instance = RAGContainer(pool_mgr=pool_mgr)
+                _rag_instance = RAGContainer(
+                    pool_mgr=pool_mgr,
+                    infer_sem=infer_sem,
+                )
     return _rag_instance
 
 
 # 1. 全局单例容器
 class RAGContainer:
-    def __init__(self, pool_mgr: ThreadPoolManager | None = None):
+    def __init__(
+        self,
+        pool_mgr: ThreadPoolManager | None = None,
+        infer_sem: asyncio.Semaphore | None = None,
+    ):
         logger.info("RAG 容器初始化开始")
         # 线程池管理器：优先使用注入的全局实例，否则回退单例
         self._pool_mgr = pool_mgr if pool_mgr is not None else ThreadPoolManager()
+        # 推理信号量：所有 LLM 调用（主推理 + 摘要 + 压缩）共享同一上限
+        self._infer_sem = infer_sem
         # 步骤1：执行所有模块注册
         register_all_rerankers()
         register_all_tokenizers()
@@ -127,6 +140,7 @@ class RAGContainer:
             inference=_infer_engine,
             summary_model=_summary_entry.model_name,
             summary_options=_summary_entry.options,
+            semaphore=self._infer_sem,
         )
 
         # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）

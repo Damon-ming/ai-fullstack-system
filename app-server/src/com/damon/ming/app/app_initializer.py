@@ -60,9 +60,9 @@ class AppInitializer:
         self._init_database()
         self._init_encryption()
         self._init_sign_context()
+        self._init_chat()  # 必须在 _init_ai 之前：创建 infer_sem 供 RAGContainer 传递
         self._init_ai()
         self._init_guardrail()
-        self._init_chat()
 
         logger.info("应用启动完成")
 
@@ -81,6 +81,7 @@ class AppInitializer:
         # 聊天配置（Semaphore 在 lifespan 内创建，绑定到正确的事件循环）
         app.state.infer_sem = self.chat_sem
         app.state.rag_sem = self.rag_sem
+        app.state.guardrail_sem = self.guardrail_sem
         app.state.infer_timeout = self.chat_timeout
         app.state.guardrail_timeout = self.guardrail_timeout
         app.state.retry_ms = self.chat_retry_ms
@@ -299,7 +300,7 @@ class AppInitializer:
             logger.warning("sign_context 未配置，签名密钥派生将使用空 context")
 
     def _init_chat(self) -> None:
-        """聊天配置：加载 YAML 中的并发控制、超时、系统 prompt。"""
+        """聊天配置：加载 YAML 中的 Semaphore 参数、超时、系统 prompt。"""
         import asyncio
 
         from src.com.damon.ming.app.config.ai.chat_config_loader import ChatConfigLoader
@@ -307,17 +308,21 @@ class AppInitializer:
         configs = ChatConfigLoader().load_all()
         cfg = configs.get("common") or configs[next(iter(configs.keys()))]
 
-        self.chat_sem = asyncio.Semaphore(cfg.infer_concurrency)
-        self.rag_sem = asyncio.Semaphore(cfg.rag_concurrency)
+        # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
+        self.chat_sem = asyncio.Semaphore(cfg.infer_sem)
+        self.rag_sem = asyncio.Semaphore(cfg.rag_sem)
+        self.guardrail_sem = asyncio.Semaphore(cfg.guardrail_sem)
         self.chat_timeout = cfg.infer_timeout
         self.guardrail_timeout = cfg.guardrail_timeout
         self.chat_retry_ms = cfg.retry_ms
         self.chat_system_prompt_tpl = cfg.system_prompt
 
         logger.info(
-            "聊天配置初始化完成 | infer_concurrency=%d | rag_concurrency=%d | guardrail_timeout=%ds | infer_timeout=%ds",
-            cfg.infer_concurrency,
-            cfg.rag_concurrency,
+            "聊天配置初始化完成 | infer_sem=%d | rag_sem=%d | guardrail_sem=%d | "
+            "guardrail_timeout=%ds | infer_timeout=%ds",
+            cfg.infer_sem,
+            cfg.rag_sem,
+            cfg.guardrail_sem,
             cfg.guardrail_timeout,
             cfg.infer_timeout,
         )
@@ -333,7 +338,12 @@ class AppInitializer:
         )
 
         register_all_inferences()
-        self.rag_app = get_rag_container(pool_mgr=self.pool_mgr)
+        # infer_sem 由 _init_chat() 创建（已在 lifespan 事件循环内），
+        # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量
+        self.rag_app = get_rag_container(
+            pool_mgr=self.pool_mgr,
+            infer_sem=self.chat_sem,
+        )
 
         # 全量加载推理引擎和模型
         _loader = InferenceConfigLoader()

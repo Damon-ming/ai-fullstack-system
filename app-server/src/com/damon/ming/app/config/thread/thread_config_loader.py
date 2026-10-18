@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/app/config/thread/thread_config_loader.py
+# app-server/src/com/damon/ming/app/config/thread_config_loader.py
 """
 线程池配置加载器 —— 从 YAML 文件读取线程池参数。
 
@@ -9,7 +9,7 @@ pool_manager 通过 ThreadPoolConfigLoader().load() 接收参数，
 加载优先级：
   1. 显式传入的 config_path
   2. THREAD_CONFIG_PATH 环境变量
-  3. 默认路径：本目录下的 thread-config.yaml
+  3. 默认路径：本目录下的 thread-pool-config.yaml
 
 加载失败时抛出异常（线程池是核心依赖，不做静默降级）。
 """
@@ -32,7 +32,7 @@ class ThreadPoolConfigLoader:
             config_path = os.environ.get("THREAD_CONFIG_PATH", "")
         if not config_path:
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "thread-config.yaml")
+            config_path = os.path.join(base_dir, "thread-pool-config.yaml")
         self._config_path = config_path
 
     def load(self) -> dict[str, int]:

@@ -15,6 +15,7 @@
 
 import asyncio
 import copy
+import time
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
@@ -43,13 +44,35 @@ class SummaryService:
         inference: BaseInferenceService | None = None,
         summary_model: str = "",
         summary_options: dict | None = None,
+        semaphore: asyncio.Semaphore | None = None,
     ):
         self.tokenizer = tokenizer
         self.inference = inference
         self.summary_model = summary_model
         self.summary_options = summary_options or {}
+        # 摘要/压缩 LLM 调用共享推理信号量（与主推理共用 infer_sem）
+        # inject 模式——由 AppInitializer 创建后赋值，不穿透 RAGContainer 构造参数
+        self._sem = semaphore
 
     # ── 公开接口 ──────────────────────────────────────────────────────
+
+    async def _guarded_summary(self, text: str, max_tokens: int) -> str:
+        """带信号量保护的 _run_single_summary，竞争时记录等待耗时。"""
+        if self._sem is None:
+            return await self._run_single_summary(text, max_tokens)
+
+        # 检测竞争：信号量值 <= 0 时说明需要排队等待
+        contended = self._sem._value <= 0
+        wait_start = time.monotonic() if contended else 0
+
+        async with self._sem:
+            if contended:
+                wait_ms = (time.monotonic() - wait_start) * 1000
+                logger.info(
+                    "摘要等待推理槽 | wait_ms=%.0f | avail_after=%d",
+                    wait_ms, self._sem._value,
+                )
+            return await self._run_single_summary(text, max_tokens)
 
     async def run_summary(self, text: str, max_tokens: int) -> str:
         """单文本摘要压缩。超长自动分段，失败降级硬截断。"""
@@ -60,7 +83,7 @@ class SummaryService:
         if text_tokens > input_limit:
             return await self._run_segmented_summary(text, max_tokens, input_limit)
 
-        return await self._run_single_summary(text, max_tokens)
+        return await self._guarded_summary(text, max_tokens)
 
     async def compress_nodes(
         self, nodes: list[TextNode], max_tokens: int
@@ -78,7 +101,7 @@ class SummaryService:
                 logger.info(f"节点压缩 | tokens={token_cnt} | max_tokens={max_tokens}")
                 tasks.append(
                     (idx, asyncio.create_task(
-                        self.run_summary(text=node.text, max_tokens=max_tokens)
+                        self._guarded_summary(text=node.text, max_tokens=max_tokens)
                     ))
                 )
 
@@ -141,7 +164,7 @@ class SummaryService:
 
         per_segment_max = max(max_tokens // len(segments), 1)
         tasks = [
-            self._run_single_summary(segment, per_segment_max) for segment in segments
+            self._guarded_summary(segment, per_segment_max) for segment in segments
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
