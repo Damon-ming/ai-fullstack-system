@@ -220,6 +220,7 @@ class ChromaDBStore(BaseVectorStore):
     def get_by_metadata(
         self, metadata_filter: dict[str, Any], **kwargs
     ) -> list[TextNode]:
+        """按元数据查询。不缓存：调用方（ingest 去重、constructor）可能修改返回节点。"""
         try:
             results = self.collection.get(where=metadata_filter)
             if not results["ids"]:
@@ -232,9 +233,6 @@ class ChromaDBStore(BaseVectorStore):
                     metadata=results["metadatas"][i],
                 )
                 nodes.append(node)
-            with self._cache_lock:
-                for node in nodes:
-                    self._cache_put(node.node_id, node)
             return nodes
         except Exception as e:
             self.logger.error(f"[ChromaDBStore] 元数据查询失败: {e}")
@@ -249,6 +247,7 @@ class ChromaDBStore(BaseVectorStore):
 
         将 N 个独立查询合并为 1 次 SQLite 扫描，SectionReconstructor 场景下
         显著减少 ChromaDB 查询耗时。
+        不缓存：返回的节分片后续会被 constructor 合并修改，缓存会导致过期数据。
         """
         if not filters:
             return []
@@ -267,9 +266,6 @@ class ChromaDBStore(BaseVectorStore):
                     metadata=results["metadatas"][i],
                 )
                 nodes.append(node)
-            with self._cache_lock:
-                for node in nodes:
-                    self._cache_put(node.node_id, node)
             return nodes
         except Exception as e:
             self.logger.error(f"[ChromaDBStore] 批量元数据查询失败: {e}")

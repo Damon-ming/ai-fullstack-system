@@ -27,9 +27,11 @@ class ReciprocalRankFusion:
         results_list: list[list[tuple[TextNode, float]]],
         weights: list[float],
         top_k: int,
-    ) -> list[TextNode]:
+    ) -> list[tuple[TextNode, float]]:
         """
         带权重的 RRF 融合。
+
+        纯检索操作：不修改任何输入节点的 metadata，返回 (node, score) 元组列表。
 
         Args:
             results_list: 多个检索器的结果列表
@@ -64,10 +66,8 @@ class ReciprocalRankFusion:
             node_map.items(), key=lambda x: node_scores.get(x[0], 0), reverse=True
         )
 
-        result_nodes = []
-        for node_id, _ in sorted_nodes[:top_k]:
-            node = node_map[node_id]
-            node.metadata["_rrf_score"] = node_scores[node_id]
-            result_nodes.append(node)
-
-        return result_nodes
+        # 返回 (node, score) 元组，不修改原节点 metadata
+        return [
+            (node_map[node_id], node_scores[node_id])
+            for node_id, _ in sorted_nodes[:top_k]
+        ]

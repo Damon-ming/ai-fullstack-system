@@ -101,26 +101,25 @@ class UploadService:
             digest = hashlib.sha256(content)
             file_sha256 = digest.hexdigest()
 
+            # check + write + cache 在同一锁内，避免并发上传同一文件产生磁盘副本
             with UploadService._sha_cache_lock:
                 existing = UploadService._sha_cache.get(file_sha256)
+                if existing:
+                    saved_files.append(
+                        {
+                            "filename": origin_name,
+                            "save_path": str(existing),
+                            "file_size": existing.stat().st_size,
+                            "file_sha256": file_sha256,
+                            "duplicate": True,
+                        }
+                    )
+                    # 即使本地文件已存在，也交给幂等入库流程检查一次，修复 “文件已保存但服务重启前入库失败”的半成品状态。
+                    files_to_index.append(str(existing.resolve()))
+                    continue
 
-            if existing:
-                saved_files.append(
-                    {
-                        "filename": origin_name,
-                        "save_path": str(existing),
-                        "file_size": existing.stat().st_size,
-                        "file_sha256": file_sha256,
-                        "duplicate": True,
-                    }
-                )
-                # 即使本地文件已存在，也交给幂等入库流程检查一次，修复 “文件已保存但服务重启前入库失败”的半成品状态。
-                files_to_index.append(str(existing.resolve()))
-                continue
-            with file_path.open("wb") as f:
-                f.write(content)
-
-            with UploadService._sha_cache_lock:
+                with file_path.open("wb") as f:
+                    f.write(content)
                 UploadService._sha_cache[file_sha256] = file_path
 
             saved_files.append(
@@ -142,8 +141,12 @@ class UploadService:
                 index_result = get_rag_container().ingest_files(
                     files_to_index, cancellation_token=cancellation_token
                 )
-                indexed_by_md5 = {item["file_sha256"] for item in index_result["indexed"]}
-                skipped_by_md5 = {item["file_sha256"] for item in index_result["skipped"]}
+                indexed_by_md5 = {
+                    item["file_sha256"] for item in index_result["indexed"]
+                }
+                skipped_by_md5 = {
+                    item["file_sha256"] for item in index_result["skipped"]
+                }
                 for item in saved_files:
                     item["duplicate"] = item.get("file_sha256") in skipped_by_md5
                     item["indexed"] = (

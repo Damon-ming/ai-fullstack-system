@@ -175,12 +175,12 @@ class HybridRetriever:
                 top_k=rrf_top_k,
             )
 
-            # ③ 不要求 section 多样性 → 直接返回
+            # ③ 不要求 section 多样性 → 直接返回（解包元组为节点列表）
             if not dedup_by_section:
                 self.logger.info(
                     f"[HybridRetriever] 检索完成（dedup_by_section=False） | 返回 {len(fused_results)} 个结果"
                 )
-                return fused_results[:top_k]
+                return [node for node, _ in fused_results[:top_k]]
 
             # ④ section 去重（处理跨检索器的 section 重复）
             deduped = self._dedup_by_section(fused_results, top_k)
@@ -199,19 +199,21 @@ class HybridRetriever:
             )
             multiplier += 1
 
-        # 兜底：放大到最大倍数仍不够，诚实返回已收集的
+        # 兜底：放大到最大倍数仍不够，诚实返回已收集的（解包元组为节点列表）
         self.logger.info(
             f"[HybridRetriever] 达到最大放大倍数 | 返回 {len(deduped)} 个不同 section"
         )
-        return deduped[:top_k]
+        return [node for node, _ in deduped[:top_k]]
 
     # ── section 去重 ─────────────────────────────────────────────────
 
     @staticmethod
-    def _dedup_by_section(nodes: list[TextNode], top_k: int) -> list[TextNode]:
+    def _dedup_by_section(
+        scored_nodes: list[tuple[TextNode, float]], top_k: int
+    ) -> list[tuple[TextNode, float]]:
         """按 (file_sha256, section_id) 去重，保留 RRF 排序靠前的 chunk。
 
         委托给 BaseRetriever.dedup_by_section 统一实现，避免逻辑分散。
+        输入输出均为 (node, score) 元组列表，不修改原节点 metadata。
         """
-        scored = [(node, 0.0) for node in nodes]
-        return [node for node, _ in BaseRetriever.dedup_by_section(scored, top_k)]
+        return BaseRetriever.dedup_by_section(scored_nodes, top_k)
