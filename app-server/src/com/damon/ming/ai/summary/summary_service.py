@@ -136,7 +136,9 @@ class SummaryService:
 
     async def _run_single_summary(self, text: str, max_tokens: int) -> str:
         """单段摘要，带容错降级。"""
-        prompt = SUMMARY_PROMPT_TEMPLATE.format(max_tokens=max_tokens, content=text)
+        prompt = SUMMARY_PROMPT_TEMPLATE.replace(
+            "{max_tokens}", str(max_tokens), 1
+        ).replace("{content}", text, 1)
         opts = {"temperature": 0.1, "num_predict": max_tokens}
         opts.update(self.summary_options)
         try:

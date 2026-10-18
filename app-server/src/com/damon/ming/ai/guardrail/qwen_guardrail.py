@@ -56,7 +56,7 @@ class QwenGuardrail(BaseGuardrail):
 
     async def check(self, query: str) -> GuardrailResult:
         """调用 Qwen 模型检测用户输入。"""
-        prompt = self.params.prompt_template.format(query=query)
+        prompt = self.params.prompt_template.replace("{query}", query, 1)
         messages = [{"role": "user", "content": prompt}]
 
         logger.debug(
