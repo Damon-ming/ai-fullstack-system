@@ -325,19 +325,19 @@ class AppInitializer:
         self.chat_sem = asyncio.Semaphore(cfg.infer_sem)
         self.rag_sem = asyncio.Semaphore(cfg.rag_sem)
         self.guardrail_sem = asyncio.Semaphore(cfg.guardrail_sem)
-        self.chat_timeout = cfg.infer_timeout
+        self.chat_timeout = cfg.total_timeout
         self.guardrail_timeout = cfg.guardrail_timeout
-        self.chat_retry_ms = cfg.retry_ms
+        self.chat_retry_ms = cfg.sse_retry_ms
         self.chat_system_prompt_tpl = cfg.system_prompt
 
         logger.info(
             "聊天配置初始化完成 | infer_sem=%d | rag_sem=%d | guardrail_sem=%d | "
-            "guardrail_timeout=%ds | infer_timeout=%ds",
+            "guardrail_timeout=%ds | total_timeout=%ds",
             cfg.infer_sem,
             cfg.rag_sem,
             cfg.guardrail_sem,
             cfg.guardrail_timeout,
-            cfg.infer_timeout,
+            cfg.total_timeout,
         )
 
     def _init_ai(self) -> None:

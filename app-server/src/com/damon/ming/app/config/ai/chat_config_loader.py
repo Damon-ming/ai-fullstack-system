@@ -17,35 +17,38 @@ class ChatConfig:
     """AI 并发控制配置参数。所有参数无默认值，必须由 YAML 显式提供。"""
 
     __slots__ = (
+        "config_ttl_seconds",
         "guardrail_sem",
         "guardrail_timeout",
         "infer_sem",
-        "infer_timeout",
         "name",
         "rag_sem",
-        "retry_ms",
+        "sse_retry_ms",
         "system_prompt",
+        "total_timeout",
     )
 
     def __init__(
         self,
         name: str,
         system_prompt: str,
+        total_timeout: int,
         infer_sem: int,
         rag_sem: int,
         guardrail_sem: int,
         guardrail_timeout: int,
-        infer_timeout: int,
-        retry_ms: int,
+        sse_retry_ms: int,
+        config_ttl_seconds: int,
     ):
         self.name = name
         self.system_prompt = system_prompt
+        self.total_timeout = total_timeout
         self.infer_sem = infer_sem
         self.rag_sem = rag_sem
         self.guardrail_sem = guardrail_sem
         self.guardrail_timeout = guardrail_timeout
-        self.infer_timeout = infer_timeout
-        self.retry_ms = retry_ms
+        self.sse_retry_ms = sse_retry_ms
+        self.config_ttl_seconds = config_ttl_seconds
 
 
 class ChatConfigLoader:
@@ -105,15 +108,17 @@ class ChatConfigLoader:
         # TTL 每次构建时刷新（config_ttl_seconds 变化后下次缓存过期即生效）
         self._cache_ttl_seconds = float(section.get("config_ttl_seconds", 60))
         try:
+            pipeline = section["pipeline"]
             return ChatConfig(
                 name=name,
                 system_prompt=section["system_prompt"],
-                infer_sem=int(section["inference"]["semaphore"]),
-                infer_timeout=int(section["inference"]["timeout"]),
-                rag_sem=int(section["rag"]["semaphore"]),
+                total_timeout=int(pipeline["total_timeout"]),
+                infer_sem=int(pipeline["inference"]["semaphore"]),
+                rag_sem=int(pipeline["rag"]["semaphore"]),
                 guardrail_sem=int(section["guardrail"]["semaphore"]),
                 guardrail_timeout=int(section["guardrail"]["timeout"]),
-                retry_ms=int(section["retry_ms"]),
+                sse_retry_ms=int(section["sse_retry_ms"]),
+                config_ttl_seconds=int(section.get("config_ttl_seconds", 60)),
             )
         except KeyError as e:
             raise ValueError(f"配置 '{name}' 缺少必填字段: {e}") from e
