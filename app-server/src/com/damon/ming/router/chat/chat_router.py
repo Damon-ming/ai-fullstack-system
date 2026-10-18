@@ -287,15 +287,6 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                 except asyncio.CancelledError:
                     logger.warning("SSE客户端主动断开连接，取消推理任务")
                     raise
-                except TimeoutError as e:
-                    logger.warning("流式聊天请求超时")
-                    yield emitter.emit(
-                        "error",
-                        SseMessageFactory.error(
-                            ErrorCode.CHAT.TIMEOUT, BaseLLMFailedData(error_msg=str(e))
-                        ),
-                    )
-                    return
 
         # ── done 事件（结束包） ──
         yield emitter.emit("done", SseMessageFactory.done())

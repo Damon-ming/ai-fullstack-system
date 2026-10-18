@@ -41,6 +41,7 @@ class UploadService:
     async def batch_save_files(
         file_list: list[UploadFile],
         req: FileUploadRequest,
+        upload_config,
         cancellation_token: CancellationToken | None = None,
     ) -> list[dict]:
         # 非阻塞获取：浏览器关闭后重新请求时立即返回业务失败，不排队等待。
@@ -48,7 +49,7 @@ class UploadService:
             raise UploadInProgressError("资料库还在更新中，请稍等")
         try:
             return await UploadService._batch_save_files_locked(
-                file_list, cancellation_token
+                file_list, upload_config, cancellation_token
             )
         finally:
             UploadService._processing_lock.release()
@@ -56,25 +57,46 @@ class UploadService:
     @staticmethod
     async def _batch_save_files_locked(
         file_list: list[UploadFile],
+        upload_config,
         cancellation_token: CancellationToken | None = None,
     ) -> list[dict]:
         """
         批量保存文件
         :param file_list: 上传文件数组
+        :param upload_config: UploadConfig 实例（文件类型白名单 + 大小上限）
         :param cancellation_token: 请求级取消令牌
         :return: 文件信息列表
         """
         saved_files = []
         files_to_index = []
         prepared_files = []
+        allowed_exts = sorted(upload_config.allowed_types.keys())
         # 先完整读取并准备本次请求的所有文件；任一文件读取失败时，此阶段不会写入磁盘，避免多文件请求产生半上传结果。
         for file in file_list:
             origin_name = Path(file.filename or "unnamed").name
+            suffix = Path(origin_name).suffix.lower()
+
+            # 类型白名单校验：不在配置中的扩展名直接拒绝
+            if not upload_config.is_type_allowed(suffix):
+                raise ValueError(
+                    f"不支持的文件类型: {suffix or '无扩展名'}（{origin_name}），"
+                    f"仅允许: {', '.join(allowed_exts)}"
+                )
+
+            # 大小校验：按类型匹配上限
+            max_size = upload_config.get_max_size_for_ext(suffix)
             content = await file.read()
+            if len(content) > max_size:
+                raise ValueError(
+                    f"文件过大: {origin_name}（{len(content) // (1024 * 1024)}MB），"
+                    f"该类型上限 {max_size // (1024 * 1024)}MB"
+                )
+
             logger.info(
-                "收到用户上传文件 | original_filename=%s | size=%s",
+                "收到用户上传文件 | original_filename=%s | size=%s | type=%s",
                 origin_name,
                 len(content),
+                suffix,
             )
             prepared_files.append((file, origin_name, content))
 

@@ -142,6 +142,7 @@ class _Upload:
 
     UPLOAD_FAILED = _build(detail=1, business=Business.UPLOAD)  # 200006001
     IN_PROGRESS = _build(detail=2, business=Business.UPLOAD)  # 200006002
+    OUT_OF_WINDOW = _build(detail=3, business=Business.UPLOAD)  # 200006003
 
 
 class _History:

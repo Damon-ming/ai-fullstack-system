@@ -13,6 +13,7 @@ Qwen 护栏引擎 —— 利用小模型对用户输入进行安全分类。
 """
 
 import asyncio
+import threading
 
 from pydantic import BaseModel, ValidationError
 from src.com.damon.ming.ai.guardrail import register_engine
@@ -25,6 +26,34 @@ from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
 from src.com.damon.ming.log import pin
 
 logger = pin("QwenGuardrail")
+
+# ── 护栏健康监控 ─────────────────────────────────────────────────
+# fail-open 连续次数阈值，达到后输出告警日志（便于运维感知护栏异常）
+_FAIL_OPEN_ALERT_THRESHOLD = 5
+_fail_open_count = 0
+_fail_open_lock = threading.Lock()
+
+
+def _record_fail_open(reason: str) -> None:
+    """记录一次 fail-open 事件，连续超阈值时输出告警。"""
+    global _fail_open_count
+    with _fail_open_lock:
+        _fail_open_count += 1
+        count = _fail_open_count
+    if count >= _FAIL_OPEN_ALERT_THRESHOLD:
+        logger.warning(
+            "护栏连续 fail-open 告警 | 连续次数=%d | 最近原因=%s | 请检查护栏模型是否正常",
+            count,
+            reason,
+        )
+
+
+def _record_guardrail_success() -> None:
+    """护栏正常工作时重置计数器（检测完成且未触发 fail-open）。"""
+    global _fail_open_count
+    with _fail_open_lock:
+        _fail_open_count = 0
+
 
 # ── 结构化输出模型 ────────────────────────────────────────────────
 
@@ -74,14 +103,19 @@ class QwenGuardrail(BaseGuardrail):
             )
         except asyncio.CancelledError:
             logger.warning("护栏检测被取消，fail-open 放行")
+            _record_fail_open("cancelled")
             return GuardrailResult(passed=True)
         except TimeoutError:
             logger.warning("护栏检测超时，fail-open 放行")
+            _record_fail_open("timeout")
             return GuardrailResult(passed=True)
         except Exception as e:
             logger.warning("护栏检测异常，fail-open 放行 | error=%s", e)
+            _record_fail_open(str(e))
             return GuardrailResult(passed=True)
 
+        # 推理成功：重置连续 fail-open 计数器
+        _record_guardrail_success()
         return self._parse_response(raw)
 
     # ── 私有 ────────────────────────────────────────────────────────
@@ -92,6 +126,7 @@ class QwenGuardrail(BaseGuardrail):
             data = _GuardrailResponse.model_validate_json(raw)
         except ValidationError as e:
             logger.warning("护栏响应解析失败，fail-open 放行 | error=%s", e)
+            _record_fail_open(f"parse_error: {e}")
             return GuardrailResult(passed=True)
 
         if data.safe:

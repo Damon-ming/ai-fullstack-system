@@ -27,6 +27,7 @@ class OllamaEmbedding(BaseEmbeddingService):
         失败立即抛 RuntimeError，由上层调用方（DenseRetriever）做短退避重试。
       - 缓存使用 OrderedDict 实现 LRU 淘汰（上限通过 YAML cache_max 配置，默认 2000 条），
         防止长期运行后内存无界增长。
+      - 缓存 key 使用 SHA-256（hexdigest 前 32 字符），避免 MD5 潜在碰撞风险。
     """
 
     def __init__(self, params: EmbeddingParams):
@@ -94,7 +95,7 @@ class OllamaEmbedding(BaseEmbeddingService):
     def _embed_with_prefix(self, text: str, prefix: str) -> list[float]:
         """带前缀的编码（缓存 key 使用加前缀后的文本）。"""
         prefixed = prefix + text
-        cache_key = hashlib.md5(prefixed.encode("utf-8")).hexdigest()
+        cache_key = hashlib.sha256(prefixed.encode("utf-8")).hexdigest()[:32]
 
         with self._cache_lock:
             if cache_key in self._cache:

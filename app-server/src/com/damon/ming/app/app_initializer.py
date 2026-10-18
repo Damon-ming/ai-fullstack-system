@@ -56,6 +56,7 @@ class AppInitializer:
 
         self._register_exception_types()
         self._init_thread_pool()
+        self._init_upload_config()
         self._init_upload_service()
         self._init_database()
         self._init_encryption()
@@ -86,6 +87,9 @@ class AppInitializer:
         app.state.guardrail_timeout = self.guardrail_timeout
         app.state.retry_ms = self.chat_retry_ms
         app.state.system_prompt_tpl = self.chat_system_prompt_tpl
+
+        # 上传配置（文件类型白名单 + 大小上限 + 时间窗口）
+        app.state.upload_config = self.upload_config
 
         logger.info("子系统已挂载到 app.state")
 
@@ -118,6 +122,23 @@ class AppInitializer:
         self.pool_mgr = ThreadPoolManager()
         self.pool_mgr.startup(pool_configs=pool_configs)
         logger.info("线程池管理器初始化完成")
+
+    def _init_upload_config(self) -> None:
+        """上传配置：从 YAML 加载文件类型白名单 + 各自大小上限。
+
+        上传配置是安全策略的一部分，加载失败直接抛出异常（不做静默降级）。
+        """
+        from src.com.damon.ming.app.config.upload import UploadConfigLoader
+
+        loader = UploadConfigLoader()
+        self.upload_config = loader.load()
+        logger.info(
+            "上传配置已加载 | allowed_types=%s",
+            {
+                k: f"{v['max_size_bytes'] // (1024 * 1024)}MB"
+                for k, v in self.upload_config.allowed_types.items()
+            },
+        )
 
     def _register_exception_types(self) -> None:
         """注册子系统异常类型到全局异常分类器。"""

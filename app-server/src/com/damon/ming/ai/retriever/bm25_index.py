@@ -29,10 +29,12 @@ class BM25Index:
         return text.lower().split()
 
     def build(self, nodes: list[TextNode]):
-        """构建 BM25 内存索引（双 buffer 原子替换，不阻塞并发查询）。
+        """构建 BM25 内存索引（锁内顺序赋值 + 版本校验，不阻塞并发查询）。
 
-        构建过程在锁外完成，仅在最终替换指针时持锁（微秒级），
-        避免 upload 重建 BM25 期间阻塞所有 chat 请求的稀疏检索。
+        构建过程在锁外完成（耗时操作不阻塞读），
+        仅在最终替换指针时持锁（微秒级顺序赋值 corpus → index → version），
+        CPython 引用赋值天然原子，读端通过 version + scores 长度校验检测不一致，
+        避免 upload 重建 BM25 期间 chat 读到损坏状态。
         """
         from rank_bm25 import BM25Okapi
 

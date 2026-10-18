@@ -32,6 +32,7 @@ async def save_files(
         len(files),
         [file.filename for file in files],
     )
+
     # 创建请求级上下文，绑定 CancellationToken
     ctx = request.state.pool_mgr.create_request_context()
 
@@ -45,7 +46,10 @@ async def save_files(
         req_data = FileUploadRequest(**meta) if meta else FileUploadRequest()
 
         saved_files = await UploadService.batch_save_files(
-            files, req_data, cancellation_token=ctx.cancellation_token
+            files,
+            req_data,
+            upload_config=request.app.state.upload_config,
+            cancellation_token=ctx.cancellation_token,
         )
         logger.info("文件上传请求完成 | saved_count=%s", len(saved_files))
 
