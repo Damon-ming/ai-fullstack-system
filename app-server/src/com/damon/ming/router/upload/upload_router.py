@@ -45,11 +45,14 @@ async def save_files(
 
         req_data = FileUploadRequest(**meta) if meta else FileUploadRequest()
 
+        # 复用 document 命名池写盘，统一线程资源管理
+        document_pool = request.state.pool_mgr.get_pool("document")
         saved_files = await UploadService.batch_save_files(
             files,
             req_data,
             upload_config=request.app.state.upload_config,
             cancellation_token=ctx.cancellation_token,
+            executor=document_pool,
         )
         logger.info("文件上传请求完成 | saved_count=%s", len(saved_files))
 

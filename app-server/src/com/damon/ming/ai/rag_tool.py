@@ -423,9 +423,6 @@ class RAGContainer:
                 logger.info("RAG 检索无结果")
                 return ""
 
-            # 阶段间 yield：让出控制权，允许 CancelledError 在阶段间隙传播
-            await asyncio.sleep(0)
-
             # ── 阶段 2: 章节重构 ──
             reconstructed_nodes = (
                 await self.section_recon.reconstruct_sections_to_nodes(
@@ -434,9 +431,6 @@ class RAGContainer:
                     executor=retrieval_pool,
                 )
             )
-
-            # 阶段间 yield
-            await asyncio.sleep(0)
 
             # ── 阶段 3: 超长章节压缩（仅处理超 max_seq_len 的节点） ──
             # 压缩前保存原文到 metadata（deepcopy 后仍保留），再替换节点。
@@ -459,9 +453,6 @@ class RAGContainer:
                 reconstructed_nodes = [
                     compress_map.get(id(n), n) for n in reconstructed_nodes
                 ]
-
-            # 阶段间 yield
-            await asyncio.sleep(0)
 
             # ── 阶段 4: rerank 重排（CPU/GPU 密集，提交到独立 rerank 池） ──
             # 使用独立池避免 rerank 长耗时占用 retrieval 线程（与 Stage 1/2 隔离）

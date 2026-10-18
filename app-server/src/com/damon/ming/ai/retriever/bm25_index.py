@@ -22,7 +22,6 @@ class BM25Index:
         self.corpus: list[TextNode] = []
         self.logger = pin("BM25Index")
         self._rw_lock = threading.RLock()
-        self._version = 0  # 索引版本号，build 时递增，查询时校验一致性
 
     def _default_tokenizer(self, text: str) -> list[str]:
         """默认简单空格分词，中文场景建议外部传入jieba等分词器"""
@@ -42,7 +41,6 @@ class BM25Index:
             with self._rw_lock:
                 self.corpus = nodes
                 self.index = None
-                self._version += 1
                 self.logger.warning("[BM25Index] 没有可建立索引的文档")
                 return
 
@@ -50,11 +48,11 @@ class BM25Index:
         tokenized_corpus = [self.tokenizer(node.text) for node in nodes]
         new_index = BM25Okapi(tokenized_corpus)
 
-        # 锁内原子替换（微秒级引用赋值），版本号递增保证查询端可检测一致性
+        # 锁内原子替换（微秒级引用赋值），CPython 引用赋值天然原子，
+        # 读端通过 scores 长度与 corpus 长度校验检测不一致
         with self._rw_lock:
             self.corpus = nodes
             self.index = new_index
-            self._version += 1
 
         self.logger.info(f"[BM25Index] 索引构建完成 | 文档数: {len(nodes)}")
 

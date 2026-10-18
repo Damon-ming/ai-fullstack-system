@@ -54,6 +54,7 @@ class UploadService:
         req: FileUploadRequest,
         upload_config,
         cancellation_token: CancellationToken | None = None,
+        executor=None,
     ) -> list[dict]:
         # 移除全局 _processing_lock：各层已有细粒度锁保护
         #   - sha_cache 读写 → _sha_cache_lock
@@ -61,7 +62,7 @@ class UploadService:
         #   - BM25 索引重建 → BM25Index._rw_lock (RLock)
         # 并发上传同一文件的边界：各自写 UUID 副本 → ingest_files 向量库去重只索引一份
         return await UploadService._batch_save_files_locked(
-            file_list, upload_config, cancellation_token
+            file_list, upload_config, cancellation_token, executor
         )
 
     @staticmethod
@@ -69,6 +70,7 @@ class UploadService:
         file_list: list[UploadFile],
         upload_config,
         cancellation_token: CancellationToken | None = None,
+        executor=None,
     ) -> list[dict]:
         """
         批量保存文件
@@ -169,8 +171,8 @@ class UploadService:
                 files_to_index.append(str(existing.resolve()))
                 continue
 
-            # M2: 同步写盘提交到线程池，不阻塞事件循环
-            await loop.run_in_executor(None, _write_file_sync, file_path, content)
+            # M2: 同步写盘提交到线程池（优先使用注入的命名池，否则用 asyncio 默认池）
+            await loop.run_in_executor(executor, _write_file_sync, file_path, content)
 
             # M3 + M5: 锁仅覆盖 cache 更新，含 LRU 淘汰
             with UploadService._sha_cache_lock:
