@@ -16,6 +16,11 @@ embedding_engines:
       base_url: http://ollama-server:11434
       timeout: 60
       max_retries: 3
+      # Ollama 为远程服务，无本地推理并发问题；concurrency 仅作占位必填
+      concurrency: 4
+      device: ""
+      normalize_embeddings: true
+      cache_folder: ""
       cache_max: 2000  # 查询缓存 LRU 上限（约 16MB）
       query_prefix: "query: "      # BGE-M3 等模型要求 query 编码加前缀（分布对齐）
       passage_prefix: "passage: "  # 文档编码前缀（与训练时一致）
@@ -27,6 +32,7 @@ embedding_engines:
   #     base_url: ""
   #     timeout: 0
   #     max_retries: 0
-  #     device: cpu
-  #     normalize_embeddings: true
-  #     cache_folder: ""
+#     concurrency: 2              # 本地 GPU 推理并发上限（与 inference 池一致）
+#     device: cpu
+#     normalize_embeddings: true
+#     cache_folder: ""

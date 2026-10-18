@@ -14,7 +14,14 @@ logger = pin("HuggingFaceEmbedding")
 
 @register_engine("huggingface")
 class HuggingFaceEmbedding(BaseEmbeddingService):
-    """HuggingFace embedding — 适用于本地 GPU/CPU 推理的 SentenceTransformer 模型"""
+    """HuggingFace embedding — 适用于本地 GPU/CPU 推理的 SentenceTransformer 模型。
+
+    并发控制：
+      - embed_query（单条）无锁：PyTorch no_grad 推理在单条场景下线程安全，
+        锁会串行化 retrieval 池的全部并发能力。
+      - embed_documents（批量）用 threading.Semaphore(params.concurrency) 限流：
+        多个 batch 同时 GPU 推理会争抢 CUDA context，并发上限由 YAML 配置透传。
+    """
 
     def __init__(self, params: EmbeddingParams):
         super().__init__(params)
@@ -30,25 +37,27 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
             device=params.device,
             cache_folder=params.cache_folder or None,
         )
-        # SentenceTransformer.encode 底层为 PyTorch forward，非线程安全
-        self._infer_lock = threading.Lock()
+        # 批量推理并发控制（仅 batch 模式使用，单条 embed_query 无锁）
+        self._batch_sem = threading.Semaphore(params.concurrency)
         logger.info(
-            f"[HuggingFaceEmbedding] 初始化成功 | model={params.model_name} | device={params.device}"
+            f"[HuggingFaceEmbedding] 初始化成功 | model={params.model_name} | "
+            f"device={params.device} | concurrency={params.concurrency}"
         )
 
     def embed_query(self, text: str) -> list[float]:
+        """单条推理无锁，依赖 PyTorch 内部线程安全。"""
         try:
-            with self._infer_lock:
-                embedding = self.model.encode(
-                    text, normalize_embeddings=self.params.normalize_embeddings
-                )
+            embedding = self.model.encode(
+                text, normalize_embeddings=self.params.normalize_embeddings
+            )
             return embedding.tolist()
         except Exception as e:
             raise RuntimeError(f"HuggingFace embedding failed: {e}")
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """批量推理受 concurrency 信号量限流，防止多 batch 争抢 GPU。"""
         try:
-            with self._infer_lock:
+            with self._batch_sem:
                 embeddings = self.model.encode(
                     texts,
                     normalize_embeddings=self.params.normalize_embeddings,

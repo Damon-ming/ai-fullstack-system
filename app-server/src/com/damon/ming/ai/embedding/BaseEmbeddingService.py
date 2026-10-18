@@ -32,6 +32,9 @@ class EmbeddingParams:
     device: str
     normalize_embeddings: bool
     cache_folder: str
+    concurrency: int
+    """本地推理并发上限（HuggingFace 等线程不安全模型的 batch 并发控制）。
+       远程服务（如 Ollama）忽略此值，仅用于线程锁粒度控制。"""
     extra: dict[str, Any] = field(default_factory=dict)
 
 
