@@ -234,10 +234,6 @@ class RAGContainer:
         document_pool = pool_mgr.get_pool("document")
         source_root = LocalPDFDataSource(KNOWLEDGES_DIR)
 
-        if cancellation_token is not None and cancellation_token.is_cancelled():
-            logger.warning("ingest_files | 启动前检测到取消信号")
-            return {"indexed": [], "skipped": []}
-
         try:
             upload_docs = await loop.run_in_executor(
                 document_pool,
@@ -260,12 +256,6 @@ class RAGContainer:
         skipped: list[dict] = []
 
         for file_path in file_paths:
-            if cancellation_token is not None and cancellation_token.is_cancelled():
-                logger.warning(
-                    f"ingest_files | 检测到取消信号，停止处理 | 已解析={len(parsed)}"
-                )
-                break
-
             p = Path(file_path).resolve()
             key = str(p)
             docs = path_to_docs.get(key, [])

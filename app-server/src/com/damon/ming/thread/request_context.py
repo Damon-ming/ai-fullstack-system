@@ -41,8 +41,7 @@ class RequestContext:
         幂等——多次调用无副作用（dispose 会从注册表移除，
         cancel 在已取消状态下是空操作）。
         """
-        if not self.cancellation_token.is_cancelled():
-            self.cancellation_token.cancel()
+        self.cancellation_token.cancel()
         self.cancellation_token.dispose()
         age = time.monotonic() - self.created_at
         logger.debug(

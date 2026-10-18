@@ -37,12 +37,11 @@
   pool_mgr.shutdown()
 """
 
-from src.com.damon.ming.thread.cancellation import CancelResult, CancellationToken
+from src.com.damon.ming.thread.cancellation import CancellationToken
 from src.com.damon.ming.thread.pool_manager import ThreadPoolManager
 from src.com.damon.ming.thread.request_context import RequestContext
 
 __all__ = [
-    "CancelResult",
     "CancellationToken",
     "RequestContext",
     "ThreadPoolManager",
