@@ -59,9 +59,16 @@ def _record_fail_open(reason: str) -> None:
 
 
 def _record_guardrail_success() -> None:
-    """护栏正常工作时清空窗口内的 fail-open 记录。"""
+    """护栏正常工作时清理窗口外的旧 fail-open 记录。
+
+    仅淘汰超龄记录，不清空窗口内记录。避免间歇性故障（偶发超时+偶尔成功）
+    导致计数器永远达不到告警阈值。窗口内的真实故障密度得以保留。
+    """
+    now = time.monotonic()
     with _fail_open_lock:
-        _fail_open_timestamps.clear()
+        cutoff = now - _FAIL_OPEN_WINDOW_SECONDS
+        while _fail_open_timestamps and _fail_open_timestamps[0] < cutoff:
+            _fail_open_timestamps.popleft()
 
 
 # ── 结构化输出模型 ────────────────────────────────────────────────
