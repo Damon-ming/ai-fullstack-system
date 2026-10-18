@@ -259,6 +259,9 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             ]
             logger.debug("prompt_messages:\n%s", prompt_messages)
 
+            # 复用同步接口的 schema 构造，约束 LLM 流式输出为结构化 JSON
+            schema = get_chat_schema(body.reason)
+
             # 仅推理段进入信号量，释放 RAG 等待期间的并发槽
             async with infer_sem:
                 try:
@@ -266,6 +269,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                         model_name=req.app.state.llm_model_name,
                         messages=prompt_messages,
                         reason=body.reason,
+                        response_schema=schema,
                         options=dict(req.app.state.llm_options),
                     ):
                         # 根据 token 类型发射不同事件：

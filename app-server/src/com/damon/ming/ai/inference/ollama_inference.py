@@ -83,6 +83,7 @@ class OllamaInference(BaseInferenceService):
         model_name: str,
         messages: list[dict[str, str]],
         reason: bool = False,
+        response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamToken, None]:
         run_opts = dict(options) if options else {}
@@ -94,6 +95,7 @@ class OllamaInference(BaseInferenceService):
             options=run_opts,
             stream=True,
             keep_alive="30m",
+            format=response_schema,  # Ollama: format 字段传 None 等价于不约束
         )
         try:
             async for chunk in stream:

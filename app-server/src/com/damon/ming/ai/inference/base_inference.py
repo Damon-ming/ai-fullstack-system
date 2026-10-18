@@ -77,9 +77,13 @@ class BaseInferenceService(ABC):
         model_name: str,
         messages: list[dict[str, str]],
         reason: bool = False,
+        response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamToken, None]:
-        """流式SSE输出 —— 产出 StreamToken 区分 reasoning / content。"""
+        """流式SSE输出 —— 产出 StreamToken 区分 reasoning / content。
+
+        response_schema 不为 None 时，LLM 输出结构化 JSON（前端在 done 事件后解析）。
+        """
 
     @abstractmethod
     async def check_model_ready(self, model_name: str) -> bool:

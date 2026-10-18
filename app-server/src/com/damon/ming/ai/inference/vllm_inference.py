@@ -66,12 +66,22 @@ class VLLMInference(BaseInferenceService):
         model_name: str,
         messages: list[dict[str, str]],
         reason: bool = False,
+        response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamToken, None]:
         run_opts = _map_options(options)
-        stream = await self.client.chat.completions.create(
-            model=model_name, messages=messages, stream=True, **run_opts
-        )
+        create_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": messages,
+            "stream": True,
+            **run_opts,
+        }
+        if response_schema:
+            create_kwargs["response_format"] = {
+                "type": "json_object",
+                "schema": response_schema,
+            }
+        stream = await self.client.chat.completions.create(**create_kwargs)
         try:
             async for chunk in stream:
                 delta = chunk.choices[0].delta
