@@ -57,6 +57,7 @@ def list_engines() -> list[str]:
 # ── 触发注册（必须放在注册器定义之后）──────────────────────────────
 from src.com.damon.ming.ai.source.csv_data_source import LocalCsvDataSource
 from src.com.damon.ming.ai.source.doc_data_source import LocalDocDataSource
+from src.com.damon.ming.ai.source.html_data_source import LocalHtmlDataSource
 from src.com.damon.ming.ai.source.markdown_data_source import LocalMarkdownDataSource
 from src.com.damon.ming.ai.source.pdf_data_source import LocalPDFDataSource
 from src.com.damon.ming.ai.source.pptx_data_source import LocalPptxDataSource
@@ -67,6 +68,7 @@ __all__ = [
     "BaseDataSource",
     "LocalCsvDataSource",
     "LocalDocDataSource",
+    "LocalHtmlDataSource",
     "LocalMarkdownDataSource",
     "LocalPDFDataSource",
     "LocalPptxDataSource",

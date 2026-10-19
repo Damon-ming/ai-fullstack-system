@@ -92,3 +92,24 @@ source:
         - "\\n\\n"
         - "\\n"
         - ""
+
+  html_source:
+    # 编码尝试顺序（网页常用 utf-8，部分中文站点用 gbk）
+    encoding_fallbacks:
+      - "utf-8"
+      - "gbk"
+
+    # 是否保留超链接 URL（true 时链接转为 "文本 (URL)" 格式）
+    include_links: true
+
+    # 是否提取 HTML 表格为 Markdown 表格
+    include_tables: true
+
+    # 超大正文的预分块配置
+    pre_chunk:
+      enabled: true
+      chunk_chars: 800
+      boundaries:
+        - "\\n\\n"
+        - "\\n"
+        - ""

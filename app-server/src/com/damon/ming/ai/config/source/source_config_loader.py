@@ -132,6 +132,23 @@ class PptxSourceConfig:
 
 
 @dataclass(frozen=True)
+class HtmlSourceConfig:
+    """HTML 数据源配置（纯数据类）。"""
+
+    # 编码尝试顺序
+    encoding_fallbacks: tuple[str, ...]
+
+    # 预分块配置（超大正文按自然边界切分）
+    pre_chunk: PreChunkConfig
+
+    # 是否保留超链接 URL
+    include_links: bool
+
+    # 是否提取 HTML 表格
+    include_tables: bool
+
+
+@dataclass(frozen=True)
 class SourceConfig:
     """数据源总配置（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
@@ -152,6 +169,9 @@ class SourceConfig:
 
     # PPTX 数据源配置
     pptx_source: PptxSourceConfig
+
+    # HTML 数据源配置
+    html_source: HtmlSourceConfig
 
 
 class SourceConfigLoader:
@@ -270,6 +290,31 @@ class SourceConfigLoader:
         if pptx_extract_images is None:
             raise ValueError("缺少 source.pptx_source.extract_images 配置项")
 
+        # 解析 html_source
+        html_section = source_section.get("html_source", {})
+        if not html_section:
+            raise ValueError("缺少 source.html_source 配置项")
+        html_enc_list = html_section.get("encoding_fallbacks")
+        if html_enc_list is None:
+            raise ValueError("缺少 source.html_source.encoding_fallbacks 配置项")
+        html_encoding_fallbacks = tuple(html_enc_list)
+        html_pre_chunk_section = html_section.get("pre_chunk", {})
+        if not html_pre_chunk_section:
+            raise ValueError("缺少 source.html_source.pre_chunk 配置项")
+        html_boundaries_raw = html_pre_chunk_section.get("boundaries", [])
+        html_boundaries = tuple(html_boundaries_raw) if html_boundaries_raw else tuple()
+        html_pre_chunk = PreChunkConfig(
+            enabled=html_pre_chunk_section.get("enabled", True),
+            chunk_chars=html_pre_chunk_section.get("chunk_chars", 800),
+            boundaries=html_boundaries,
+        )
+        html_include_links = html_section.get("include_links")
+        if html_include_links is None:
+            raise ValueError("缺少 source.html_source.include_links 配置项")
+        html_include_tables = html_section.get("include_tables")
+        if html_include_tables is None:
+            raise ValueError("缺少 source.html_source.include_tables 配置项")
+
         self._cache = SourceConfig(
             csv_source=CsvSourceConfig(
                 encoding_fallbacks=csv_encoding_fallbacks,
@@ -296,6 +341,12 @@ class SourceConfigLoader:
                 include_tables=pptx_include_tables,
                 include_notes=pptx_include_notes,
                 extract_images=pptx_extract_images,
+            ),
+            html_source=HtmlSourceConfig(
+                encoding_fallbacks=html_encoding_fallbacks,
+                pre_chunk=html_pre_chunk,
+                include_links=html_include_links,
+                include_tables=html_include_tables,
             ),
         )
         return self._cache
