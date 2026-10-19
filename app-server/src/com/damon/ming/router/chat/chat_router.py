@@ -109,6 +109,8 @@ async def chat(req: Request, body: ChatRequest):
         rag_sem = req.app.state.rag_sem
         infer_timeout = req.app.state.infer_timeout
         system_prompt_tpl = req.app.state.system_prompt_tpl
+        ref_label = req.app.state.ref_label
+        query_label = req.app.state.query_label
 
         # ── Phase 2: RAG + 推理（共享完整超时预算） ──
         async with asyncio.timeout(infer_timeout):
@@ -123,11 +125,16 @@ async def chat(req: Request, body: ChatRequest):
 
             schema = get_chat_schema(body.reason)
 
-            # 2. 填充固定Prompt，构造标准messages数组
-            system_prompt = system_prompt_tpl.replace("{ref_content}", ref_content, 1)
+            # 2. 构造标准messages数组：system prompt 保持纯净（只含指令），
+            #    用户数据（参考资料 + 问题）全部放在 user message 中，
+            #    避免 ref_content 中的模板占位符或恶意内容污染 system prompt。
+            #    消息标签从 YAML 配置读取，与 system prompt 同文件管理。
             prompt_messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": body.query},
+                {"role": "system", "content": system_prompt_tpl},
+                {
+                    "role": "user",
+                    "content": f"{ref_label}\n{ref_content}\n\n{query_label}{body.query}",
+                },
             ]
 
             # 3. 仅推理段进入信号量，释放 RAG 等待期间的并发槽
@@ -249,6 +256,8 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
         rag_sem = req.app.state.rag_sem
         infer_timeout = req.app.state.infer_timeout
         system_prompt_tpl = req.app.state.system_prompt_tpl
+        ref_label = req.app.state.ref_label
+        query_label = req.app.state.query_label
 
         # ── Phase 2: RAG + 推理（共享完整超时预算） ──
         async with asyncio.timeout(infer_timeout):
@@ -260,10 +269,15 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                     cancellation_token=ctx.cancellation_token,
                 )
 
-            system_prompt = system_prompt_tpl.replace("{ref_content}", ref_content, 1)
+            # system prompt 保持纯净（只含指令），用户数据放在 user message 中，
+            # 避免 ref_content 中的内容污染 system prompt（防模板注入）。
+            # 消息标签从 YAML 配置读取，与 system prompt 同文件管理。
             prompt_messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": body.query},
+                {"role": "system", "content": system_prompt_tpl},
+                {
+                    "role": "user",
+                    "content": f"{ref_label}\n{ref_content}\n\n{query_label}{body.query}",
+                },
             ]
             logger.debug("prompt_messages:\n%s", prompt_messages)
 
@@ -304,8 +318,10 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             ),
         )
     except asyncio.CancelledError:
+        # 客户端已断开，无需 re-raise（避免 ASGI 层记录 500），
+        # 让 generator 自然结束；ctx.cleanup() 在 finally 中保证执行。
         logger.warning("【统计】流式SSE请求被客户端主动取消")
-        raise
+        return
     except Exception as e:
         logger.exception("流式聊天请求失败")
         yield emitter.emit(

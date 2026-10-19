@@ -22,7 +22,9 @@ class ChatConfig:
         "guardrail_timeout",
         "infer_sem",
         "name",
+        "query_label",
         "rag_sem",
+        "ref_label",
         "sse_retry_ms",
         "system_prompt",
         "total_timeout",
@@ -39,6 +41,8 @@ class ChatConfig:
         guardrail_timeout: int,
         sse_retry_ms: int,
         config_ttl_seconds: int,
+        ref_label: str,
+        query_label: str,
     ):
         self.name = name
         self.system_prompt = system_prompt
@@ -49,6 +53,8 @@ class ChatConfig:
         self.guardrail_timeout = guardrail_timeout
         self.sse_retry_ms = sse_retry_ms
         self.config_ttl_seconds = config_ttl_seconds
+        self.ref_label = ref_label
+        self.query_label = query_label
 
 
 class ChatConfigLoader:
@@ -119,6 +125,8 @@ class ChatConfigLoader:
                 guardrail_timeout=int(section["guardrail"]["timeout"]),
                 sse_retry_ms=int(section["sse_retry_ms"]),
                 config_ttl_seconds=int(section.get("config_ttl_seconds", 60)),
+                ref_label=str(section.get("ref_label", "参考资料：")),
+                query_label=str(section.get("query_label", "问题：")),
             )
         except KeyError as e:
             raise ValueError(f"配置 '{name}' 缺少必填字段: {e}") from e

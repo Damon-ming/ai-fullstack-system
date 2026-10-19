@@ -89,6 +89,8 @@ class AppInitializer:
         app.state.guardrail_timeout = self.guardrail_timeout
         app.state.retry_ms = self.chat_retry_ms
         app.state.system_prompt_tpl = self.chat_system_prompt_tpl
+        app.state.ref_label = self.ref_label
+        app.state.query_label = self.query_label
 
         # 上传配置（文件类型白名单 + 大小上限 + 时间窗口）
         app.state.upload_config = self.upload_config
@@ -336,6 +338,8 @@ class AppInitializer:
         self.guardrail_timeout = cfg.guardrail_timeout
         self.chat_retry_ms = cfg.sse_retry_ms
         self.chat_system_prompt_tpl = cfg.system_prompt
+        self.ref_label = cfg.ref_label
+        self.query_label = cfg.query_label
 
         logger.info(
             "聊天配置初始化完成 | infer_sem=%d | rag_sem=%d | guardrail_sem=%d | "
