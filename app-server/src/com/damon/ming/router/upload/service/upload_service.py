@@ -81,6 +81,16 @@ class UploadService:
         prepared_files: list[tuple[str, bytes]] = []
         allowed_exts = sorted(upload_config.allowed_types.keys())
 
+        # 文件数量校验
+        if len(file_list) > upload_config.max_files_per_request:
+            raise ValueError(
+                t(
+                    I18nKey.UPLOAD_TOO_MANY_FILES,
+                    max_files=str(upload_config.max_files_per_request),
+                    actual=str(len(file_list)),
+                )
+            )
+
         # 阶段0：完整读取并准备所有文件；任一文件读取失败仅跳过该文件，
         # 不会写入磁盘，避免产生半上传结果。
         for file in file_list:

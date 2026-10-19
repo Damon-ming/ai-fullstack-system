@@ -47,7 +47,7 @@ export const DrawerCollapsed: React.FC = () => {
           hidden
           multiple
           type="file"
-          accept=".pdf,.md,.txt"
+          accept=".pdf,.md,.txt,.csv,.xlsx,.docx,.doc,.pptx,.html,.htm"
           onChange={(event) => handleUpload(event.target.files)}
         />
       </label>

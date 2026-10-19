@@ -26,6 +26,9 @@ class UploadConfig:
     # sha256 内存缓存 LRU 上限（超出时淘汰最久未用条目）
     sha_cache_max: int
 
+    # 单次上传最大文件数
+    max_files_per_request: int
+
     # 文件类型配置：扩展名(小写, 无点号) → {max_size_bytes, description}
     allowed_types: dict[str, dict] = field(default_factory=dict)
 
@@ -93,13 +96,23 @@ class UploadConfigLoader:
                 f"上传配置中 sha_cache_max 必须为正整数 | path={self._config_path}"
             )
 
+        max_files = upload_section.get("max_files_per_request")
+        if not max_files or not isinstance(max_files, int) or max_files < 1:
+            raise ValueError(
+                f"上传配置中 max_files_per_request 必须为正整数 | path={self._config_path}"
+            )
+
         allowed_types = upload_section.get("allowed_types", {})
         if not allowed_types:
             raise ValueError(
                 f"上传配置中 allowed_types 不能为空 | path={self._config_path}"
             )
 
-        return UploadConfig(sha_cache_max=sha_cache_max, allowed_types=allowed_types)
+        return UploadConfig(
+            sha_cache_max=sha_cache_max,
+            max_files_per_request=max_files,
+            allowed_types=allowed_types,
+        )
 
     def _read_yaml(self) -> dict:
         if not os.path.exists(self._config_path):

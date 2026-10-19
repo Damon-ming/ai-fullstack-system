@@ -14,6 +14,7 @@
 
   "upload.no_extension": "无扩展名",
   "upload.type_rejected": "不支持的文件类型: {suffix}，仅允许: {allowed}",
+  "upload.too_many_files": "单次最多上传 {max_files} 个文件，当前 {actual} 个",
   "upload.size_exceeded": "文件过大（上限 {max_mb}MB）",
   "upload.parse_failed": "无法解析文件: {filename}",
   "upload.vector_db_error": "向量库入库结果异常，未找到该文件",

@@ -25,7 +25,7 @@ export const DrawerUpload: React.FC = () => {
         <input
           hidden
           multiple
-          accept=".pdf,.md,.txt"
+          accept=".pdf,.md,.txt,.csv,.xlsx,.docx,.doc,.pptx,.html,.htm"
           type="file"
           onChange={(event) => handleUpload(event.target.files)}
         />
