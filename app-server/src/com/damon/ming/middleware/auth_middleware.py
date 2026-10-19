@@ -14,6 +14,8 @@
 """
 
 from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.i18n import t
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.request_context import get_ua_profile
 from src.com.damon.ming.middleware.ua_fingerprint import has_ua_changed_significantly
@@ -57,7 +59,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
                 content={
                     "code": ErrorCode.AUTH.MISSING_TOKEN,
-                    "data": {"error_msg": "Missing authentication token"},
+                    "data": {"error_msg": t(I18nKey.AUTH_MISSING_TOKEN)},
                 },
             )
 
@@ -71,7 +73,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
                 content={
                     "code": ErrorCode.AUTH.INVALID_TOKEN,
-                    "data": {"error_msg": "Invalid or expired token"},
+                    "data": {"error_msg": t(I18nKey.AUTH_INVALID_TOKEN)},
                 },
             )
 
@@ -91,7 +93,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     status_code=401,
                     content={
                         "code": ErrorCode.AUTH.INVALID_SESSION,
-                        "data": {"error_msg": "Invalid or expired session"},
+                        "data": {"error_msg": t(I18nKey.AUTH_INVALID_SESSION)},
                     },
                 )
             if session.token != ctx.token:
@@ -107,7 +109,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     status_code=401,
                     content={
                         "code": ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
-                        "data": {"error_msg": "Session does not belong to this token"},
+                        "data": {"error_msg": t(I18nKey.AUTH_SESSION_MISMATCH)},
                     },
                 )
 

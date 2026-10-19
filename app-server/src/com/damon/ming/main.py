@@ -41,6 +41,7 @@ from src.com.damon.ming.exception import register_exception_handler
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware import AuthMiddleware, EncryptionMiddleware
 from src.com.damon.ming.middleware.context_middleware import ContextMiddleware
+from src.com.damon.ming.middleware.i18n_middleware import I18nMiddleware
 from src.com.damon.ming.middleware.rate_limiter import limiter, rate_limit_handler
 from src.com.damon.ming.precheck import run_precheck
 from src.com.damon.ming.router.account import account_router
@@ -118,6 +119,9 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 # ContextMiddleware 一次性解析所有头部 → request.state.ctx
 # 后续所有中间件和路由通过 ctx 读取，不再直接访问 request.headers
 app.add_middleware(ContextMiddleware)
+
+# ---- i18n 语言协商（必须在 auth / encryption 之前）--------------
+app.add_middleware(I18nMiddleware)
 
 # ---- 认证中间件 ---------------------------------------------------------
 if not IS_DEBUG:

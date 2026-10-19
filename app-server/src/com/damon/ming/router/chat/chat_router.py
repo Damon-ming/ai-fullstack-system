@@ -12,8 +12,14 @@ from src.com.damon.ming.ai.schemas.response import (
     ChatDeltaData,
 )
 from src.com.damon.ming.ai.security import InputValidator
+from src.com.damon.ming.app.config.ai.chat_config_loader import (
+    ChatConfigLoader,
+    ChatLocaleText,
+)
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
+from src.com.damon.ming.i18n import get_locale, t
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
@@ -28,6 +34,11 @@ router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
 _input_validator = InputValidator()
 
 
+def _get_chat_text_cfg(app_state) -> ChatLocaleText:
+    """获取当前请求 locale 对应的聊天文本配置。"""
+    return ChatConfigLoader.resolve_locale_text(app_state.chat_locales, get_locale())
+
+
 def _check_input(query: str) -> BaseLLMFailedResponse | None:
     """前置输入校验（纯本地规则，零 IO，微秒级）。
 
@@ -36,10 +47,14 @@ def _check_input(query: str) -> BaseLLMFailedResponse | None:
     """
     result = _input_validator.validate(query)
     if not result.passed:
-        logger.warning("输入校验拦截 | rule=%s | reason=%s", result.rule, result.reason)
+        logger.warning(
+            "输入校验拦截 | i18n_key=%s | reason=%s", result.i18n_key, result.reason
+        )
         return BaseLLMFailedResponse[BaseLLMFailedData](
             code=ErrorCode.CHAT.GUARDRAIL_BLOCKED,
-            data=BaseLLMFailedData(error_msg=result.reason),
+            data=BaseLLMFailedData(
+                error_msg=t(result.i18n_key, **result.i18n_params),
+            ),
         )
     return None
 
@@ -55,7 +70,9 @@ async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | Non
         logger.warning("护栏拦截用户输入 | reason=%s", result.reason)
         return BaseLLMFailedResponse[BaseLLMFailedData](
             code=ErrorCode.CHAT.GUARDRAIL_BLOCKED,
-            data=BaseLLMFailedData(error_msg=result.reason or "输入内容被安全策略拦截"),
+            data=BaseLLMFailedData(
+                error_msg=result.reason or t(I18nKey.GUARDRAIL_BLOCKED),
+            ),
         )
     return None
 
@@ -108,9 +125,10 @@ async def chat(req: Request, body: ChatRequest):
         infer_sem = req.app.state.infer_sem
         rag_sem = req.app.state.rag_sem
         infer_timeout = req.app.state.infer_timeout
-        system_prompt_tpl = req.app.state.system_prompt_tpl
-        ref_label = req.app.state.ref_label
-        query_label = req.app.state.query_label
+        _chat_cfg = _get_chat_text_cfg(req.app.state)
+        system_prompt_tpl = _chat_cfg.system_prompt
+        ref_label = _chat_cfg.ref_label
+        query_label = _chat_cfg.query_label
 
         # ── Phase 2: RAG + 推理（共享完整超时预算） ──
         async with asyncio.timeout(infer_timeout):
@@ -154,7 +172,7 @@ async def chat(req: Request, body: ChatRequest):
                 logger.exception("LLM 返回非法 JSON | raw=%.200s", llm_raw)
                 return BaseLLMFailedResponse[BaseLLMFailedData](
                     code=ErrorCode.CHAT.UNKNOWN,
-                    data=BaseLLMFailedData(error_msg="模型返回内容格式异常"),
+                    data=BaseLLMFailedData(error_msg=t(I18nKey.CHAT_MODEL_ERROR)),
                 )
             logger.info("同步聊天请求完成")
             # 外层统一返回
@@ -165,7 +183,7 @@ async def chat(req: Request, body: ChatRequest):
         logger.warning("同步聊天请求超时")
         return BaseLLMFailedResponse[BaseLLMFailedData](
             code=ErrorCode.CHAT.TIMEOUT,
-            data=BaseLLMFailedData(error_msg="请求超时，请稍后重试"),
+            data=BaseLLMFailedData(error_msg=t(I18nKey.CHAT_TIMEOUT)),
         )
     except asyncio.CancelledError:
         logger.warning("【统计】同步聊天请求被客户端主动取消")
@@ -230,7 +248,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                     BaseLLMFailedData(
                         error_msg=input_blocked.data.error_msg
                         if input_blocked.data
-                        else "输入校验未通过"
+                        else t(I18nKey.VALIDATOR_EMPTY_INPUT)
                     ),
                 ),
             )
@@ -246,7 +264,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                     BaseLLMFailedData(
                         error_msg=blocked_resp.data.error_msg
                         if blocked_resp.data
-                        else "输入内容被安全策略拦截"
+                        else t(I18nKey.GUARDRAIL_BLOCKED)
                     ),
                 ),
             )
@@ -255,9 +273,10 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
         infer_sem = req.app.state.infer_sem
         rag_sem = req.app.state.rag_sem
         infer_timeout = req.app.state.infer_timeout
-        system_prompt_tpl = req.app.state.system_prompt_tpl
-        ref_label = req.app.state.ref_label
-        query_label = req.app.state.query_label
+        _chat_cfg = _get_chat_text_cfg(req.app.state)
+        system_prompt_tpl = _chat_cfg.system_prompt
+        ref_label = _chat_cfg.ref_label
+        query_label = _chat_cfg.query_label
 
         # ── Phase 2: RAG + 推理（共享完整超时预算） ──
         async with asyncio.timeout(infer_timeout):
@@ -314,7 +333,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             "error",
             SseMessageFactory.error(
                 ErrorCode.CHAT.TIMEOUT,
-                BaseLLMFailedData(error_msg="请求超时，请稍后重试"),
+                BaseLLMFailedData(error_msg=t(I18nKey.CHAT_TIMEOUT)),
             ),
         )
     except asyncio.CancelledError:

@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/config/guardrail/guardrail-config.yaml
 # 护栏配置 —— 用户输入安全检测
 #
 # 护栏作为聊天流程的第一道关卡，在 RAG 检索和 LLM 推理之前执行。

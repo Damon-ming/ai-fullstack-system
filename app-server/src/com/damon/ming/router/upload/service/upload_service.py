@@ -9,6 +9,8 @@ from typing import ClassVar
 
 from fastapi import UploadFile
 from src.com.damon.ming.ai.rag_tool import RAGContainer
+from src.com.damon.ming.i18n import t
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadRequest,
@@ -92,7 +94,11 @@ class UploadService:
                         "filename": origin_name,
                         "file_size": 0,
                         "file_sha256": "",
-                        "error": f"不支持的文件类型: {suffix or '无扩展名'}，仅允许: {', '.join(allowed_exts)}",
+                        "error": t(
+                            I18nKey.UPLOAD_TYPE_REJECTED,
+                            suffix=suffix or t(I18nKey.UPLOAD_NO_EXTENSION),
+                            allowed=", ".join(allowed_exts),
+                        ),
                     }
                 )
                 continue
@@ -109,7 +115,10 @@ class UploadService:
                     total += len(chunk)
                     if total > max_size:
                         raise ValueError(
-                            f"文件过大（上限 {max_size // (1024 * 1024)}MB）"
+                            t(
+                                I18nKey.UPLOAD_SIZE_EXCEEDED,
+                                max_mb=str(max_size // (1024 * 1024)),
+                            )
                         )
                     chunks.append(chunk)
             except ValueError as e:
@@ -207,7 +216,7 @@ class UploadService:
                     )
                 else:
                     # 入库结果中没有这个文件 → 视为失败
-                    raise RuntimeError("向量库入库结果异常，未找到该文件")
+                    raise RuntimeError(t(I18nKey.UPLOAD_VECTOR_DB_ERROR))
 
             except asyncio.CancelledError:
                 # 客户端取消：回滚并继续

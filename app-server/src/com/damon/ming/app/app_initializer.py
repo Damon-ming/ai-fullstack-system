@@ -60,6 +60,7 @@ class AppInitializer:
         self._init_thread_pool()
         self._init_upload_config()
         self._init_upload_service()
+        self._init_i18n()
         self._init_database()
         self._init_encryption()
         self._init_sign_context()
@@ -88,9 +89,7 @@ class AppInitializer:
         app.state.infer_timeout = self.chat_timeout
         app.state.guardrail_timeout = self.guardrail_timeout
         app.state.retry_ms = self.chat_retry_ms
-        app.state.system_prompt_tpl = self.chat_system_prompt_tpl
-        app.state.ref_label = self.ref_label
-        app.state.query_label = self.query_label
+        app.state.chat_locales = self.chat_locales
 
         # 上传配置（文件类型白名单 + 大小上限 + 时间窗口）
         app.state.upload_config = self.upload_config
@@ -114,6 +113,49 @@ class AppInitializer:
     # -----------------------------------------------------------------------
     # 子系统初始化
     # -----------------------------------------------------------------------
+
+    def _init_i18n(self) -> None:
+        """i18n 模块初始化：加载配置 + 注入 LocalResolver。"""
+        import os
+
+        # 加载 YAML 配置
+        from src.com.damon.ming.app.config.i18n.i18n_config_loader import (
+            I18nConfigLoader,
+        )
+        from src.com.damon.ming.i18n import configure
+        from src.com.damon.ming.i18n.locale_negotiator import (
+            configure as configure_negotiator,
+        )
+        from src.com.damon.ming.i18n.resolver import LocalResolver
+
+        i18n_cfg = I18nConfigLoader().load()
+        configure_negotiator(
+            default_locale=i18n_cfg.default_locale,
+            supported_locales=i18n_cfg.supported_locales,
+        )
+
+        # 注入 resolver
+        locales_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "..",
+            "i18n",
+            "locales",
+        )
+        locales_dir = os.path.normpath(locales_dir)
+        configure(
+            LocalResolver(
+                locales_dir=locales_dir,
+                default_locale=i18n_cfg.default_locale,
+                supported_locales=set(i18n_cfg.supported_locales),
+            )
+        )
+        logger.info(
+            "i18n 模块初始化完成 | default=%s | supported=%s | locales_dir=%s",
+            i18n_cfg.default_locale,
+            i18n_cfg.supported_locales,
+            locales_dir,
+        )
 
     def _init_thread_pool(self) -> None:
         """线程池管理器：从 YAML 加载配置，初始化所有线程池。
@@ -322,13 +364,17 @@ class AppInitializer:
             logger.warning("sign_context 未配置，签名密钥派生将使用空 context")
 
     def _init_chat(self) -> None:
-        """聊天配置：加载 YAML 中的 Semaphore 参数、超时、系统 prompt。"""
+        """聊天配置：加载 YAML 中的 Semaphore 参数、超时、多 locale 系统 prompt。"""
         import asyncio
 
-        from src.com.damon.ming.app.config.ai.chat_config_loader import ChatConfigLoader
+        from src.com.damon.ming.app.config.ai.chat_config_loader import (
+    ChatConfigLoader,
+    ChatLocaleText,
+)
 
         configs = ChatConfigLoader().load_all()
-        cfg = configs.get("common") or configs[next(iter(configs.keys()))]
+        # 并发参数所有 locale 相同（来自 common），任选其一提取
+        cfg = configs["zh_CN"]
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
         self.chat_sem = asyncio.Semaphore(cfg.infer_sem)
@@ -337,13 +383,20 @@ class AppInitializer:
         self.chat_timeout = cfg.total_timeout
         self.guardrail_timeout = cfg.guardrail_timeout
         self.chat_retry_ms = cfg.sse_retry_ms
-        self.chat_system_prompt_tpl = cfg.system_prompt
-        self.ref_label = cfg.ref_label
-        self.query_label = cfg.query_label
+        # 多 locale 文本配置：locale → ChatLocaleText
+        self.chat_locales = {
+            locale: ChatLocaleText(
+                system_prompt=c.system_prompt,
+                ref_label=c.ref_label,
+                query_label=c.query_label,
+            )
+            for locale, c in configs.items()
+        }
 
         logger.info(
-            "聊天配置初始化完成 | infer_sem=%d | rag_sem=%d | guardrail_sem=%d | "
-            "guardrail_timeout=%ds | total_timeout=%ds",
+            "聊天配置初始化完成 | locales=%s | infer_sem=%d | rag_sem=%d | "
+            "guardrail_sem=%d | guardrail_timeout=%ds | total_timeout=%ds",
+            list(self.chat_locales.keys()),
             cfg.infer_sem,
             cfg.rag_sem,
             cfg.guardrail_sem,

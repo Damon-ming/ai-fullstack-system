@@ -1,0 +1,46 @@
+{
+  "validator.empty_input": "输入内容不能为空",
+  "validator.input_too_long": "输入内容过长，请精简后重试（上限 8000 字符）",
+  "validator.illegal_chars": "输入包含非法字符",
+  "validator.prompt_injection": "输入包含不允许的内容模式",
+  "validation.param_format": "请求参数格式错误",
+
+  "guardrail.blocked": "输入内容被安全策略拦截",
+
+  "rate_limited": "请求过于频繁，请稍后再试",
+
+  "chat.timeout": "请求超时，请稍后再试",
+  "chat.model_error": "模型返回内容格式异常",
+
+  "upload.no_extension": "无扩展名",
+  "upload.type_rejected": "不支持的文件类型: {suffix}，仅允许: {allowed}",
+  "upload.size_exceeded": "文件过大（上限 {max_mb}MB）",
+  "upload.parse_failed": "无法解析文件: {filename}",
+  "upload.vector_db_error": "向量库入库结果异常，未找到该文件",
+
+  "auth.missing_session": "缺少会话标识",
+  "auth.missing_token": "缺少认证令牌",
+  "auth.invalid_token": "令牌无效或已过期",
+  "auth.invalid_session": "会话无效或已过期",
+  "auth.session_mismatch": "会话不属于当前令牌",
+
+  "history.not_found": "历史记录不存在",
+  "history.no_permission": "历史记录不存在或无权限删除",
+
+  "encrypt.unsupported_version": "不支持的加密版本: {version}，支持: {supported}",
+  "encrypt.decryption_failed": "解密失败",
+  "encrypt.session_invalid": "会话无效或签名验证失败",
+  "encrypt.signature_failed": "签名验证失败",
+  "encrypt.unsupported_sig_version": "不支持的签名版本: {version}，支持: {supported}",
+  "encrypt.invalid_key_format": "无效的 AES 密钥格式",
+  "encrypt.session_reg_failed": "会话注册失败",
+
+  "sys.database_failure": "数据服务暂不可用，请稍后重试",
+  "sys.encryption_failure": "安全服务异常，请重新建立会话",
+  "sys.upload_failure": "文件处理失败，请重试",
+  "sys.ai_failure": "AI 服务暂不可用，请稍后重试",
+  "sys.auth_failure": "认证失败，请重新登录",
+  "sys.unknown_failure": "服务暂不可用，请稍后重试",
+
+  "unknown_error": "服务异常，请稍后重试"
+}

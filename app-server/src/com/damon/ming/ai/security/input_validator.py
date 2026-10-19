@@ -6,12 +6,16 @@
   - 所有规则无状态、可并发调用，无需加锁
   - 规则链顺序排列，命中即返回（短路求值），不做冗余检查
   - 不替代 LLM 护栏——仅过滤明显无效/攻击性输入，语义安全仍由护栏负责
-  - 参数硬编码（规则本身是安全策略，非业务配置，不应被外部调整）
+  - 校验结果携带 i18n_key + params，由调用方负责本地化
+
+变更：reason 字段保留（中文，供服务端日志），新增 i18n_key + params（供前端展示）。
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 
 logger = pin("security.validator")
@@ -28,10 +32,13 @@ class ValidationResult:
     """是否通过校验。True=放行，False=拦截。"""
 
     reason: str = ""
-    """拦截原因（仅 passed=False 时有意义）。"""
+    """拦截原因（中文，供服务端日志）。"""
 
-    rule: str = ""
-    """命中的规则名（便于日志追踪）。"""
+    i18n_key: str = ""
+    """前端词条 key（供前端展示）。"""
+
+    i18n_params: dict[str, Any] = field(default_factory=dict)
+    """前端词条动态参数。"""
 
 
 # ── 规则引擎 ──────────────────────────────────────────────────────────
@@ -60,13 +67,16 @@ def _check_length(query: str) -> ValidationResult:
     """长度校验：空输入拒绝，超长输入拒绝（资源保护）。"""
     if not query or len(query.strip()) == 0:
         return ValidationResult(
-            passed=False, reason="输入内容不能为空", rule="LengthRule"
+            passed=False,
+            reason="输入内容不能为空",
+            i18n_key=I18nKey.VALIDATOR_EMPTY_INPUT,
         )
     if len(query) > 8000:
         return ValidationResult(
             passed=False,
             reason="输入内容过长，请精简后重试（上限 8000 字符）",
-            rule="LengthRule",
+            i18n_key=I18nKey.VALIDATOR_INPUT_TOO_LONG,
+            i18n_params={"max_chars": "8000"},
         )
     return ValidationResult(passed=True)
 
@@ -79,13 +89,17 @@ def _check_charset(query: str) -> ValidationResult:
     # null byte 检测（文本协议中不应出现）
     if "\x00" in query:
         return ValidationResult(
-            passed=False, reason="输入包含非法字符", rule="CharsetRule"
+            passed=False,
+            reason="输入包含非法字符",
+            i18n_key=I18nKey.VALIDATOR_ILLEGAL_CHARS,
         )
     # 控制字符检测：任何非 \n\r\t 的控制字符都拒绝
     ctrl_count = sum(1 for ch in query if ord(ch) < 32 and ch not in "\n\r\t")
     if ctrl_count > 0:
         return ValidationResult(
-            passed=False, reason="输入包含异常字符", rule="CharsetRule"
+            passed=False,
+            reason="输入包含异常字符",
+            i18n_key=I18nKey.VALIDATOR_ILLEGAL_CHARS,
         )
     return ValidationResult(passed=True)
 
@@ -102,7 +116,7 @@ def _check_injection(query: str) -> ValidationResult:
             return ValidationResult(
                 passed=False,
                 reason="输入包含不允许的内容模式",
-                rule="InjectionRule",
+                i18n_key=I18nKey.VALIDATOR_PROMPT_INJECTION,
             )
     return ValidationResult(passed=True)
 
@@ -120,7 +134,9 @@ class InputValidator:
         validator = InputValidator()
         result = validator.validate(user_input)
         if not result.passed:
-            return reject(result.reason)
+            # 服务端日志用 result.reason（中文）
+            # 前端展示用 result.i18n_key + result.i18n_params
+            error_msg = t(result.i18n_key, **result.i18n_params)
     """
 
     # 规则链顺序：成本从低到高排列，命中即短路
@@ -139,8 +155,8 @@ class InputValidator:
             result = rule_fn(query)
             if not result.passed:
                 logger.warning(
-                    "输入校验拦截 | rule=%s | reason=%s | query_length=%d",
-                    result.rule,
+                    "输入校验拦截 | i18n_key=%s | reason=%s | query_length=%d",
+                    result.i18n_key,
                     result.reason,
                     len(query),
                 )

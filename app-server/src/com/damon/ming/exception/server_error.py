@@ -9,6 +9,8 @@
 """
 
 from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.i18n import t
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 
 logger = pin("app.error")
@@ -69,12 +71,12 @@ def classify_exception(exc: Exception) -> int:
 def get_safe_message(subsystem_code: int) -> str:
     """返回给客户端的安全错误描述（不含内部细节）。"""
     _MESSAGES = {
-        ServerSubSystem.DATABASE: "数据服务暂不可用，请稍后重试",
-        ServerSubSystem.ENCRYPTION: "安全服务异常，请重新建立会话",
-        ServerSubSystem.UPLOAD: "文件处理失败，请重试",
-        ServerSubSystem.AI: "AI 服务暂不可用，请稍后重试",
-        ServerSubSystem.AUTH: "认证失败，请重新登录",
-        ServerSubSystem.UNKNOWN: "服务暂不可用，请稍后重试",
+        ServerSubSystem.DATABASE: t(I18nKey.SYS_DATABASE_FAILURE),
+        ServerSubSystem.ENCRYPTION: t(I18nKey.SYS_ENCRYPTION_FAILURE),
+        ServerSubSystem.UPLOAD: t(I18nKey.SYS_UPLOAD_FAILURE),
+        ServerSubSystem.AI: t(I18nKey.SYS_AI_FAILURE),
+        ServerSubSystem.AUTH: t(I18nKey.SYS_AUTH_FAILURE),
+        ServerSubSystem.UNKNOWN: t(I18nKey.SYS_UNKNOWN_FAILURE),
     }
     return _MESSAGES.get(subsystem_code, _MESSAGES[ServerSubSystem.UNKNOWN])
 

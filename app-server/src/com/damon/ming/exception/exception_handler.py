@@ -21,6 +21,8 @@ from src.com.damon.ming.exception.server_error import (
     get_safe_error_message,
     get_safe_message,
 )
+from src.com.damon.ming.i18n import t
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.schemas.response import BaseFailedResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -108,6 +110,6 @@ def register_exception_handler(app: FastAPI) -> None:
             status_code=422,
             content=BaseFailedResponse(
                 code=ErrorCode.VALIDATION.PARAM_FORMAT,
-                data={"error_msg": "请求参数格式错误"},
+                data={"error_msg": t(I18nKey.VALIDATION_PARAM_FORMAT)},
             ).model_dump(),
         )

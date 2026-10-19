@@ -1,0 +1,46 @@
+{
+  "validator.empty_input": "Input cannot be empty",
+  "validator.input_too_long": "Input too long, please shorten and try again (max 8000 chars)",
+  "validator.illegal_chars": "Input contains illegal characters",
+  "validator.prompt_injection": "Input contains disallowed content patterns",
+  "validation.param_format": "Request parameter format error",
+
+  "guardrail.blocked": "Input blocked by safety policy",
+
+  "rate_limited": "Too many requests, please try again later",
+
+  "chat.timeout": "Request timed out, please try again later",
+  "chat.model_error": "Model returned malformed content",
+
+  "upload.no_extension": "No extension",
+  "upload.type_rejected": "Unsupported file type: {suffix}, allowed: {allowed}",
+  "upload.size_exceeded": "File too large (max {max_mb}MB)",
+  "upload.parse_failed": "Cannot parse file: {filename}",
+  "upload.vector_db_error": "Vector DB ingestion failed, file not found",
+
+  "auth.missing_session": "Missing session identifier",
+  "auth.missing_token": "Missing authentication token",
+  "auth.invalid_token": "Invalid or expired token",
+  "auth.invalid_session": "Invalid or expired session",
+  "auth.session_mismatch": "Session does not belong to this token",
+
+  "history.not_found": "History record not found",
+  "history.no_permission": "History record not found or no permission to delete",
+
+  "encrypt.unsupported_version": "Unsupported encryption version: {version}, supported: {supported}",
+  "encrypt.decryption_failed": "Decryption failed",
+  "encrypt.session_invalid": "Invalid session or bad signature",
+  "encrypt.signature_failed": "Signature verification failed",
+  "encrypt.unsupported_sig_version": "Unsupported signature version: {version}, supported: {supported}",
+  "encrypt.invalid_key_format": "Invalid AES key format",
+  "encrypt.session_reg_failed": "Session registration failed",
+
+  "sys.database_failure": "Database service unavailable, please try again later",
+  "sys.encryption_failure": "Security service error, please re-establish session",
+  "sys.upload_failure": "File processing failed, please try again",
+  "sys.ai_failure": "AI service unavailable, please try again later",
+  "sys.auth_failure": "Authentication failed, please login again",
+  "sys.unknown_failure": "Service unavailable, please try again later",
+
+  "unknown_error": "Service error, please try again later"
+}

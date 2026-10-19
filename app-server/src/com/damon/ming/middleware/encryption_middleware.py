@@ -56,6 +56,8 @@ from src.com.damon.ming.encryption.v1.signature import (
     verify_signature,
 )
 from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.i18n import t
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
@@ -69,36 +71,48 @@ logger = pin("middleware.encryption")
 # ---------------------------------------------------------------------------
 
 
-def _check_version_header(client_version: str) -> str | None:
+def _check_version_header(client_version: str) -> tuple[str, dict] | None:
     """
     检查加密版本是否受支持。
 
-    返回 None 表示通过，否则返回错误消息。
+    返回 None 表示通过，否则返回 (i18n_key, params)。
     缺失版本视为不合规，拒绝请求。
     """
     if not client_version:
-        return "Missing X-Encrypt-Version header"
+        return I18nKey.ENCRYPT_UNSUPPORTED_VERSION, {
+            "version": "",
+            "supported": str(sorted(SUPPORTED_ENCRYPTION_VERSIONS)),
+        }
     if client_version not in SUPPORTED_ENCRYPTION_VERSIONS:
         return (
-            f"Unsupported encryption version: {client_version}, "
-            f"supported: {sorted(SUPPORTED_ENCRYPTION_VERSIONS)}"
+            I18nKey.ENCRYPT_UNSUPPORTED_VERSION,
+            {
+                "version": client_version,
+                "supported": str(sorted(SUPPORTED_ENCRYPTION_VERSIONS)),
+            },
         )
     return None
 
 
-def _check_signature_version_header(client_version: str) -> str | None:
+def _check_signature_version_header(client_version: str) -> tuple[str, dict] | None:
     """
     检查签名版本是否受支持。
 
-    返回 None 表示通过，否则返回错误消息。
+    返回 None 表示通过，否则返回 (i18n_key, params)。
     缺失版本视为不合规，拒绝请求。
     """
     if not client_version:
-        return "Missing X-Signature-Version header"
+        return I18nKey.ENCRYPT_UNSUPPORTED_SIG_VERSION, {
+            "version": "",
+            "supported": str(sorted(SUPPORTED_SIGNATURE_VERSIONS)),
+        }
     if client_version not in SUPPORTED_SIGNATURE_VERSIONS:
         return (
-            f"Unsupported signature version: {client_version}, "
-            f"supported: {sorted(SUPPORTED_SIGNATURE_VERSIONS)}"
+            I18nKey.ENCRYPT_UNSUPPORTED_SIG_VERSION,
+            {
+                "version": client_version,
+                "supported": str(sorted(SUPPORTED_SIGNATURE_VERSIONS)),
+            },
         )
     return None
 
@@ -118,29 +132,29 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         # ---- 0. 版本校验（header 层级，不解密即可拒绝）-----------
         version_error = _check_version_header(ctx.encrypt_version)
         if version_error is not None:
-            logger.warning(
-                "加密版本校验失败: %s | path=%s", version_error, request.url.path
-            )
+            i18n_key, i18n_params = version_error
+            logger.warning("加密版本校验失败: %s | path=%s", i18n_key, request.url.path)
             return JSONResponse(
                 status_code=400,
                 content={
                     "code": ErrorCode.ENCRYPT.UNSUPPORTED_VERSION,
-                    "data": {"error_msg": version_error},
+                    "data": {"error_msg": t(i18n_key, **i18n_params)},
                 },
             )
 
         sig_version_error = _check_signature_version_header(ctx.signature_version)
         if sig_version_error is not None:
+            i18n_key, i18n_params = sig_version_error
             logger.warning(
                 "签名版本校验失败: %s | path=%s",
-                sig_version_error,
+                i18n_key,
                 request.url.path,
             )
             return JSONResponse(
                 status_code=400,
                 content={
                     "code": ErrorCode.ENCRYPT.UNSUPPORTED_SIGNATURE_VERSION,
-                    "data": {"error_msg": sig_version_error},
+                    "data": {"error_msg": t(i18n_key, **i18n_params)},
                 },
             )
 
@@ -160,7 +174,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                                 content={
                                     "code": ErrorCode.ENCRYPT.SESSION_INVALID,
                                     "data": {
-                                        "error_msg": "Invalid session or bad signature"
+                                        "error_msg": t(I18nKey.ENCRYPT_SESSION_INVALID),
                                     },
                                 },
                             )
@@ -171,7 +185,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                     status_code=400,
                     content={
                         "code": ErrorCode.ENCRYPT.DECRYPTION_FAILED,
-                        "data": {"error_msg": "Decryption failed"},
+                        "data": {"error_msg": t(I18nKey.ENCRYPT_DECRYPTION_FAILED)},
                     },
                 )
 
@@ -184,7 +198,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                         status_code=401,
                         content={
                             "code": ErrorCode.ENCRYPT.SESSION_INVALID,
-                            "data": {"error_msg": "Invalid session or bad signature"},
+                            "data": {"error_msg": t(I18nKey.ENCRYPT_SESSION_INVALID)},
                         },
                     )
                 encrypt_response = True
@@ -194,7 +208,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                     status_code=400,
                     content={
                         "code": ErrorCode.ENCRYPT.META_DECRYPT_FAILED,
-                        "data": {"error_msg": "Meta decryption failed"},
+                        "data": {"error_msg": t(I18nKey.ENCRYPT_DECRYPTION_FAILED)},
                     },
                 )
 

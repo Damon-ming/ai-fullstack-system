@@ -1,0 +1,13 @@
+# app-server/src/com/damon/ming/app/config/i18n/i18n-config.yaml
+# i18n 模块配置 —— 控制语言协商行为。
+#
+# 新增语言：
+#   1. 在 supported_locales 中添加 locale 标签（如 fr_FR）
+#   2. 在 i18n/locales/ 下添加对应的 JSON 文件
+#   无需修改代码。
+
+i18n:
+  default_locale: zh_CN          # 默认 / 回退 locale
+  supported_locales:             # 支持的 locale 列表
+    - zh_CN
+    - en_US

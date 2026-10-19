@@ -20,6 +20,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
+from src.com.damon.ming.i18n import t
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 
 logger = pin("rate_limiter")
@@ -45,5 +47,5 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
     return JSONResponse(
         status_code=429,
-        content={"code": 429, "error_msg": "请求过于频繁，请稍后再试"},
+        content={"code": 429, "error_msg": t(I18nKey.RATE_LIMITED)},
     )

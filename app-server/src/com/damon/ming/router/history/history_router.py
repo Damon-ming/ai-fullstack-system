@@ -12,6 +12,8 @@
 
 from fastapi import APIRouter, Path, Query, Request
 from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.i18n import t
+from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.history.schemas.bean import (
@@ -89,7 +91,7 @@ async def get_history(
         if detail is None:
             return BaseFailedResponse(
                 code=ErrorCode.HISTORY.NOT_FOUND,
-                data=HistoryFailedData(error_msg="历史记录不存在"),
+                data=HistoryFailedData(error_msg=t(I18nKey.HISTORY_NOT_FOUND)),
             )
         return BaseSuccessResponse(
             code=ErrorCode.OK,
@@ -155,7 +157,7 @@ async def delete_history(
         if not deleted:
             return BaseFailedResponse(
                 code=ErrorCode.HISTORY.NOT_FOUND,
-                data=HistoryFailedData(error_msg="历史记录不存在或无权限删除"),
+                data=HistoryFailedData(error_msg=t(I18nKey.HISTORY_NO_PERMISSION)),
             )
         return BaseSuccessResponse(
             code=ErrorCode.OK,
