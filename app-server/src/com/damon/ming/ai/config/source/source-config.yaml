@@ -2,30 +2,23 @@
 # 数据源配置 —— 各数据源类型的可配置参数。
 #
 # PDF 数据源参数通过构造函数注入（无额外配置需求）。
-# 文本数据源通过本文件配置支持的扩展名、编码和预分块策略。
+# 文本数据源和 Markdown 数据源分别配置。
 #
-# 预分块规则：
+# 文本数据源预分块规则：
 #   - enabled: 是否启用（大文件入库前按自然边界切分成多个 Document）
 #   - chunk_chars: 每个预分块的目标字符数（超过则触发切分）
-#   - overlap_chars: 相邻块重叠字符数（保持上下文连贯）
 #   - boundaries: 切分边界优先级列表（YAML 字符串，\\n 代表换行符）
-#     "\\n\\n"  → 段落分隔（空行，优先级最高）
-#     "\\n"     → 换行
-#     "。！？"  → 中文句末标点
-#     ".,!?"   → 英文句末标点
-#     " "      → 空格
-#     ""       → 字符级兜底（无自然边界时按长度硬切）
 #
-# 预分块的目标：让每个 Document 的文本量合理，
-# 使 splitter 生成的 section_id 粒度匹配 PDF 按标题切章节的效果，
-# 避免检索时章节重建拉回全文。
+# Markdown 数据源预分块规则：
+#   - 按 ## / ### / #### 标题层级切分，超大段落按自然边界二次切分
+#   - chunk_chars: 标题段落超过此长度时触发二次切分
+#   - boundaries: 二次切分边界优先级
 
 source:
   text_source:
-    # 文本数据源支持的文件扩展名
+    # 纯文本数据源支持的文件扩展名（不含 Markdown）
     extensions:
       - ".txt"
-      - ".md"
 
     # 文本编码尝试顺序（按此顺序解码，失败则尝试下一个）
     encoding_fallbacks:
@@ -37,6 +30,21 @@ source:
     pre_chunk:
       enabled: true
       chunk_chars: 400
+      boundaries:
+        - "\\n\\n"
+        - "\\n"
+        - ""
+
+  markdown_source:
+    # 编码尝试顺序（与文本源共用）
+    encoding_fallbacks:
+      - "utf-8"
+      - "gbk"
+      - "latin-1"
+
+    # 超大标题段落的二次切分配置
+    pre_chunk:
+      chunk_chars: 800
       boundaries:
         - "\\n\\n"
         - "\\n"

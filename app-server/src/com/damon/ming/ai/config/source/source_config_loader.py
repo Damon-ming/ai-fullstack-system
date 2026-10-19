@@ -74,11 +74,25 @@ class TextSourceConfig:
 
 
 @dataclass(frozen=True)
+class MarkdownSourceConfig:
+    """Markdown 数据源配置（纯数据类）。"""
+
+    # 编码尝试顺序
+    encoding_fallbacks: tuple[str, ...] = field(default_factory=tuple)
+
+    # 超大标题段落的二次切分配置
+    pre_chunk: PreChunkConfig = field(default_factory=PreChunkConfig)
+
+
+@dataclass(frozen=True)
 class SourceConfig:
     """数据源总配置（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
     # 文本数据源配置
     text_source: TextSourceConfig = field(default_factory=TextSourceConfig)
+
+    # Markdown 数据源配置
+    markdown_source: MarkdownSourceConfig = field(default_factory=MarkdownSourceConfig)
 
 
 class SourceConfigLoader:
@@ -126,12 +140,28 @@ class SourceConfigLoader:
             boundaries=boundaries,
         )
 
+        # 解析 markdown_source
+        md_section = source_section.get("markdown_source", {})
+        md_enc_list = md_section.get("encoding_fallbacks", [])
+        md_encoding_fallbacks = tuple(md_enc_list) if md_enc_list else tuple()
+        md_pre_chunk_section = md_section.get("pre_chunk", [])
+        md_boundaries_raw = md_pre_chunk_section.get("boundaries", [])
+        md_boundaries = tuple(md_boundaries_raw) if md_boundaries_raw else tuple()
+        md_pre_chunk = PreChunkConfig(
+            chunk_chars=md_pre_chunk_section.get("chunk_chars", 800),
+            boundaries=md_boundaries,
+        )
+
         self._cache = SourceConfig(
             text_source=TextSourceConfig(
                 extensions=extensions,
                 encoding_fallbacks=encoding_fallbacks,
                 pre_chunk=pre_chunk,
-            )
+            ),
+            markdown_source=MarkdownSourceConfig(
+                encoding_fallbacks=md_encoding_fallbacks,
+                pre_chunk=md_pre_chunk,
+            ),
         )
         return self._cache
 

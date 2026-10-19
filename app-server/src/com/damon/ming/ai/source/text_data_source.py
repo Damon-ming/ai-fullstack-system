@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/source/text_data_source.py
 """
-纯文本 / Markdown 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+纯文本数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
 
 本模块只负责"给定文本文件路径，返回 Document 列表"，
 不感知线程池、取消令牌等基础设施。
@@ -11,8 +11,10 @@
 
 可配置项通过 SourceConfigLoader 从 YAML 读取：
   - text_source.extensions: 文本数据源支持的文件扩展名
-  - text_source.encoding_fallbacks: 编码尝试顺序
+  - text_source.encoding_fallbacks: 文本编码尝试顺序
   - text_source.pre_chunk: 预分块配置（边界优先级 + 块大小 + 重叠）
+
+Markdown 文件由独立的 markdown_data_source.py 处理。
 """
 
 import hashlib
@@ -31,7 +33,7 @@ logger = pin("LocalTextDataSource")
 
 @register_engine("text")
 class LocalTextDataSource(BaseDataSource):
-    """纯文本 / Markdown 数据源，同步处理。
+    """纯文本数据源，同步处理。
 
     上层 RAGContainer 使用 asyncio.to_thread 或 ThreadPoolExecutor
     将本类的调用提交到线程池，本类不感知线程环境。
