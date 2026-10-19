@@ -115,23 +115,43 @@ class DocSourceConfig:
 
 
 @dataclass(frozen=True)
+class PptxSourceConfig:
+    """PPTX 数据源配置（纯数据类）。"""
+
+    # 预分块配置（超大文本按自然边界切分）
+    pre_chunk: PreChunkConfig
+
+    # 是否提取表格为 Markdown 表格
+    include_tables: bool
+
+    # 是否提取演讲者备注
+    include_notes: bool
+
+    # 是否提取图片并 OCR
+    extract_images: bool
+
+
+@dataclass(frozen=True)
 class SourceConfig:
     """数据源总配置（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
     # CSV 数据源配置
-    csv_source: CsvSourceConfig = field(default_factory=CsvSourceConfig)
+    csv_source: CsvSourceConfig
 
     # XLSX 数据源配置
-    xlsx_source: XlsxSourceConfig = field(default_factory=XlsxSourceConfig)
+    xlsx_source: XlsxSourceConfig
 
     # 文本数据源配置
-    text_source: TextSourceConfig = field(default_factory=TextSourceConfig)
+    text_source: TextSourceConfig
 
     # Markdown 数据源配置
-    markdown_source: MarkdownSourceConfig = field(default_factory=MarkdownSourceConfig)
+    markdown_source: MarkdownSourceConfig
 
     # DOC/DOCX 数据源配置
     doc_source: DocSourceConfig
+
+    # PPTX 数据源配置
+    pptx_source: PptxSourceConfig
 
 
 class SourceConfigLoader:
@@ -226,6 +246,30 @@ class SourceConfigLoader:
         if doc_include_tables is None:
             raise ValueError("缺少 source.doc_source.include_tables 配置项")
 
+        # 解析 pptx_source
+        pptx_section = source_section.get("pptx_source", {})
+        if not pptx_section:
+            raise ValueError("缺少 source.pptx_source 配置项")
+        pptx_pre_chunk_section = pptx_section.get("pre_chunk", {})
+        if not pptx_pre_chunk_section:
+            raise ValueError("缺少 source.pptx_source.pre_chunk 配置项")
+        pptx_boundaries_raw = pptx_pre_chunk_section.get("boundaries", [])
+        pptx_boundaries = tuple(pptx_boundaries_raw) if pptx_boundaries_raw else tuple()
+        pptx_pre_chunk = PreChunkConfig(
+            enabled=pptx_pre_chunk_section.get("enabled", True),
+            chunk_chars=pptx_pre_chunk_section.get("chunk_chars", 500),
+            boundaries=pptx_boundaries,
+        )
+        pptx_include_tables = pptx_section.get("include_tables")
+        if pptx_include_tables is None:
+            raise ValueError("缺少 source.pptx_source.include_tables 配置项")
+        pptx_include_notes = pptx_section.get("include_notes")
+        if pptx_include_notes is None:
+            raise ValueError("缺少 source.pptx_source.include_notes 配置项")
+        pptx_extract_images = pptx_section.get("extract_images")
+        if pptx_extract_images is None:
+            raise ValueError("缺少 source.pptx_source.extract_images 配置项")
+
         self._cache = SourceConfig(
             csv_source=CsvSourceConfig(
                 encoding_fallbacks=csv_encoding_fallbacks,
@@ -246,6 +290,12 @@ class SourceConfigLoader:
             doc_source=DocSourceConfig(
                 pre_chunk=doc_pre_chunk,
                 include_tables=doc_include_tables,
+            ),
+            pptx_source=PptxSourceConfig(
+                pre_chunk=pptx_pre_chunk,
+                include_tables=pptx_include_tables,
+                include_notes=pptx_include_notes,
+                extract_images=pptx_extract_images,
             ),
         )
         return self._cache
