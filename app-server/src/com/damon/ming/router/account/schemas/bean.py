@@ -6,7 +6,7 @@ class TokenRequest(BaseModel):
 
     phone: str = Field(
         ...,
-        description="手机号（含区号），用于标识用户身份。TODO: 当前模拟",
+        description="手机号（含区号），用于标识用户身份。",
         examples=["+8613800138000"],
     )
 

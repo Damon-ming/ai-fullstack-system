@@ -10,8 +10,6 @@ Account 路由 —— 用户登录 / Token 签发 / 资料管理
   - 同一 (token, device_id) 组合复用同一 session_id
   - 用户资料读取与修改（昵称）
 
-TODO: 后期接入真实手机号 + 验证码校验
-
 用法：
   POST /api/account/login/v1     body: { "phone": "+8613800138000" }
     → { "token": "xxx", "device_id": "dev_sha256abc...", "session_id": "uuid..." }
