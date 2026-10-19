@@ -57,7 +57,8 @@ from src.com.damon.ming.ai.retriever.base_retriever import (
 )
 from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.retriever.hybrid_retriever import HybridRetriever
-from src.com.damon.ming.ai.source.ref_sources import LocalPDFDataSource
+from src.com.damon.ming.ai.source.pdf_data_source import LocalPDFDataSource
+from src.com.damon.ming.ai.source.text_data_source import LocalTextDataSource
 from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
 from src.com.damon.ming.ai.summary import SummaryService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
@@ -95,6 +96,9 @@ def get_rag_container(
 
 # 1. 全局单例容器
 class RAGContainer:
+    # 支持的文件扩展名集合（用于启动时扫描）
+    _SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
+
     def __init__(
         self,
         pool_mgr: ThreadPoolManager | None = None,
@@ -180,9 +184,11 @@ class RAGContainer:
             chunk_overlap=self.splitter_config.chunk_overlap,
         )
 
-        # 首次启动自动建立知识库
-        docs = LocalPDFDataSource(KNOWLEDGES_DIR).load_documents()
-        bm25_nodes = self.splitter.split(docs)
+        # 首次启动自动建立知识库（PDF + 文本文件）
+        pdf_docs = LocalPDFDataSource(KNOWLEDGES_DIR).load_documents()
+        text_docs = LocalTextDataSource(KNOWLEDGES_DIR).load_documents()
+        all_startup_docs = pdf_docs + text_docs
+        bm25_nodes = self.splitter.split(all_startup_docs)
         self.all_nodes = bm25_nodes
 
         if bm25_nodes:
@@ -191,9 +197,16 @@ class RAGContainer:
         if self.vector_store.count() == 0 and bm25_nodes:
             self._index_nodes(bm25_nodes, rebuild_bm25=False)
         elif self.vector_store.count() > 0:
-            pdf_paths = [str(path.resolve()) for path in KNOWLEDGES_DIR.rglob("*.pdf")]
-            if pdf_paths:
-                self.ingest_files(pdf_paths)
+            # 向量库有数据但 BM25 刚重建（非空节点来自全量解析），
+            # 直接全量入库，跳过 ingest_files 的去重检查
+            # （已解析的 all_startup_docs 是最权威数据源）
+            all_paths = [
+                str(path.resolve())
+                for path in KNOWLEDGES_DIR.rglob("*")
+                if path.is_file() and path.suffix.lower() in self._SUPPORTED_EXTENSIONS
+            ]
+            if all_paths:
+                self._index_nodes(bm25_nodes, rebuild_bm25=False)
 
         logger.info("RAG 容器初始化完成")
 
@@ -221,32 +234,50 @@ class RAGContainer:
         file_paths: list[str],
         cancellation_token: CancellationToken | None = None,
     ) -> dict:
-        """增量处理上传文件。
+        """增量处理上传文件（支持 PDF / TXT / MD）。
 
         线程编排层：
-          1. 锁外：PDF 加载 + 文档分割（IO/CPU 密集，不访问共享状态）
+          1. 锁外：按扩展名路由到对应数据源加载（IO/CPU 密集，无共享状态访问）
           2. 锁内：去重检查 + 入库 + BM25 重建（所有共享状态读写）
         """
         loop = asyncio.get_running_loop()
         pool_mgr = self._pool_mgr
 
-        # ── 阶段 1：锁外 PDF 加载（无共享状态访问）──
+        # ── 阶段 1：按扩展名分组 → 路由到对应数据源加载 ──
         document_pool = pool_mgr.get_pool("document")
-        source_root = LocalPDFDataSource(KNOWLEDGES_DIR)
+        pdf_paths = [fp for fp in file_paths if Path(fp).suffix.lower() == ".pdf"]
+        text_paths = [
+            fp for fp in file_paths if Path(fp).suffix.lower() in (".txt", ".md")
+        ]
 
-        try:
-            upload_docs = await loop.run_in_executor(
-                document_pool,
-                source_root.load_specific_files,
-                file_paths,
-            )
-        except asyncio.CancelledError:
-            logger.warning("ingest_files | PDF 加载阶段被取消")
-            raise
+        pdf_docs: list = []
+        text_docs: list = []
 
-        # 构建 path -> docs 的映射
+        if pdf_paths:
+            try:
+                pdf_docs = await loop.run_in_executor(
+                    document_pool,
+                    LocalPDFDataSource(KNOWLEDGES_DIR).load_specific_files,
+                    pdf_paths,
+                )
+            except asyncio.CancelledError:
+                logger.warning("ingest_files | PDF 加载阶段被取消")
+                raise
+
+        if text_paths:
+            try:
+                text_docs = await loop.run_in_executor(
+                    document_pool,
+                    LocalTextDataSource(KNOWLEDGES_DIR).load_specific_files,
+                    text_paths,
+                )
+            except asyncio.CancelledError:
+                logger.warning("ingest_files | 文本加载阶段被取消")
+                raise
+
+        # 构建 path -> docs 的映射（PDF + 文本合并）
         path_to_docs: dict[str, list] = {}
-        for d in upload_docs:
+        for d in pdf_docs + text_docs:
             fp = d.metadata["file_path"]
             path_to_docs.setdefault(fp, []).append(d)
 

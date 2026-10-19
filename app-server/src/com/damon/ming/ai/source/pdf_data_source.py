@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/source/ref_sources.py
+# app-server/src/com/damon/ming/ai/source/pdf_data_source.py
 """
 PDF 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
 
@@ -90,10 +90,8 @@ class LocalPDFDataSource(BaseDataSource):
             for page_item in md_pages:
                 page_idx = page_item.get("page")
                 if page_idx is not None:
-                    # 外层page存在：0起始，+1转为展示页码
                     page_no = page_idx + 1
                 else:
-                    # 外层page不存在，从metadata读取（1起始，不需要+1）
                     meta = page_item.get("metadata", {})
                     page_idx = meta.get("page_number", -1)
                     page_no = page_idx
