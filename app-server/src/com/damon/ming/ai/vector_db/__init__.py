@@ -17,10 +17,8 @@ from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
     VectorStoreParams,
 )
-from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
 
-# ── 引擎注册表 ──────────────────────────────────────────────────────
-# 引擎名称 → 实现类，各实现类通过 @register_engine 自动注册
+# ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 _name_to_class: dict[str, type[BaseVectorStore]] = {}
 
 
@@ -64,6 +62,9 @@ def list_engines() -> list[str]:
     """列出所有已注册的引擎名称"""
     return list(_name_to_class.keys())
 
+
+# ── 触发注册（必须放在注册器定义之后）──────────────────────────────
+from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
 
 __all__ = [
     "BaseVectorStore",

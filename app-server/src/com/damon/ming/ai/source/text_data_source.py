@@ -22,12 +22,15 @@ from pathlib import Path
 
 from llama_index.core import Document
 from src.com.damon.ming.ai.config.source.source_config_loader import SourceConfigLoader
+from src.com.damon.ming.ai.source import register_engine
+from src.com.damon.ming.ai.source.base import BaseDataSource
 from src.com.damon.ming.log import pin
 
 logger = pin("LocalTextDataSource")
 
 
-class LocalTextDataSource:
+@register_engine("text")
+class LocalTextDataSource(BaseDataSource):
     """纯文本 / Markdown 数据源，同步处理。
 
     上层 RAGContainer 使用 asyncio.to_thread 或 ThreadPoolExecutor

@@ -15,10 +15,8 @@ from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
     EmbeddingParams,
 )
-from src.com.damon.ming.ai.embedding.huggingface import HuggingFaceEmbedding
-from src.com.damon.ming.ai.embedding.ollama import OllamaEmbedding
 
-# ── 引擎注册表 ──────────────────────────────────────────────────────
+# ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 _name_to_class: dict[str, type] = {}
 
 
@@ -51,6 +49,10 @@ def list_engines() -> list[str]:
     """列出所有已注册的引擎名称"""
     return list(_name_to_class.keys())
 
+
+# ── 触发注册（必须放在注册器定义之后）──────────────────────────────
+from src.com.damon.ming.ai.embedding.huggingface import HuggingFaceEmbedding
+from src.com.damon.ming.ai.embedding.ollama import OllamaEmbedding
 
 __all__ = [
     "BaseEmbeddingService",

@@ -9,26 +9,16 @@ PDF 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责
 import hashlib
 import os
 import threading
-from abc import ABC, abstractmethod
 from pathlib import Path
 
 import pymupdf4llm
 from llama_index.core import Document
+from src.com.damon.ming.ai.source import register_engine
+from src.com.damon.ming.ai.source.base import BaseDataSource
 from src.com.damon.ming.log import pin
 
 
-class BaseDataSource(ABC):
-    """数据源抽象：仅负责加载原始文档"""
-
-    @abstractmethod
-    def load_documents(self) -> list[Document]:
-        pass
-
-    @abstractmethod
-    def load_specific_files(self, file_paths: list[str]) -> list[Document]:
-        pass
-
-
+@register_engine("pdf")
 class LocalPDFDataSource(BaseDataSource):
     """PDF 文件加载实现，同步处理。
 

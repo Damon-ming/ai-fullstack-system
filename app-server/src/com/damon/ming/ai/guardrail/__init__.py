@@ -12,8 +12,7 @@ from src.com.damon.ming.ai.guardrail.base_guardrail import (
     BaseGuardrail,
 )
 
-# ── 注册表 ────────────────────────────────────────────────────────
-
+# ── 注册表（必须在实现类 import 之前定义）────────────────────────
 _name_to_class: dict[str, type[BaseGuardrail]] = {}
 
 
@@ -49,3 +48,15 @@ def resolve_guardrail(engine: str) -> type[BaseGuardrail]:
 def list_engines() -> list[str]:
     """列出所有已注册的护栏引擎名。"""
     return list(_name_to_class.keys())
+
+
+# ── 触发注册（必须放在注册器定义之后）──────────────────────────────
+from src.com.damon.ming.ai.guardrail.qwen_guardrail import QwenGuardrail
+
+__all__ = [
+    "BaseGuardrail",
+    "QwenGuardrail",
+    "list_engines",
+    "register_engine",
+    "resolve_guardrail",
+]

@@ -49,6 +49,7 @@ from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
+from src.com.damon.ming.ai.registry.source_registry import register_all_sources
 from src.com.damon.ming.ai.registry.tokenizer_registry import register_all_tokenizers
 from src.com.damon.ming.ai.rerank.base_reranker import BaseReranker
 from src.com.damon.ming.ai.retriever.base_retriever import (
@@ -57,8 +58,7 @@ from src.com.damon.ming.ai.retriever.base_retriever import (
 )
 from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.retriever.hybrid_retriever import HybridRetriever
-from src.com.damon.ming.ai.source.pdf_data_source import LocalPDFDataSource
-from src.com.damon.ming.ai.source.text_data_source import LocalTextDataSource
+from src.com.damon.ming.ai.source import resolve_source
 from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
 from src.com.damon.ming.ai.summary import SummaryService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
@@ -113,6 +113,7 @@ class RAGContainer:
         register_all_rerankers()
         register_all_tokenizers()
         register_all_embeddings()
+        register_all_sources()
 
         # 全局缓存全部分块节点，避免每次上传全量解析PDF
         self.all_nodes = []
@@ -185,8 +186,10 @@ class RAGContainer:
         )
 
         # 首次启动自动建立知识库（PDF + 文本文件）
-        pdf_docs = LocalPDFDataSource(KNOWLEDGES_DIR).load_documents()
-        text_docs = LocalTextDataSource(KNOWLEDGES_DIR).load_documents()
+        pdf_cls = resolve_source("pdf")
+        text_cls = resolve_source("text")
+        pdf_docs = pdf_cls(KNOWLEDGES_DIR).load_documents()
+        text_docs = text_cls(KNOWLEDGES_DIR).load_documents()
         all_startup_docs = pdf_docs + text_docs
         bm25_nodes = self.splitter.split(all_startup_docs)
         self.all_nodes = bm25_nodes
@@ -232,7 +235,6 @@ class RAGContainer:
     async def ingest_files(
         self,
         file_paths: list[str],
-        cancellation_token: CancellationToken | None = None,
     ) -> dict:
         """增量处理上传文件（支持 PDF / TXT / MD）。
 
@@ -255,9 +257,10 @@ class RAGContainer:
 
         if pdf_paths:
             try:
+                pdf_cls = resolve_source("pdf")
                 pdf_docs = await loop.run_in_executor(
                     document_pool,
-                    LocalPDFDataSource(KNOWLEDGES_DIR).load_specific_files,
+                    pdf_cls(KNOWLEDGES_DIR).load_specific_files,
                     pdf_paths,
                 )
             except asyncio.CancelledError:
@@ -266,9 +269,10 @@ class RAGContainer:
 
         if text_paths:
             try:
+                text_cls = resolve_source("text")
                 text_docs = await loop.run_in_executor(
                     document_pool,
-                    LocalTextDataSource(KNOWLEDGES_DIR).load_specific_files,
+                    text_cls(KNOWLEDGES_DIR).load_specific_files,
                     text_paths,
                 )
             except asyncio.CancelledError:

@@ -19,9 +19,8 @@ from src.com.damon.ming.ai.tokenizer.base_tokenizer import (
     BaseWordTokenizer,
     TokenizerParams,
 )
-from src.com.damon.ming.ai.tokenizer.tiktoken_tokenizer import TiktokenTokenizer
 
-# ── 引擎注册表 ──────────────────────────────────────────────────────
+# ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 # 支持两种类型："token_id"（BaseTokenizer）和 "word"（BaseWordTokenizer）
 _name_to_class: dict[str, type] = {}
 
@@ -59,9 +58,14 @@ def list_engines() -> list[str]:
     return list(_name_to_class.keys())
 
 
+# ── 触发注册（必须放在注册器定义之后）──────────────────────────────
+from src.com.damon.ming.ai.tokenizer.jieba_tokenizer import JiebaTokenizer
+from src.com.damon.ming.ai.tokenizer.tiktoken_tokenizer import TiktokenTokenizer
+
 __all__ = [
     "BaseTokenizer",
     "BaseWordTokenizer",
+    "JiebaTokenizer",
     "TiktokenTokenizer",
     "TokenizerParams",
     "list_engines",
