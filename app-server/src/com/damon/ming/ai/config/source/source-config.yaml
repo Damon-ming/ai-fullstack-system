@@ -15,6 +15,16 @@
 #   - boundaries: 二次切分边界优先级
 
 source:
+  csv_source:
+    # CSV 编码尝试顺序
+    encoding_fallbacks:
+      - "utf-8"
+      - "gbk"
+      - "latin-1"
+
+    # 每个 Document 包含的数据行数（不含表头）
+    batch_rows: 50
+
   text_source:
     # 纯文本数据源支持的文件扩展名（不含 Markdown）
     extensions:
