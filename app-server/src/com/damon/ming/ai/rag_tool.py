@@ -310,10 +310,12 @@ class RAGContainer:
         # ── BM25 重建（锁外，线程池异步，不阻塞上传响应）──
         # BM25Okapi 不支持增量添加，仍需全量重建。
         # 提交到线程池后上传立即返回，重建期间 chat 稀疏检索使用旧索引（优雅降级）。
-        # BM25Index.build 内部 _rw_lock 保证读写安全（锁外构建 + 锁内原子替换）。
+        # BM25Index.build 内部 _build_lock 保证读写安全（锁外构建 + 锁内原子替换）。
         if new_nodes:
             retrieval_pool = pool_mgr.get_pool("retrieval")
-            build_args = (list(self.all_nodes), len(new_nodes), len(self.all_nodes))
+            # 锁内复制快照，避免 run_in_executor 读取时 all_nodes 被并发修改
+            nodes_snapshot = list(self.all_nodes)
+            build_args = (nodes_snapshot, len(new_nodes), len(nodes_snapshot))
             loop.run_in_executor(retrieval_pool, self._rebuild_bm25, *build_args)
             logger.info(
                 f"BM25后台重建已提交 | 新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
@@ -488,5 +490,11 @@ class RAGContainer:
         except asyncio.CancelledError:
             # 通知线程池中的 rerank 提前退出，避免无效计算
             cancel_event.set()
-            logger.warning("RAG 检索被取消（客户端断开或超时）")
+            logger.warning("RAG 检索被取消（客户端断开）")
+            raise
+        except TimeoutError:
+            # asyncio.timeout 触发时 CancelledError 会被转换为 TimeoutError，
+            # 需在此单独设置 cancel_event，否则后台线程无法感知取消
+            cancel_event.set()
+            logger.warning("RAG 检索超时，通知后台线程停止")
             raise

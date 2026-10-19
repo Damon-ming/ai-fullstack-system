@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -61,6 +62,18 @@ class VLLMInference(BaseInferenceService):
         resp = await self.client.chat.completions.create(**create_kwargs)
         return resp.choices[0].message.content
 
+    @asynccontextmanager
+    async def _managed_stream(self, **create_kwargs):
+        """托管 vLLM 流式响应生命周期，确保 close 恰好一次。"""
+        stream = await self.client.chat.completions.create(**create_kwargs)
+        try:
+            yield stream
+        finally:
+            try:
+                await stream.close()
+            except Exception:
+                pass
+
     async def stream_generate(
         self,
         model_name: str,
@@ -81,31 +94,19 @@ class VLLMInference(BaseInferenceService):
                 "type": "json_object",
                 "schema": response_schema,
             }
-        stream = await self.client.chat.completions.create(**create_kwargs)
         try:
-            async for chunk in stream:
-                delta = chunk.choices[0].delta
-                reasoning = getattr(delta, "reasoning_content", None)
-                if reasoning:
-                    yield StreamToken(content=reasoning, type="reasoning")
-                content = delta.content
-                if content:
-                    yield StreamToken(content=content, type="content")
+            async with self._managed_stream(**create_kwargs) as stream:
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if reasoning:
+                        yield StreamToken(content=reasoning, type="reasoning")
+                    content = delta.content
+                    if content:
+                        yield StreamToken(content=content, type="content")
         except asyncio.CancelledError:
             logger.warning("VLLM stream 收到取消信号，关闭流")
-            # 在 CancelledError 传播前主动关闭流，避免依赖 finally
-            # 在已取消的上下文中 await 可能无法被调度
-            try:
-                await stream.close()
-            except Exception:
-                pass
             raise
-        finally:
-            # 兜底：非取消路径下的正常关闭，或取消路径关闭失败时的二次尝试
-            try:
-                await stream.close()
-            except Exception:
-                pass
 
     async def check_model_ready(self, model_name: str) -> bool:
         try:

@@ -4,6 +4,7 @@ import json
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.upload.schemas.bean import (
@@ -67,7 +68,7 @@ async def save_files(
         raise
     except Exception as e:
         logger.exception("文件上传请求失败")
-        fail_data = FileUploadFailedData(error_msg=str(e))
+        fail_data = FileUploadFailedData(error_msg=get_safe_error_message(e))
         return BaseFailedResponse(code=ErrorCode.UPLOAD.UPLOAD_FAILED, data=fail_data)
     finally:
         # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源

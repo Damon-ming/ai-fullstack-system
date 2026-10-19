@@ -21,7 +21,8 @@ class BM25Index:
         self.index = None
         self.corpus: list[TextNode] = []
         self.logger = pin("BM25Index")
-        self._rw_lock = threading.Lock()
+        # 保护 build() 的原子替换：锁外构建 + 锁内原子赋值（微秒级）
+        self._build_lock = threading.Lock()
 
     def _default_tokenizer(self, text: str) -> list[str]:
         """默认简单空格分词，中文场景建议外部传入jieba等分词器"""
@@ -38,7 +39,7 @@ class BM25Index:
         from rank_bm25 import BM25Okapi
 
         if not nodes:
-            with self._rw_lock:
+            with self._build_lock:
                 self.corpus = nodes
                 self.index = None
                 self.logger.warning("[BM25Index] 没有可建立索引的文档")
@@ -50,7 +51,7 @@ class BM25Index:
 
         # 锁内原子替换（微秒级引用赋值），CPython 引用赋值天然原子，
         # 读端通过 scores 长度与 corpus 长度校验检测不一致
-        with self._rw_lock:
+        with self._build_lock:
             self.corpus = nodes
             self.index = new_index
 
@@ -62,7 +63,7 @@ class BM25Index:
         锁内做 index + corpus + version 三元组快照，评分计算在锁外。
         返回前校验 scores 长度与 corpus 一致，防止 build 过程中读到不一致状态。
         """
-        with self._rw_lock:
+        with self._build_lock:
             if self.index is None:
                 raise ValueError("索引未初始化，请先执行 build()")
             index = self.index
@@ -87,7 +88,7 @@ class BM25Index:
         """
         if top_k < 1:
             return []
-        with self._rw_lock:
+        with self._build_lock:
             if self.index is None:
                 raise ValueError("索引未初始化，请先执行 build()")
             index = self.index  # 引用快照

@@ -45,7 +45,7 @@ from contextlib import contextmanager
 from typing import Any, Self
 
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.thread.cancellation import _TokenRegistry
+from src.com.damon.ming.thread.cancellation import CancellationToken
 from src.com.damon.ming.thread.request_context import RequestContext
 
 logger = pin("thread.pool_manager")
@@ -97,7 +97,6 @@ class ThreadPoolManager:
 
             self._pool_configs = dict(pool_configs)
             self._pools: dict[str, ThreadPoolExecutor] = {}
-            self._token_registry = _TokenRegistry()
 
             for name, max_workers in self._pool_configs.items():
                 self._pools[name] = ThreadPoolExecutor(
@@ -121,10 +120,7 @@ class ThreadPoolManager:
         if not self._initialized:
             return
 
-        # 1. 先取消所有活跃的取消令牌
-        self._token_registry.cancel_all()
-
-        # 2. 关闭所有线程池
+        # 1. 关闭所有线程池（RequestContext.cleanup() 会在路由层单独取消各令牌）
         for name, pool in self._pools.items():
             try:
                 pool.shutdown(wait=wait, cancel_futures=cancel_futures)
@@ -170,31 +166,16 @@ class ThreadPoolManager:
         Returns:
             RequestContext 实例。
         """
-        from src.com.damon.ming.thread.cancellation import CancellationToken
-
         req_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
-        token = CancellationToken(
-            token_id=f"{req_id}-tok",
-            registry=self._token_registry,
-        )
-        self._token_registry.register(req_id, token)
+        token = CancellationToken(token_id=f"{req_id}-tok")
         ctx = RequestContext(request_id=req_id, token=token)
-        logger.debug(
-            "请求上下文已创建 | request_id=%s | alive_tokens=%d",
-            req_id,
-            self._token_registry.count(),
-        )
+        logger.debug("请求上下文已创建 | request_id=%s", req_id)
         return ctx
-
-    def cancel_request(self, request_id: str) -> None:
-        """取消某请求关联的所有令牌（客户端断开连接时调用）。"""
-        self._token_registry.cancel_request(request_id)
 
     def get_stats(self) -> dict[str, Any]:
         """获取线程池运行状态，用于监控。"""
         stats: dict[str, Any] = {
             "initialized": self._initialized,
-            "alive_tokens": self._token_registry.count(),
             "pools": {},
         }
         for name, pool in self._pools.items():

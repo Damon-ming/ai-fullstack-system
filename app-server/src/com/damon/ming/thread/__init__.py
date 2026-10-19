@@ -3,7 +3,7 @@
 线程管理模块 —— 统一管理所有 AI 子系统的线程资源。
 
 子模块：
-  - cancellation: CancellationToken（协作式取消令牌）+ _TokenRegistry
+  - cancellation: CancellationToken（协作式取消令牌）
   - request_context: RequestContext（请求级上下文）
   - pool_manager: ThreadPoolManager（进程级线程池管理器单例）
 
