@@ -10,7 +10,7 @@
     "idle": "⌁ Upload",
     "uploading": "◌ Uploading...",
     "success_allIndexed": "All files indexed",
-    "success_partial": "Uploaded, some still indexing",
+    "success_with_failed": "Uploaded: {{success_count}} succeeded, {{failed_count}} failed",
     "error": "Upload failed"
   },
   "history": {

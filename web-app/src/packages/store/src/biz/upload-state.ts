@@ -7,33 +7,39 @@ export type UploadStatus = "idle" | "uploading" | "success" | "error";
 
 export interface ChatUploadFileResult {
   filename: string;
-  file_sha256: string;
-  file_size: number;
-  duplicate: boolean;
-  indexed: boolean;
+}
+
+export interface ChatUploadFailedFile {
+  filename: string;
+  error: string;
 }
 
 export interface ChatUploadState {
   upload: {
     status: UploadStatus;
-    /** 已完成上传的文件数量（用于 UI 判断是否全部 indexed） */
     fileNames: string[];
     files: ChatUploadFileResult[];
+    failedFiles: ChatUploadFailedFile[];
   };
   startUpload: (fileNames: string[]) => void;
   finishUpload: (
     status: "success" | "error",
     files?: ChatUploadFileResult[],
+    failedFiles?: ChatUploadFailedFile[],
   ) => void;
   closeUpload: () => void;
 }
 
 export const useChatUploadStore = createAppStore<ChatUploadState>((set) => ({
-  upload: { status: "idle", fileNames: [], files: [] },
+  upload: { status: "idle", fileNames: [], files: [], failedFiles: [] },
   startUpload: (fileNames) =>
-    set({ upload: { status: "uploading", fileNames, files: [] } }),
-  finishUpload: (status, files = []) =>
-    set((state) => ({ upload: { ...state.upload, status, files } })),
+    set({
+      upload: { status: "uploading", fileNames, files: [], failedFiles: [] },
+    }),
+  finishUpload: (status, files = [], failedFiles = []) =>
+    set((state) => ({
+      upload: { ...state.upload, status, files, failedFiles },
+    })),
   closeUpload: () =>
     set((state) => ({ upload: { ...state.upload, status: "idle" } })),
 }));

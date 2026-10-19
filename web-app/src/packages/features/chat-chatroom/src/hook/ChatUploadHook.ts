@@ -26,7 +26,8 @@ export function chatUploadHook() {
       finishUpload("error");
     } else {
       const uploadedFiles = res?.data?.files ?? [];
-      finishUpload("success", uploadedFiles);
+      const failedFiles = res?.data?.failed_files ?? [];
+      finishUpload("success", uploadedFiles, failedFiles);
     }
     setUploading(false);
   };

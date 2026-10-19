@@ -10,7 +10,7 @@
     "idle": "⌁ 上传文件",
     "uploading": "◌ 正在上传文件...",
     "success_allIndexed": "文件已经进入语料库",
-    "success_partial": "文件已上传，部分词条仍在更新",
+    "success_with_failed": "上传完成：{{success_count}} 个成功，{{failed_count}} 个失败",
     "error": "文件上传失败"
   },
   "history": {

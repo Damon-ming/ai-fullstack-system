@@ -1,3 +1,4 @@
+// web-app/src/packages/features/chat-drawer/src/hook/useDrawerUploadHook.ts
 import { useMemo, useRef, useCallback } from "react";
 import { uploadFiles as uploadFilesFromApi } from "@ming/feature-upload-api";
 import { useChatUploadStore } from "@ming/store/biz/upload-state";
@@ -33,15 +34,19 @@ export function useDrawerUploadHook() {
       case "error":
         return t("upload.error");
       case "success": {
-        const allIndexed = upload.files.every((f) => f.indexed || f.duplicate);
-        return allIndexed
-          ? t("upload.success_allIndexed")
-          : t("upload.success_partial");
+        if (upload.failedFiles.length > 0) {
+          const opts = {
+            success_count: String(upload.files.length),
+            failed_count: String(upload.failedFiles.length),
+          };
+          return t("upload.success_with_failed", opts as any);
+        }
+        return t("upload.success_allIndexed");
       }
       default:
         return t("upload.idle");
     }
-  }, [upload.status, upload.files, t]);
+  }, [upload.status, upload.files, upload.failedFiles, t]);
 
   const handleUpload = async (fileList?: FileList | null) => {
     const files = fileList ? Array.from(fileList) : [];
@@ -66,9 +71,18 @@ export function useDrawerUploadHook() {
       const resultFiles = Array.isArray(response?.data?.files)
         ? response.data.files
         : [];
-      finishUpload("success", resultFiles);
+      const failedFiles = Array.isArray(response?.data?.failed_files)
+        ? response.data.failed_files
+        : [];
+      finishUpload("success", resultFiles, failedFiles);
     }
   };
 
-  return { upload, message, handleUpload, abortUpload };
+  return {
+    upload,
+    message,
+    handleUpload,
+    abortUpload,
+    failedFiles: upload.failedFiles,
+  };
 }
