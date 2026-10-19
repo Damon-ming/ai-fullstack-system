@@ -9,14 +9,20 @@
  *   - X-Client-UA    : 浏览器环境摘要
  *   - X-Device-ID    : 设备标识（独立存储，设备生命周期）
  *   - X-Session-ID   : 会话标识（从会话上下文读取）
+ *   - X-Language     : 当前语言偏好（服务端据此下发对应 locale 的词条）
  *   - Cookie         : 设备认证 token（从会话上下文读取，有则注入）
  */
 
 import type { NormalizedRequest } from "@ming/core-network";
 import { collectClientUA, encodeClientUA } from "@ming/core-util";
-import { getSessionContext, getDeviceId, getToken } from "@ming/biz-common-storage";
+import {
+  getSessionContext,
+  getDeviceId,
+  getToken,
+} from "@ming/biz-common-storage";
 import { envCode, clientTypeCode } from "@ming/biz-common-debug";
 import { VERSION } from "../../../../../version";
+import { i18n } from "@ming/i18n";
 
 const TOKEN_COOKIE_NAME = "device_auth_token";
 
@@ -32,6 +38,10 @@ export function createCommonHeaderInterceptor() {
         "X-Client-Type": String(clientTypeCode()),
         "X-Client-UA": clientUA,
       };
+
+      // X-Language：当前语言偏好，服务端据此返回对应 locale 的词条
+      // 后端 negotiate_locale 支持前缀匹配（zh → zh_CN, en → en_US）
+      headers["X-Language"] = i18n.language;
 
       // device_id：独立存储，设备生命周期（登出后仍存在）
       const deviceId = getDeviceId();

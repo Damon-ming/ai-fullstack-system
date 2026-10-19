@@ -112,6 +112,9 @@ importers:
       '@ming/core-util':
         specifier: workspace:*
         version: link:../../core/util
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
       axios:
         specifier: ^1.7.7
         version: 1.20.0(debug@4.4.3)

@@ -14,6 +14,7 @@
     "@ming/core-log": "workspace:*",
     "@ming/core-network": "workspace:*",
     "@ming/core-util": "workspace:*",
+    "@ming/i18n": "workspace:*",
     "axios": "^1.7.7"
   },
   "peerDependencies": {
