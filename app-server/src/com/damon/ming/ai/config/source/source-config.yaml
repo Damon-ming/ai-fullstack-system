@@ -60,3 +60,16 @@ source:
         - "\\n\\n"
         - "\\n"
         - ""
+
+  doc_source:
+    # 是否提取 Word 表格为 Markdown 表格（true 时每个表格生成独立 Document）
+    include_tables: true
+
+    # 超大段落的预分块配置
+    pre_chunk:
+      enabled: true
+      chunk_chars: 600
+      boundaries:
+        - "\\n\\n"
+        - "\\n"
+        - ""

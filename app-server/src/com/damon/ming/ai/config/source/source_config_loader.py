@@ -104,6 +104,17 @@ class MarkdownSourceConfig:
 
 
 @dataclass(frozen=True)
+class DocSourceConfig:
+    """DOC/DOCX 数据源配置（纯数据类）。"""
+
+    # 预分块配置（超大段落按自然边界切分）
+    pre_chunk: PreChunkConfig
+
+    # 是否提取表格为 Markdown 表格
+    include_tables: bool
+
+
+@dataclass(frozen=True)
 class SourceConfig:
     """数据源总配置（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
@@ -118,6 +129,9 @@ class SourceConfig:
 
     # Markdown 数据源配置
     markdown_source: MarkdownSourceConfig = field(default_factory=MarkdownSourceConfig)
+
+    # DOC/DOCX 数据源配置
+    doc_source: DocSourceConfig
 
 
 class SourceConfigLoader:
@@ -194,6 +208,24 @@ class SourceConfigLoader:
             boundaries=md_boundaries,
         )
 
+        # 解析 doc_source
+        doc_section = source_section.get("doc_source", {})
+        if not doc_section:
+            raise ValueError("缺少 source.doc_source 配置项")
+        doc_pre_chunk_section = doc_section.get("pre_chunk", {})
+        if not doc_pre_chunk_section:
+            raise ValueError("缺少 source.doc_source.pre_chunk 配置项")
+        doc_boundaries_raw = doc_pre_chunk_section.get("boundaries", [])
+        doc_boundaries = tuple(doc_boundaries_raw) if doc_boundaries_raw else tuple()
+        doc_pre_chunk = PreChunkConfig(
+            enabled=doc_pre_chunk_section.get("enabled", True),
+            chunk_chars=doc_pre_chunk_section.get("chunk_chars", 600),
+            boundaries=doc_boundaries,
+        )
+        doc_include_tables = doc_section.get("include_tables")
+        if doc_include_tables is None:
+            raise ValueError("缺少 source.doc_source.include_tables 配置项")
+
         self._cache = SourceConfig(
             csv_source=CsvSourceConfig(
                 encoding_fallbacks=csv_encoding_fallbacks,
@@ -210,6 +242,10 @@ class SourceConfigLoader:
             markdown_source=MarkdownSourceConfig(
                 encoding_fallbacks=md_encoding_fallbacks,
                 pre_chunk=md_pre_chunk,
+            ),
+            doc_source=DocSourceConfig(
+                pre_chunk=doc_pre_chunk,
+                include_tables=doc_include_tables,
             ),
         )
         return self._cache
