@@ -51,10 +51,15 @@ class LocalDocDataSource(BaseDataSource):
         folder_path: str,
         pre_chunk_config=None,
         include_tables: bool | None = None,
+        enable_image_extract: bool = False,
+        vlm_model: str | None = None,
     ):
         self.folder_path = folder_path
         self.logger = pin("LocalDocDataSource")
         self._ensure_dir_exists()
+        self._images_dir = os.path.join(folder_path, "images")
+        self.enable_image_extract = enable_image_extract
+        self.vlm_model = vlm_model
 
         cfg = SourceConfigLoader().load()
         self._pre_chunk_config = (
@@ -264,6 +269,22 @@ class LocalDocDataSource(BaseDataSource):
             if self._include_tables:
                 table_texts = self._extract_tables(doc)
 
+            # ── 图片提取 + OCR ─────────────────────────────────────
+            image_texts: list[str] = []
+            all_image_paths: list[str] = []
+            if self.enable_image_extract:
+                from src.com.damon.ming.ai.source.image_text_extractor import (
+                    extract_image_text,
+                    extract_images_from_docx,
+                )
+
+                docx_images = extract_images_from_docx(file_path, self._images_dir)
+                for img_path in docx_images:
+                    img_text = extract_image_text(img_path, self.vlm_model)
+                    if img_text:
+                        image_texts.append(img_text)
+                    all_image_paths.append(img_path)
+
             # ── 构建 Document 列表 ──────────────────────────────────
             docs: list[Document] = []
             global_page_index = 0
@@ -314,6 +335,24 @@ class LocalDocDataSource(BaseDataSource):
                 docs.append(doc)
                 global_page_index += 1
 
+            # 图片 OCR 文本作为独立 Document
+            for img_text in image_texts:
+                doc = Document(
+                    text=img_text,
+                    metadata={
+                        "file_name": file_name,
+                        "file_path": file_path,
+                        "file_sha256": file_sha256,
+                        "source_refId": file_sha256,
+                        "page": global_page_index + 1,
+                        "page_index": global_page_index,
+                        "content_type": "image_text",
+                        "images": all_image_paths,
+                    },
+                )
+                docs.append(doc)
+                global_page_index += 1
+
             total_pages = global_page_index
             # 回填 total_pages
             for doc in docs:
@@ -328,7 +367,7 @@ class LocalDocDataSource(BaseDataSource):
             self.logger.info(
                 f"[DocDataSource] 读取成功 | file={file_name} | "
                 f"pages={total_pages} | tables={len(table_texts)} | "
-                f"sha256={file_sha256[:8]}..."
+                f"images={len(image_texts)} | sha256={file_sha256[:8]}..."
             )
             return docs
 

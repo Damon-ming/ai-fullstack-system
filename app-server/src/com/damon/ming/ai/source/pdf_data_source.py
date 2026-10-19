@@ -30,11 +30,14 @@ class LocalPDFDataSource(BaseDataSource):
         self,
         folder_path: str,
         enable_image_extract: bool = False,
+        vlm_model: str | None = None,
     ):
         self.folder_path = folder_path
         self.enable_image_extract = enable_image_extract
+        self.vlm_model = vlm_model
         self.logger = pin("LocalPDFDataSource")
         self._ensure_dir_exists()
+        self._images_dir = os.path.join(folder_path, "images")
 
         # 实例级别锁，避免多实例竞争
         self._stats_lock = threading.Lock()
@@ -70,7 +73,7 @@ class LocalPDFDataSource(BaseDataSource):
             md_pages = pymupdf4llm.to_markdown(
                 file_path,
                 page_chunks=True,
-                write_images=self.enable_image_extract,
+                write_images=False,  # 图片由 fitz 直接提取 + OCR
                 dpi=150,
             )
 
@@ -92,8 +95,28 @@ class LocalPDFDataSource(BaseDataSource):
 
                 page_text = page_item.get("text", "")
 
+                # ── 图片提取 + OCR ────────────────────────────────
+                image_text = ""
+                image_paths: list[str] = []
+                if self.enable_image_extract:
+                    from src.com.damon.ming.ai.source.image_text_extractor import (
+                        extract_image_text,
+                        extract_images_from_pdf_page,
+                    )
+
+                    page_images = extract_images_from_pdf_page(
+                        file_path, page_idx, self._images_dir
+                    )
+                    for img_path in page_images:
+                        img_text = extract_image_text(img_path, self.vlm_model)
+                        if img_text:
+                            image_text += f"\n{img_text}"
+                        image_paths.append(img_path)
+
+                full_text = (page_text + image_text).strip()
+
                 doc = Document(
-                    text=page_text.strip(),
+                    text=full_text,
                     metadata={
                         "file_name": file_name,
                         "file_path": file_path,
@@ -102,6 +125,7 @@ class LocalPDFDataSource(BaseDataSource):
                         "page": page_no,
                         "page_index": page_idx,
                         "total_pages": total_page_count,
+                        "images": image_paths,
                     },
                 )
                 docs.append(doc)
