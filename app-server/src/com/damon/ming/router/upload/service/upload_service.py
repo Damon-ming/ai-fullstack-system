@@ -22,6 +22,10 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class UploadService:
+    """上传服务——逐文件原子提交：每个文件独立走 磁盘+缓存+向量库 三步，
+    三步全部成功才算成功；任一步失败则回滚该文件的磁盘和缓存，通知客户端重试。
+    """
+
     _sha_cache: ClassVar[OrderedDict[str, Path]] = OrderedDict()
     _sha_cache_lock: ClassVar[threading.Lock] = threading.Lock()
     _sha_cache_max: ClassVar[int] = 0  # 由 init_sha_cache() 从配置注入
@@ -56,172 +60,198 @@ class UploadService:
         rag_app: RAGContainer,
         cancellation_token: CancellationToken | None = None,
         executor=None,
-    ) -> list[dict]:
-        # 移除全局 _processing_lock：各层已有细粒度锁保护
-        #   - sha_cache 读写 → _sha_cache_lock
-        #   - 向量库去重 + 入库 → RAGContainer._knowledge_lock
-        #   - BM25 索引重建 → BM25Index._rw_lock (Lock)
-        # 并发上传同一文件的边界：各自写 UUID 副本 → ingest_files 向量库去重只索引一份
-        return await UploadService._batch_save_files_locked(
-            file_list, upload_config, rag_app, cancellation_token, executor
-        )
+    ) -> dict:
+        """批量保存文件——每个文件独立原子提交。
 
-    @staticmethod
-    async def _batch_save_files_locked(
-        file_list: list[UploadFile],
-        upload_config,
-        rag_app,
-        cancellation_token: CancellationToken | None = None,
-        executor=None,
-    ) -> list[dict]:
+        逐文件处理，每个文件走完整生命周期：
+          1. 校验类型/大小
+          2. 写磁盘 + 更新 sha_cache（锁内 check + 锁外写盘 + 锁内 recheck）
+          3. 逐文件入库向量库
+          4. 任一步失败 → 回滚该文件的磁盘和缓存，标记失败，继续处理下一个
+
+        每个文件互不影响，一个失败不会中断其他文件。
+
+        Returns:
+            {"files": [成功文件meta...], "failed_files": [失败文件信息...]}
         """
-        批量保存文件
-        :param file_list: 上传文件数组
-        :param upload_config: UploadConfig 实例（文件类型白名单 + 大小上限）
-        :param cancellation_token: 请求级取消令牌
-        :return: 文件信息列表
-        """
-        saved_files = []
-        files_to_index = []
-        prepared_files = []
+        success_files: list[dict] = []
+        failed_files: list[dict] = []
+        prepared_files: list[tuple[str, bytes]] = []
         allowed_exts = sorted(upload_config.allowed_types.keys())
-        # 先完整读取并准备本次请求的所有文件；任一文件读取失败时，此阶段不会写入磁盘，避免多文件请求产生半上传结果。
+
+        # 阶段0：完整读取并准备所有文件；任一文件读取失败仅跳过该文件，
+        # 不会写入磁盘，避免产生半上传结果。
         for file in file_list:
             origin_name = Path(file.filename or "unnamed").name
             suffix = Path(origin_name).suffix.lower()
 
-            # 类型白名单校验：不在配置中的扩展名直接拒绝
+            # 类型白名单校验
             if not upload_config.is_type_allowed(suffix):
-                raise ValueError(
-                    f"不支持的文件类型: {suffix or '无扩展名'}（{origin_name}），"
-                    f"仅允许: {', '.join(allowed_exts)}"
+                failed_files.append(
+                    {
+                        "filename": origin_name,
+                        "file_size": 0,
+                        "file_sha256": "",
+                        "error": f"不支持的文件类型: {suffix or '无扩展名'}，仅允许: {', '.join(allowed_exts)}",
+                    }
                 )
+                continue
 
-            # 大小校验：按类型匹配上限（边读边校验，超限立即中断，
-            # 避免恶意大文件一次性读入内存导致 OOM）
+            # 大小校验（边读边校验，超限立即中断）
             max_size = upload_config.get_max_size_for_ext(suffix)
             chunks: list[bytes] = []
             total = 0
-            while True:
-                chunk = await file.read(1024 * 1024)  # 1MB 分块
-                if not chunk:
-                    break
-                total += len(chunk)
-                if total > max_size:
-                    raise ValueError(
-                        f"文件过大: {origin_name}（>"
-                        f"{max_size // (1024 * 1024)}MB），"
-                        f"该类型上限 {max_size // (1024 * 1024)}MB"
-                    )
-                chunks.append(chunk)
-            content = b"".join(chunks)
+            try:
+                while True:
+                    chunk = await file.read(1024 * 1024)  # 1MB 分块
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > max_size:
+                        raise ValueError(
+                            f"文件过大（上限 {max_size // (1024 * 1024)}MB）"
+                        )
+                    chunks.append(chunk)
+            except ValueError as e:
+                failed_files.append(
+                    {
+                        "filename": origin_name,
+                        "file_size": 0,
+                        "file_sha256": "",
+                        "error": str(e),
+                    }
+                )
+                continue
 
+            content = b"".join(chunks)
             logger.info(
                 "收到用户上传文件 | original_filename=%s | size=%s | type=%s",
                 origin_name,
                 len(content),
                 suffix,
             )
-            prepared_files.append((file, origin_name, content))
+            prepared_files.append((origin_name, content))
 
+        # 阶段1+2+3：逐文件独立处理（写盘 + 缓存 + 入库）
         loop = asyncio.get_running_loop()
 
-        for file, origin_name, content in prepared_files:
-            file_uid = uuid.uuid4().hex
-            # 磁盘文件名完全不使用用户文件名，只保留随机标识和安全扩展名。
+        for origin_name, content in prepared_files:
             suffix = Path(origin_name).suffix.lower()
+            file_uid = uuid.uuid4().hex
+            file_sha256 = hashlib.sha256(content).hexdigest()
 
-            if suffix:
-                sub_folder_name = suffix.lstrip(".")
-            else:
-                sub_folder_name = "no_ext"
-
+            # 构建存储路径
+            sub_folder_name = suffix.lstrip(".") if suffix else "no_ext"
             target_base_dir = UPLOAD_DIR / sub_folder_name
             target_base_dir.mkdir(parents=True, exist_ok=True)
-
             store_name = f"{file_uid}{suffix}"
             file_path = target_base_dir / store_name
 
-            logger.debug(
-                "开始保存文件 | filename=%s | size=%s", origin_name, len(content)
-            )
+            written_to_disk = False
+            cache_added = False
 
-            digest = hashlib.sha256(content)
-            file_sha256 = digest.hexdigest()
-
-            # M5: 锁仅覆盖 sha_cache 读写，写盘移到锁外 + executor
-            # 先检查缓存，命中则跳过写盘
-            cache_hit = False
-            with UploadService._sha_cache_lock:
-                existing = UploadService._sha_cache.get(file_sha256)
-                if existing:
-                    cache_hit = True
-                    # M3: 更新 LRU 顺序（命中 → 移到末尾）
-                    UploadService._sha_cache.move_to_end(file_sha256)
-
-            if cache_hit:
-                saved_files.append(
-                    {
-                        "filename": origin_name,
-                        "save_path": str(existing),
-                        "file_size": existing.stat().st_size,
-                        "file_sha256": file_sha256,
-                        "duplicate": True,
-                    }
-                )
-                # 即使本地文件已存在，也交给幂等入库流程检查一次，修复 "文件已保存但服务重启前入库失败"的半成品状态。
-                files_to_index.append(str(existing.resolve()))
-                continue
-
-            # M2: 同步写盘提交到线程池（优先使用注入的命名池，否则用 asyncio 默认池）
-            await loop.run_in_executor(executor, _write_file_sync, file_path, content)
-
-            # M3 + M5: 锁仅覆盖 cache 更新，含 LRU 淘汰
-            with UploadService._sha_cache_lock:
-                UploadService._sha_cache[file_sha256] = file_path
-                UploadService._sha_cache.move_to_end(file_sha256)
-                if len(UploadService._sha_cache) > UploadService._sha_cache_max:
-                    evicted_sha, _ = UploadService._sha_cache.popitem(last=False)
-                    logger.debug("sha_cache LRU 淘汰 | sha=%s", evicted_sha[:16])
-
-            saved_files.append(
-                {
-                    "filename": origin_name,
-                    "save_path": str(file_path),
-                    "file_size": len(content),
-                    "file_sha256": file_sha256,
-                    "duplicate": False,
-                }
-            )
-
-            files_to_index.append(str(file_path.resolve()))
-
-        if files_to_index:
-            # 这里不回滚磁盘文件：如果后续索引失败，保留文件并打印日志，
-            # 下次服务启动时由启动同步逻辑补齐向量库和 BM25。
             try:
-                index_result = rag_app.ingest_files(
-                    files_to_index, cancellation_token=cancellation_token
-                )
-                indexed_by_md5 = {
-                    item["file_sha256"] for item in index_result["indexed"]
-                }
-                skipped_by_md5 = {
-                    item["file_sha256"] for item in index_result["skipped"]
-                }
-                for item in saved_files:
-                    item["duplicate"] = item.get("file_sha256") in skipped_by_md5
-                    item["indexed"] = (
-                        item.get("file_sha256") in indexed_by_md5 or item["duplicate"]
+                # ── 阶段1：检查缓存（锁内，极小临界区）──
+                cache_hit = False
+                with UploadService._sha_cache_lock:
+                    existing = UploadService._sha_cache.get(file_sha256)
+                    if existing:
+                        cache_hit = True
+                        disk_path = existing
+
+                if not cache_hit:
+                    # ── 写盘（锁外，线程池，不阻塞事件循环）──
+                    await loop.run_in_executor(
+                        executor, _write_file_sync, file_path, content
                     )
-            except Exception:
-                logger.exception(
-                    "文件已保存，但知识库增量同步失败；服务重启后将自动补偿 | paths=%s",
-                    files_to_index,
+                    written_to_disk = True
+
+                    # ── 更新缓存 + 二次检查（锁内，极小临界区）──
+                    # 处理并发同文件上传：两个请求同时缓存miss，先写盘者入库，
+                    # 后写盘者发现缓存已被更新，删除自己多余的磁盘文件。
+                    with UploadService._sha_cache_lock:
+                        recheck = UploadService._sha_cache.get(file_sha256)
+                        if recheck and recheck != file_path:
+                            file_path.unlink(missing_ok=True)
+                            written_to_disk = False
+                            cache_hit = True
+                            disk_path = recheck
+                        else:
+                            UploadService._sha_cache[file_sha256] = file_path
+                            UploadService._sha_cache.move_to_end(file_sha256)
+                            if (
+                                len(UploadService._sha_cache)
+                                > UploadService._sha_cache_max
+                            ):
+                                UploadService._sha_cache.popitem(last=False)
+                            cache_added = True
+                            disk_path = file_path
+
+                # ── 阶段2：逐文件入库向量库 ──
+                index_result = rag_app.ingest_files(
+                    [str(disk_path.resolve())],
+                    cancellation_token=cancellation_token,
+                )
+
+                # ── 阶段3：确认入库结果 ──
+                indexed_shas = {item["file_sha256"] for item in index_result["indexed"]}
+                skipped_shas = {item["file_sha256"] for item in index_result["skipped"]}
+
+                if file_sha256 in indexed_shas or file_sha256 in skipped_shas:
+                    # 三库一致：成功
+                    success_files.append({"filename": origin_name})
+                    logger.info(
+                        "文件上传成功 | filename=%s | sha=%s",
+                        origin_name,
+                        file_sha256[:16],
+                    )
+                else:
+                    # 入库结果中没有这个文件 → 视为失败
+                    raise RuntimeError("向量库入库结果异常，未找到该文件")
+
+            except asyncio.CancelledError:
+                # 客户端取消：回滚并继续
+                _rollback_file(file_path, file_sha256, written_to_disk, cache_added)
+                failed_files.append(
+                    {"filename": origin_name, "error": "上传被客户端取消"}
                 )
                 raise
-        logger.info("文件保存完成 | count=%s", len(saved_files))
-        return saved_files
+
+            except Exception as e:
+                # 任一步失败：回滚该文件的磁盘 + 缓存
+                _rollback_file(file_path, file_sha256, written_to_disk, cache_added)
+                logger.warning(
+                    "文件上传失败已回滚 | filename=%s | sha=%s | error=%s",
+                    origin_name,
+                    file_sha256[:16],
+                    e,
+                )
+                failed_files.append({"filename": origin_name, "error": str(e)})
+
+        logger.info(
+            "批量上传完成 | 总计=%d | 成功=%d | 失败=%d",
+            len(prepared_files),
+            len(success_files),
+            len(failed_files),
+        )
+        return {"files": success_files, "failed_files": failed_files}
+
+
+def _rollback_file(
+    file_path: Path, file_sha256: str, written_to_disk: bool, cache_added: bool
+):
+    """回滚单个文件的磁盘和缓存，保持三库一致。"""
+    if written_to_disk:
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            logger.warning("回滚删除磁盘文件失败 | path=%s", file_path)
+
+    if cache_added:
+        with UploadService._sha_cache_lock:
+            # 只有缓存值仍指向我们的路径才删除（防止被并发覆盖）
+            if UploadService._sha_cache.get(file_sha256) == file_path:
+                UploadService._sha_cache.pop(file_sha256, None)
 
 
 def _write_file_sync(path: Path, content: bytes) -> None:

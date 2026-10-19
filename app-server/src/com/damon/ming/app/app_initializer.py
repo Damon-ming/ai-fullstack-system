@@ -22,7 +22,7 @@ logger = pin("app.init")
 class AppInitializer:
     """应用初始化器。
 
-    用法：
+    用法:
         init = AppInitializer(is_debug=True)
         init.startup()
         # ... 运行应用 ...
@@ -43,6 +43,8 @@ class AppInitializer:
         self.inference: dict = {}
         self.llm_model_name: str = ""
         self.llm_options: dict = {}
+
+        # 上传改为逐文件同步入库，无需后台任务
 
     # -----------------------------------------------------------------------
     # 生命周期
@@ -96,9 +98,13 @@ class AppInitializer:
     def shutdown(self) -> None:
         """关闭所有子系统，释放资源。"""
         logger.info("应用关闭，释放资源")
+
+        # 1. 关闭线程池
         if self.pool_mgr is not None:
             self.pool_mgr.shutdown(wait=True, cancel_futures=True)
             logger.info("线程池管理器已关闭")
+
+        # 3. 关闭数据库
         if self.db_conn is not None:
             self.db_conn.close()
             logger.info("数据库连接池已关闭")
@@ -168,12 +174,13 @@ class AppInitializer:
             logger.warning("异常类型注册失败: %s", e)
 
     def _init_upload_service(self) -> None:
-        """上传服务：初始化 SHA 缓存（LRU 上限由上传配置注入）。"""
+        """上传服务：初始化 SHA 缓存（逐文件同步入库，无需后台任务）。"""
         from src.com.damon.ming.router.upload.service.upload_service import (
             UploadService,
         )
 
         UploadService.init_sha_cache(sha_cache_max=self.upload_config.sha_cache_max)
+        logger.info("上传服务初始化完成（逐文件同步入库模式）")
 
     def _init_database(self) -> None:
         """数据库连接池：仅从 YAML 配置文件加载。

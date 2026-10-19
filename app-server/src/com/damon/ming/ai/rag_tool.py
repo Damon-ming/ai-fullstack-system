@@ -326,7 +326,7 @@ class RAGContainer:
     def _rebuild_bm25(self, all_nodes: list, new_count: int, total_count: int) -> None:
         """后台线程中重建 BM25 索引（CPU 密集，不阻塞事件循环）。
 
-        BM25Index.build 内部使用 _rw_lock 的锁外构建 + 锁内原子替换模式，
+        BM25Index.build 内部使用 _build_lock 的锁外构建 + 锁内原子替换模式，
         并发查询的 get_scores / get_top_k 不受影响（读到旧索引或新索引均为一致状态）。
         多个重建任务并发时后者覆盖前者，最终一致，无数据损坏。
         """
