@@ -59,6 +59,7 @@ from src.com.damon.ming.ai.source.csv_data_source import LocalCsvDataSource
 from src.com.damon.ming.ai.source.markdown_data_source import LocalMarkdownDataSource
 from src.com.damon.ming.ai.source.pdf_data_source import LocalPDFDataSource
 from src.com.damon.ming.ai.source.text_data_source import LocalTextDataSource
+from src.com.damon.ming.ai.source.xlsx_data_source import LocalXlsxDataSource
 
 __all__ = [
     "BaseDataSource",
@@ -66,6 +67,7 @@ __all__ = [
     "LocalMarkdownDataSource",
     "LocalPDFDataSource",
     "LocalTextDataSource",
+    "LocalXlsxDataSource",
     "list_engines",
     "register_engine",
     "resolve_source",

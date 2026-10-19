@@ -16,12 +16,15 @@
 
 source:
   csv_source:
-    # CSV 编码尝试顺序
+    # 每个 Document 包含的数据行数（不含表头）
+    batch_rows: 50
+
+    # 编码尝试顺序：默认 utf-8，不行降级 gbk，最后 latin-1 兜底
     encoding_fallbacks:
       - "utf-8"
       - "gbk"
-      - "latin-1"
 
+  xlsx_source:
     # 每个 Document 包含的数据行数（不含表头）
     batch_rows: 50
 
@@ -34,7 +37,6 @@ source:
     encoding_fallbacks:
       - "utf-8"
       - "gbk"
-      - "latin-1"
 
     # 大文件预分块配置
     pre_chunk:
@@ -50,7 +52,6 @@ source:
     encoding_fallbacks:
       - "utf-8"
       - "gbk"
-      - "latin-1"
 
     # 超大标题段落的二次切分配置
     pre_chunk:

@@ -33,33 +33,25 @@ logger = pin("LocalCsvDataSource")
 class LocalCsvDataSource(BaseDataSource):
     """CSV 数据源，按行分批打包为 Document。"""
 
-    # 每个 Document 包含的行数（不含表头）
-    DEFAULT_BATCH_ROWS = 50
-
     def __init__(
         self,
         folder_path: str,
-        encoding_fallbacks: tuple[str, ...] | None = None,
         batch_rows: int | None = None,
+        encoding_fallbacks: tuple[str, ...] | None = None,
     ):
         self.folder_path = folder_path
         self.logger = pin("LocalCsvDataSource")
         self._ensure_dir_exists()
 
-        # 从 YAML 加载配置
-        if encoding_fallbacks is None or batch_rows is None:
-            cfg = SourceConfigLoader().load()
-            self._encoding_fallbacks = (
-                encoding_fallbacks
-                if encoding_fallbacks is not None
-                else cfg.csv_source.encoding_fallbacks
-            )
-            self._batch_rows = (
-                batch_rows if batch_rows is not None else cfg.csv_source.batch_rows
-            )
-        else:
-            self._encoding_fallbacks = encoding_fallbacks
-            self._batch_rows = batch_rows
+        cfg = SourceConfigLoader().load()
+        self._batch_rows = (
+            batch_rows if batch_rows is not None else cfg.csv_source.batch_rows
+        )
+        self._encoding_fallbacks = (
+            encoding_fallbacks
+            if encoding_fallbacks is not None
+            else cfg.csv_source.encoding_fallbacks
+        )
 
         # 实例级别锁
         self._stats_lock = threading.Lock()
@@ -87,24 +79,21 @@ class LocalCsvDataSource(BaseDataSource):
         return hash_sha256.hexdigest()
 
     def _read_csv(self, file_path: str) -> pd.DataFrame:
-        """用 pandas 读取 CSV，按编码顺序尝试。
+        """用 pandas 读取 CSV，编码失败时按配置的降级链重试。
 
-        pandas 自动处理：引号转义、换行字段、BOM、不规则列数、空值。
+        配置链已包含 latin-1 兜底（不会抛 UnicodeDecodeError），
+        循环一定能成功返回。
+        pandas 自动处理引号转义、换行字段、BOM、不规则列数、空值。
         """
         for encoding in self._encoding_fallbacks:
             try:
-                df = pd.read_csv(file_path, encoding=encoding, dtype=str)
-                if df.empty:
-                    return pd.DataFrame()
-                return df
-            except (UnicodeDecodeError, LookupError):
+                df = pd.read_csv(file_path, dtype=str, encoding=encoding)
+                return df if not df.empty else pd.DataFrame()
+            except UnicodeDecodeError:
+                self.logger.debug(f"CSV 编码 {encoding} 失败，尝试下一个: {file_path}")
                 continue
-
-        # 兜底：utf-8 + errors=ignore
-        df = pd.read_csv(
-            file_path, encoding="utf-8", encoding_errors="ignore", dtype=str
-        )
-        return df if not df.empty else pd.DataFrame()
+        # 不可达：latin-1 在配置链末尾，不会抛 UnicodeDecodeError
+        return pd.DataFrame()
 
     def _format_as_table(self, df: pd.DataFrame) -> str:
         """将 DataFrame 批次格式化为 Markdown 表格文本。

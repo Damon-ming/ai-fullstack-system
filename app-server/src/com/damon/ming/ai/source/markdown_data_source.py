@@ -272,7 +272,9 @@ class LocalMarkdownDataSource(BaseDataSource):
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
         """加载指定的 Markdown 文件列表，用于增量上传（同步）"""
-        self.logger.info(f"[MarkdownDataSource] 增量加载指定文件 count={len(file_paths)}")
+        self.logger.info(
+            f"[MarkdownDataSource] 增量加载指定文件 count={len(file_paths)}"
+        )
         md_files = []
         for fp in file_paths:
             p = Path(fp).resolve()

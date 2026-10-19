@@ -7,6 +7,7 @@ from src.com.damon.ming.ai.config.source.source_config_loader import (
     SourceConfig,
     SourceConfigLoader,
     TextSourceConfig,
+    XlsxSourceConfig,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "SourceConfig",
     "SourceConfigLoader",
     "TextSourceConfig",
+    "XlsxSourceConfig",
 ]

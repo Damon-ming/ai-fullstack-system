@@ -78,10 +78,18 @@ class CsvSourceConfig:
     """CSV 数据源配置（纯数据类）。"""
 
     # 编码尝试顺序
-    encoding_fallbacks: tuple[str, ...] = field(default_factory=tuple)
+    encoding_fallbacks: tuple[str, ...]
 
     # 每个 Document 包含的数据行数（不含表头）
-    batch_rows: int = 50
+    batch_rows: int
+
+
+@dataclass(frozen=True)
+class XlsxSourceConfig:
+    """XLSX 数据源配置（纯数据类）。"""
+
+    # 每个 Document 包含的数据行数（不含表头）
+    batch_rows: int
 
 
 @dataclass(frozen=True)
@@ -101,6 +109,9 @@ class SourceConfig:
 
     # CSV 数据源配置
     csv_source: CsvSourceConfig = field(default_factory=CsvSourceConfig)
+
+    # XLSX 数据源配置
+    xlsx_source: XlsxSourceConfig = field(default_factory=XlsxSourceConfig)
 
     # 文本数据源配置
     text_source: TextSourceConfig = field(default_factory=TextSourceConfig)
@@ -137,9 +148,19 @@ class SourceConfigLoader:
 
         # 解析 csv_source
         csv_section = source_section.get("csv_source", {})
-        csv_enc_list = csv_section.get("encoding_fallbacks", [])
-        csv_encoding_fallbacks = tuple(csv_enc_list) if csv_enc_list else tuple()
-        csv_batch_rows = csv_section.get("batch_rows", 50)
+        csv_enc_list = csv_section.get("encoding_fallbacks")
+        if csv_enc_list is None:
+            raise ValueError("缺少 source.csv_source.encoding_fallbacks 配置项")
+        csv_encoding_fallbacks = tuple(csv_enc_list)
+        csv_batch_rows = csv_section.get("batch_rows")
+        if csv_batch_rows is None:
+            raise ValueError("缺少 source.csv_source.batch_rows 配置项")
+
+        # 解析 xlsx_source
+        xlsx_section = source_section.get("xlsx_source", {})
+        xlsx_batch_rows = xlsx_section.get("batch_rows")
+        if xlsx_batch_rows is None:
+            raise ValueError("缺少 source.xlsx_source.batch_rows 配置项")
 
         text_section = source_section.get("text_source", {})
 
@@ -177,6 +198,9 @@ class SourceConfigLoader:
             csv_source=CsvSourceConfig(
                 encoding_fallbacks=csv_encoding_fallbacks,
                 batch_rows=csv_batch_rows,
+            ),
+            xlsx_source=XlsxSourceConfig(
+                batch_rows=xlsx_batch_rows,
             ),
             text_source=TextSourceConfig(
                 extensions=extensions,
