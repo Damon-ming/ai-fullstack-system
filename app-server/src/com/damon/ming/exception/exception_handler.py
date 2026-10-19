@@ -24,7 +24,7 @@ from src.com.damon.ming.exception.server_error import (
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.schemas.response import BaseFailedResponse
+from src.com.damon.ming.schemas.response import BaseBizFailedData, BaseFailedResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = pin("app.exception")
@@ -73,7 +73,7 @@ def register_exception_handler(app: FastAPI) -> None:
             status_code=500,
             content=BaseFailedResponse(
                 code=code,
-                data={"error_msg": safe_msg},
+                data=BaseBizFailedData(error_msg=safe_msg),
             ).model_dump(),
         )
 
@@ -94,7 +94,7 @@ def register_exception_handler(app: FastAPI) -> None:
             status_code=exc.status_code,
             content=BaseFailedResponse(
                 code=biz_code,
-                data={"error_msg": exc.detail},
+                data=BaseBizFailedData(error_msg=exc.detail),
             ).model_dump(),
         )
 
@@ -110,6 +110,6 @@ def register_exception_handler(app: FastAPI) -> None:
             status_code=422,
             content=BaseFailedResponse(
                 code=ErrorCode.VALIDATION.PARAM_FORMAT,
-                data={"error_msg": t(I18nKey.VALIDATION_PARAM_FORMAT)},
+                data=BaseBizFailedData(error_msg=t(I18nKey.VALIDATION_PARAM_FORMAT)),
             ).model_dump(),
         )

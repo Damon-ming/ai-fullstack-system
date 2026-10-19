@@ -24,6 +24,7 @@ from src.com.damon.ming.router.account.token_store import (
     get_session,
     is_token_valid,
 )
+from src.com.damon.ming.schemas.response import BaseBizFailedData, BaseFailedResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -57,10 +58,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
             return JSONResponse(
                 status_code=401,
-                content={
-                    "code": ErrorCode.AUTH.MISSING_TOKEN,
-                    "data": {"error_msg": t(I18nKey.AUTH_MISSING_TOKEN)},
-                },
+                content=BaseFailedResponse(
+                    code=ErrorCode.AUTH.MISSING_TOKEN,
+                    data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_MISSING_TOKEN)),
+                ).model_dump(),
             )
 
         if not is_token_valid(ctx.token):
@@ -71,10 +72,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
             return JSONResponse(
                 status_code=401,
-                content={
-                    "code": ErrorCode.AUTH.INVALID_TOKEN,
-                    "data": {"error_msg": t(I18nKey.AUTH_INVALID_TOKEN)},
-                },
+                content=BaseFailedResponse(
+                    code=ErrorCode.AUTH.INVALID_TOKEN,
+                    data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_TOKEN)),
+                ).model_dump(),
             )
 
         phone = get_phone_by_token(ctx.token)
@@ -91,10 +92,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 return JSONResponse(
                     status_code=401,
-                    content={
-                        "code": ErrorCode.AUTH.INVALID_SESSION,
-                        "data": {"error_msg": t(I18nKey.AUTH_INVALID_SESSION)},
-                    },
+                    content=BaseFailedResponse(
+                        code=ErrorCode.AUTH.INVALID_SESSION,
+                        data=BaseBizFailedData(
+                            error_msg=t(I18nKey.AUTH_INVALID_SESSION)
+                        ),
+                    ).model_dump(),
                 )
             if session.token != ctx.token:
                 logger.warning(
@@ -107,10 +110,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 return JSONResponse(
                     status_code=401,
-                    content={
-                        "code": ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
-                        "data": {"error_msg": t(I18nKey.AUTH_SESSION_MISMATCH)},
-                    },
+                    content=BaseFailedResponse(
+                        code=ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
+                        data=BaseBizFailedData(
+                            error_msg=t(I18nKey.AUTH_SESSION_MISMATCH)
+                        ),
+                    ).model_dump(),
                 )
 
         # 4. UA 一致性校验（基于 session 签发时的 UA）

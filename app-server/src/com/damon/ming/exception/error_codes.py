@@ -165,6 +165,7 @@ class _System:
     UPLOAD_FAILURE = _build(detail=3, business=Business.SYSTEM)  # 200007003
     AI_FAILURE = _build(detail=4, business=Business.SYSTEM)  # 200007004
     AUTH_FAILURE = _build(detail=5, business=Business.SYSTEM)  # 200007005
+    RATE_LIMITED = _build(detail=6, business=Business.SYSTEM)  # 200007006
     UNKNOWN = _build(detail=99, business=Business.SYSTEM)  # 200007099
 
 

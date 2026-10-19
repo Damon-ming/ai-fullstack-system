@@ -59,6 +59,7 @@ from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.schemas.response import BaseBizFailedData, BaseFailedResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
@@ -136,10 +137,10 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             logger.warning("加密版本校验失败: %s | path=%s", i18n_key, request.url.path)
             return JSONResponse(
                 status_code=400,
-                content={
-                    "code": ErrorCode.ENCRYPT.UNSUPPORTED_VERSION,
-                    "data": {"error_msg": t(i18n_key, **i18n_params)},
-                },
+                content=BaseFailedResponse(
+                    code=ErrorCode.ENCRYPT.UNSUPPORTED_VERSION,
+                    data=BaseBizFailedData(error_msg=t(i18n_key, **i18n_params)),
+                ).model_dump(),
             )
 
         sig_version_error = _check_signature_version_header(ctx.signature_version)
@@ -152,10 +153,10 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             )
             return JSONResponse(
                 status_code=400,
-                content={
-                    "code": ErrorCode.ENCRYPT.UNSUPPORTED_SIGNATURE_VERSION,
-                    "data": {"error_msg": t(i18n_key, **i18n_params)},
-                },
+                content=BaseFailedResponse(
+                    code=ErrorCode.ENCRYPT.UNSUPPORTED_SIGNATURE_VERSION,
+                    data=BaseBizFailedData(error_msg=t(i18n_key, **i18n_params)),
+                ).model_dump(),
             )
 
         content_type = ctx.content_type
@@ -171,22 +172,24 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                         if session is None:
                             return JSONResponse(
                                 status_code=401,
-                                content={
-                                    "code": ErrorCode.ENCRYPT.SESSION_INVALID,
-                                    "data": {
-                                        "error_msg": t(I18nKey.ENCRYPT_SESSION_INVALID),
-                                    },
-                                },
+                                content=BaseFailedResponse(
+                                    code=ErrorCode.ENCRYPT.SESSION_INVALID,
+                                    data=BaseBizFailedData(
+                                        error_msg=t(I18nKey.ENCRYPT_SESSION_INVALID)
+                                    ),
+                                ).model_dump(),
                             )
                         encrypt_response = True
             except Exception as e:
                 logger.warning("JSON 解密失败: %s", e)
                 return JSONResponse(
                     status_code=400,
-                    content={
-                        "code": ErrorCode.ENCRYPT.DECRYPTION_FAILED,
-                        "data": {"error_msg": t(I18nKey.ENCRYPT_DECRYPTION_FAILED)},
-                    },
+                    content=BaseFailedResponse(
+                        code=ErrorCode.ENCRYPT.DECRYPTION_FAILED,
+                        data=BaseBizFailedData(
+                            error_msg=t(I18nKey.ENCRYPT_DECRYPTION_FAILED)
+                        ),
+                    ).model_dump(),
                 )
 
         # ---- 2. FormData 加密请求：解密 meta + 验证签名 ----------------
@@ -196,20 +199,24 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 if session is None:
                     return JSONResponse(
                         status_code=401,
-                        content={
-                            "code": ErrorCode.ENCRYPT.SESSION_INVALID,
-                            "data": {"error_msg": t(I18nKey.ENCRYPT_SESSION_INVALID)},
-                        },
+                        content=BaseFailedResponse(
+                            code=ErrorCode.ENCRYPT.SESSION_INVALID,
+                            data=BaseBizFailedData(
+                                error_msg=t(I18nKey.ENCRYPT_SESSION_INVALID)
+                            ),
+                        ).model_dump(),
                     )
                 encrypt_response = True
             except Exception as e:
                 logger.warning("FormData 解密失败: %s", e)
                 return JSONResponse(
                     status_code=400,
-                    content={
-                        "code": ErrorCode.ENCRYPT.META_DECRYPT_FAILED,
-                        "data": {"error_msg": t(I18nKey.ENCRYPT_DECRYPTION_FAILED)},
-                    },
+                    content=BaseFailedResponse(
+                        code=ErrorCode.ENCRYPT.META_DECRYPT_FAILED,
+                        data=BaseBizFailedData(
+                            error_msg=t(I18nKey.ENCRYPT_DECRYPTION_FAILED)
+                        ),
+                    ).model_dump(),
                 )
 
         # ---- 3. 调用下游 --------------------------------------------

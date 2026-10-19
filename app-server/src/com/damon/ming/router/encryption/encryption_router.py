@@ -24,6 +24,7 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.account.token_store import get_session, is_token_valid
 from src.com.damon.ming.schemas.response import (
+    BaseBizFailedData,
     BaseFailedResponse,
     BaseSuccessResponse,
 )
@@ -79,23 +80,21 @@ async def register_session(
     if not ctx.token or not is_token_valid(ctx.token):
         return BaseFailedResponse(
             code=ErrorCode.AUTH.INVALID_TOKEN,
-            data={"error_msg": t(I18nKey.AUTH_INVALID_TOKEN)},
+            data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_TOKEN)),
         )
 
     # 2. 校验 session_id
     if not ctx.session_id:
         return BaseFailedResponse(
             code=ErrorCode.AUTH.MISSING_SESSION,
-            data={"error_msg": t(I18nKey.AUTH_MISSING_SESSION)},
+            data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_MISSING_SESSION)),
         )
 
     session = get_session(ctx.session_id)
     if session is None:
         return BaseFailedResponse(
             code=ErrorCode.AUTH.INVALID_SESSION,
-            data={
-                "error_msg": t(I18nKey.AUTH_INVALID_SESSION),
-            },
+            data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_SESSION)),
         )
 
     # 3. 防伪造：session 必须属于该 token
@@ -107,7 +106,7 @@ async def register_session(
         )
         return BaseFailedResponse(
             code=ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
-            data={"error_msg": t(I18nKey.AUTH_SESSION_MISMATCH)},
+            data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_SESSION_MISMATCH)),
         )
 
     # 4. 撤销该 session_id 的旧加密会话（防止僵尸密钥）
@@ -123,13 +122,13 @@ async def register_session(
         logger.warning("会话注册失败（密钥格式错误）: %s", e)
         return BaseFailedResponse(
             code=ErrorCode.ENCRYPT.INVALID_KEY_FORMAT,
-            data={"error_msg": t(I18nKey.ENCRYPT_INVALID_KEY_FORMAT)},
+            data=BaseBizFailedData(error_msg=t(I18nKey.ENCRYPT_INVALID_KEY_FORMAT)),
         )
     except Exception:
         logger.exception("会话注册失败")
         return BaseFailedResponse(
             code=ErrorCode.ENCRYPT.SESSION_REG_FAILED,
-            data={"error_msg": t(I18nKey.ENCRYPT_SESSION_REG_FAILED)},
+            data=BaseBizFailedData(error_msg=t(I18nKey.ENCRYPT_SESSION_REG_FAILED)),
         )
 
     # 6. 业务层关联：将加密会话绑定到 session_id
