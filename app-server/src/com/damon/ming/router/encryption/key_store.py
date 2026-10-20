@@ -66,7 +66,10 @@ class PgKeyStore(BaseKeyStore):
         """
 
     def save_session(self, session: StoredSession, session_id: str = "") -> None:
-        """保存会话记录。session_id 为业务层扩展字段。"""
+        """保存会话记录。session_id 为业务层扩展字段，一步写入。
+
+        同一 key_id 重复保存 → ON CONFLICT 覆盖，结果幂等。
+        """
         self._db.execute(
             "INSERT INTO encryption_sessions (key_id, aes_key_enc, session_id, created_at, expires_at) "
             "VALUES (%s, %s, %s, %s, %s) "
@@ -82,6 +85,43 @@ class PgKeyStore(BaseKeyStore):
             ),
             commit=True,
         )
+
+    def replace_session(
+        self,
+        session_id: str,
+        new_stored: StoredSession | None = None,
+    ) -> None:
+        """原子地替换某 session_id 关联的加密会话。
+
+        删除该 session_id 的所有旧记录，可选插入新记录。
+        两者在同一事务中，崩溃时自动 rollback。
+
+        用法：
+          - 换绑：先 replace_session(sid, None) 删除旧记录，
+                  再 save_session(new_stored) 插入新记录。
+          - 一次性替换：replace_session(sid, new_stored)。
+          - 仅删除：replace_session(sid, None)。
+        """
+        with self._db.transaction() as conn:
+            conn.execute(
+                text("DELETE FROM encryption_sessions WHERE session_id = :sid"),
+                {"sid": session_id},
+            )
+            if new_stored is not None:
+                conn.execute(
+                    text(
+                        "INSERT INTO encryption_sessions "
+                        "(key_id, aes_key_enc, session_id, created_at, expires_at) "
+                        "VALUES (:kid, :enc, :sid, :cat, :eat)"
+                    ),
+                    {
+                        "kid": new_stored.key_id,
+                        "enc": new_stored.aes_key_enc,
+                        "sid": session_id,
+                        "cat": new_stored.created_at,
+                        "eat": new_stored.expires_at,
+                    },
+                )
 
     def get_session(self, key_id: str) -> StoredSession | None:
         with self._db.engine.connect() as conn:
@@ -140,8 +180,10 @@ class PgKeyStore(BaseKeyStore):
         """
         将加密会话绑定到业务会话。
 
-        由业务层在 register_session 成功后调用，加密模块不感知此方法。
-        session_id 在此仅是 opaque string，不解析其含义。
+        .. deprecated::
+            使用 save_session(stored, session_id=...) 一步写入代替，
+            避免 save + bind 两步之间的竞态窗口。
+            保留本方法仅供历史兼容，新代码不应调用。
         """
         with self._db.engine.connect() as conn:
             conn.execute(

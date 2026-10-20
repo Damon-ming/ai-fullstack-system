@@ -80,14 +80,25 @@ def is_token_valid(token: str) -> bool:
         return result.fetchone() is not None
 
 
-def bind_token(phone: str, token: str) -> None:
-    """绑定 phone → token 映射（幂等，ON CONFLICT 覆盖）。"""
+def bind_token(phone: str, token: str) -> str:
+    """绑定 phone → token 映射。
+
+    采用 INSERT 优先策略：先尝试插入，phone 冲突时 DO NOTHING，
+    然后查出当前绑定的 token 返回。并发场景下竞争失败方不会 500，
+    而是返回竞争者已插入的 token。
+
+    返回最终生效的 token（自己或竞争者的）。
+    """
     _db().execute(
         "INSERT INTO users (token, phone, name, created_at) VALUES (%s, %s, '', %s) "
-        "ON CONFLICT (token) DO UPDATE SET phone = EXCLUDED.phone",
+        "ON CONFLICT (phone) DO NOTHING",
         (token, phone, now()),
         commit=True,
     )
+
+    # 无论自己是否插入成功，都返回数据库中当前绑定的 token
+    existing = get_token_by_phone(phone)
+    return existing or token
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +260,40 @@ def get_active_session(token: str, device_id: str) -> SessionRow | None:
         )
         row = result.fetchone()
     return _session_row(row)
+
+
+def create_or_refresh_session(token: str, device_id: str, ua_hash: str = "") -> str:
+    """创建新会话并原子过期该 (token, device_id) 的所有旧会话。
+
+    每次登录都返回新 session_id，消除 get-then-create 的 TOCTOU 窗口。
+    并发调用时各自持有有效 session，旧会话被过期但新会话互不干扰。
+    """
+    current = now()
+    session_id = str(uuid.uuid4())
+    expires_at = current + SESSION_TTL
+
+    with _db().transaction() as conn:
+        # 过期该 (token, device_id) 的所有旧会话
+        conn.execute(
+            text(
+                "UPDATE sessions SET expires_at = :now "
+                "WHERE token = :tok AND device_id = :did AND expires_at > :now"
+            ),
+            {"now": current, "tok": token, "did": device_id},
+        )
+        # 插入新会话
+        conn.execute(
+            sessions.insert().values(
+                session_id=session_id,
+                token=token,
+                device_id=device_id,
+                issued_ua_hash=ua_hash,
+                created_at=current,
+                expires_at=expires_at,
+            )
+        )
+
+    return session_id
 
 
 def revoke_sessions_by_token(token: str) -> int:

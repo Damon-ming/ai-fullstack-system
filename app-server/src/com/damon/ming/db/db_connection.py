@@ -246,14 +246,16 @@ _default_db_lock = threading.Lock()
 
 
 def get_default_db() -> DbConnection:
-    """获取全局默认数据库连接。"""
+    """获取全局默认数据库连接（线程安全）。"""
     if _default_db is None:
-        from src.com.damon.ming.exception.error_codes import ErrorCode
+        with _default_db_lock:
+            if _default_db is None:
+                from src.com.damon.ming.exception.error_codes import ErrorCode
 
-        raise DatabaseError(
-            "默认数据库未初始化。请先调用 set_default_db()。",
-            biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
-        )
+                raise DatabaseError(
+                    "默认数据库未初始化。请先调用 set_default_db()。",
+                    biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
+                )
     return _default_db
 
 

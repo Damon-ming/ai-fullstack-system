@@ -138,49 +138,22 @@ def save_history(
 ) -> HistoryConversationRow:
     """保存对话历史。
 
-    同一 token + title 已存在则更新消息和更新时间；
+    同一 token + title 已存在则更新消息和更新时间（UPSERT）；
     不存在则新建一条记录。
+    消除 SELECT + INSERT/UPDATE 之间的 TOCTOU 竞态。
     返回保存后的完整记录（含消息正文）。
     """
     current = now()
     messages_json = json.dumps(messages, ensure_ascii=False)
     msg_count = len(messages)
-
-    # 查找同 token + title 的已有记录
-    existing_rows = _db().execute(
-        "SELECT id FROM history_conversations WHERE token = :token AND title = :title",
-        {"token": token, "title": title},
-        commit=False,
-        fetch=True,
-    )
-
-    if existing_rows:
-        conversation_id = existing_rows[0][0]
-        _db().execute(
-            "UPDATE history_conversations "
-            "SET messages = :messages, msg_count = :msg_count, updated_at = :now "
-            "WHERE id = :id",
-            {
-                "messages": messages_json,
-                "msg_count": msg_count,
-                "now": current,
-                "id": conversation_id,
-            },
-            commit=True,
-        )
-        logger.info(
-            "历史记录已更新 | id=%s | title=%s | msg_count=%d",
-            conversation_id,
-            title,
-            msg_count,
-        )
-        return get_history(conversation_id, token)
-
-    # 新建
     conversation_id = str(uuid.uuid4())
+
+    # UPSERT：并发时一个成功 INSERT，另一个走 ON CONFLICT UPDATE
     _db().execute(
         "INSERT INTO history_conversations (id, token, title, messages, msg_count, created_at, updated_at) "
-        "VALUES (:id, :token, :title, :messages, :msg_count, :now, :now)",
+        "VALUES (:id, :token, :title, :messages, :msg_count, :now, :now) "
+        "ON CONFLICT (token, title) DO UPDATE SET "
+        "messages = EXCLUDED.messages, msg_count = EXCLUDED.msg_count, updated_at = EXCLUDED.updated_at",
         {
             "id": conversation_id,
             "token": token,
@@ -191,13 +164,23 @@ def save_history(
         },
         commit=True,
     )
+
+    # 查出实际 id（UPDATE 时 id 不变，INSERT 时是新 uuid）
+    rows = _db().execute(
+        "SELECT id FROM history_conversations WHERE token = :token AND title = :title",
+        {"token": token, "title": title},
+        commit=False,
+        fetch=True,
+    )
+    actual_id = rows[0][0] if rows else conversation_id
+
     logger.info(
-        "历史记录已新建 | id=%s | title=%s | msg_count=%d",
-        conversation_id,
+        "历史记录已保存 | id=%s | title=%s | msg_count=%d",
+        actual_id,
         title,
         msg_count,
     )
-    return get_history(conversation_id, token)
+    return get_history(actual_id, token)
 
 
 # ---------------------------------------------------------------------------

@@ -109,12 +109,13 @@ async def register_session(
             data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_SESSION_MISMATCH)),
         )
 
-    # 4. 撤销该 session_id 的旧加密会话（防止僵尸密钥）
-    key_store = getattr(km, "_key_store", None)
-    if key_store is not None and hasattr(key_store, "remove_by_session"):
-        key_store.remove_by_session(ctx.session_id)
+    # 4. 业务层决策：该 session_id 已有绑定的加密会话 → 先删除旧记录
+    #    删除操作独立事务内完成，register_session 写入新记录。
+    #    如果步骤 5 崩溃，旧密钥已删但客户端可重新注册（幂等流程）。
+    if ctx.session_id:
+        km.clear_key_store_session(ctx.session_id)
 
-    # 5. 注册加密会话（纯密钥操作，不感知业务绑定）
+    # 5. 注册加密会话（纯技术操作：RSA 解密 + 生成 key_id + 落盘）
     try:
         encrypted_aes_key = base64.b64decode(encrypted_aes_key)
         enc_session = km.register_session(encrypted_aes_key)
@@ -130,10 +131,6 @@ async def register_session(
             code=ErrorCode.ENCRYPT.SESSION_REG_FAILED,
             data=BaseBizFailedData(error_msg=t(I18nKey.ENCRYPT_SESSION_REG_FAILED)),
         )
-
-    # 6. 业务层关联：将加密会话绑定到 session_id
-    if key_store is not None and hasattr(key_store, "bind_session"):
-        key_store.bind_session(enc_session.key_id, ctx.session_id)
 
     logger.info(
         "加密会话注册 | key_id=%s session_id=%s",

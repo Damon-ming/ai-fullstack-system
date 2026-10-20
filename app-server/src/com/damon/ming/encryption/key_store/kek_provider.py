@@ -72,9 +72,11 @@ def derive_kek(
         )
 
     if len(master_key) < 16:
-        from com.damon.ming.log.logger import security_warn
+        from src.com.damon.ming.log import pin
 
-        security_warn("MASTER_KEY 长度不足 32 字符，生产环境请使用更强的密钥")
+        pin("encryption.kek").warning(
+            "MASTER_KEY 长度不足 32 字符，生产环境请使用更强的密钥"
+        )
 
     hkdf = HKDF(
         algorithm=hashes.SHA256(),

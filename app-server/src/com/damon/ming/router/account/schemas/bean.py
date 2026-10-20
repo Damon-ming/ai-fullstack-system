@@ -6,7 +6,8 @@ class TokenRequest(BaseModel):
 
     phone: str = Field(
         ...,
-        description="手机号（含区号），用于标识用户身份。",
+        pattern=r"^\+?[0-9]{6,20}$",
+        description="手机号（含区号），6-20 位数字，可选 + 前缀。如 +8613800138000",
         examples=["+8613800138000"],
     )
 

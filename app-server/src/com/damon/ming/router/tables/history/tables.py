@@ -11,7 +11,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import JSON, Column, Integer, String, Table
+from sqlalchemy import JSON, Column, Integer, String, Table, UniqueConstraint
 from src.com.damon.ming.router.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
@@ -28,6 +28,7 @@ history_conversations = Table(
     Column("msg_count", Integer, nullable=False, server_default="0"),
     Column("created_at", nullable=False, server_default=_NOW),
     Column("updated_at", nullable=False, server_default=_NOW),
+    UniqueConstraint("token", "title", name="uq_history_token_title"),
 )
 
 
@@ -49,6 +50,7 @@ class HistoryConversationRow:
 _HISTORY_INDEX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_history_token ON history_conversations (token)",
     "CREATE INDEX IF NOT EXISTS idx_history_updated ON history_conversations (updated_at)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_history_token_title ON history_conversations (token, title)",
 ]
 
 

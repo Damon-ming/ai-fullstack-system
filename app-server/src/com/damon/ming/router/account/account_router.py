@@ -37,8 +37,7 @@ from src.com.damon.ming.router.account.schemas.bean import (
 )
 from src.com.damon.ming.router.account.token_store import (
     bind_token,
-    create_session,
-    get_active_session,
+    create_or_refresh_session,
     get_token_by_phone,
     get_user_profile,
     is_token_valid,
@@ -85,40 +84,16 @@ async def login(body: TokenRequest, request: Request):
 
     # 3. 检查该 phone 是否已有 token（幂等）
     existing_token = get_token_by_phone(body.phone)
-    if existing_token:
-        # 查找该组合的活跃会话
-        active_session = get_active_session(existing_token, device_id)
-        session_id = (
-            active_session.session_id
-            if active_session
-            else create_session(existing_token, device_id, ua_hash)
-        )
+    if not existing_token:
+        # 4. 新 phone → 签发 token（INSERT 优先，并发时返回竞争者的 token）
+        new_token = secrets.token_hex(32)
+        existing_token = bind_token(body.phone, new_token)
 
-        logger.info(
-            "Token 已存在（复用） | phone=%s device_id=%s session_id=%s",
-            _mask_phone(body.phone),
-            device_id[:12] + "...",
-            session_id[:8] + "...",
-        )
-
-        return BaseSuccessResponse(
-            code=ErrorCode.OK,
-            data=TokenResponseData(
-                token=existing_token,
-                device_id=device_id,
-                session_id=session_id,
-            ),
-        )
-
-    # 4. 新 phone → 签发 token
-    token = secrets.token_hex(32)
-    bind_token(body.phone, token)
-
-    # 5. 创建会话
-    session_id = create_session(token, device_id, ua_hash)
+    # 5. 创建/刷新会话（原子操作：过期旧会话 + 插入新会话）
+    session_id = create_or_refresh_session(existing_token, device_id, ua_hash)
 
     logger.info(
-        "Token 已签发 | phone=%s device_id=%s session_id=%s",
+        "登录完成 | phone=%s device_id=%s session_id=%s",
         _mask_phone(body.phone),
         device_id[:12] + "...",
         session_id[:8] + "...",
@@ -127,7 +102,7 @@ async def login(body: TokenRequest, request: Request):
     return BaseSuccessResponse(
         code=ErrorCode.OK,
         data=TokenResponseData(
-            token=token,
+            token=existing_token,
             device_id=device_id,
             session_id=session_id,
         ),

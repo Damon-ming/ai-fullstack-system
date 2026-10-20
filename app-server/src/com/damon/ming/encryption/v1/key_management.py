@@ -187,9 +187,9 @@ class KeyManager:
           SessionKey（含 key_id，客户端后续请求需带上）
 
         注意：
-          本方法只做密钥注册，不感知任何业务绑定（用户/设备/会话归属等）。
-          业务层如需关联会话与业务实体，请在注册后通过 key_store 的
-          bind_session() 方法自行建立关联。
+          本方法只做密钥注册 + 纯 key_id 维度的持久化。
+          不感知任何业务绑定（session_id / 换绑 / 替换等）。
+          业务层如需先清理旧会话再注册，应在调用本方法之前自行处理。
         """
         # 1. RSA 解密拿到原始 AES 密钥
         aes_key = self._private_key.decrypt(
@@ -285,6 +285,11 @@ class KeyManager:
             self._sessions.pop(key_id, None)
         if self._key_store is not None:
             self._key_store.remove_session(key_id)
+
+    def clear_key_store_session(self, session_id: str) -> None:
+        """清除存储后端中某 session_id 的所有记录（业务层调用）。"""
+        if self._key_store is not None:
+            self._key_store.replace_session(session_id, None)
 
     # ---- 内部清理 -------------------------------------------------------
 
