@@ -4,7 +4,7 @@
 
 职责：
   - 数据库连接池（从 YAML 配置加载，失败则启动报错）
-  - 加密体系（KeyManager + 可选 PgKeyStore）
+  - 加密体系（RSAKeyPair + KeyMaterial + SessionService）
   - 签名密钥
   - RAG 知识库
   - LLM 推理客户端
@@ -35,7 +35,9 @@ class AppInitializer:
 
         # 子系统状态（startup 后填充）
         self.db_conn = None
-        self.key_manager = None
+        self.rsa_key_pair = None
+        self.key_material = None
+        self.session_service = None
         self.pool_mgr = None
         self.rag_app = None
         self.infer_service = None
@@ -93,6 +95,9 @@ class AppInitializer:
 
         # 上传配置（文件类型白名单 + 大小上限 + 时间窗口）
         app.state.upload_config = self.upload_config
+
+        # 加密会话服务（RSA + 内存 + 可选 DB 持久化）
+        app.state.session_service = self.session_service
 
         logger.info("子系统已挂载到 app.state")
 
@@ -259,31 +264,50 @@ class AppInitializer:
             logger.warning("账号体系表创建失败: %s", e)
 
     def _init_encryption(self) -> None:
-        """加密体系：配置加载 > KeyManager > 可选 PgKeyStore（共享连接池）。"""
+        """加密体系：RSAKeyPair（纯技术）+ KeyMaterial（数据密钥）+ SessionService（业务协调）。"""
+        from src.com.damon.ming.app.encryption.session_service import SessionService
+        from src.com.damon.ming.encryption.globals import (
+            set_key_material,
+            set_rsa_key_pair,
+        )
+        from src.com.damon.ming.encryption.v1.key_management import KeyMaterial
+        from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
+
         self._enc_config = self._load_encryption_config()
         key_store, kek = self._create_key_store()
         rsa_size = self._enc_config.rsa_key_size if self._enc_config else 2048
-        ttl_seconds = (
-            self._enc_config.session_ttl_seconds if self._enc_config else 60 * 60 * 24
-        )
-
-        # 数据密钥 ID 从业务配置读取（encryption 模块不包含此常量）
         data_key_id = self._enc_config.data_key_id if self._enc_config else ""
 
-        from src.com.damon.ming.encryption.globals import set_key_manager
-        from src.com.damon.ming.encryption.v1.key_management import KeyManager
+        # 1. RSA 密钥对（纯技术）
+        self.rsa_key_pair = RSAKeyPair(rsa_key_size=rsa_size)
+        self.rsa_key_pair.initialize()
+        set_rsa_key_pair(self.rsa_key_pair)
 
-        self.key_manager = KeyManager(
-            rsa_key_size=rsa_size,
-            key_store=key_store,
-            kek=kek,
-            session_ttl_seconds=ttl_seconds,
-            data_key_id=data_key_id,
+        # 2. 数据密钥材料（纯技术：字段加解密 + 盲索引）
+        self.key_material = KeyMaterial(data_key_id=data_key_id)
+        self.key_material.initialize()
+        set_key_material(self.key_material)
+
+        # 3. 会话服务（业务协调：RSA + 内存 + 可选 DB）
+        ttl_seconds = (
+            self._enc_config.session_ttl_seconds
+            if self._enc_config
+            else 60 * 60 * 24
         )
-        self.key_manager.initialize()
-        set_key_manager(self.key_manager)
+        self.session_service = SessionService(
+            rsa_key_pair=self.rsa_key_pair,
+            kek=kek or b"",
+            ttl_seconds=ttl_seconds,
+        )
+        if key_store is not None:
+            self.session_service.set_key_store(key_store)
+        self.session_service.initialize()
+
         logger.info(
-            "加密体系初始化完成 | rsa=%d | ttl=%dh", rsa_size, ttl_seconds // 3600
+            "加密体系初始化完成 | rsa=%d | ttl=%dh | 持久化=%s",
+            rsa_size,
+            ttl_seconds // 3600,
+            "启用" if key_store is not None else "纯内存",
         )
 
     def _load_encryption_config(self):
@@ -316,8 +340,8 @@ class AppInitializer:
             return None, None
 
         try:
+            from src.com.damon.ming.app.encryption.key_store import PgKeyStore
             from src.com.damon.ming.encryption.key_store import derive_kek
-            from src.com.damon.ming.router.encryption.key_store import PgKeyStore
 
             if self._is_debug and not os.environ.get("MASTER_KEY"):
                 from src.com.damon.ming.encryption.key_store.generate_master_key import (
@@ -343,7 +367,9 @@ class AppInitializer:
                 )
 
             store = PgKeyStore(self.db_conn)
+            store.initialize()
             kek = derive_kek(kek_salt=kek_salt, kek_info=kek_info)
+            store.cleanup_expired()
             logger.info("密钥持久化存储已启用（PostgreSQL）")
             return store, kek
         except Exception as e:
@@ -368,9 +394,9 @@ class AppInitializer:
         import asyncio
 
         from src.com.damon.ming.app.config.ai.chat_config_loader import (
-    ChatConfigLoader,
-    ChatLocaleText,
-)
+            ChatConfigLoader,
+            ChatLocaleText,
+        )
 
         configs = ChatConfigLoader().load_all()
         # 并发参数所有 locale 相同（来自 common），任选其一提取

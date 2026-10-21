@@ -1,23 +1,24 @@
-# app-server/src/com/damon/ming/router/encryption/key_store.py
+# app-server/src/com/damon/ming/app/encryption/key_store.py
 """
-数据库密钥存储实现 —— 会话密钥持久化到数据库。
+数据库密钥存储实现 —— 业务层存储后端。
 
-本文件属于业务层（router/encryption/），在纯存储接口之上扩展了业务维度索引。
+本文件从 router/encryption/ 迁移到 app/encryption/，
+因为存储实现属于业务层，不属于路由层。
 
 关联：
   devices 表由 account_schema.py 管理，本模块不再重复建表。
   encryption_sessions 通过 session_id 与 sessions 表关联。
 
-表定义统一在 router/tables.py，本文件只负责业务逻辑和调用。
+表定义统一在 app/tables.py，本文件只负责业务逻辑和调用。
 """
 
 from sqlalchemy import text
-from src.com.damon.ming.db.db_config import DbConfig
-from src.com.damon.ming.db.db_connection import DbConnection
-from src.com.damon.ming.encryption.key_store.base_key_store import (
+from src.com.damon.ming.app.encryption.base_key_store import (
     BaseKeyStore,
     StoredSession,
 )
+from src.com.damon.ming.db.db_config import DbConfig
+from src.com.damon.ming.db.db_connection import DbConnection
 from src.com.damon.ming.router.tables.encryption import (
     encryption_sessions,
 )
@@ -30,7 +31,7 @@ class PgKeyStore(BaseKeyStore):
 
     用法：
         # 方式一：传入 DbConnection（与项目其他模块共享连接池）
-        db_conn = DbConnection(db_config)  # db_config 由上层配置加载器构造
+        db_conn = DbConnection(db_config)
         db_conn.initialize()
         store = PgKeyStore(db_conn)
         store.initialize()
@@ -97,8 +98,6 @@ class PgKeyStore(BaseKeyStore):
         两者在同一事务中，崩溃时自动 rollback。
 
         用法：
-          - 换绑：先 replace_session(sid, None) 删除旧记录，
-                  再 save_session(new_stored) 插入新记录。
           - 一次性替换：replace_session(sid, new_stored)。
           - 仅删除：replace_session(sid, None)。
         """

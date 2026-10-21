@@ -48,14 +48,13 @@ from fastapi import Request
 from src.com.damon.ming.encryption.globals import (
     SUPPORTED_ENCRYPTION_VERSIONS,
     SUPPORTED_SIGNATURE_VERSIONS,
-    get_key_manager,
     get_sign_context,
 )
 from src.com.damon.ming.encryption.v1.crypto_engine import (
     AesGcmEngine,
     EncryptedPayload,
 )
-from src.com.damon.ming.encryption.v1.key_management import KeyManager, SessionKey
+from src.com.damon.ming.encryption.v1.key_management import SessionKey
 from src.com.damon.ming.encryption.v1.signature import (
     derive_signing_key,
     verify_signature,
@@ -106,9 +105,7 @@ def _replay_response() -> JSONResponse:
         status_code=400,
         content=BaseFailedResponse(
             code=ErrorCode.ENCRYPT.SIGNATURE_REPLAY_DETECTED,
-            data=BaseBizFailedData(
-                error_msg=t(I18nKey.ENCRYPT_REPLAY_DETECTED)
-            ),
+            data=BaseBizFailedData(error_msg=t(I18nKey.ENCRYPT_REPLAY_DETECTED)),
         ).model_dump(),
     )
 
@@ -186,7 +183,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         return True
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        km = get_key_manager()
+        sm = request.state.session_service
         ctx = request.state.ctx
         encrypt_response = ctx.encrypt_enabled
         session: SessionKey | None = None
@@ -229,7 +226,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 if raw_body:
                     body_json = json.loads(raw_body)
                     if _is_encrypted_body(body_json):
-                        session = self._decrypt_and_verify_json(request, km, body_json)
+                        session = self._decrypt_and_verify_json(request, sm, body_json)
                         if session is None:
                             return JSONResponse(
                                 status_code=401,
@@ -256,7 +253,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         # ---- 2. FormData 加密请求：解密 meta + 验证签名 ----------------
         elif "multipart/form-data" in content_type:
             try:
-                session = await self._decrypt_and_verify_formdata(request, km)
+                session = await self._decrypt_and_verify_formdata(request, sm)
                 if session is None:
                     return JSONResponse(
                         status_code=401,
@@ -292,10 +289,11 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
     # ==== 私有 ============================================================
 
     def _decrypt_and_verify_json(
-        self, request: Request, km: KeyManager, body_json: dict
+        self, request: Request, sm, body_json: dict
     ) -> SessionKey | None:
         """解密 JSON 请求并验证签名。返回 session 或 None。"""
-        session = km.get_session(body_json.get("keyId", ""))
+        key_id = body_json.get("keyId", "")
+        session = sm.get_session(key_id)
         if session is None:
             return None
 
@@ -340,7 +338,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         return session
 
     async def _decrypt_and_verify_formdata(
-        self, request: Request, km: KeyManager
+        self, request: Request, sm
     ) -> SessionKey | None:
         """解密 FormData 的 meta_json_encrypted 并验证签名。"""
         form = await request.form()
@@ -356,7 +354,8 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         if not _is_encrypted_body(meta_encrypted):
             return None
 
-        session = km.get_session(meta_encrypted.get("keyId", ""))
+        key_id = meta_encrypted.get("keyId", "")
+        session = sm.get_session(key_id)
         if session is None:
             return None
 

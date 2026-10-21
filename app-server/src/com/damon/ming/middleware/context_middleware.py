@@ -18,4 +18,6 @@ class ContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # 一次性提取所有头部 → 存入 request.state.ctx
         request.state.ctx = build_request_context(request)
+        # 注入加密会话服务（RSA + 内存 + 可选 DB 持久化）
+        request.state.session_service = request.app.state.session_service
         return await call_next(request)

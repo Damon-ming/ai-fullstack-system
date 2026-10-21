@@ -130,17 +130,17 @@ class FieldEncryptor:
         参数：
           plaintext:  待加密明文
           suite:       加密套件（默认随机 nonce，最安全）
-          key:         AES-256 密钥（32 字节），为 None 时尝试从 KeyManager 取
+          key:         AES-256 密钥（32 字节），为 None 时尝试从 KeyMaterial 取
           key_id:      密钥标识（写入密文，解密时用于取对应密钥）
           index_key:   盲索引密钥（可选，传则同时返回索引）
 
         返回：
           密文字符串。
         """
-        from src.com.damon.ming.encryption.globals import get_key_manager
+        from src.com.damon.ming.encryption.globals import get_key_material
 
         if key is None:
-            key = get_key_manager().get_data_key(key_id)
+            key = get_key_material().get_data_key(key_id)
 
         plaintext_bytes = plaintext.encode("utf-8")
 
@@ -170,20 +170,19 @@ class FieldEncryptor:
         参数：
           packed_b64: FieldEncryptor.encrypt 返回的密文
           suite:       加密套件（需与加密时一致）
-          key_map:      key_id → key 的映射（为 None 时从 KeyManager 取）
+          key_map:      key_id → key 的映射（为 None 时从 KeyMaterial 取）
 
         返回：
           解密后的明文字符串。
         """
-        from src.com.damon.ming.encryption.globals import get_key_manager
+        from src.com.damon.ming.encryption.globals import get_key_material
 
         key_id, nonce, ciphertext = _unpack_ciphertext(packed_b64)
 
         if key_map and key_id in key_map:
             key = key_map[key_id]
         else:
-            km = get_key_manager()
-            key = km.get_data_key(key_id)
+            key = get_key_material().get_data_key(key_id)
 
         payload = EncryptedPayload(
             encrypted=base64.b64encode(ciphertext).decode("ascii"),
@@ -206,9 +205,9 @@ class FieldEncryptor:
           # 查询时
           db.query(User).filter(User.email_idx == FieldEncryptor.blind_index("foo@example.com"))
         """
-        from src.com.damon.ming.encryption.globals import get_key_manager
+        from src.com.damon.ming.encryption.globals import get_key_material
 
         if index_key is None:
-            index_key = get_key_manager().get_index_key()
+            index_key = get_key_material().get_index_key()
 
         return CryptoEngine.blind_index(value, index_key)

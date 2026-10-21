@@ -1,20 +1,18 @@
-# app-server/src/com/damon/ming/encryption/key_store/memory_key_store.py
+# app-server/src/com/damon/ming/app/encryption/memory_key_store.py
 """
-内存密钥存储 —— 纯内存实现，不持久化。
+内存密钥存储 —— 业务层存储实现，不持久化。
 
 适用场景：
   - 开发环境 / 单实例快速部署
   - 不需要跨重启保持会话
-  - 作为无 DB 依赖的 fallback
+  - 作为无 DB 时的 fallback
 
-安全说明：
-  - 重启后所有会话丢失，客户端需重新注册
-  - 纯 key_id 索引，无业务维度
+本文件从 encryption/key_store/ 迁移到 app/encryption/。
 """
 
 import threading
 
-from src.com.damon.ming.encryption.key_store.base_key_store import (
+from src.com.damon.ming.app.encryption.base_key_store import (
     BaseKeyStore,
     StoredSession,
 )

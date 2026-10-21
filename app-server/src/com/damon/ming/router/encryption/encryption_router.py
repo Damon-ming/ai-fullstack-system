@@ -16,7 +16,6 @@
 import base64
 
 from fastapi import APIRouter, Body, Request
-from src.com.damon.ming.encryption.globals import get_key_manager
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
@@ -36,15 +35,15 @@ router = APIRouter(prefix="/api/encryption", tags=["加密体系"])
 
 @router.get("/key/v1")
 @limiter.limit("30/minute")
-async def get_public_key():
+async def get_public_key(request: Request):
     """
     获取服务端 RSA 公钥。
 
     客户端拿到公钥后，用它加密自己生成的 AES-256 密钥，
     再通过 POST /session/v1 注册会话。
     """
-    km = get_key_manager()
-    pem = km.get_public_key_pem()
+    sm = request.state.session_service
+    pem = sm.rsa_key_pair.get_public_key_pem()
     return BaseSuccessResponse(
         code=ErrorCode.OK,
         data={
@@ -73,8 +72,8 @@ async def register_session(
       - X-Session-ID header 必须存在且有效（session 属于该 token）
       - 会话将绑定到该 session_id，注册前撤销该 session 的旧密钥
     """
-    km = get_key_manager()
     ctx = request.state.ctx
+    sm = request.state.session_service
 
     # 1. 校验 token
     if not ctx.token or not is_token_valid(ctx.token):
@@ -109,16 +108,10 @@ async def register_session(
             data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_SESSION_MISMATCH)),
         )
 
-    # 4. 业务层决策：该 session_id 已有绑定的加密会话 → 先删除旧记录
-    #    删除操作独立事务内完成，register_session 写入新记录。
-    #    如果步骤 5 崩溃，旧密钥已删但客户端可重新注册（幂等流程）。
-    if ctx.session_id:
-        km.clear_key_store_session(ctx.session_id)
-
-    # 5. 注册加密会话（纯技术操作：RSA 解密 + 生成 key_id + 落盘）
+    # 4. 注册加密会话（原子替换：清旧录 + 插新录在同一事务）
     try:
-        encrypted_aes_key = base64.b64decode(encrypted_aes_key)
-        enc_session = km.register_session(encrypted_aes_key)
+        encrypted_aes_key_bytes = base64.b64decode(encrypted_aes_key)
+        enc_session = sm.register_and_replace(encrypted_aes_key_bytes, ctx.session_id)
     except ValueError as e:
         logger.warning("会话注册失败（密钥格式错误）: %s", e)
         return BaseFailedResponse(
