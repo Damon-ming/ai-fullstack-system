@@ -190,19 +190,12 @@ def save_history(
 
 def delete_history(conversation_id: str, token: str) -> bool:
     """删除单条历史记录。返回是否实际删除（False = 不存在或无权限）。"""
-    rows = _db().execute(
+    rowcount = _db().execute(
         "DELETE FROM history_conversations WHERE id = :id AND token = :token",
         {"id": conversation_id, "token": token},
         commit=True,
     )
-    # DELETE 不返回行数，再查一次确认
-    check = _db().execute(
-        "SELECT 1 FROM history_conversations WHERE id = :id AND token = :token",
-        {"id": conversation_id, "token": token},
-        commit=False,
-        fetch=True,
-    )
-    deleted = not bool(check)
+    deleted = rowcount > 0
     if deleted:
         logger.info("历史记录已删除 | id=%s", conversation_id)
     return deleted

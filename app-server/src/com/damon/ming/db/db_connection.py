@@ -129,7 +129,7 @@ class DbConnection:
                         conn.commit()
                     if fetch:
                         return [tuple(row) for row in result.fetchall()]
-                    return None
+                    return result.rowcount
             except Exception as e:
                 last_error = e
                 logger.warning(
