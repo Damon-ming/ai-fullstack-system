@@ -44,7 +44,7 @@ def _token(request: Request) -> str:
 
 @router.get("/list/v1", response_model=None)
 @limiter.limit("30/minute")
-async def list_history(
+def list_history(
     request: Request,
     page: int = Query(1, ge=1, description="页码（从1开始）"),
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
@@ -52,7 +52,7 @@ async def list_history(
     """分页获取当前用户的对话历史列表（按 updated_time 倒序，不含消息正文）。"""
     token = _token(request)
     try:
-        result = await HistoryService.list_history(
+        result = HistoryService.list_history(
             token=token, page=page, page_size=page_size
         )
         success_data = HistoryListSuccessData(
@@ -78,14 +78,14 @@ async def list_history(
 
 @router.get("/v1/{conversation_id}", response_model=None)
 @limiter.limit("30/minute")
-async def get_history(
+def get_history(
     request: Request,
     conversation_id: str = Path(..., description="对话 ID"),
 ):
     """获取单条历史记录详情（含消息正文）。"""
     token = _token(request)
     try:
-        detail = await HistoryService.get_history(
+        detail = HistoryService.get_history(
             conversation_id=conversation_id, token=token
         )
         if detail is None:
@@ -112,7 +112,7 @@ async def get_history(
 
 @router.post("/save/v1", response_model=None)
 @limiter.limit("10/minute")
-async def save_history(
+def save_history(
     request: Request,
     body: HistorySaveRequest,
 ):
@@ -122,7 +122,7 @@ async def save_history(
     """
     token = _token(request)
     try:
-        detail = await HistoryService.save_history(
+        detail = HistoryService.save_history(
             token=token,
             title=body.title,
             messages=body.messages,
@@ -144,14 +144,14 @@ async def save_history(
 
 @router.delete("/v1/{conversation_id}", response_model=None)
 @limiter.limit("10/minute")
-async def delete_history(
+def delete_history(
     request: Request,
     conversation_id: str = Path(..., description="对话 ID"),
 ):
     """删除单条历史记录。"""
     token = _token(request)
     try:
-        deleted = await HistoryService.delete_history(
+        deleted = HistoryService.delete_history(
             conversation_id=conversation_id, token=token
         )
         if not deleted:

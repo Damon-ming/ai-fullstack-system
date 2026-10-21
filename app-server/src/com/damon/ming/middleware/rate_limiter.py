@@ -28,13 +28,34 @@ from src.com.damon.ming.schemas.response import BaseBizFailedData, BaseFailedRes
 
 logger = pin("rate_limiter")
 
+
+def _rate_limit_key(request: Request) -> str:
+    """获取客户端真实 IP 用于限流。
+
+    优先从 X-Forwarded-For 取最左侧（原始客户端 IP），
+    适用于 Nginx/反向代理场景。
+    直连场景回退到 TCP peer IP。
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # 格式: "client, proxy1, proxy2" — 最左侧是原始客户端
+        client_ip = forwarded.split(",")[0].strip()
+        if client_ip:
+            return client_ip
+
+    if request.client:
+        return request.client.host
+
+    return "unknown"
+
+
 # per-IP 限流（默认内存存储，多实例部署时切换为 Redis）
 # TODO: 多 worker 部署时切换为 Redis 存储，确保全局限流一致
 #  依赖: pip install redis
 #  配置: storage_uri="redis://localhost:6379"
 #  优先级: P2，单实例部署内存模式即可
 limiter = Limiter(
-    key_func=lambda request: request.client.host if request.client else "unknown",
+    key_func=_rate_limit_key,
     default_limits=["20/minute"],
     storage_uri="memory://",
 )

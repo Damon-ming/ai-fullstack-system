@@ -53,14 +53,16 @@ def _messages_to_items(messages: list) -> list[HistoryMessageItem]:
 
 def _row_to_detail(row) -> HistoryDetailData:
     """DB 行 → 详情 schema（含消息正文）。"""
-    return HistoryDetailData(**_format_row_common(row), messages=_messages_to_items(row.messages))
+    return HistoryDetailData(
+        **_format_row_common(row), messages=_messages_to_items(row.messages)
+    )
 
 
 class HistoryService:
     """对话历史业务逻辑。"""
 
     @staticmethod
-    async def list_history(
+    def list_history(
         token: str,
         page: int,
         page_size: int,
@@ -75,7 +77,7 @@ class HistoryService:
         }
 
     @staticmethod
-    async def get_history(
+    def get_history(
         conversation_id: str,
         token: str,
     ) -> HistoryDetailData | None:
@@ -86,7 +88,7 @@ class HistoryService:
         return _row_to_detail(row)
 
     @staticmethod
-    async def save_history(
+    def save_history(
         token: str,
         title: str,
         messages: list[dict],
@@ -94,7 +96,11 @@ class HistoryService:
         """保存/更新对话历史。"""
         # 清洗消息：只保留 {id, text, role} 三个字段，与前端持久化格式一致
         cleaned = [
-            {"id": str(m.get("id", "")), "text": str(m.get("text", "")), "role": str(m.get("role", ""))}
+            {
+                "id": str(m.get("id", "")),
+                "text": str(m.get("text", "")),
+                "role": str(m.get("role", "")),
+            }
             for m in messages
             if isinstance(m, dict)
         ]
@@ -102,7 +108,7 @@ class HistoryService:
         return _row_to_detail(row)
 
     @staticmethod
-    async def delete_history(
+    def delete_history(
         conversation_id: str,
         token: str,
     ) -> bool:
