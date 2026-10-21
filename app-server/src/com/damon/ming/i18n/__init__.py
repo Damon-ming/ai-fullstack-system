@@ -25,7 +25,9 @@ import contextvars
 from typing import Protocol
 
 # 请求级 locale —— 中间件设置，t() 读取
-_locale_var: contextvars.ContextVar[str] = contextvars.ContextVar("locale")
+_locale_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "locale", default="zh_CN"
+)
 
 # 全局 resolver —— AppInitializer 启动时注入
 _resolver: "MessageResolver | None" = None

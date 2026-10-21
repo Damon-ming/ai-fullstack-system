@@ -38,6 +38,7 @@ class AppInitializer:
         self.rsa_key_pair = None
         self.key_material = None
         self.session_service = None
+        self.limiter = None
         self.pool_mgr = None
         self.rag_app = None
         self.infer_service = None
@@ -66,6 +67,7 @@ class AppInitializer:
         self._init_database()
         self._init_encryption()
         self._init_sign_context()
+        self._init_rate_limiter()
         self._init_chat()  # 必须在 _init_ai 之前：创建 infer_sem 供 RAGContainer 传递
         self._init_ai()
         self._init_guardrail()
@@ -98,6 +100,9 @@ class AppInitializer:
 
         # 加密会话服务（RSA + 内存 + 可选 DB 持久化）
         app.state.session_service = self.session_service
+
+        # 速率限制器（slowapi，per-IP 限流）
+        app.state.limiter = self.limiter
 
         logger.info("子系统已挂载到 app.state")
 
@@ -263,6 +268,13 @@ class AppInitializer:
         except Exception as e:
             logger.warning("账号体系表创建失败: %s", e)
 
+    def _init_rate_limiter(self) -> None:
+        """速率限制器：slowapi 封装，per-IP 限流。"""
+        from src.com.damon.ming.middleware.rate_limiter import limiter
+
+        self.limiter = limiter
+        logger.info("速率限制器初始化完成（per-IP，内存存储）")
+
     def _init_encryption(self) -> None:
         """加密体系：RSAKeyPair（纯技术）+ KeyMaterial（数据密钥）+ SessionService（业务协调）。"""
         from src.com.damon.ming.app.encryption.session_service import SessionService
@@ -290,9 +302,7 @@ class AppInitializer:
 
         # 3. 会话服务（业务协调：RSA + 内存 + 可选 DB）
         ttl_seconds = (
-            self._enc_config.session_ttl_seconds
-            if self._enc_config
-            else 60 * 60 * 24
+            self._enc_config.session_ttl_seconds if self._enc_config else 60 * 60 * 24
         )
         self.session_service = SessionService(
             rsa_key_pair=self.rsa_key_pair,

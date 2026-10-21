@@ -42,7 +42,7 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware import AuthMiddleware, EncryptionMiddleware
 from src.com.damon.ming.middleware.context_middleware import ContextMiddleware
 from src.com.damon.ming.middleware.i18n_middleware import I18nMiddleware
-from src.com.damon.ming.middleware.rate_limiter import limiter, rate_limit_handler
+from src.com.damon.ming.middleware.rate_limiter import rate_limit_handler
 from src.com.damon.ming.precheck import run_precheck
 from src.com.damon.ming.router.account import account_router
 from src.com.damon.ming.router.chat import chat_router
@@ -111,8 +111,6 @@ else:
     logger.info("CORS: release 模式，允许来源: %s", release_origins)
 
 # ---- 速率限制（per-IP，slowapi）--------------------------------------
-# 必须在路由注册前绑定 limiter 状态，使 @limiter.limit() 装饰器生效
-app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
 # ---- 请求上下文（必须在 auth / encryption 之前执行，因此先添加）------
