@@ -122,32 +122,43 @@ class SessionService:
         with self._lock:
             self._cleanup_expired_unlocked()
             # 清理同一 session_id 的旧 key_id（防映射表膨胀 + 确保归属唯一）
+            # 先保存旧 session 引用，DB 失败时可回滚恢复
             old_keys = [k for k, s in self._key_to_session.items() if s == session_id]
+            old_sessions = {k: self._sessions.pop(k, None) for k in old_keys}
             for old_key in old_keys:
-                self._sessions.pop(old_key, None)
-                del self._key_to_session[old_key]
+                self._key_to_session.pop(old_key, None)
             self._sessions[key_id] = session
             self._key_to_session[key_id] = session_id
 
-        # 3. 持久化（原子替换）
-        if self._key_store is not None:
-            expires_at = datetime.now(tz=UTC) + timedelta(seconds=session.ttl_seconds)
-            stored = StoredSession(
-                key_id=key_id,
-                aes_key_enc=wrap_key(aes_key, self._kek),
-                session_id=session_id,
-                created_at=datetime.now(tz=UTC),
-                expires_at=expires_at,
-            )
-            try:
-                self._key_store.replace_session(session_id, stored)
-            except Exception as e:
-                logger.warning(
-                    "会话持久化失败 | key_id=%s session_id=%s error=%s",
-                    key_id[:12],
-                    session_id[:8],
-                    e,
+            # 3. 持久化（锁内操作，失败时回滚内存）
+            if self._key_store is not None:
+                expires_at = datetime.now(tz=UTC) + timedelta(
+                    seconds=session.ttl_seconds
                 )
+                stored = StoredSession(
+                    key_id=key_id,
+                    aes_key_enc=wrap_key(aes_key, self._kek),
+                    session_id=session_id,
+                    created_at=datetime.now(tz=UTC),
+                    expires_at=expires_at,
+                )
+                try:
+                    self._key_store.replace_session(session_id, stored)
+                except Exception as e:
+                    # DB 失败 → 回滚内存：移除新 key，恢复旧 key
+                    self._sessions.pop(key_id, None)
+                    self._key_to_session.pop(key_id, None)
+                    for old_key, old_session in old_sessions.items():
+                        if old_session is not None:
+                            self._sessions[old_key] = old_session
+                            self._key_to_session[old_key] = session_id
+                    logger.error(
+                        "会话持久化失败，已回滚内存 | key_id=%s session_id=%s error=%s",
+                        key_id[:12],
+                        session_id[:8],
+                        e,
+                    )
+                    raise
 
         return session
 
