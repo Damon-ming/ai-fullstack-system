@@ -119,19 +119,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
 
         # 4. UA 一致性校验（基于 session 签发时的 UA）
-        if ctx.client_ua and ctx.session_id:
-            session = get_session(ctx.session_id)
-            if session:
-                ua_profile = get_ua_profile(ctx)
-                if ua_profile and has_ua_changed_significantly(
-                    session.ua_hash, ua_profile
-                ):
-                    logger.info(
-                        "UA 发生变化 | phone=%s session_id=%s",
-                        phone[:3] + "***" if phone else "unknown",
-                        ctx.session_id[:8] + "...",
-                    )
-                    # 当前策略：仅记录，不阻断（宽松模式）
+        if ctx.client_ua and ctx.session_id and session is not None:
+            ua_profile = get_ua_profile(ctx)
+            if ua_profile and has_ua_changed_significantly(session.ua_hash, ua_profile):
+                logger.info(
+                    "UA 发生变化 | phone=%s session_id=%s",
+                    phone[:3] + "***" if phone else "unknown",
+                    ctx.session_id[:8] + "...",
+                )
+                # 当前策略：仅记录，不阻断（宽松模式）
 
         # 5. 注入 request.state，供下游路由使用
         request.state.device_token = ctx.token
