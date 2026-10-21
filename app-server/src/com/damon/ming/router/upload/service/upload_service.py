@@ -230,15 +230,27 @@ class UploadService:
 
             except asyncio.CancelledError:
                 # 客户端取消：回滚并继续
-                _rollback_file(file_path, file_sha256, written_to_disk, cache_added)
+                _rollback_file(
+                    file_path,
+                    file_sha256,
+                    written_to_disk,
+                    cache_added,
+                    rag_app=rag_app,
+                )
                 failed_files.append(
                     {"filename": origin_name, "error": "上传被客户端取消"}
                 )
                 raise
 
             except Exception as e:
-                # 任一步失败：回滚该文件的磁盘 + 缓存
-                _rollback_file(file_path, file_sha256, written_to_disk, cache_added)
+                # 任一步失败：回滚该文件的磁盘 + 缓存 + 向量库
+                _rollback_file(
+                    file_path,
+                    file_sha256,
+                    written_to_disk,
+                    cache_added,
+                    rag_app=rag_app,
+                )
                 logger.warning(
                     "文件上传失败已回滚 | filename=%s | sha=%s | error=%s",
                     origin_name,
@@ -257,9 +269,13 @@ class UploadService:
 
 
 def _rollback_file(
-    file_path: Path, file_sha256: str, written_to_disk: bool, cache_added: bool
+    file_path: Path,
+    file_sha256: str,
+    written_to_disk: bool,
+    cache_added: bool,
+    rag_app=None,
 ):
-    """回滚单个文件的磁盘和缓存，保持三库一致。"""
+    """回滚单个文件的磁盘 / 缓存 / 向量库，保持三库一致。"""
     if written_to_disk:
         try:
             file_path.unlink(missing_ok=True)
@@ -271,6 +287,12 @@ def _rollback_file(
             # 只有缓存值仍指向我们的路径才删除（防止被并发覆盖）
             if UploadService._sha_cache.get(file_sha256) == file_path:
                 UploadService._sha_cache.pop(file_sha256, None)
+
+    # 回滚向量库，清理可能已写入的 chunk
+    if rag_app:
+        deleted = rag_app.vector_store.delete_by_metadata({"file_sha256": file_sha256})
+        if deleted:
+            logger.info("回滚向量库 | sha=%s | deleted=%d", file_sha256[:16], deleted)
 
 
 def _write_file_sync(path: Path, content: bytes) -> None:

@@ -242,28 +242,28 @@ class _TransactionContext:
 # ---------------------------------------------------------------------------
 
 _default_db: DbConnection | None = None
-_default_db_lock = threading.Lock()
 
 
 def get_default_db() -> DbConnection:
-    """获取全局默认数据库连接（线程安全）。"""
-    if _default_db is None:
-        with _default_db_lock:
-            if _default_db is None:
-                from src.com.damon.ming.exception.error_codes import ErrorCode
+    """获取全局默认数据库连接。
 
-                raise DatabaseError(
-                    "默认数据库未初始化。请先调用 set_default_db()。",
-                    biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
-                )
+    set_default_db 在 lifespan 启动阶段调用一次（早于任何请求），
+    多 worker 场景下各进程独立初始化，无跨进程竞争。
+    """
+    if _default_db is None:
+        from src.com.damon.ming.exception.error_codes import ErrorCode
+
+        raise DatabaseError(
+            "默认数据库未初始化。请先调用 set_default_db()。",
+            biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
+        )
     return _default_db
 
 
 def set_default_db(db: DbConnection) -> None:
     """设置全局默认数据库连接（在 lifespan 中调用一次）。"""
     global _default_db
-    with _default_db_lock:
-        _default_db = db
+    _default_db = db
 
 
 def query(sql: str, params: tuple | dict | None = None) -> list[tuple]:

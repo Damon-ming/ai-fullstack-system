@@ -110,6 +110,11 @@ class BaseVectorStore(ABC):
         ...
 
     @abstractmethod
+    def delete_by_metadata(self, metadata_filter: dict[str, Any], **kwargs) -> int:
+        """根据元数据删除文档，返回删除数量。失败返回 0。"""
+        ...
+
+    @abstractmethod
     def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
         """根据 ID 获取文档，失败返回 None"""
         ...
@@ -123,7 +128,9 @@ class BaseVectorStore(ABC):
 
     @abstractmethod
     def get_by_metadata_batch(
-        self, filters: list[dict[str, Any]], **kwargs,
+        self,
+        filters: list[dict[str, Any]],
+        **kwargs,
     ) -> list[TextNode]:
         """批量元数据查询（OR 语义：匹配任意一个 filter 的文档）。
 

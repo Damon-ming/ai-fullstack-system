@@ -196,6 +196,22 @@ class ChromaDBStore(BaseVectorStore):
             self.logger.error(f"[ChromaDBStore] 删除失败: {e}")
             return False
 
+    def delete_by_metadata(self, metadata_filter: dict[str, Any], **kwargs) -> int:
+        """按元数据查询并删除匹配文档，返回删除数量。"""
+        try:
+            results = self.collection.get(where=metadata_filter)
+            if not results["ids"]:
+                return 0
+            node_ids = results["ids"]
+            self.collection.delete(ids=node_ids)
+            with self._cache_lock:
+                for node_id in node_ids:
+                    self._node_cache.pop(node_id, None)
+            return len(node_ids)
+        except Exception as e:
+            self.logger.error(f"[ChromaDBStore] 按元数据删除失败: {e}")
+            return 0
+
     def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
         with self._cache_lock:
             cached = self._cache_get(node_id)
