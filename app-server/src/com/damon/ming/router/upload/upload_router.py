@@ -59,6 +59,9 @@ async def save_files(
             rag_app=request.app.state.rag_app,
             cancellation_token=ctx.cancellation_token,
             executor=document_pool,
+            token=request.state.ctx.token,
+            device_id=request.state.ctx.device_id,
+            db_conn=request.app.state.db_conn,
         )
         logger.info(
             "文件上传请求完成 | success=%s | failed=%s",

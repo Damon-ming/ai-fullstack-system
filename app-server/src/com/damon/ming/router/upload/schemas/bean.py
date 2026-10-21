@@ -16,6 +16,8 @@ class FileUploadItem(BaseModel):
     """成功文件"""
 
     filename: str = Field(..., description="原始文件名")
+    file_uid: str = Field(..., description="服务端文件唯一 ID（后续删除/引用用）")
+    file_path: str = Field(..., description="服务端存储绝对路径")
 
 
 class FileUploadFailedItem(BaseModel):

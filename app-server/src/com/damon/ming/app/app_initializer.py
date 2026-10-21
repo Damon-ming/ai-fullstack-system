@@ -98,6 +98,9 @@ class AppInitializer:
         # 上传配置（文件类型白名单 + 大小上限 + 时间窗口）
         app.state.upload_config = self.upload_config
 
+        # 数据库连接（上传审计表写入）
+        app.state.db_conn = self.db_conn
+
         # 加密会话服务（RSA + 内存 + 可选 DB 持久化）
         app.state.session_service = self.session_service
 

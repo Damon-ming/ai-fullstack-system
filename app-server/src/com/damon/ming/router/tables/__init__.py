@@ -14,10 +14,11 @@
   create_all_tables(db_conn)
 """
 
-from src.com.damon.ming.router.tables.base import metadata
 from src.com.damon.ming.router.tables.account import create_account_tables
+from src.com.damon.ming.router.tables.base import metadata
 from src.com.damon.ming.router.tables.encryption import create_encryption_tables
 from src.com.damon.ming.router.tables.history import create_history_tables
+from src.com.damon.ming.router.tables.upload import create_upload_tables
 
 
 def create_all_tables(db_conn) -> None:
@@ -29,3 +30,4 @@ def create_all_tables(db_conn) -> None:
     create_account_tables(db_conn)
     create_encryption_tables(db_conn)
     create_history_tables(db_conn)
+    create_upload_tables(db_conn)

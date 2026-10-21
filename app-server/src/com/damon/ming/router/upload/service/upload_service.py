@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from fastapi import UploadFile
+from sqlalchemy import text
 from src.com.damon.ming.ai.rag_tool import RAGContainer
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
@@ -62,6 +63,9 @@ class UploadService:
         rag_app: RAGContainer,
         cancellation_token: CancellationToken | None = None,
         executor=None,
+        token: str | None = None,
+        device_id: str = "",
+        db_conn=None,
     ) -> dict:
         """批量保存文件——每个文件独立原子提交。
 
@@ -144,8 +148,10 @@ class UploadService:
 
             content = b"".join(chunks)
             logger.info(
-                "收到用户上传文件 | original_filename=%s | size=%s | type=%s",
-                origin_name,
+                "收到用户上传文件 | token=%s | device=%s | filename=%s | size=%s | type=%s",
+                token[:8] if token else "anon",
+                device_id[:8] if device_id else "-",
+                repr(origin_name),
                 len(content),
                 suffix,
             )
@@ -206,10 +212,11 @@ class UploadService:
                             cache_added = True
                             disk_path = file_path
 
-                # ── 阶段2：逐文件入库向量库 ──
+                # ── 阶段2：逐文件入库向量库（携带 file_uid 写入 chunk metadata）──
                 index_result = rag_app.ingest_files(
                     [str(disk_path.resolve())],
                     cancellation_token=cancellation_token,
+                    file_uid=file_uid,
                 )
 
                 # ── 阶段3：确认入库结果 ──
@@ -218,7 +225,28 @@ class UploadService:
 
                 if file_sha256 in indexed_shas or file_sha256 in skipped_shas:
                     # 三库一致：成功
-                    success_files.append({"filename": origin_name})
+                    success_files.append(
+                        {
+                            "filename": origin_name,
+                            "file_uid": file_uid,
+                            "file_path": str(disk_path.resolve()),
+                        }
+                    )
+
+                    # ── 写入审计表（fire-and-forget，不阻塞上传响应）──
+                    if db_conn is not None and file_sha256 in indexed_shas:
+                        loop.run_in_executor(
+                            executor,
+                            _record_upload_metadata,
+                            db_conn,
+                            file_uid,
+                            file_sha256,
+                            str(disk_path.resolve()),
+                            len(content),
+                            token,
+                            device_id,
+                        )
+
                     logger.info(
                         "文件上传成功 | filename=%s | sha=%s",
                         origin_name,
@@ -308,3 +336,38 @@ def _file_sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _record_upload_metadata(
+    db_conn,
+    file_uid: str,
+    file_sha256: str,
+    file_path: str,
+    file_size: int,
+    token: str | None,
+    device_id: str,
+) -> None:
+    """同步写入 upload_records 审计表（在 run_in_executor 中调用）。
+
+    写入失败仅 log 警告，不影响上传主流程。
+    """
+    from datetime import UTC, datetime
+
+    db_conn.execute(
+        text(
+            "INSERT INTO upload_records "
+            "(file_uid, file_sha256, file_path, file_size, token, device_id, created_at) "
+            "VALUES (:uid, :sha, :path, :size, :token, :device, :cat) "
+            "ON CONFLICT (file_uid) DO NOTHING"
+        ),
+        {
+            "uid": file_uid,
+            "sha": file_sha256,
+            "path": file_path,
+            "size": str(file_size),
+            "token": token[:64] if token else None,
+            "device": device_id[:64] if device_id else "",
+            "cat": datetime.now(tz=UTC),
+        },
+        commit=True,
+    )

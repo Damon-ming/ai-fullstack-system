@@ -232,6 +232,7 @@ class RAGContainer:
     async def ingest_files(
         self,
         file_paths: list[str],
+        file_uid: str = "",
     ) -> dict:
         """增量处理上传文件（支持 PDF / TXT / MD）。
 
@@ -331,6 +332,11 @@ class RAGContainer:
                     )
                     continue
 
+                # 将 file_uid 注入 chunk metadata（审计追溯键）
+                if file_uid:
+                    for node in nodes:
+                        node.metadata["file_uid"] = file_uid
+
                 try:
                     self.vector_store.add_documents(nodes)
                 except Exception as e:
@@ -350,9 +356,7 @@ class RAGContainer:
 
             if failed_shas:
                 # 告知 upload_service 回滚失败文件的磁盘和缓存，保持三库一致
-                raise RuntimeError(
-                    f"向量库入库失败，需回滚文件数: {len(failed_shas)}"
-                )
+                raise RuntimeError(f"向量库入库失败，需回滚文件数: {len(failed_shas)}")
 
         # ── BM25 重建（锁外，线程池异步，不阻塞上传响应）──
         # BM25Okapi 不支持增量添加，仍需全量重建。
