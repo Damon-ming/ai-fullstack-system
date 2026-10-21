@@ -1,6 +1,7 @@
 # app-server/src/com/damon/ming/upload/service/upload_service.py
 import asyncio
 import hashlib
+import os
 import threading
 import uuid
 from collections import OrderedDict
@@ -43,14 +44,23 @@ class UploadService:
         cls._sha_cache_max = sha_cache_max
         logger.info("初始化文件sha256缓存 | sha_cache_max=%d", sha_cache_max)
         cache: OrderedDict[str, Path] = OrderedDict()
+        tmp_cleaned = 0
         for p in UPLOAD_DIR.rglob("*"):
-            if p.is_file():
-                sha = _file_sha256(p)
-                cache[sha] = p
-                # 启动扫描也受 LRU 上限约束，避免超大知识库启动时内存爆炸
-                if len(cache) > sha_cache_max:
-                    evicted_sha, _ = cache.popitem(last=False)
-                    logger.debug("sha_cache 启动扫描LRU淘汰 | sha=%s", evicted_sha[:16])
+            if not p.is_file():
+                continue
+            if p.suffix.endswith(".tmp"):
+                # 崩溃残留的临时文件：写盘未完成，安全删除
+                p.unlink(missing_ok=True)
+                tmp_cleaned += 1
+                continue
+            sha = _file_sha256(p)
+            cache[sha] = p
+            # 启动扫描也受 LRU 上限约束，避免超大知识库启动时内存爆炸
+            if len(cache) > sha_cache_max:
+                evicted_sha, _ = cache.popitem(last=False)
+                logger.debug("sha_cache 启动扫描LRU淘汰 | sha=%s", evicted_sha[:16])
+        if tmp_cleaned:
+            logger.info("启动清理残留 .tmp 文件 | count=%d", tmp_cleaned)
         with cls._sha_cache_lock:
             cls._sha_cache = cache
         logger.info(f"sha缓存初始化完成，共{len(cache)}个文件")
@@ -324,9 +334,17 @@ def _rollback_file(
 
 
 def _write_file_sync(path: Path, content: bytes) -> None:
-    """同步写盘（在 run_in_executor 中调用，不阻塞事件循环）"""
-    with path.open("wb") as f:
+    """同步写盘（在 run_in_executor 中调用，不阻塞事件循环）。
+
+    原子写入：先写 .tmp → fsync → rename。崩溃时残留 .tmp 不影响正式文件，
+    启动扫描会自动跳过。
+    """
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with tmp_path.open("wb") as f:
         f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+    os.rename(tmp_path, path)
 
 
 def _file_sha256(path: Path) -> str:
