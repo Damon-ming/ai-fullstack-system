@@ -313,24 +313,42 @@ def _rollback_file(
     cache_added: bool,
     rag_app=None,
 ):
-    """回滚单个文件的磁盘 / 缓存 / 向量库，保持三库一致。"""
+    """回滚单个文件的向量库 / 磁盘 / 缓存，保持三库一致。
+
+    顺序：向量库 → 磁盘 → 缓存。向量库失败时中断回滚并记录，
+    避免磁盘已删但向量库仍残留 chunk 的不一致。
+    """
+    # 1. 先删向量库（失败则中断，不继续删磁盘）
+    if rag_app:
+        try:
+            deleted = rag_app.vector_store.delete_by_metadata(
+                {"file_sha256": file_sha256}
+            )
+            if deleted:
+                logger.info(
+                    "回滚向量库 | sha=%s | deleted=%d", file_sha256[:16], deleted
+                )
+        except Exception as e:
+            logger.error(
+                "回滚向量库失败，中断回滚 | sha=%s | error=%s",
+                file_sha256[:16],
+                e,
+            )
+            return  # 不继续删磁盘/缓存，保留可重试状态
+
+    # 2. 删磁盘
     if written_to_disk:
         try:
             file_path.unlink(missing_ok=True)
         except Exception:
             logger.warning("回滚删除磁盘文件失败 | path=%s", file_path)
 
+    # 3. 删缓存
     if cache_added:
         with UploadService._sha_cache_lock:
             # 只有缓存值仍指向我们的路径才删除（防止被并发覆盖）
             if UploadService._sha_cache.get(file_sha256) == file_path:
                 UploadService._sha_cache.pop(file_sha256, None)
-
-    # 回滚向量库，清理可能已写入的 chunk
-    if rag_app:
-        deleted = rag_app.vector_store.delete_by_metadata({"file_sha256": file_sha256})
-        if deleted:
-            logger.info("回滚向量库 | sha=%s | deleted=%d", file_sha256[:16], deleted)
 
 
 def _write_file_sync(path: Path, content: bytes) -> None:
