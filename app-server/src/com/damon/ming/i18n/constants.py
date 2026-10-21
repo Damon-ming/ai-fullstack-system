@@ -56,6 +56,7 @@ class I18nKey(StrEnum):
     ENCRYPT_UNSUPPORTED_SIG_VERSION = "encrypt.unsupported_sig_version"
     ENCRYPT_INVALID_KEY_FORMAT = "encrypt.invalid_key_format"
     ENCRYPT_SESSION_REG_FAILED = "encrypt.session_reg_failed"
+    ENCRYPT_REPLAY_DETECTED = "encrypt.replay_detected"
 
     # ── 子系统兜底 ──
     SYS_DATABASE_FAILURE = "sys.database_failure"

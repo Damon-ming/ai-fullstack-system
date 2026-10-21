@@ -111,6 +111,9 @@ class _Encryption:
     UNSUPPORTED_SIGNATURE_VERSION = _build(
         detail=8, business=Business.ENCRYPTION
     )  # 200002008
+    SIGNATURE_REPLAY_DETECTED = _build(
+        detail=9, business=Business.ENCRYPTION
+    )  # 200002009
 
 
 class _Auth:

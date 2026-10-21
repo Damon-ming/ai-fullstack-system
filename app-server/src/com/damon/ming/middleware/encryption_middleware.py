@@ -24,6 +24,7 @@ FastAPI 加密 + 签名中间件
   200002006: 会话过期 / 无效
   200002007: 签名验证失败
   200002008: 客户端签名协议版本不受支持（X-Signature-Version header）
+  200002009: 请求重放拦截（nonce 已使用过）
 
 版本校验：
   加密版本：客户端必须通过 X-Encrypt-Version header 告知服务端，缺失或不支持返回 200002003。
@@ -37,7 +38,11 @@ FastAPI 加密 + 签名中间件
 """
 
 import json
+import time
+from collections import OrderedDict
 from collections.abc import Callable
+from threading import Lock
+from typing import ClassVar
 
 from fastapi import Request
 from src.com.damon.ming.encryption.globals import (
@@ -95,6 +100,19 @@ def _check_version_header(client_version: str) -> tuple[str, dict] | None:
     return None
 
 
+def _replay_response() -> JSONResponse:
+    """构建重放拦截响应（400 + 重放错误码）。"""
+    return JSONResponse(
+        status_code=400,
+        content=BaseFailedResponse(
+            code=ErrorCode.ENCRYPT.SIGNATURE_REPLAY_DETECTED,
+            data=BaseBizFailedData(
+                error_msg=t(I18nKey.ENCRYPT_REPLAY_DETECTED)
+            ),
+        ).model_dump(),
+    )
+
+
 def _check_signature_version_header(client_version: str) -> tuple[str, dict] | None:
     """
     检查签名版本是否受支持。
@@ -121,8 +139,51 @@ def _check_signature_version_header(client_version: str) -> tuple[str, dict] | N
 class EncryptionMiddleware(BaseHTTPMiddleware):
     """透明加密 / 解密 + 签名验证中间件。"""
 
+    # ── nonce 重放防护缓存 ──────────────────────────────────────────
+    # key = "session_key_id:nonce", value = 首次接收时间戳（秒）
+    _nonce_cache: ClassVar[OrderedDict[str, float]] = OrderedDict()
+    _nonce_cache_lock: ClassVar[Lock] = Lock()
+    _NONCE_TTL_SECONDS: ClassVar[int] = 600  # 10 分钟（2 × 5 分钟签名容差）
+    _NONCE_CACHE_MAX: ClassVar[int] = 10_000  # LRU 上限
+    _NONCE_EVICT_RATIO: ClassVar[float] = 0.2  # 超限时淘汰最老的 20%
+
     def __init__(self, app: ASGIApp):
         super().__init__(app)
+
+    @classmethod
+    def _check_and_store_nonce(cls, session_key_id: str, nonce: str) -> bool:
+        """检查 nonce 是否已使用过，未使用则记录。
+
+        Returns:
+            True  = nonce 新鲜，可以继续
+            False = nonce 已存在（重放），拒绝请求
+        """
+        if not nonce:
+            return True  # 无 nonce 时不拦截（兼容旧客户端）
+
+        cache_key = f"{session_key_id}:{nonce}"
+        now = time.time()
+
+        with cls._nonce_cache_lock:
+            # 检查是否存在且未过期
+            if cache_key in cls._nonce_cache:
+                first_seen = cls._nonce_cache[cache_key]
+                if now - first_seen < cls._NONCE_TTL_SECONDS:
+                    return False  # 重放命中
+                # 已过期，移除后重新记录
+                del cls._nonce_cache[cache_key]
+
+            # 记录新 nonce
+            cls._nonce_cache[cache_key] = now
+            cls._nonce_cache.move_to_end(cache_key)
+
+            # 超限淘汰
+            if len(cls._nonce_cache) > cls._NONCE_CACHE_MAX:
+                evict_count = int(cls._NONCE_CACHE_MAX * cls._NONCE_EVICT_RATIO)
+                for _ in range(evict_count):
+                    cls._nonce_cache.popitem(last=False)
+
+        return True
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         km = get_key_manager()
@@ -263,6 +324,16 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             logger.warning("JSON 签名验证失败: %s", sig_reason)
             return None
 
+        # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
+        nonce = decrypted_json.get("nonce", "")
+        if not self._check_and_store_nonce(session.key_id, nonce):
+            logger.warning(
+                "JSON 请求重放拦截 | key_id=%s | nonce=%s",
+                session.key_id[:12] + "...",
+                nonce[:16] + "...",
+            )
+            return _replay_response()
+
         _patch_request_body(request, decrypted_str)
         request.state.enc_session = session
         logger.debug("JSON 请求已解密并验证签名 | key_id=%s", session.key_id)
@@ -313,6 +384,15 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         if not sig_ok:
             logger.warning("FormData 签名验证失败: %s", sig_reason)
             return None
+
+        # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
+        if not self._check_and_store_nonce(session.key_id, nonce):
+            logger.warning(
+                "FormData 请求重放拦截 | key_id=%s | nonce=%s",
+                session.key_id[:12] + "...",
+                nonce[:16] + "...",
+            )
+            return _replay_response()
 
         # 将解密后的 meta 注入 request.state，供路由读取
         request.state.decrypted_meta = meta

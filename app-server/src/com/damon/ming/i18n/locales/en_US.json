@@ -35,6 +35,7 @@
   "encrypt.unsupported_sig_version": "Unsupported signature version: {version}, supported: {supported}",
   "encrypt.invalid_key_format": "Invalid AES key format",
   "encrypt.session_reg_failed": "Session registration failed",
+  "encrypt.replay_detected": "Request already processed, do not resubmit",
 
   "sys.database_failure": "Database service unavailable, please try again later",
   "sys.encryption_failure": "Security service error, please re-establish session",
