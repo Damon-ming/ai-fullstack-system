@@ -11,7 +11,6 @@
   - 连接失败自动重试（可配置重试次数和间隔）
 """
 
-import threading
 import time
 
 from src.com.damon.ming.db.db_config import DbConfig
@@ -38,7 +37,6 @@ class DbConnection:
     def __init__(self, config: DbConfig):
         self._config = config
         self._engine = None
-        self._lock = threading.Lock()
 
     def initialize(self) -> None:
         """初始化 SQLAlchemy 引擎（连接池）。应用启动时调用一次。"""
@@ -300,6 +298,14 @@ def _convert_placeholders(
     # tuple / list → 转换 %s → :p0, :p1, ...
     if not isinstance(params, (tuple, list)):
         params = (params,)
+
+    # 编程错误（占位符与参数数量不匹配）直接抛异常，不进入 retry 循环
+    placeholder_count = sql.count("%s")
+    if placeholder_count != len(params):
+        raise ValueError(
+            "SQL 占位符数量与参数数量不匹配: "
+            f"%s_count={placeholder_count}, params_len={len(params)}"
+        )
 
     converted_params = {}
     parts = []
