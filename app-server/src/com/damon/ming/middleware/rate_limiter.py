@@ -29,24 +29,28 @@ from src.com.damon.ming.schemas.response import BaseBizFailedData, BaseFailedRes
 logger = pin("rate_limiter")
 
 
+# 可信反向代理 IP 列表。仅当直连对端 IP 在此列表中时才解析 X-Forwarded-For，
+# 否则直接使用 TCP peer IP 作为限流键（防客户端伪造 header 绕过限流）。
+# 当前无反向代理部署，留空集；部署 Nginx 后将代理 IP 加入即可。
+TRUSTED_PROXIES: set[str] = set()
+
+
 def _rate_limit_key(request: Request) -> str:
     """获取客户端真实 IP 用于限流。
 
-    优先从 X-Forwarded-For 取最左侧（原始客户端 IP），
-    适用于 Nginx/反向代理场景。
-    直连场景回退到 TCP peer IP。
+    仅在可信反向代理后方时解析 X-Forwarded-For（取最左侧原始客户端 IP），
+    否则直接使用 TCP peer IP，避免客户端伪造 header 绕过限流配额。
     """
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        # 格式: "client, proxy1, proxy2" — 最左侧是原始客户端
-        client_ip = forwarded.split(",")[0].strip()
-        if client_ip:
-            return client_ip
+    peer_ip = request.client.host if request.client else "unknown"
+    if peer_ip in TRUSTED_PROXIES:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            # 格式: "client, proxy1, proxy2" — 最左侧是原始客户端
+            client_ip = forwarded.split(",")[0].strip()
+            if client_ip:
+                return client_ip
 
-    if request.client:
-        return request.client.host
-
-    return "unknown"
+    return peer_ip
 
 
 # per-IP 限流（默认内存存储，多实例部署时切换为 Redis）
