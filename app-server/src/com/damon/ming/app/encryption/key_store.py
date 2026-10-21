@@ -129,20 +129,25 @@ class PgKeyStore(BaseKeyStore):
                     },
                 )
 
-    def get_session(self, key_id: str) -> StoredSession | None:
+    def get_session(
+        self, key_id: str, session_id: str | None = None
+    ) -> StoredSession | None:
+        query = encryption_sessions.select().where(
+            encryption_sessions.c.key_id == key_id,
+            encryption_sessions.c.expires_at > text("NOW()"),
+        )
+        # 归属校验：session_id 非空时仅返回属于该 session_id 的记录
+        if session_id:
+            query = query.where(encryption_sessions.c.session_id == session_id)
         with self._db.engine.connect() as conn:
-            result = conn.execute(
-                encryption_sessions.select().where(
-                    encryption_sessions.c.key_id == key_id,
-                    encryption_sessions.c.expires_at > text("NOW()"),
-                )
-            )
+            result = conn.execute(query)
             row = result.fetchone()
         if row is None:
             return None
         return StoredSession(
             key_id=row.key_id,
             aes_key_enc=row.aes_key_enc,
+            session_id=row.session_id or "",
             created_at=row.created_at,
             expires_at=row.expires_at,
         )
@@ -166,4 +171,3 @@ class PgKeyStore(BaseKeyStore):
         with self._db.engine.connect() as conn:
             result = conn.execute(text("SELECT COUNT(*) FROM encryption_sessions"))
             return result.scalar() or 0
-

@@ -25,17 +25,19 @@ from datetime import datetime
 
 @dataclass(frozen=True)
 class StoredSession:
-    """一条已持久化的 AES 会话密钥记录。as
+    """一条已持久化的 AES 会话密钥记录。
 
     字段说明：
       key_id:        会话标识（明文，由业务层生成）
       aes_key_enc:   KEK 加密后的 AES-256 密钥（base64 编码）
+      session_id:    业务 session_id（归属标识，用于所有权校验）
       created_at:    创建时间
       expires_at:    过期时间
     """
 
     key_id: str
     aes_key_enc: str  # base64(KEK_encrypted_aes_key)
+    session_id: str = ""  # 业务 session_id（可选，默认空串向后兼容）
     created_at: datetime
     expires_at: datetime
 
@@ -66,8 +68,11 @@ class BaseKeyStore(ABC):
         ...
 
     @abstractmethod
-    def get_session(self, key_id: str) -> StoredSession | None:
-        """按 key_id 查找会话。已过期返回 None。"""
+    def get_session(
+        self, key_id: str, session_id: str | None = None
+    ) -> StoredSession | None:
+        """按 key_id 查找会话。session_id 非空时校验归属（仅返回属于该 session_id 的记录）。
+        已过期返回 None。"""
         ...
 
     @abstractmethod

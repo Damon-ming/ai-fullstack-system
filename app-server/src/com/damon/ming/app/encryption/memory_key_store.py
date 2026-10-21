@@ -32,13 +32,18 @@ class MemoryKeyStore(BaseKeyStore):
         with self._lock:
             self._sessions[session.key_id] = session
 
-    def get_session(self, key_id: str) -> StoredSession | None:
+    def get_session(
+        self, key_id: str, session_id: str | None = None
+    ) -> StoredSession | None:
         with self._lock:
             session = self._sessions.get(key_id)
             if session is None:
                 return None
             if session.is_expired:
                 del self._sessions[key_id]
+                return None
+            # 归属校验：调用者传了 session_id 且记录有 session_id 时必须匹配
+            if session_id and session.session_id and session.session_id != session_id:
                 return None
             return session
 

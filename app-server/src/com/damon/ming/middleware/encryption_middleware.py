@@ -293,7 +293,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
     ) -> SessionKey | None:
         """解密 JSON 请求并验证签名。返回 session 或 None。"""
         key_id = body_json.get("keyId", "")
-        session = sm.get_session(key_id)
+        session = sm.get_session(key_id, session_id=request.state.ctx.session_id)
         if session is None:
             return None
 
@@ -355,7 +355,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         key_id = meta_encrypted.get("keyId", "")
-        session = sm.get_session(key_id)
+        session = sm.get_session(key_id, session_id=request.state.ctx.session_id)
         if session is None:
             return None
 

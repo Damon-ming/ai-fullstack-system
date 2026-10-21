@@ -50,9 +50,7 @@ class SessionService:
         ss.clear_session(session_id)
     """
 
-    def __init__(
-        self, rsa_key_pair: RSAKeyPair, kek: bytes, ttl_seconds: int
-    ) -> None:
+    def __init__(self, rsa_key_pair: RSAKeyPair, kek: bytes, ttl_seconds: int) -> None:
         """
         参数：
           rsa_key_pair:  已初始化的 RSAKeyPair 实例。
@@ -64,6 +62,8 @@ class SessionService:
         self._ttl_seconds = ttl_seconds
         self._key_store = None  # 可选存储后端
         self._sessions: dict[str, SessionKey] = {}
+        # 内存归属索引：key_id → session_id（业务层 session，用于所有权校验）
+        self._key_to_session: dict[str, str] = {}
         self._lock = threading.RLock()
 
     @property
@@ -121,7 +121,13 @@ class SessionService:
         )
         with self._lock:
             self._cleanup_expired_unlocked()
+            # 清理同一 session_id 的旧 key_id（防映射表膨胀 + 确保归属唯一）
+            old_keys = [k for k, s in self._key_to_session.items() if s == session_id]
+            for old_key in old_keys:
+                self._sessions.pop(old_key, None)
+                del self._key_to_session[old_key]
             self._sessions[key_id] = session
+            self._key_to_session[key_id] = session_id
 
         # 3. 持久化（原子替换）
         if self._key_store is not None:
@@ -129,6 +135,7 @@ class SessionService:
             stored = StoredSession(
                 key_id=key_id,
                 aes_key_enc=wrap_key(aes_key, self._kek),
+                session_id=session_id,
                 created_at=datetime.now(tz=UTC),
                 expires_at=expires_at,
             )
@@ -144,23 +151,43 @@ class SessionService:
 
         return session
 
-    def get_session(self, key_id: str) -> SessionKey | None:
-        """查找会话。内存优先，miss 时从 DB 加载并回填。"""
+    def get_session(
+        self, key_id: str, session_id: str | None = None
+    ) -> SessionKey | None:
+        """查找会话。内存优先，miss 时从 DB 加载并回填。
+
+        Args:
+            key_id:     加密会话标识
+            session_id: 业务 session_id。非空时执行归属校验，
+                        仅返回属于该 session_id 的密钥（防跨用户密钥泄露）。
+        """
         # 1. 内存查找
         with self._lock:
             session = self._sessions.get(key_id)
             if session is not None:
                 if session.is_expired:
                     del self._sessions[key_id]
+                    self._key_to_session.pop(key_id, None)
                     return None
+                # 归属校验：调用者传了 session_id 时，检查内存映射
+                if session_id:
+                    owner = self._key_to_session.get(key_id)
+                    if owner and owner != session_id:
+                        logger.warning(
+                            "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
+                            key_id[:12],
+                            owner[:8],
+                            session_id[:8],
+                        )
+                        return None
                 session.touch()
                 return session
 
-        # 2. DB 查找
+        # 2. DB 查找（session_id 透传给 store 层执行过滤）
         if self._key_store is None:
             return None
 
-        stored = self._key_store.get_session(key_id)
+        stored = self._key_store.get_session(key_id, session_id=session_id)
         if stored is None:
             return None
 
@@ -176,6 +203,9 @@ class SessionService:
         )
         with self._lock:
             self._sessions[key_id] = session
+            # 回填 DB 中的归属关系到内存映射
+            if stored.session_id:
+                self._key_to_session[key_id] = stored.session_id
 
         return session
 
@@ -188,6 +218,7 @@ class SessionService:
         """删除指定会话（内存 + DB）。"""
         with self._lock:
             self._sessions.pop(key_id, None)
+            self._key_to_session.pop(key_id, None)
         if self._key_store is not None:
             self._key_store.remove_session(key_id)
 
@@ -198,3 +229,4 @@ class SessionService:
         expired = [k for k, v in self._sessions.items() if v.is_expired]
         for k in expired:
             del self._sessions[k]
+            self._key_to_session.pop(k, None)
