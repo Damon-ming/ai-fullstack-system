@@ -34,6 +34,7 @@ class I18nKey(StrEnum):
     UPLOAD_TYPE_REJECTED = "upload.type_rejected"
     UPLOAD_TOO_MANY_FILES = "upload.too_many_files"
     UPLOAD_SIZE_EXCEEDED = "upload.size_exceeded"
+    UPLOAD_TOTAL_SIZE_EXCEEDED = "upload.total_size_exceeded"
     UPLOAD_PARSE_FAILED = "upload.parse_failed"
     UPLOAD_VECTOR_DB_ERROR = "upload.vector_db_error"
 

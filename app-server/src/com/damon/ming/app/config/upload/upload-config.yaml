@@ -13,6 +13,9 @@ upload:
   # 单次上传最大文件数
   max_files_per_request: 10
 
+  # 单次请求总大小上限（所有文件合计，字节）
+  max_total_upload_size: 524288000  # 500MB —— 防内存溢出
+
   # 支持的文件类型及各自大小上限（字节）
   # 扩展名不带点号，大小写不敏感
   allowed_types:

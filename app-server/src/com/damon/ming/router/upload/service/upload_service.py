@@ -92,8 +92,9 @@ class UploadService:
         """
         success_files: list[dict] = []
         failed_files: list[dict] = []
-        prepared_files: list[tuple[str, bytes]] = []
         allowed_exts = sorted(upload_config.allowed_types.keys())
+        total_uploaded = 0  # 累计已读字节数（总量上限防护）
+        loop = asyncio.get_running_loop()
 
         # 文件数量校验
         if len(file_list) > upload_config.max_files_per_request:
@@ -105,8 +106,8 @@ class UploadService:
                 )
             )
 
-        # 阶段0：完整读取并准备所有文件；任一文件读取失败仅跳过该文件，
-        # 不会写入磁盘，避免产生半上传结果。
+        # 逐文件独立处理：读取 → 校验 → 写盘 → 入库 → 释放内存
+        # 单循环设计：任意时刻内存最多持有 1 个文件，避免批量 OOM
         for file in file_list:
             origin_name = Path(file.filename or "unnamed").name
             suffix = Path(origin_name).suffix.lower()
@@ -157,6 +158,19 @@ class UploadService:
                 continue
 
             content = b"".join(chunks)
+
+            # 总量上限校验（所有文件合计）
+            total_uploaded += len(content)
+            if total_uploaded > upload_config.max_total_upload_size:
+                raise ValueError(
+                    t(
+                        I18nKey.UPLOAD_TOTAL_SIZE_EXCEEDED,
+                        max_mb=str(
+                            upload_config.max_total_upload_size // (1024 * 1024)
+                        ),
+                    )
+                )
+
             logger.info(
                 "收到用户上传文件 | token=%s | device=%s | filename=%s | size=%s | type=%s",
                 token[:8] if token else "anon",
@@ -165,13 +179,8 @@ class UploadService:
                 len(content),
                 suffix,
             )
-            prepared_files.append((origin_name, content))
 
-        # 阶段1+2+3：逐文件独立处理（写盘 + 缓存 + 入库）
-        loop = asyncio.get_running_loop()
-
-        for origin_name, content in prepared_files:
-            suffix = Path(origin_name).suffix.lower()
+            # ── 直接处理该文件：写盘 → 缓存 → 入库（content 处理后离开作用域释放）──
             file_uid = uuid.uuid4().hex
             file_sha256 = hashlib.sha256(content).hexdigest()
 
@@ -299,7 +308,7 @@ class UploadService:
 
         logger.info(
             "批量上传完成 | 总计=%d | 成功=%d | 失败=%d",
-            len(prepared_files),
+            len(file_list),
             len(success_files),
             len(failed_files),
         )

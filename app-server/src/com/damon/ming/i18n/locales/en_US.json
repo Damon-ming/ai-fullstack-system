@@ -16,6 +16,7 @@
   "upload.type_rejected": "Unsupported file type: {suffix}, allowed: {allowed}",
   "upload.too_many_files": "Maximum {max_files} files per upload, got {actual}",
   "upload.size_exceeded": "File too large (max {max_mb}MB)",
+  "upload.total_size_exceeded": "Total upload size exceeded (max {max_mb}MB)",
   "upload.parse_failed": "Cannot parse file: {filename}",
   "upload.vector_db_error": "Vector DB ingestion failed, file not found",
 

@@ -29,6 +29,9 @@ class UploadConfig:
     # 单次上传最大文件数
     max_files_per_request: int
 
+    # 单次请求总大小上限（所有文件合计，字节）
+    max_total_upload_size: int
+
     # 文件类型配置：扩展名(小写, 无点号) → {max_size_bytes, description}
     allowed_types: dict[str, dict] = field(default_factory=dict)
 
@@ -108,9 +111,16 @@ class UploadConfigLoader:
                 f"上传配置中 allowed_types 不能为空 | path={self._config_path}"
             )
 
+        max_total = upload_section.get("max_total_upload_size")
+        if not max_total or not isinstance(max_total, int) or max_total < 1:
+            raise ValueError(
+                f"上传配置中 max_total_upload_size 必须为正整数 | path={self._config_path}"
+            )
+
         return UploadConfig(
             sha_cache_max=sha_cache_max,
             max_files_per_request=max_files,
+            max_total_upload_size=max_total,
             allowed_types=allowed_types,
         )
 
