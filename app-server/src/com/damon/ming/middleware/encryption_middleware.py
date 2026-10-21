@@ -37,11 +37,11 @@ FastAPI 加密 + 签名中间件
   不感知 HTTP 协议。中间件是"用加密能力服务 HTTP 请求"的胶水层。
 """
 
+import asyncio
 import json
 import time
 from collections import OrderedDict
 from collections.abc import Callable
-from threading import Lock
 from typing import ClassVar
 
 from fastapi import Request
@@ -139,7 +139,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
     # ── nonce 重放防护缓存 ──────────────────────────────────────────
     # key = "session_key_id:nonce", value = 首次接收时间戳（秒）
     _nonce_cache: ClassVar[OrderedDict[str, float]] = OrderedDict()
-    _nonce_cache_lock: ClassVar[Lock] = Lock()
+    _nonce_cache_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
     _NONCE_TTL_SECONDS: ClassVar[int] = 600  # 10 分钟（2 × 5 分钟签名容差）
     _NONCE_CACHE_MAX: ClassVar[int] = 10_000  # LRU 上限
     _NONCE_EVICT_RATIO: ClassVar[float] = 0.2  # 超限时淘汰最老的 20%
@@ -148,7 +148,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
     @classmethod
-    def _check_and_store_nonce(cls, session_key_id: str, nonce: str) -> bool:
+    async def _check_and_store_nonce(cls, session_key_id: str, nonce: str) -> bool:
         """检查 nonce 是否已使用过，未使用则记录。
 
         Returns:
@@ -161,7 +161,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         cache_key = f"{session_key_id}:{nonce}"
         now = time.time()
 
-        with cls._nonce_cache_lock:
+        async with cls._nonce_cache_lock:
             # 检查是否存在且未过期
             if cache_key in cls._nonce_cache:
                 first_seen = cls._nonce_cache[cache_key]
@@ -226,7 +226,9 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 if raw_body:
                     body_json = json.loads(raw_body)
                     if _is_encrypted_body(body_json):
-                        session = self._decrypt_and_verify_json(request, sm, body_json)
+                        session = await self._decrypt_and_verify_json(
+                            request, sm, body_json
+                        )
                         if session is None:
                             return JSONResponse(
                                 status_code=401,
@@ -288,7 +290,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
     # ==== 私有 ============================================================
 
-    def _decrypt_and_verify_json(
+    async def _decrypt_and_verify_json(
         self, request: Request, sm, body_json: dict
     ) -> SessionKey | None:
         """解密 JSON 请求并验证签名。返回 session 或 None。"""
@@ -324,7 +326,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
         # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
         nonce = decrypted_json.get("nonce", "")
-        if not self._check_and_store_nonce(session.key_id, nonce):
+        if not await self._check_and_store_nonce(session.key_id, nonce):
             logger.warning(
                 "JSON 请求重放拦截 | key_id=%s | nonce=%s",
                 session.key_id[:12] + "...",
@@ -385,7 +387,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
-        if not self._check_and_store_nonce(session.key_id, nonce):
+        if not await self._check_and_store_nonce(session.key_id, nonce):
             logger.warning(
                 "FormData 请求重放拦截 | key_id=%s | nonce=%s",
                 session.key_id[:12] + "...",
