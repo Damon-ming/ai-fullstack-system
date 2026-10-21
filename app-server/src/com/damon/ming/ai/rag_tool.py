@@ -159,7 +159,7 @@ class RAGContainer:
 
         # 步骤8：初始化稀疏BM25索引（启动时预加载所有节点构建）
         self.bm25_index = BM25Index(tokenizer=self.word_tokenizer.tokenize)
-        self._knowledge_lock = threading.RLock()
+        self._knowledge_lock = asyncio.Lock()
         self.sparse_retriever = SparseRetriever(bm25_index=self.bm25_index)
 
         # 步骤9：混合检索器（稠密+稀疏RRF融合，参数来自 YAML）
@@ -237,7 +237,11 @@ class RAGContainer:
 
         线程编排层：
           1. 锁外：按扩展名路由到对应数据源加载（IO/CPU 密集，无共享状态访问）
-          2. 锁内：去重检查 + 入库 + BM25 重建（所有共享状态读写）
+          2. 锁外：embedding 预计算（CPU/GPU 密集，多文件并行，不阻塞事件循环）
+          3. 锁内（asyncio.Lock）：去重检查 + 向量写入 + all_nodes 更新（毫秒级）
+          4. 锁外：BM25 后台重建（异步，不阻塞上传响应）
+
+        任一文件向量写入失败 → 抛 RuntimeError，由 upload_service 回滚该文件。
         """
         loop = asyncio.get_running_loop()
         pool_mgr = self._pool_mgr
@@ -300,10 +304,22 @@ class RAGContainer:
             if nodes:
                 parsed.append((key, nodes, file_sha256))
 
-        # ── 阶段 3：锁内共享状态（去重检查 + 入库）──
-        with self._knowledge_lock:
+        # ── 阶段 2.5：锁外预计算 embedding（CPU/GPU 密集，多文件并行不阻塞事件循环）──
+        # embedding 不访问共享状态，无需持锁；锁内只做去重 + 写入（毫秒级）
+        for key, nodes, file_sha256 in parsed:
+            texts = [n.text for n in nodes]
+            embeddings = await loop.run_in_executor(
+                document_pool, self.embedder.embed_documents, texts
+            )
+            for node, vec in zip(nodes, embeddings):
+                node.embedding = vec
+
+        # ── 阶段 3：锁内共享状态（去重检查 + 入库 + all_nodes 更新）──
+        # asyncio.Lock：持锁期间事件循环不冻结，聊天协程继续响应
+        async with self._knowledge_lock:
             accepted: list[dict] = []
             new_nodes: list[TextNode] = []
+            failed_shas: list[str] = []
 
             for key, nodes, file_sha256 in parsed:
                 existing = self.vector_store.get_by_metadata(
@@ -315,12 +331,28 @@ class RAGContainer:
                     )
                     continue
 
-                self._index_nodes(nodes, rebuild_bm25=False)
+                try:
+                    self.vector_store.add_documents(nodes)
+                except Exception as e:
+                    logger.warning(
+                        "向量库入库失败 | file_sha256=%s | error=%s",
+                        file_sha256[:16],
+                        e,
+                    )
+                    failed_shas.append(file_sha256)
+                    continue
+
                 accepted.append({"file_sha256": file_sha256, "chunks": len(nodes)})
                 new_nodes.extend(nodes)
 
             if new_nodes:
                 self.all_nodes.extend(new_nodes)
+
+            if failed_shas:
+                # 告知 upload_service 回滚失败文件的磁盘和缓存，保持三库一致
+                raise RuntimeError(
+                    f"向量库入库失败，需回滚文件数: {len(failed_shas)}"
+                )
 
         # ── BM25 重建（锁外，线程池异步，不阻塞上传响应）──
         # BM25Okapi 不支持增量添加，仍需全量重建。
