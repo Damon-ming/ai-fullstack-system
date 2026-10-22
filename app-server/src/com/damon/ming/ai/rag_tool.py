@@ -159,7 +159,7 @@ class RAGContainer:
 
         # 步骤8：初始化稀疏BM25索引（启动时预加载所有节点构建）
         self.bm25_index = BM25Index(tokenizer=self.word_tokenizer.tokenize)
-        self._knowledge_lock = asyncio.Lock()
+        self._knowledge_lock = threading.Lock()
         self.sparse_retriever = SparseRetriever(bm25_index=self.bm25_index)
 
         # 步骤9：混合检索器（稠密+稀疏RRF融合，参数来自 YAML）
@@ -239,8 +239,8 @@ class RAGContainer:
         线程编排层：
           1. 锁外：按扩展名路由到对应数据源加载（IO/CPU 密集，无共享状态访问）
           2. 锁外：embedding 预计算（CPU/GPU 密集，多文件并行，不阻塞事件循环）
-          3. 锁内（asyncio.Lock）：去重检查 + 向量写入 + all_nodes 更新（毫秒级）
-          4. 锁外：BM25 后台重建（异步，不阻塞上传响应）
+          3. 锁内（threading.Lock + run_in_executor）：去重检查 + 向量写入（线程池，不阻塞事件循环）
+          4. 锁外：all_nodes 更新 + BM25 后台重建（异步，不阻塞上传响应）
 
         任一文件向量写入失败 → 抛 RuntimeError，由 upload_service 回滚该文件。
         """
@@ -315,48 +315,58 @@ class RAGContainer:
             for node, vec in zip(nodes, embeddings):
                 node.embedding = vec
 
-        # ── 阶段 3：锁内共享状态（去重检查 + 入库 + all_nodes 更新）──
-        # asyncio.Lock：持锁期间事件循环不冻结，聊天协程继续响应
-        async with self._knowledge_lock:
+        # ── 阶段 3：threading.Lock + run_in_executor 原子去重 + 入库 ──
+        # threading.Lock 保证去重检查和写入的原子性；
+        # run_in_executor 卸载到线程池，不阻塞事件循环，聊天请求可继续响应。
+        def _locked_ingest() -> tuple[list[dict], list[TextNode], list[str]]:
+            """持 threading.Lock 执行 ChromaDB 去重 + 写入。"""
             accepted: list[dict] = []
             new_nodes: list[TextNode] = []
             failed_shas: list[str] = []
 
-            for key, nodes, file_sha256 in parsed:
-                existing = self.vector_store.get_by_metadata(
-                    {"file_sha256": file_sha256}
-                )
-                if existing:
-                    skipped.append(
-                        {"file_sha256": file_sha256, "reason": "already_indexed"}
+            with self._knowledge_lock:
+                for key, nodes, file_sha256 in parsed:
+                    existing = self.vector_store.get_by_metadata(
+                        {"file_sha256": file_sha256}
                     )
-                    continue
+                    if existing:
+                        skipped.append(
+                            {"file_sha256": file_sha256, "reason": "already_indexed"}
+                        )
+                        continue
 
-                # 将 file_uid 注入 chunk metadata（审计追溯键）
-                if file_uid:
-                    for node in nodes:
-                        node.metadata["file_uid"] = file_uid
+                    # 将 file_uid 注入 chunk metadata（审计追溯键）
+                    if file_uid:
+                        for node in nodes:
+                            node.metadata["file_uid"] = file_uid
 
-                try:
-                    self.vector_store.add_documents(nodes)
-                except Exception as e:
-                    logger.warning(
-                        "向量库入库失败 | file_sha256=%s | error=%s",
-                        file_sha256[:16],
-                        e,
-                    )
-                    failed_shas.append(file_sha256)
-                    continue
+                    try:
+                        self.vector_store.add_documents(nodes)
+                    except Exception as e:
+                        logger.warning(
+                            "向量库入库失败 | file_sha256=%s | error=%s",
+                            file_sha256[:16],
+                            e,
+                        )
+                        failed_shas.append(file_sha256)
+                        continue
 
-                accepted.append({"file_sha256": file_sha256, "chunks": len(nodes)})
-                new_nodes.extend(nodes)
+                    accepted.append({"file_sha256": file_sha256, "chunks": len(nodes)})
+                    new_nodes.extend(nodes)
 
-            if new_nodes:
-                self.all_nodes.extend(new_nodes)
+            return accepted, new_nodes, failed_shas
 
-            if failed_shas:
-                # 告知 upload_service 回滚失败文件的磁盘和缓存，保持三库一致
-                raise RuntimeError(f"向量库入库失败，需回滚文件数: {len(failed_shas)}")
+        accepted, new_nodes, failed_shas = await loop.run_in_executor(
+            document_pool, _locked_ingest
+        )
+
+        # 锁外：更新内存节点列表（纯内存操作，无需持锁）
+        if new_nodes:
+            self.all_nodes.extend(new_nodes)
+
+        if failed_shas:
+            # 告知 upload_service 回滚失败文件的磁盘和缓存，保持三库一致
+            raise RuntimeError(f"向量库入库失败，需回滚文件数: {len(failed_shas)}")
 
         # ── BM25 重建（锁外，线程池异步，不阻塞上传响应）──
         # BM25Okapi 不支持增量添加，仍需全量重建。

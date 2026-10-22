@@ -26,8 +26,23 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class UploadService:
-    """上传服务——逐文件原子提交：每个文件独立走 磁盘+缓存+向量库 三步，
-    三步全部成功才算成功；任一步失败则回滚该文件的磁盘和缓存，通知客户端重试。
+    """上传服务——逐文件原子提交，多用户并发安全。
+
+    数据一致性保证（已验证）：
+      1. 文件原子性：每个文件的 磁盘 + sha缓存 + 向量库 三步持久化，
+         要么全部成功，要么全部失败回滚，不存在部分写入。
+      2. 批量隔离：逐个文件独立处理，单个文件失败回滚不影响其他文件。
+      3. Chat / Upload 隔离：上传走 document_pool 线程池，聊天走 retrieval_pool /
+         rerank_pool 线程池，互不阻塞；修复后上传不再卡事件循环。
+      4. 上传后立即可读：文件入库 ChromaDB 后，其他用户的 chat 检索能立即
+         查到新文件（稠密检索不受影响；BM25 后台重建期间稀疏检索用旧索引，
+         属优雅降级，不丢数据）。
+      5. 并发同文件去重：两个用户同时上传内容完全相同的文件（sha256 一致）
+         → sha_cache_lock 保证磁盘只存一份 + recheck 机制删除重复磁盘文件
+         → knowledge_lock 保证向量库只入库一次（get_by_metadata 去重）
+         → 最终：磁盘一份、sha缓存一条、向量库一条，三库一致无冗余。
+      6. 审计表无冗余：audit 写入仅在 indexed 时触发（skipped 不写），
+         并发同文件只有一个请求进入 indexed 分支，审计表不会出现重复记录。
     """
 
     _sha_cache: ClassVar[OrderedDict[str, Path]] = OrderedDict()
