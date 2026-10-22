@@ -326,6 +326,10 @@ class RAGContainer:
 
             with self._knowledge_lock:
                 for key, nodes, file_sha256 in parsed:
+                    # get_by_metadata 查询失败时返回 []（异常被底层吞掉），
+                    # 无法区分"查询失败"和"文件不存在"。ChromaDB 为本地 SQLite 极难抖动，
+                    # 若出现极端情况会导致去重被击穿产生重复 chunk（非数据丢失，仅检索冗余）。
+                    # 暂不区分处理，保持代码简洁；如 ChromaDB 频繁抖动可在此加单次重试。
                     existing = self.vector_store.get_by_metadata(
                         {"file_sha256": file_sha256}
                     )
@@ -372,6 +376,11 @@ class RAGContainer:
         # BM25Okapi 不支持增量添加，仍需全量重建。
         # 提交到线程池后上传立即返回，重建期间 chat 稀疏检索使用旧索引（优雅降级）。
         # BM25Index.build 内部 _build_lock 保证读写安全（锁外构建 + 锁内原子替换）。
+        # 设计取舍：并发上传可能提交多个冗余重建任务（后者覆盖前者），
+        # 无数据丢失且最终一致，为保持代码简洁不做版本号去重，批量上传场景下可考虑优化。
+        # 性能备注：每次上传触发全量重建（jieba 分词 ~80% + BM25 构建 ~20%），
+        # 单文件上传无感知（异步后台），批量上传时线程池排队 + CPU 满载。
+        # 上传为低频操作，当前可接受；若遇批量上传性能瓶颈，可引入版本号跳过过期重建。
         if new_nodes:
             retrieval_pool = pool_mgr.get_pool("retrieval")
             # 锁内复制快照，避免 run_in_executor 读取时 all_nodes 被并发修改

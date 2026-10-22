@@ -32,6 +32,8 @@ logger = pin("rate_limiter")
 # 可信反向代理 IP 列表。仅当直连对端 IP 在此列表中时才解析 X-Forwarded-For，
 # 否则直接使用 TCP peer IP 作为限流键（防客户端伪造 header 绕过限流）。
 # 当前无反向代理部署，留空集；部署 Nginx 后将代理 IP 加入即可。
+# 部署警告：若服务放在反向代理后方但未配置此列表，所有用户将共享同一限流配额；
+#    配置时只填实际代理 IP，切勿填 0.0.0.0/0 或 ::/0 否则客户端可伪造 header 绕过限流。
 TRUSTED_PROXIES: set[str] = set()
 
 

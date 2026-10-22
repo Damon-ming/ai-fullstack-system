@@ -284,7 +284,12 @@ class SessionService:
         return session
 
     def clear_session(self, session_id: str) -> None:
-        """清除某 session_id 关联的所有加密记录。"""
+        """清除某 session_id 关联的所有加密记录（内存 + DB）。"""
+        with self._lock:
+            keys = [k for k, s in self._key_to_session.items() if s == session_id]
+            for k in keys:
+                self._sessions.pop(k, None)
+                self._key_to_session.pop(k, None)
         if self._key_store is not None:
             self._key_store.replace_session(session_id, None)
 
