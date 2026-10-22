@@ -25,6 +25,7 @@ FastAPI 加密 + 签名中间件
   200002007: 签名验证失败
   200002008: 客户端签名协议版本不受支持（X-Signature-Version header）
   200002009: 请求重放拦截（nonce 已使用过）
+  200002010: 空 nonce 拒绝（加密请求必须携带非空 nonce）
 
 版本校验：
   加密版本：客户端必须通过 X-Encrypt-Version header 告知服务端，缺失或不支持返回 200002003。
@@ -110,6 +111,17 @@ def _replay_response() -> JSONResponse:
     )
 
 
+def _empty_nonce_response() -> JSONResponse:
+    """构建空 nonce 拒绝响应（400 + 空 nonce 错误码）。"""
+    return JSONResponse(
+        status_code=400,
+        content=BaseFailedResponse(
+            code=ErrorCode.ENCRYPT.EMPTY_NONCE,
+            data=BaseBizFailedData(error_msg=t(I18nKey.ENCRYPT_EMPTY_NONCE)),
+        ).model_dump(),
+    )
+
+
 def _check_signature_version_header(client_version: str) -> tuple[str, dict] | None:
     """
     检查签名版本是否受支持。
@@ -155,8 +167,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             True  = nonce 新鲜，可以继续
             False = nonce 已存在（重放），拒绝请求
         """
-        if not nonce:
-            return True  # 无 nonce 时不拦截（兼容旧客户端）
+        # 空 nonce 在调用方已处理，此处为防御性保留
 
         cache_key = f"{session_key_id}:{nonce}"
         now = time.time()
@@ -328,6 +339,11 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
         # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
         nonce = decrypted_json.get("nonce", "")
+        if not nonce:
+            logger.warning(
+                "JSON 请求空 nonce 拒绝 | key_id=%s", session.key_id[:12] + "..."
+            )
+            return _empty_nonce_response()
         if not await self._check_and_store_nonce(session.key_id, nonce):
             logger.warning(
                 "JSON 请求重放拦截 | key_id=%s | nonce=%s",
@@ -391,6 +407,11 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
+        if not nonce:
+            logger.warning(
+                "FormData 请求空 nonce 拒绝 | key_id=%s", session.key_id[:12] + "..."
+            )
+            return _empty_nonce_response()
         if not await self._check_and_store_nonce(session.key_id, nonce):
             logger.warning(
                 "FormData 请求重放拦截 | key_id=%s | nonce=%s",

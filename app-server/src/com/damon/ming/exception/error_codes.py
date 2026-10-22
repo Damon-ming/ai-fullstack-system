@@ -114,6 +114,7 @@ class _Encryption:
     SIGNATURE_REPLAY_DETECTED = _build(
         detail=9, business=Business.ENCRYPTION
     )  # 200002009
+    EMPTY_NONCE = _build(detail=10, business=Business.ENCRYPTION)  # 200002010
 
 
 class _Auth:

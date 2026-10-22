@@ -37,6 +37,7 @@
   "encrypt.invalid_key_format": "无效的 AES 密钥格式",
   "encrypt.session_reg_failed": "会话注册失败",
   "encrypt.replay_detected": "请求已处理，请勿重复提交",
+  "encrypt.empty_nonce": "缺少 nonce 参数",
 
   "sys.database_failure": "数据服务暂不可用，请稍后重试",
   "sys.encryption_failure": "安全服务异常，请重新建立会话",
