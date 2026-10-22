@@ -150,10 +150,10 @@ register_exception_handler(app)
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    logger.info("启动 FastAPI 服务 | host=0.0.0.0 | port=8000 | debug=%s", IS_DEBUG)
+    logger.info("启动 FastAPI 服务 | host=127.0.0.1 | port=8000 | debug=%s", IS_DEBUG)
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=8000,
         workers=1,  # GPU项目必须保持1个worker，不能多
         limit_concurrency=50,
