@@ -16,6 +16,7 @@
   - BaseKeyStore 实现 (同目录)          — 持久化后端
 """
 
+import asyncio
 import secrets
 import threading
 from datetime import UTC, datetime, timedelta
@@ -218,6 +219,68 @@ class SessionService:
             if stored.session_id:
                 self._key_to_session[key_id] = stored.session_id
 
+        return session
+
+    async def get_session_async(
+        self, key_id: str, session_id: str | None = None
+    ) -> SessionKey | None:
+        """异步查找会话（缓存 miss 时通过线程池查 DB，不阻塞事件循环）。
+
+        供 async 中间件/路由调用，替代同步 get_session()。
+
+        Args:
+            key_id:     加密会话标识
+            session_id: 业务 session_id。非空时执行归属校验，
+                        仅返回属于该 session_id 的密钥（防跨用户密钥泄露）。
+        """
+        # 1. 内存查找（同步，极快，锁内仅 dict 操作）
+        with self._lock:
+            session = self._sessions.get(key_id)
+            if session is not None:
+                if session.is_expired:
+                    del self._sessions[key_id]
+                    self._key_to_session.pop(key_id, None)
+                    return None
+                if session_id:
+                    owner = self._key_to_session.get(key_id)
+                    if owner and owner != session_id:
+                        logger.warning(
+                            "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
+                            key_id[:12],
+                            owner[:8],
+                            session_id[:8],
+                        )
+                        return None
+                session.touch()
+                return session
+
+        # 2. 内存 miss → DB 查找卸载到线程池（不阻塞事件循环）
+        if self._key_store is None:
+            return None
+
+        loop = asyncio.get_running_loop()
+
+        def _db_lookup() -> StoredSession | None:
+            return self._key_store.get_session(key_id, session_id=session_id)
+
+        stored = await loop.run_in_executor(None, _db_lookup)
+        if stored is None:
+            return None
+
+        try:
+            aes_key = unwrap_key(stored.aes_key_enc, self._kek)
+        except Exception:
+            return None
+
+        session = SessionKey(
+            key_id=stored.key_id,
+            aes_key=aes_key,
+            created_at=stored.created_at.timestamp(),
+        )
+        with self._lock:
+            self._sessions[key_id] = session
+            if stored.session_id:
+                self._key_to_session[key_id] = stored.session_id
         return session
 
     def clear_session(self, session_id: str) -> None:
