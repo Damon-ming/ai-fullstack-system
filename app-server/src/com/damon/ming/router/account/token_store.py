@@ -118,9 +118,7 @@ def update_user_name(token: str, name: str) -> bool:
     """更新用户昵称。返回是否成功。"""
     with _db().engine.connect() as conn:
         result = conn.execute(
-            users.update()
-            .where(users.c.token == token)
-            .values(name=name)
+            users.update().where(users.c.token == token).values(name=name)
         )
         conn.commit()
     return result.rowcount > 0
@@ -183,7 +181,13 @@ def is_device_registered(device_id: str) -> bool:
 
 
 def remove_device(device_id: str) -> None:
-    """删除设备记录（同时逻辑过期该设备的所有会话）。"""
+    """删除设备记录（同时逻辑过期该设备的所有会话）。
+
+    已知限制：本函数未锁 device 行，与 create_or_refresh_session 并发时
+    可能产生孤儿 session（新 session 的 device_id 指向已删除的设备）。
+    当前影响：remove_device 为管理/调试操作，正常业务不会与登录并发；
+    孤儿 session 由 expires_at 到期自动清理。待后续必要时加 SELECT FOR UPDATE。
+    """
     current = now()
     with _db().transaction() as conn:
         conn.execute(
@@ -204,6 +208,7 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
     """为 (token, device_id) 创建一个新会话。
 
     同一组合的旧会话立即过期（确保每个 token+device 只有一条活跃会话）。
+    通过 SELECT ... FOR UPDATE 锁住 device 行串行化同一设备的并发登录。
     返回新 session_id。
     """
     current = now()
@@ -211,6 +216,11 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
     expires_at = current + SESSION_TTL
 
     with _db().transaction() as conn:
+        # 锁住 device 行，串行化同一设备的并发登录，防止新 session 被并发 UPDATE 过期
+        conn.execute(
+            text("SELECT device_id FROM devices WHERE device_id = :did FOR UPDATE"),
+            {"did": device_id},
+        )
         # 过期旧会话
         conn.execute(
             text(
@@ -266,13 +276,19 @@ def create_or_refresh_session(token: str, device_id: str, ua_hash: str = "") -> 
     """创建新会话并原子过期该 (token, device_id) 的所有旧会话。
 
     每次登录都返回新 session_id，消除 get-then-create 的 TOCTOU 窗口。
-    并发调用时各自持有有效 session，旧会话被过期但新会话互不干扰。
+    通过 SELECT ... FOR UPDATE 锁住 device 行串行化同一设备的并发登录，
+    确保最终只有一条活跃 session。
     """
     current = now()
     session_id = str(uuid.uuid4())
     expires_at = current + SESSION_TTL
 
     with _db().transaction() as conn:
+        # 锁住 device 行，串行化同一设备的并发登录，防止新 session 被并发 UPDATE 过期
+        conn.execute(
+            text("SELECT device_id FROM devices WHERE device_id = :did FOR UPDATE"),
+            {"did": device_id},
+        )
         # 过期该 (token, device_id) 的所有旧会话
         conn.execute(
             text(

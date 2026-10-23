@@ -155,6 +155,7 @@ if __name__ == "__main__":
         app,
         host="127.0.0.1",
         port=8000,
-        workers=1,  # GPU项目必须保持1个worker，不能多
-        limit_concurrency=50,
+        workers=1,  # GPU项目必须保持1个worker，不能多（多worker导致CUDA上下文重复加载，显存爆炸）
+        limit_concurrency=50,  # 并发连接上限含SSE长连接；GPU推理能力(1-4并发)才是真正瓶颈，此值足够。
+        # 若未来用户量增长优先扩GPU，盲目调大只会增加GPU排队延迟。
     )

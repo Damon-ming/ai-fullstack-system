@@ -132,6 +132,9 @@ class SessionService:
             self._key_to_session[key_id] = session_id
 
             # 3. 持久化（锁内操作，失败时回滚内存）
+            # 锁覆盖 DB 事务是故意设计——保证内存状态与 DB 原子一致，
+            # DB 失败可回滚内存到旧 key。RSA 解密（~1-5ms）已在锁外并行，
+            # 锁内仅剩 ~1-2ms 内存 + DB 操作，并发加密会话建立时无瓶颈。
             if self._key_store is not None:
                 expires_at = datetime.now(tz=UTC) + timedelta(
                     seconds=session.ttl_seconds

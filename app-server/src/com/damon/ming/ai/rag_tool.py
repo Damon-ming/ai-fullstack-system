@@ -318,6 +318,13 @@ class RAGContainer:
         # ── 阶段 3：threading.Lock + run_in_executor 原子去重 + 入库 ──
         # threading.Lock 保证去重检查和写入的原子性；
         # run_in_executor 卸载到线程池，不阻塞事件循环，聊天请求可继续响应。
+        #
+        # 已知限制：锁临界区包含 get_by_metadata（SQLite 读）+ add_documents（SQLite 写），
+        # 持锁期间 ~15-110ms，多用户并发上传时在此串行化排队。
+        # 串行化是正确性必需的（防 check-then-act 去重击穿），不可去掉。
+        # 锁内 I/O 耗时主要来自 ChromaDB 内部串行化（应用层省不了），当前可接受。
+        # 若未来并发上传成为瓶颈（>20 用户同时上传），可考虑内存 Set 缩小临界区，
+        # 但需处理 Set 与 ChromaDB 的同步及崩溃恢复，复杂度较高。
         def _locked_ingest() -> tuple[list[dict], list[TextNode], list[str]]:
             """持 threading.Lock 执行 ChromaDB 去重 + 写入。"""
             accepted: list[dict] = []
@@ -372,21 +379,18 @@ class RAGContainer:
             # 告知 upload_service 回滚失败文件的磁盘和缓存，保持三库一致
             raise RuntimeError(f"向量库入库失败，需回滚文件数: {len(failed_shas)}")
 
-        # ── BM25 重建（锁外，线程池异步，不阻塞上传响应）──
+        # ── BM25 重建（锁外，独立线程池异步，不阻塞上传响应且不与检索争线程）──
         # BM25Okapi 不支持增量添加，仍需全量重建。
-        # 提交到线程池后上传立即返回，重建期间 chat 稀疏检索使用旧索引（优雅降级）。
+        # 提交到 bm25 专用线程池后上传立即返回，重建期间 chat 稀疏检索使用旧索引（优雅降级）。
         # BM25Index.build 内部 _build_lock 保证读写安全（锁外构建 + 锁内原子替换）。
-        # 设计取舍：并发上传可能提交多个冗余重建任务（后者覆盖前者），
-        # 无数据丢失且最终一致，为保持代码简洁不做版本号去重，批量上传场景下可考虑优化。
-        # 性能备注：每次上传触发全量重建（jieba 分词 ~80% + BM25 构建 ~20%），
-        # 单文件上传无感知（异步后台），批量上传时线程池排队 + CPU 满载。
-        # 上传为低频操作，当前可接受；若遇批量上传性能瓶颈，可引入版本号跳过过期重建。
+        # 独立于 retrieval_pool，避免 BM25 重建（CPU 密集）饿死聊天检索线程。
+        # bm25_pool 单 worker 串行处理，多任务排队后者覆盖前者，最终一致无冗余 CPU 浪费。
         if new_nodes:
-            retrieval_pool = pool_mgr.get_pool("retrieval")
+            bm25_pool = pool_mgr.get_pool("bm25")
             # 锁内复制快照，避免 run_in_executor 读取时 all_nodes 被并发修改
             nodes_snapshot = list(self.all_nodes)
             build_args = (nodes_snapshot, len(new_nodes), len(nodes_snapshot))
-            loop.run_in_executor(retrieval_pool, self._rebuild_bm25, *build_args)
+            loop.run_in_executor(bm25_pool, self._rebuild_bm25, *build_args)
             logger.info(
                 f"BM25后台重建已提交 | 新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
             )

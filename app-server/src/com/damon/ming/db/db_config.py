@@ -46,7 +46,11 @@ class DbConfig:
     retry_count: int = 3  # 连接失败重试次数
     backoff_seconds: float = 0.1  # 重试退避基础秒数（实际睡眠 = backoff * (attempt+1)）
     pool_size: int = 5  # 连接池大小
-    max_overflow: int = 10  # 超出 pool_size 的额外连接数
+    max_overflow: int = 10  # 超出 pool_size 的额外连接数（最大 15 并发）
+    # 注意：document_pool / retrieval_pool / bm25_pool 操作 ChromaDB（独立 SQLite），
+    # 不占用本连接池。主池仅服务账号、会话、审计、历史等短事务（毫秒级），
+    # 15 连接可支撑 ~3000 TPS，GPU 推理才是真正的吞吐瓶颈。
+    # 若遇连接等待，优先排查长事务而非调大池子。
     pool_timeout: int = 30  # 获取连接的超时秒数
     pool_recycle: int = 3600  # 连接回收秒数（防止连接被数据库断开）
     echo: bool = False  # 是否打印 SQL 调试日志

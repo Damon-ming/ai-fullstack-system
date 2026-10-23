@@ -409,25 +409,35 @@ def _record_upload_metadata(
 ) -> None:
     """同步写入 upload_records 审计表（在 run_in_executor 中调用）。
 
-    写入失败仅 log 警告，不影响上传主流程。
+    写入失败记录 error 日志，不影响上传主流程。
+    fire-and-forget 场景下任务可能在服务重启时被取消，审计记录可能丢失，
+    upload_records 与实际入库文件可能不一致时需排查此日志。
     """
     from datetime import UTC, datetime
 
-    db_conn.execute(
-        text(
-            "INSERT INTO upload_records "
-            "(file_uid, file_sha256, file_path, file_size, token, device_id, created_at) "
-            "VALUES (:uid, :sha, :path, :size, :token, :device, :cat) "
-            "ON CONFLICT (file_uid) DO NOTHING"
-        ),
-        {
-            "uid": file_uid,
-            "sha": file_sha256,
-            "path": file_path,
-            "size": str(file_size),
-            "token": token[:64] if token else None,
-            "device": device_id[:64] if device_id else "",
-            "cat": datetime.now(tz=UTC),
-        },
-        commit=True,
-    )
+    try:
+        db_conn.execute(
+            text(
+                "INSERT INTO upload_records "
+                "(file_uid, file_sha256, file_path, file_size, token, device_id, created_at) "
+                "VALUES (:uid, :sha, :path, :size, :token, :device, :cat) "
+                "ON CONFLICT (file_uid) DO NOTHING"
+            ),
+            {
+                "uid": file_uid,
+                "sha": file_sha256,
+                "path": file_path,
+                "size": str(file_size),
+                "token": token[:64] if token else None,
+                "device": device_id[:64] if device_id else "",
+                "cat": datetime.now(tz=UTC),
+            },
+            commit=True,
+        )
+    except Exception as e:
+        logger.error(
+            "写入审计表失败 | file_uid=%s sha=%s error=%s",
+            file_uid[:16],
+            file_sha256[:16],
+            e,
+        )

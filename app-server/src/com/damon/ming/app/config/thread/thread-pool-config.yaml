@@ -6,3 +6,4 @@ retrieval: 4      # HybridRetriever 稠密+稀疏并发 + 余量
 document: 8       # PDF 加载 / 文档分割
 inference: 2      # 推理辅助线程
 rerank: 2         # CrossEncoder 重排专用池（与 retrieval 隔离）
+bm25: 1           # BM25 全量重建专用池（单 worker 串行，与检索池隔离防饿死）
