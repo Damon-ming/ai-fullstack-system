@@ -82,6 +82,19 @@ class TokenizerConfigLoader:
         known_fields = {f.name for f in TokenizerParams.__dataclass_fields__.values()}
         base_kwargs = {k: v for k, v in params_raw.items() if k in known_fields}
         extra_kwargs = {k: v for k, v in params_raw.items() if k not in known_fields}
+
+        # 将 dicts_base_dir 相对路径解析为绝对路径（锚定 tokenizer-config.yaml 位置）
+        if base_kwargs.get("dicts_base_dir") and not os.path.isabs(
+            base_kwargs["dicts_base_dir"]
+        ):
+            config_dir = os.path.dirname(os.path.abspath(self._config_path))
+            src_root = os.path.abspath(
+                os.path.join(config_dir, "..", "..", "..", "..", "..", "..")
+            )
+            base_kwargs["dicts_base_dir"] = os.path.abspath(
+                os.path.join(src_root, base_kwargs["dicts_base_dir"])
+            )
+
         params = TokenizerParams(**base_kwargs, extra=extra_kwargs)
 
         engine = raw.get("tokenizer_engine")

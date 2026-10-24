@@ -23,8 +23,9 @@ tokenizers:
     tokenizer_engine: jieba
     params:
       encoding_name: none
+      dicts_base_dir: "com/damon/ming/ai/config/tokenizer/dicts"  # 词典目录（相对路径，基于 src/）
       dict_paths:
-        - ai/config/tokenizer/dicts/tech_terms.txt
+        - tech_terms.txt  # 相对于 dicts_base_dir
 
   # 备用 GPT-3.5 编码（与 GPT-4 的 cl100k 不同）
   # gpt35_counter:

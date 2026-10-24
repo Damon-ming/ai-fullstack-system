@@ -21,9 +21,6 @@ from src.com.damon.ming.thread import CancellationToken
 
 logger = pin("upload.service")
 
-UPLOAD_DIR = Path(__file__).resolve().parents[2] / "knowledges"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
 
 class UploadService:
     """上传服务——逐文件原子提交，多用户并发安全。
@@ -45,9 +42,17 @@ class UploadService:
          并发同文件只有一个请求进入 indexed 分支，审计表不会出现重复记录。
     """
 
+    upload_dir: ClassVar[Path] = Path(".")  # 由 set_knowledge_dir() 从配置注入
     _sha_cache: ClassVar[OrderedDict[str, Path]] = OrderedDict()
     _sha_cache_lock: ClassVar[threading.Lock] = threading.Lock()
     _sha_cache_max: ClassVar[int] = 0  # 由 init_sha_cache() 从配置注入
+
+    @classmethod
+    def set_knowledge_dir(cls, knowledge_dir: str) -> None:
+        """设置知识库目录（由 app_initializer 调用，必须在 init_sha_cache 之前）。"""
+        cls.upload_dir = Path(knowledge_dir).resolve()
+        cls.upload_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("上传服务知识库目录已设置 | path=%s", cls.upload_dir)
 
     @classmethod
     def init_sha_cache(cls, sha_cache_max: int = 10000):
@@ -60,7 +65,7 @@ class UploadService:
         logger.info("初始化文件sha256缓存 | sha_cache_max=%d", sha_cache_max)
         cache: OrderedDict[str, Path] = OrderedDict()
         tmp_cleaned = 0
-        for p in UPLOAD_DIR.rglob("*"):
+        for p in cls.upload_dir.rglob("*"):
             if not p.is_file():
                 continue
             if p.suffix.endswith(".tmp"):
@@ -201,7 +206,7 @@ class UploadService:
 
             # 构建存储路径
             sub_folder_name = suffix.lstrip(".") if suffix else "no_ext"
-            target_base_dir = UPLOAD_DIR / sub_folder_name
+            target_base_dir = UploadService.upload_dir / sub_folder_name
             target_base_dir.mkdir(parents=True, exist_ok=True)
             store_name = f"{file_uid}{suffix}"
             file_path = target_base_dir / store_name

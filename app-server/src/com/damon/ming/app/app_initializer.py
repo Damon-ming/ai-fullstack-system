@@ -34,6 +34,7 @@ class AppInitializer:
         self._profile = "common" if is_debug else "production"
 
         # 子系统状态（startup 后填充）
+        self.system_config = None
         self.db_conn = None
         self.rsa_key_pair = None
         self.key_material = None
@@ -60,6 +61,7 @@ class AppInitializer:
         )
 
         self._register_exception_types()
+        self._init_system_config()  # 必须在其他子系统之前：提供 knowledge_dir
         self._init_thread_pool()
         self._init_upload_config()
         self._init_upload_service()
@@ -79,6 +81,7 @@ class AppInitializer:
 
         必须在 startup() 之后调用，确保所有子系统已初始化。
         """
+        app.state.system_config = self.system_config
         app.state.rag_app = self.rag_app
         app.state.infer_service = self.infer_service
         app.state.guardrail = self.guardrail
@@ -203,6 +206,19 @@ class AppInitializer:
             },
         )
 
+    def _init_system_config(self) -> None:
+        """系统级配置：跨模块共享的路径和基础设置。
+
+        必须在其他子系统之前初始化，后续模块从 self.system_config 获取路径。
+        """
+        from src.com.damon.ming.app.config.system import SystemConfigLoader
+
+        loader = SystemConfigLoader()
+        self.system_config = loader.load()
+        logger.info(
+            "系统配置已加载 | knowledge_dir=%s", self.system_config.knowledge_dir
+        )
+
     def _register_exception_types(self) -> None:
         """注册子系统异常类型到全局异常分类器。"""
         try:
@@ -231,11 +247,12 @@ class AppInitializer:
             logger.warning("异常类型注册失败: %s", e)
 
     def _init_upload_service(self) -> None:
-        """上传服务：初始化 SHA 缓存（逐文件同步入库，无需后台任务）。"""
+        """上传服务：设置知识库目录 + 初始化 SHA 缓存（逐文件同步入库，无需后台任务）。"""
         from src.com.damon.ming.router.upload.service.upload_service import (
             UploadService,
         )
 
+        UploadService.set_knowledge_dir(self.system_config.knowledge_dir)
         UploadService.init_sha_cache(sha_cache_max=self.upload_config.sha_cache_max)
         logger.info("上传服务初始化完成（逐文件同步入库模式）")
 
@@ -459,6 +476,7 @@ class AppInitializer:
         self.rag_app = get_rag_container(
             pool_mgr=self.pool_mgr,
             infer_sem=self.chat_sem,
+            knowledge_dir=self.system_config.knowledge_dir,
         )
 
         # 全量加载推理引擎和模型

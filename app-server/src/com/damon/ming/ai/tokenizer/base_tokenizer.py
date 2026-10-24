@@ -28,6 +28,7 @@ class TokenizerParams:
     """分词器参数（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
     encoding_name: str
+    dicts_base_dir: str = ""  # 词典目录（已由 loader 解析为绝对路径）
     extra: dict[str, Any] = field(default_factory=dict)
 
 

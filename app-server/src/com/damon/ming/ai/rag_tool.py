@@ -68,7 +68,6 @@ from src.com.damon.ming.thread import CancellationToken, ThreadPoolManager
 
 logger = pin("ai.rag")
 
-KNOWLEDGES_DIR = Path(__file__).resolve().parent.parent / "knowledges"
 _rag_instance = None
 _rag_instance_lock = threading.Lock()
 
@@ -76,12 +75,14 @@ _rag_instance_lock = threading.Lock()
 def get_rag_container(
     pool_mgr: ThreadPoolManager,
     infer_sem: asyncio.Semaphore,
+    knowledge_dir: str,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
     Args:
         pool_mgr: 由 AppInitializer 注入的全局线程池管理器（必填）。
         infer_sem: 推理信号量（与主推理共用，必填）。
+        knowledge_dir: 知识库目录绝对路径（由 app.config 注入，必填）。
     """
     global _rag_instance
     if _rag_instance is None:
@@ -90,6 +91,7 @@ def get_rag_container(
                 _rag_instance = RAGContainer(
                     pool_mgr=pool_mgr,
                     infer_sem=infer_sem,
+                    knowledge_dir=knowledge_dir,
                 )
     return _rag_instance
 
@@ -100,12 +102,17 @@ class RAGContainer:
         self,
         pool_mgr: ThreadPoolManager | None = None,
         infer_sem: asyncio.Semaphore | None = None,
+        knowledge_dir: str = "",
     ):
         logger.info("RAG 容器初始化开始")
         # 线程池管理器：优先使用注入的全局实例，否则回退单例
         self._pool_mgr = pool_mgr if pool_mgr is not None else ThreadPoolManager()
         # 推理信号量：所有 LLM 调用（主推理 + 摘要 + 压缩）共享同一上限
         self._infer_sem = infer_sem
+        # 知识库目录：由 app.config 注入，不再硬编码，不合法直接抛异常
+        if not knowledge_dir:
+            raise ValueError("RAGContainer 初始化失败：knowledge_dir 不能为空")
+        self._knowledge_dir = Path(knowledge_dir)
         # 步骤1：执行所有模块注册
         register_all_rerankers()
         register_all_tokenizers()
@@ -186,7 +193,7 @@ class RAGContainer:
         all_startup_docs: list = []
         for _name in list_engines():
             cls = resolve_source(_name)
-            docs = cls(KNOWLEDGES_DIR).load_documents()
+            docs = cls(self._knowledge_dir).load_documents()
             all_startup_docs.extend(docs)
         bm25_nodes = self.splitter.split(all_startup_docs)
         self.all_nodes = bm25_nodes
@@ -202,7 +209,7 @@ class RAGContainer:
             # （已解析的 all_startup_docs 是最权威数据源）
             all_paths = [
                 str(path.resolve())
-                for path in KNOWLEDGES_DIR.rglob("*")
+                for path in self._knowledge_dir.rglob("*")
                 if path.is_file()
             ]
             if all_paths:
@@ -256,7 +263,7 @@ class RAGContainer:
             try:
                 docs = await loop.run_in_executor(
                     document_pool,
-                    cls(KNOWLEDGES_DIR).load_specific_files,
+                    cls(self._knowledge_dir).load_specific_files,
                     file_paths,
                 )
                 all_loaded_docs.extend(docs)

@@ -1,0 +1,6 @@
+# 系统级配置 —— 跨模块共享的路径和基础设置。
+# 各模块从 app.state.system_config 读取，不再自行硬编码路径。
+
+system:
+  # 知识库目录（相对路径基于 app-server/ 根目录解析）
+  knowledge_dir: "knowledges"

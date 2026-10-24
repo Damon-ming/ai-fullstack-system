@@ -48,6 +48,7 @@ from src.com.damon.ming.router.account import account_router
 from src.com.damon.ming.router.chat import chat_router
 from src.com.damon.ming.router.encryption import encryption_router
 from src.com.damon.ming.router.history import history_router
+from src.com.damon.ming.router.knowledge import knowledge_router
 from src.com.damon.ming.router.upload import upload_router
 
 logger = pin("app.main")
@@ -142,6 +143,7 @@ app.include_router(account_router.router)
 app.include_router(encryption_router.router)
 app.include_router(upload_router.router)
 app.include_router(history_router.router)
+app.include_router(knowledge_router.router)
 app.include_router(chat_router.router)
 logger.info("应用路由初始化完成")
 
