@@ -18,6 +18,8 @@ from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadRequest,
 )
 from src.com.damon.ming.thread import CancellationToken
+from src.com.damon.ming.utils.file_stat import file_creation_time
+from src.com.damon.ming.utils.time import now_iso
 
 logger = pin("upload.service")
 
@@ -251,11 +253,21 @@ class UploadService:
                             cache_added = True
                             disk_path = file_path
 
+                # ── 记录 disk_file_at：写盘时取当前时间，缓存命中时取磁盘 stat ──
+                if not cache_hit:
+                    disk_file_at = now_iso()
+                else:
+                    try:
+                        disk_file_at = file_creation_time(str(disk_path)).isoformat()
+                    except OSError:
+                        disk_file_at = now_iso()
+
                 # ── 阶段2：逐文件入库向量库（携带 file_uid 写入 chunk metadata）──
                 index_result = rag_app.ingest_files(
                     [str(disk_path.resolve())],
                     cancellation_token=cancellation_token,
                     file_uid=file_uid,
+                    disk_file_at=disk_file_at,
                 )
 
                 # ── 阶段3：确认入库结果 ──

@@ -65,6 +65,7 @@ from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import CancellationToken, ThreadPoolManager
+from src.com.damon.ming.utils.time import now_iso
 
 logger = pin("ai.rag")
 
@@ -240,6 +241,7 @@ class RAGContainer:
         self,
         file_paths: list[str],
         file_uid: str = "",
+        disk_file_at: str = "",
     ) -> dict:
         """增量处理上传文件（支持 PDF / TXT / MD）。
 
@@ -353,10 +355,13 @@ class RAGContainer:
                         )
                         continue
 
-                    # 将 file_uid 注入 chunk metadata（审计追溯键）
-                    if file_uid:
-                        for node in nodes:
+                    # 注入 chunk metadata：file_uid + 时间戳
+                    indexed_at = now_iso()
+                    for node in nodes:
+                        if file_uid:
                             node.metadata["file_uid"] = file_uid
+                        node.metadata["disk_file_at"] = disk_file_at
+                        node.metadata["indexed_at"] = indexed_at
 
                     try:
                         self.vector_store.add_documents(nodes)
