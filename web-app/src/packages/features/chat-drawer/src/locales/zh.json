@@ -13,6 +13,17 @@
     "success_with_failed": "上传完成：{{success_count}} 个成功，{{failed_count}} 个失败",
     "error": "文件上传失败"
   },
+  "knowledge": {
+    "button": "⊞ 知识库",
+    "title": "知识库文件",
+    "close": "关闭",
+    "tabList": "列表",
+    "tabTree": "目录树",
+    "loading": "加载中...",
+    "error": "加载失败",
+    "empty": "暂无上传文件",
+    "fileCount": "共 {{count}} 个文件"
+  },
   "history": {
     "title": "最近对话",
     "delete": "删除记录",

@@ -272,6 +272,9 @@ importers:
       '@ming/core-util':
         specifier: workspace:*
         version: link:../../core/util
+      '@ming/data-layer':
+        specifier: workspace:*
+        version: link:../../data-layer
       '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../account-api

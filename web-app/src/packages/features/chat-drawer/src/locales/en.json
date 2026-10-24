@@ -13,6 +13,17 @@
     "success_with_failed": "Uploaded: {{success_count}} succeeded, {{failed_count}} failed",
     "error": "Upload failed"
   },
+  "knowledge": {
+    "button": "⊞ Knowledge",
+    "title": "Knowledge Files",
+    "close": "Close",
+    "tabList": "List",
+    "tabTree": "Tree",
+    "loading": "Loading...",
+    "error": "Failed to load",
+    "empty": "No files uploaded",
+    "fileCount": "{{count}} files"
+  },
   "history": {
     "title": "Recent Chats",
     "delete": "Delete",

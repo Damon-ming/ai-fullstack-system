@@ -8,6 +8,7 @@ import {
   useAccountStore,
   useHistoryStore,
   useSearchStore,
+  useKnowledgeStore,
 } from "@ming/store";
 import { useHistory } from "@ming/feature-history-api";
 import { searchHistory } from "@ming/feature-search-api";
@@ -27,11 +28,7 @@ export function useChatPageHook() {
   const finishHistoryLoad = useHistoryStore((state) => state.finishLoad);
   const clearSkipHistorySave = useHistoryStore((state) => state.clearSkipSave);
   const beginHistoryLoad = useHistoryStore((state) => state.beginLoad);
-  const {
-    list: historyList,
-    getMessages,
-    saveMessages,
-  } = useHistory();
+  const { list: historyList, getMessages, saveMessages } = useHistory();
   const messages = useChatMessageStore((state) => state.messages);
   const setMessages = useChatMessageStore((state) => state.setMessages);
   const accountOpen = useAccountStore((state) => state.dialogOpen);
@@ -50,6 +47,8 @@ export function useChatPageHook() {
   const upload = useChatUploadStore((state) => state.upload);
   const closeUpload = useChatUploadStore((state) => state.closeUpload);
   const { abortUpload } = useDrawerUploadHook();
+  const knowledgeOpen = useKnowledgeStore((state) => state.open);
+  const closeKnowledge = useKnowledgeStore((state) => state.closeKnowledge);
 
   useEffect(() => {
     if (historyLoading) {
@@ -64,10 +63,7 @@ export function useChatPageHook() {
       (message) => message.role === "user",
     );
     if (firstUserMessage) {
-      saveMessages(
-        firstUserMessage.text.slice(0, 40),
-        messages,
-      );
+      saveMessages(firstUserMessage.text.slice(0, 40), messages);
       const currentHistory = historyList.find(
         (item) => item.title === firstUserMessage.text.slice(0, 40),
       );
@@ -112,5 +108,7 @@ export function useChatPageHook() {
     upload,
     closeUpload,
     abortUpload,
+    knowledgeOpen,
+    closeKnowledge,
   };
 }

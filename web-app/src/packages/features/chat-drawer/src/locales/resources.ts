@@ -10,8 +10,19 @@ export interface ChatDrawerResources {
     idle: string;
     uploading: string;
     success_allIndexed: string;
-    success_partial: string;
+    success_with_failed: string;
     error: string;
+  };
+  knowledge: {
+    button: string;
+    title: string;
+    close: string;
+    tabList: string;
+    tabTree: string;
+    loading: string;
+    error: string;
+    empty: string;
+    fileCount: string;
   };
   history: {
     title: string;
