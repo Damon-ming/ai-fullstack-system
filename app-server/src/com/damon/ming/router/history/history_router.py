@@ -12,6 +12,7 @@
 
 from fastapi import APIRouter, Path, Query, Request
 from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
@@ -65,7 +66,7 @@ def list_history(
         return BaseSuccessResponse(code=ErrorCode.OK, data=success_data)
     except Exception as e:
         logger.exception("历史记录列表查询失败")
-        fail_data = HistoryFailedData(error_msg=str(e))
+        fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
         return BaseFailedResponse(
             code=ErrorCode.SYSTEM.DATABASE_FAILURE, data=fail_data
         )
@@ -99,7 +100,7 @@ def get_history(
         )
     except Exception as e:
         logger.exception("历史记录详情查询失败")
-        fail_data = HistoryFailedData(error_msg=str(e))
+        fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
         return BaseFailedResponse(
             code=ErrorCode.SYSTEM.DATABASE_FAILURE, data=fail_data
         )
@@ -133,7 +134,7 @@ def save_history(
         )
     except Exception as e:
         logger.exception("历史记录保存失败")
-        fail_data = HistoryFailedData(error_msg=str(e))
+        fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
         return BaseFailedResponse(code=ErrorCode.HISTORY.SAVE_FAILED, data=fail_data)
 
 
@@ -167,5 +168,5 @@ def delete_history(
         )
     except Exception as e:
         logger.exception("历史记录删除失败")
-        fail_data = HistoryFailedData(error_msg=str(e))
+        fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
         return BaseFailedResponse(code=ErrorCode.HISTORY.DELETE_FAILED, data=fail_data)

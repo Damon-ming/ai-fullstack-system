@@ -58,23 +58,21 @@ export function useDrawerUploadHook() {
     abortControllerRef.current = controller;
 
     startUpload(files.map((file) => file.name));
-    const [err, response] = await uploadFilesFromApi(files, controller.signal);
-    if (controller.signal.aborted) {
-      log.debug("upload aborted by user");
-      closeUpload();
-      return;
-    }
-    abortControllerRef.current = null;
-    if (err) {
-      finishUpload("error");
-    } else {
-      const resultFiles = Array.isArray(response?.data?.files)
-        ? response.data.files
-        : [];
-      const failedFiles = Array.isArray(response?.data?.failed_files)
-        ? response.data.failed_files
+    try {
+      const response = await uploadFilesFromApi(files, controller.signal);
+      if (controller.signal.aborted) {
+        log.debug("upload aborted by user");
+        closeUpload();
+        return;
+      }
+      abortControllerRef.current = null;
+      const resultFiles = Array.isArray(response?.files) ? response.files : [];
+      const failedFiles = Array.isArray(response?.failed_files)
+        ? response.failed_files
         : [];
       finishUpload("success", resultFiles, failedFiles);
+    } catch {
+      finishUpload("error");
     }
   };
 

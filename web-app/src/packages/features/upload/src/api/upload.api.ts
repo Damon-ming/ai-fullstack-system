@@ -1,6 +1,5 @@
 // web-app/src/packages/features/upload/src/api/upload.api.ts
-import { netClient } from "@ming/biz-common-net-api";
-import type { BizRequestConfig, BizResult } from "@ming/biz-common-net-api";
+import { dataApi } from "@ming/data-layer";
 import type { UploadRequest, UploadResponse } from "./types";
 import { createLogger } from "@ming/core-log";
 
@@ -11,7 +10,7 @@ const log = createLogger("upload/api");
 export async function uploadFile(
   request: UploadRequest,
   signal?: AbortSignal,
-): Promise<BizResult<UploadResponse>> {
+): Promise<UploadResponse> {
   log.debug("upload request", {
     endpoint: "/api/files/upload/v1",
     fileCount: request.files.length,
@@ -27,15 +26,11 @@ export async function uploadFile(
   formData.set("meta_json", JSON.stringify(meta));
 
   // PDF 解析、Embedding 和向量入库可能持续几十秒，不能使用普通接口的 10s 超时。
-  const cfg: BizRequestConfig = {
-    timeout: 1 * 60 * 1000,
-    ...(signal ? { axiosConfig: { signal } } : {}),
-  };
-  const result = await netClient.post<UploadResponse>(
+  const result = await dataApi.post<UploadResponse>(
     "/api/files/upload/v1",
     formData,
-    cfg,
+    { timeout: 1 * 60 * 1000, signal },
   );
   log.debug("upload response received");
-  return result;
+  return result.data!;
 }

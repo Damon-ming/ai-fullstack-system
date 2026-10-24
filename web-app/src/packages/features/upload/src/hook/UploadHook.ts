@@ -1,6 +1,5 @@
 // web-app/src/packages/features/upload/src/hook/UploadHook.ts
 import { uploadFile as requestUploadFile } from "../api";
-import type { BizResult } from "@ming/biz-common-net-api";
 import type { UploadRequest, UploadResponse } from "../api/types";
 import { createLogger } from "@ming/core-log";
 
@@ -69,7 +68,7 @@ export async function uploadFiles(
   files: File[],
   meta?: UploadMeta,
   signal?: AbortSignal,
-): Promise<BizResult<UploadResponse>> {
+): Promise<UploadResponse> {
   log.debug("upload started", {
     fileCount: String(files.length),
     fileNames: files.map((file) => file.name).join(", "),

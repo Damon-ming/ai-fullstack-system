@@ -263,7 +263,6 @@ class UploadService:
                         {
                             "filename": origin_name,
                             "file_uid": file_uid,
-                            "file_path": str(disk_path.resolve()),
                         }
                     )
 
@@ -297,6 +296,7 @@ class UploadService:
                     file_sha256,
                     written_to_disk,
                     cache_added,
+                    file_uid=file_uid,
                     rag_app=rag_app,
                 )
                 failed_files.append(
@@ -311,6 +311,7 @@ class UploadService:
                     file_sha256,
                     written_to_disk,
                     cache_added,
+                    file_uid=file_uid,
                     rag_app=rag_app,
                 )
                 logger.warning(
@@ -335,27 +336,27 @@ def _rollback_file(
     file_sha256: str,
     written_to_disk: bool,
     cache_added: bool,
+    file_uid: str = "",
     rag_app=None,
 ):
     """回滚单个文件的向量库 / 磁盘 / 缓存，保持三库一致。
 
     顺序：向量库 → 磁盘 → 缓存。向量库失败时中断回滚并记录，
     避免磁盘已删但向量库仍残留 chunk 的不一致。
+
+    注意：向量库删除使用 file_uid 而非 file_sha256。file_uid 在本次上传中唯一，
+    不会跨用户误删（多用户上传相同文件 sha256 一致时，file_uid 各不相同）。
     """
     # 1. 先删向量库（失败则中断，不继续删磁盘）
     if rag_app:
         try:
-            deleted = rag_app.vector_store.delete_by_metadata(
-                {"file_sha256": file_sha256}
-            )
+            deleted = rag_app.delete_by_uid(file_uid)
             if deleted:
-                logger.info(
-                    "回滚向量库 | sha=%s | deleted=%d", file_sha256[:16], deleted
-                )
+                logger.info("回滚向量库 | uid=%s | deleted=%d", file_uid[:16], deleted)
         except Exception as e:
             logger.error(
-                "回滚向量库失败，中断回滚 | sha=%s | error=%s",
-                file_sha256[:16],
+                "回滚向量库失败，中断回滚 | uid=%s | error=%s",
+                file_uid[:16],
                 e,
             )
             return  # 不继续删磁盘/缓存，保留可重试状态

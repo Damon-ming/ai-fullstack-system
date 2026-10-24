@@ -338,19 +338,20 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
+        # 返回 None 而非 JSONResponse，使调用方 `if session is None` 正确拦截
         nonce = decrypted_json.get("nonce", "")
         if not nonce:
             logger.warning(
                 "JSON 请求空 nonce 拒绝 | key_id=%s", session.key_id[:12] + "..."
             )
-            return _empty_nonce_response()
+            return None
         if not await self._check_and_store_nonce(session.key_id, nonce):
             logger.warning(
                 "JSON 请求重放拦截 | key_id=%s | nonce=%s",
                 session.key_id[:12] + "...",
                 nonce[:16] + "...",
             )
-            return _replay_response()
+            return None
 
         _patch_request_body(request, decrypted_str)
         request.state.enc_session = session
@@ -407,18 +408,19 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
+        # 返回 None 而非 JSONResponse，使调用方 `if session is None` 正确拦截
         if not nonce:
             logger.warning(
                 "FormData 请求空 nonce 拒绝 | key_id=%s", session.key_id[:12] + "..."
             )
-            return _empty_nonce_response()
+            return None
         if not await self._check_and_store_nonce(session.key_id, nonce):
             logger.warning(
                 "FormData 请求重放拦截 | key_id=%s | nonce=%s",
                 session.key_id[:12] + "...",
                 nonce[:16] + "...",
             )
-            return _replay_response()
+            return None
 
         # 将解密后的 meta 注入 request.state，供路由读取
         request.state.decrypted_meta = meta

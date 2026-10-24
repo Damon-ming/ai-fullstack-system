@@ -397,6 +397,14 @@ class RAGContainer:
 
         return {"indexed": accepted, "skipped": skipped}
 
+    def delete_by_uid(self, file_uid: str) -> int:
+        """按 file_uid 删除向量库中的 chunk（上传回滚用）。
+
+        file_uid 在本次上传中唯一，不会跨用户误删。
+        返回删除的 chunk 数量，未匹配返回 0。
+        """
+        return self.vector_store.delete_by_metadata({"file_uid": file_uid})
+
     def _rebuild_bm25(self, all_nodes: list, new_count: int, total_count: int) -> None:
         """后台线程中重建 BM25 索引（CPU 密集，不阻塞事件循环）。
 

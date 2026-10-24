@@ -38,7 +38,7 @@ from slowapi.errors import RateLimitExceeded
 from src.com.damon.ming.app import AppInitializer, create_lifespan
 from src.com.damon.ming.debug import is_debug
 from src.com.damon.ming.exception import register_exception_handler
-from src.com.damon.ming.log import pin
+from src.com.damon.ming.log import init_logging, pin
 from src.com.damon.ming.middleware import AuthMiddleware, EncryptionMiddleware
 from src.com.damon.ming.middleware.context_middleware import ContextMiddleware
 from src.com.damon.ming.middleware.i18n_middleware import I18nMiddleware
@@ -58,6 +58,12 @@ logger = pin("app.main")
 # ---------------------------------------------------------------------------
 
 IS_DEBUG = is_debug()
+
+# ---------------------------------------------------------------------------
+# 日志初始化（环境感知：debug → stdout，release → 文件）
+# ---------------------------------------------------------------------------
+
+init_logging(is_debug=IS_DEBUG)
 
 # ---------------------------------------------------------------------------
 # 启动前校验 —— 缺少关键配置时立即终止，避免运行时才发现
