@@ -1,0 +1,20 @@
+# app-server/inference/docker-ollama.yaml
+# Ollama 推理服务
+#
+# 通过根目录 docker-compose.yaml 的 include 机制按 INFERENCE_SERVER=ollama 自动加载。
+
+services:
+  ollama-server:
+    image: ollama/ollama:0.32.14
+    container_name: ollama-server
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - /root/ming/ollama/.ollama:/root/.ollama
+    runtime: nvidia
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_ORIGINS: "*"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all

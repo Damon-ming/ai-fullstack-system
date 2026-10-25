@@ -1,47 +1,13 @@
 # app-server/docker-compose.yaml
-# 后端服务 + AI 基础设施（Ollama）
+# 后端应用服务
 #
-# ═══════════════════════════════════════════════════════════════════
-# 打包命令
-# ═══════════════════════════════════════════════════════════════════
-#
-# 子目录单独构建（默认 SERVER_BUILD_ENV=0 → 锁定 release，不可切换）:
+# 启动命令（根目录一键）：
 #   docker compose up -d --build
 #
-# 子目录开发模式（SERVER_BUILD_ENV=1 → debug 可切换）:
-#   SERVER_BUILD_ENV=1 docker compose up -d --build
-#
-# 根目录一键构建（推荐，前后端同步）:
-#   生产: docker compose up -d --build
-#   开发: SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 docker compose up -d --build
-#
-# 流水线 - 生产打包:
-#   docker build --build-arg SERVER_BUILD_ENV=0 -t app-server:prod .
-#
-# 流水线 - 开发/预发打包:
-#   docker build --build-arg SERVER_BUILD_ENV=1 -t app-server:dev .
-#
-# ── 项目拆分后 ───────────────────────────────────────────────────
-# 拆为独立仓库时，本文件命令不变，只去掉根目录 include 行即可。
+# 推理后端通过 INFERENCE_SERVER 环境变量控制。
+# 业务参数集中在 ai/config/models.yaml，环境变量可作为最高优先级覆盖。
 
 services:
-  # ── Ollama 大模型服务 ─────────────────────────────────────────────
-  ollama:
-    image: ollama/ollama:0.32.14
-    container_name: ollama-server
-    restart: always
-    ports:
-      - "11434:11434"
-    volumes:
-      - /root/ming/ollama/.ollama:/root/.ollama
-    runtime: nvidia
-    environment:
-      OLLAMA_HOST: 0.0.0.0
-      OLLAMA_ORIGINS: "*"
-      NVIDIA_VISIBLE_DEVICES: all
-      NVIDIA_DRIVER_CAPABILITIES: all
-
-  # ── Python 后端应用服务 ───────────────────────────────────────────
   app-server:
     build:
       context: .
@@ -58,10 +24,9 @@ services:
       - /root/ming/chroma_data:/app-server/chroma_data
       - /root/ming/knowledges:/app-server/src/com/damon/ming/knowledges
     environment:
-      - OLLAMA_BASE_URL=http://ollama-server:11434
       - LOG_LEVEL=DEBUG
-    depends_on:
-      - ollama
+      # ── 推理后端选择（ollama / vllm / sglang）──
+      - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
     logging:
       driver: "json-file"
       options:

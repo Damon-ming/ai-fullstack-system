@@ -12,6 +12,8 @@
 【可选（本地开发用，生产镜像通过 build_info.py 固化）】
   APP_ENV                 环境标志：debug / release（默认 debug）
   LOG_LEVEL               日志级别：DEBUG / INFO / WARNING / ERROR（默认 INFO）
+  INFERENCE_SERVER        推理后端：ollama / vllm / sglang（默认 ollama，后端 YAML 提供连接信息）
+  CHAT_TEMPERATURE        聊天采样温度（必须，各角色业务参数同理）
   DB_CONFIG_PATH          DB YAML 配置文件路径（默认 app/config/db-config.yaml，可选）
   ENCRYPTION_CONFIG_PATH  加密 YAML 配置文件路径（默认 encryption/encryption-config.yaml）
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）

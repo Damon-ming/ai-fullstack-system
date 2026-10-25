@@ -1,31 +1,28 @@
 # ═══════════════════════════════════════════════════════════════════
 # 根目录 docker-compose.yaml —— 一键部署入口
 #
-# 各子服务的构建/运行配置下沉到各自的 docker-compose.yaml 中。
-# 后期项目拆分时，只需删除对应 include 行，子项目无需改动。
+# 推理后端通过 INFERENCE_SERVER 环境变量选择：
+#   INFERENCE_SERVER=ollama  → 启动 Ollama 容器（默认）
+#   INFERENCE_SERVER=vllm    → 启动 vLLM 容器
 #
-# ═══════════════════════════════════════════════════════════════════
-# 可直接执行的 Linux 命令（复制粘贴即可）
-# ═══════════════════════════════════════════════════════════════════
+# 可直接执行的命令：
 #
-# ── 生产部署（默认不设定环境 → 前后端均锁定 release，不可切换）──────
+#   开发（Ollama）:
+#     SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 docker compose up -d --build
 #
-#   docker compose up -d --build
+#   开发（vLLM）:
+#     SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 INFERENCE_SERVER=vllm docker compose up -d --build
 #
-# ── 开发部署（设定环境 → 前后端均可切换）──────────────────────────
+#   停止:
+#     docker compose down
 #
-#   SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 docker compose up -d --build
-#
-# ── 启动后切换后端环境（仅构建时 SERVER_BUILD_ENV=1 才生效）────────
-#
-#   APP_ENV=release docker compose up -d        # 切到 release
-#   APP_ENV=debug docker compose up -d           # 切到 debug（默认）
-#
-# ── 停止 ─────────────────────────────────────────────────────────
-#
-#   docker compose down
+# 新增推理后端：
+#   1. 新建 inference/docker-<backend>.yaml（容器配置）
+#   2. 新建 ai/config/backends/<backend>.yaml（模型连接信息）
+#   3. 无需修改本文件（include 自动识别）
 # ═══════════════════════════════════════════════════════════════════
 
 include:
+  - inference/docker-${INFERENCE_SERVER:-ollama}.yaml
   - app-server/docker-compose.yaml
   - web-app/docker-compose.yaml

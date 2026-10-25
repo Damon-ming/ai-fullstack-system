@@ -1,0 +1,83 @@
+# app-server/inference/docker-vllm.yaml
+# vLLM 推理服务 —— 多实例部署
+#
+# 通过根目录 docker-compose.yaml 的 include 机制按 INFERENCE_SERVER=vllm 自动加载。
+#
+# 每个模型独立 vLLM 实例，各自扩缩容、故障隔离。
+
+services:
+  vllm-intent:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-intent
+    restart: always
+    ports:
+      - "8011:8000"
+    volumes:
+      - /root/ming/models:/models
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model /models/Qwen2.5-0.5B-Instruct
+      --trust-remote-code
+      --gpu-memory-utilization 0.3
+      --max-model-len 2048
+
+
+  vllm-rewrite:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-rewrite
+    restart: always
+    ports:
+      - "8012:8000"
+    volumes:
+      - /root/ming/models:/models
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model /models/Qwen2.5-1.8B-Instruct
+      --trust-remote-code
+      --gpu-memory-utilization 0.4
+      --max-model-len 4096
+
+
+  vllm-chat:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-chat
+    restart: always
+    ports:
+      - "8013:8000"
+    volumes:
+      - /root/ming/models:/models
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model /models/Qwen2.5-7B-Instruct
+      --trust-remote-code
+      --gpu-memory-utilization 0.7
+      --max-model-len 8192
+
+
+  vllm-summary:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-summary
+    restart: always
+    ports:
+      - "8014:8000"
+    volumes:
+      - /root/ming/models:/models
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model /models/Qwen2.5-1.5B-Instruct
+      --trust-remote-code
+      --gpu-memory-utilization 0.4
+      --max-model-len 4096
+

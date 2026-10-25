@@ -1,0 +1,48 @@
+# app-server/src/com/damon/ming/ai/config/models.yaml
+# ═══════════════════════════════════════════════════════════════════
+# models.yaml —— 集中化模型行为配置
+#
+# 定义所有推理角色的公共业务参数（temperature / top_p / max_tokens / timeout）。
+# 后端连接信息（model + api_base）在后端 YAML 中，不在本文件。
+#
+# 设计意图：
+#   ① 单一数据源：所有后端的业务参数在此统一定义
+#   ② 云控入口：后续接 Apollo / Nacos / 配置中心，下发即替换此文件
+#   ③ 环境变量可作为最高优先级覆盖（ROLE_PARAM 格式）
+#
+# 加载优先级（高→低）：
+#   1. 环境变量（CHAT_TEMPERATURE 等）—— 部署级覆盖
+#   2. 本文件 —— 默认值
+#   3. 硬编码兜底（loader 内）—— 防止本文件缺失字段
+# ═══════════════════════════════════════════════════════════════════
+
+roles:
+  chat:
+    temperature: 0.7
+    top_p: 0.9
+    max_tokens: 4096
+    timeout: 180
+
+  intent:
+    temperature: 0.3
+    top_p: 0.95
+    max_tokens: 512
+    timeout: 30
+
+  rewrite:
+    temperature: 0.5
+    top_p: 0.9
+    max_tokens: 256
+    timeout: 60
+
+  summary:
+    temperature: 0.4
+    top_p: 0.9
+    max_tokens: 4096
+    timeout: 60
+
+  guardrail:
+    temperature: 0.1
+    top_p: 0.95
+    max_tokens: 256
+    timeout: 10

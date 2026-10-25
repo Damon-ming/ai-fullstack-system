@@ -1,0 +1,25 @@
+# app-server/src/com/damon/ming/ai/config/backends/vllm.yaml
+# vLLM 后端 —— 模型名 + 连接地址（静态，部署后几乎不改）
+#
+# vLLM 多实例：每个角色独立容器，各自 base_url。
+# 上层业务参数（temperature/top_p/timeout）通过环境变量注入，不在本文件中。
+
+chat:
+  model: Qwen/Qwen2.5-7B-Instruct
+  api_base: http://vllm-chat:8000/v1
+
+intent:
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  api_base: http://vllm-intent:8000/v1
+
+rewrite:
+  model: Qwen/Qwen2.5-1.8B-Instruct
+  api_base: http://vllm-rewrite:8000/v1
+
+summary:
+  model: Qwen/Qwen2.5-1.5B-Instruct
+  api_base: http://vllm-summary:8000/v1
+
+guardrail:
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  api_base: http://vllm-intent:8000/v1

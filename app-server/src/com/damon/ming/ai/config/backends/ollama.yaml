@@ -1,0 +1,25 @@
+# app-server/src/com/damon/ming/ai/config/backends/ollama.yaml
+# Ollama 后端 —— 模型名 + 连接地址（静态，部署后几乎不改）
+#
+# 上层业务参数（temperature/top_p/timeout）通过环境变量注入，不在本文件中。
+# 本文件只管"哪个角色用什么模型、连哪个地址"。
+
+chat:
+  model: ollama/qwen2.5:7b-instruct
+  api_base: http://ollama-server:11434
+
+intent:
+  model: ollama/qwen:0.5b
+  api_base: http://ollama-server:11434
+
+rewrite:
+  model: ollama/qwen:1.8b
+  api_base: http://ollama-server:11434
+
+summary:
+  model: ollama/qwen2.5:1.5b-instruct
+  api_base: http://ollama-server:11434
+
+guardrail:
+  model: ollama/qwen:0.5b
+  api_base: http://ollama-server:11434
