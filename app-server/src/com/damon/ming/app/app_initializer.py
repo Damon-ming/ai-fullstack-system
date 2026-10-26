@@ -479,7 +479,7 @@ class AppInitializer:
             knowledge_dir=self.system_config.knowledge_dir,
         )
 
-        # 全量加载推理引擎和模型
+        # 全量加载推理引擎和模型（backends.yaml 由 compose 部署时生成）
         _loader = InferenceConfigLoader()
         _loaded = _loader.load_all()
         self.inference = _loaded

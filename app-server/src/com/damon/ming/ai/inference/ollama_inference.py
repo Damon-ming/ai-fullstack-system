@@ -26,11 +26,11 @@ class OllamaInference(BaseInferenceService):
 
     async def text_generation(
         self,
-        model_name: str,
         messages: list[dict[str, str]],
         reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
+        model_name: str = "",
     ) -> str:
         run_opts = dict(options) if options else {}
         if reason:
@@ -80,11 +80,11 @@ class OllamaInference(BaseInferenceService):
 
     async def stream_generate(
         self,
-        model_name: str,
         messages: list[dict[str, str]],
         reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
+        model_name: str = "",
     ) -> AsyncGenerator[StreamToken, None]:
         run_opts = dict(options) if options else {}
         if reason:
@@ -124,11 +124,13 @@ class OllamaInference(BaseInferenceService):
         except Exception:
             logger.exception("Ollama模型预热失败 | model=%s", model_name)
 
-    async def check_model_ready(self, model_name: str) -> bool:
+    async def check_model_ready(self, model_name: str = "") -> bool:
         try:
             res = await self.client.list()
             model_list = [m["name"] for m in res.get("models", [])]
-            return model_name in model_list
+            if model_name:
+                return model_name in model_list
+            return len(model_list) > 0
         except Exception as e:
             logger.error("模型检测失败: %s", e)
             return False

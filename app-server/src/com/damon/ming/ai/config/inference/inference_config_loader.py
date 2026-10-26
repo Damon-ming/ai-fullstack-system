@@ -1,22 +1,19 @@
-# app-server/src/com/damon/ming/ai/config/inference/inference_config_loader.py
-"""
-推理引擎配置加载器 —— 从 YAML 读取引擎和模型配置，构造 InferenceParams。
+推理引擎配置加载器 —— 从 backends.yaml 读取配置。
 
-本模块属于 config/inference/ 配置层，不属于 inference/ 模块。
-inference/ 模块通过 InferenceParams 数据类接收参数，不感知配置来源。
+单一配置文件，引擎选择在 compose 层面通过模板复制完成，代码无需感知引擎类型。
 
-两层结构：
-  - engine：推理后端基础设施（连接参数），type 映射到 @register_engine
-  - models：按业务用途命名，数组格式，继承上层 engine
-
-启动时全量加载，所有引擎和模型在服务启动阶段初始化完毕。
+配置格式（backends.yaml）：
+  base_url: 网关或直连地址
+  default_timeout: 默认超时
+  roles:
+    {role}:
+      api_key: 路由 key（gateway 模式）
+      model: 模型名（直连模式）
+      temperature / top_p / max_tokens: 业务参数
 
 用法：
-  loader = InferenceConfigLoader()
+  loader = InferenceConfigLoader()      # 不传参
   result = loader.load_all()
-  result["engine"]             # BaseInferenceService
-  result["models"]             # dict[模型用途名, ModelEntry]
-
   engine, entry = loader.get_engine_for_model("chat")
 """
 
@@ -31,101 +28,82 @@ from src.com.damon.ming.ai.inference.base_inference import (
     InferenceParams,
 )
 
+_CONFIG_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backends.yaml")
+)
+
 
 @dataclass(frozen=True)
 class ModelEntry:
     """模型层加载结果。"""
 
     model_name: str
-    options: dict[str, Any]  # 模型级推理参数（temperature / top_p / num_ctx）
-    engine_type: str  # 继承自上层 engine.type
+    options: dict[str, Any]
+    api_key: str
+    engine_type: str
 
 
 class InferenceConfigLoader:
-    """从 YAML 加载推理引擎和模型配置。"""
+    """从 backends.yaml 加载推理引擎和模型配置。"""
 
-    def __init__(self, config_path: str | None = None):
-        self._engine: BaseInferenceService | None = None
+    def __init__(self):
         self._engine_type: str = ""
+        self._engines: dict[str, BaseInferenceService] = {}
         self._models: dict[str, ModelEntry] = {}
-        if config_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "inference-config.yaml")
-        self._config_path = config_path
 
     def load_all(self) -> dict:
-        """一次性加载引擎和模型配置。
+        """一次性加载引擎和模型配置。"""
+        if not os.path.exists(_CONFIG_PATH):
+            raise FileNotFoundError(f"配置文件不存在: {_CONFIG_PATH}")
 
-        Returns:
-            {
-                "engine": BaseInferenceService,
-                "models": dict[模型用途名, ModelEntry],
-            }
-        """
-        if self._engine is not None:
-            return {
-                "engine": self._engine,
-                "models": self._models,
-            }
+        with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
 
-        raw_cfg = self._read_yaml()
+        if not cfg or "roles" not in cfg:
+            raise ValueError(f"配置格式错误，缺少 roles: {_CONFIG_PATH}")
 
-        # 1. 加载引擎层
-        engine_cfg = raw_cfg.get("engine", {})
-        self._engine_type = engine_cfg.get("type", "")
-
-        params = InferenceParams(
-            base_url=engine_cfg["base_url"],
-            timeout=engine_cfg["timeout"],
-            api_key=engine_cfg.get("api_key", ""),
-        )
-
+        self._engine_type = os.environ.get("INFERENCE_SERVER", "ollama")
+        base_url = cfg.get("base_url", "")
+        timeout = cfg.get("default_timeout", 180)
         impl_cls = resolve_engine(self._engine_type)
-        self._engine = impl_cls(params)
 
-        # 2. 加载模型层 —— 统一数组格式，继承上层 engine
-        for model_role, model_cfg in raw_cfg.get("models", {}).items():
-            if not isinstance(model_cfg, list):
-                raise ValueError(  # noqa: TRY004
-                    f"模型 '{model_role}' 配置格式错误：期望数组，"
-                    f"实际为 {type(model_cfg).__name__}"
+        for role, role_cfg in cfg["roles"].items():
+            api_key = role_cfg.get("api_key", "")
+            model_name = role_cfg.get("model", "")
+
+            # api_key 为空时（如 Ollama），共享引擎
+            engine_key = api_key or "__shared__"
+            if engine_key not in self._engines:
+                params = InferenceParams(
+                    base_url=base_url,
+                    timeout=timeout,
+                    api_key=api_key,
                 )
-            if not model_cfg:
-                raise ValueError(f"模型 '{model_role}' 配置为空数组")
+                self._engines[engine_key] = impl_cls(params)
 
-            primary = model_cfg[0]
-            entry = ModelEntry(
-                model_name=primary["model_name"],
-                options={k: v for k, v in primary.items() if k != "model_name"},
+            options = {
+                k: v for k, v in role_cfg.items()
+                if k not in ("api_key", "model")
+            }
+            self._models[role] = ModelEntry(
+                model_name=model_name,
+                options=options,
+                api_key=api_key,
                 engine_type=self._engine_type,
             )
-            self._models[model_role] = entry
 
         return {
-            "engine": self._engine,
+            "engines": self._engines,
             "models": self._models,
         }
 
     def get_engine_for_model(
         self, role: str = "chat"
     ) -> tuple[BaseInferenceService, ModelEntry]:
-        """获取引擎实例和指定用途的模型信息。
-
-        Returns:
-            (engine, ModelEntry)
-        """
-        if self._engine is None:
+        """获取引擎实例和指定角色的模型信息。"""
+        if not self._models:
             self.load_all()
         entry = self._models[role]
-        return self._engine, entry
-
-    # ---- 私有 -------------------------------------------------------------
-
-    def _read_yaml(self) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"推理配置文件不存在: {self._config_path}")
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
-        if raw_cfg is None or "engine" not in raw_cfg:
-            raise ValueError("配置文件格式错误：缺少 'engine' 根节点")
-        return raw_cfg
+        engine_key = entry.api_key or "__shared__"
+        engine = self._engines[engine_key]
+        return engine, entry

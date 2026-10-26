@@ -1,0 +1,30 @@
+# app-server/inference/gateway.yaml
+# vLLM Gateway 路由表 —— 部署时根据 INFERENCE_SERVER 选择
+#
+# INFERENCE_SERVER=vllm  → 使用本文件
+# INFERENCE_SERVER=ollama → 不使用 gateway
+#
+# 格式：api_key → { upstream: 容器地址, model: 模型名 }
+
+upstream_key: akUpstream
+
+routes:
+  ak_chat_001:
+    upstream: http://vllm-chat:8000
+    model: Qwen2.5-7B-Instruct
+
+  ak_intent_001:
+    upstream: http://vllm-intent:8000
+    model: Qwen2.5-0.5B-Instruct
+
+  ak_rewrite_001:
+    upstream: http://vllm-rewrite:8000
+    model: Qwen2.5-1.8B-Instruct
+
+  ak_summary_001:
+    upstream: http://vllm-summary:8000
+    model: Qwen2.5-1.5B-Instruct
+
+  ak_test_001:
+    upstream: http://vllm-chat:8000
+    model: Qwen2.5-7B-Instruct

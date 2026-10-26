@@ -3,7 +3,11 @@
 #
 # 推理后端通过 INFERENCE_SERVER 环境变量选择：
 #   INFERENCE_SERVER=ollama  → 启动 Ollama 容器（默认）
-#   INFERENCE_SERVER=vllm    → 启动 vLLM 容器
+#   INFERENCE_SERVER=vllm    → 启动 vLLM 集群 + Gateway
+#
+# 部署时配置生成：
+#   INFERENCE_SERVER=vllm  → config/templates/vllm.yaml  → config/backends.yaml
+#   INFERENCE_SERVER=ollama → config/templates/ollama.yaml → config/backends.yaml
 #
 # 可直接执行的命令：
 #
@@ -16,13 +20,21 @@
 #   停止:
 #     docker compose down
 #
-# 新增推理后端：
-#   1. 新建 inference/docker-<backend>.yaml（容器配置）
-#   2. 新建 ai/config/backends/<backend>.yaml（模型连接信息）
-#   3. 无需修改本文件（include 自动识别）
+# 新增推理后端（如 sglang）：
+#   1. 新建 app-server/inference/docker-sglang.yaml（容器编排）
+#   2. 新建 app-server/inference/gateway-sglang.yaml（路由表，如需要 gateway）
+#   3. 新建 app-server/ai/config/templates/sglang.yaml（业务参数模板）
+#   4. 部署时 INFERENCE_SERVER=sglang → 模板复制为 backends.yaml
+#   app-server 代码零改动
 # ═══════════════════════════════════════════════════════════════════
 
 include:
-  - inference/docker-${INFERENCE_SERVER:-ollama}.yaml
+  - app-server/inference/docker-${INFERENCE_SERVER:-ollama}.yaml
   - app-server/docker-compose.yaml
   - web-app/docker-compose.yaml
+
+# 共享网络：所有服务通过容器名互相发现
+networks:
+  ai-network:
+    name: ai-network
+    driver: bridge

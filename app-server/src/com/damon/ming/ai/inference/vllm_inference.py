@@ -43,15 +43,20 @@ class VLLMInference(BaseInferenceService):
 
     async def text_generation(
         self,
-        model_name: str,
         messages: list[dict[str, str]],
+        # todo: 为什么没用到
         reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
+        model_name: str = "",
     ) -> str:
         run_opts = _map_options(options)
 
-        create_kwargs = {"model": model_name, "messages": messages, **run_opts}
+        # API Gateway 模式下 model 由 gateway 注入，客户端无需指定
+        create_kwargs: dict[str, Any] = {"messages": messages, **run_opts}
+        if model_name:
+            create_kwargs["model"] = model_name
+
         if response_schema:
             create_kwargs["response_format"] = {
                 "type": "json_object",
@@ -76,19 +81,21 @@ class VLLMInference(BaseInferenceService):
 
     async def stream_generate(
         self,
-        model_name: str,
         messages: list[dict[str, str]],
         reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
+        model_name: str = "",
     ) -> AsyncGenerator[StreamToken, None]:
         run_opts = _map_options(options)
         create_kwargs: dict[str, Any] = {
-            "model": model_name,
             "messages": messages,
             "stream": True,
             **run_opts,
         }
+        if model_name:
+            create_kwargs["model"] = model_name
+
         if response_schema:
             create_kwargs["response_format"] = {
                 "type": "json_object",
@@ -108,11 +115,14 @@ class VLLMInference(BaseInferenceService):
             logger.warning("VLLM stream 收到取消信号，关闭流")
             raise
 
-    async def check_model_ready(self, model_name: str) -> bool:
+    async def check_model_ready(self, model_name: str = "") -> bool:
         try:
             models = await self.client.models.list()
+            # gateway 模式下 /v1/models 返回的是上游 vLLM 的模型列表
             model_names = [m.id for m in models.data]
-            return model_name in model_names
+            if model_name:
+                return model_name in model_names
+            return len(model_names) > 0
         except Exception as e:
             logger.error("VLLM模型检测失败: %s", e)
             return False

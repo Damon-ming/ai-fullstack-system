@@ -2,10 +2,17 @@
 # 后端应用服务
 #
 # 启动命令（根目录一键）：
-#   docker compose up -d --build
+#   SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 INFERENCE_SERVER=vllm docker compose up -d --build
 #
 # 推理后端通过 INFERENCE_SERVER 环境变量控制。
-# 业务参数集中在 ai/config/models.yaml，环境变量可作为最高优先级覆盖。
+# 业务参数集中在 config/backends.yaml（部署时从模板生成）。
+#
+# API Key 路由：
+#   app-server 只连 gateway，不同角色用不同 api_key 路由到对应 vLLM 实例。
+#
+# 部署时配置生成（启动命令第一步）：
+#   INFERENCE_SERVER=vllm  → templates/vllm.yaml  → backends.yaml
+#   INFERENCE_SERVER=ollama → templates/ollama.yaml → backends.yaml
 
 services:
   app-server:
@@ -32,5 +39,11 @@ services:
       options:
         max-size: "100m"
         max-file: "3"
+    networks:
+      - ai-network
     command: >
-      sh -c "mkdir -p /app-server/logs && python3 -m src.com.damon.ming.main > /app-server/logs/app.log 2>&1"
+      sh -c "\
+        cp /app-server/src/com/damon/ming/ai/config/templates/$${INFERENCE_SERVER:-ollama}.yaml \
+           /app-server/src/com/damon/ming/ai/config/backends.yaml \
+        && mkdir -p /app-server/logs \
+        && python3 -m src.com.damon.ming.main > /app-server/logs/app.log 2>&1"

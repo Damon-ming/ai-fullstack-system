@@ -1,25 +1,46 @@
 # app-server/src/com/damon/ming/ai/config/backends/ollama.yaml
-# Ollama 后端 —— 模型名 + 连接地址（静态，部署后几乎不改）
+# Ollama 后端 —— 唯一权威配置
 #
-# 上层业务参数（temperature/top_p/timeout）通过环境变量注入，不在本文件中。
-# 本文件只管"哪个角色用什么模型、连哪个地址"。
+# Ollama 单容器多模型，api_key 留空（不校验）。
+# gateway_url 直接指向 ollama-server。
+#
+# 和 vllm.yaml 格式一致，InferenceConfigLoader 统一处理。
 
-chat:
-  model: ollama/qwen2.5:7b-instruct
-  api_base: http://ollama-server:11434
+gateway_url: http://ollama-server:11434
+default_timeout: 180
 
-intent:
-  model: ollama/qwen:0.5b
-  api_base: http://ollama-server:11434
+roles:
+  chat:
+    api_key: ""                         # Ollama 不需要 key
+    model: qwen2.5:7b-instruct
+    temperature: 0.7
+    top_p: 0.9
+    max_tokens: 4096
 
-rewrite:
-  model: ollama/qwen:1.8b
-  api_base: http://ollama-server:11434
+  intent:
+    api_key: ""
+    model: qwen:0.5b
+    temperature: 0.3
+    top_p: 0.95
+    max_tokens: 512
 
-summary:
-  model: ollama/qwen2.5:1.5b-instruct
-  api_base: http://ollama-server:11434
+  rewrite:
+    api_key: ""
+    model: qwen:1.8b
+    temperature: 0.5
+    top_p: 0.9
+    max_tokens: 256
 
-guardrail:
-  model: ollama/qwen:0.5b
-  api_base: http://ollama-server:11434
+  summary:
+    api_key: ""
+    model: qwen2.5:1.5b-instruct
+    temperature: 0.4
+    top_p: 0.9
+    max_tokens: 4096
+
+  guardrail:
+    api_key: ""
+    model: qwen:0.5b
+    temperature: 0.1
+    top_p: 0.95
+    max_tokens: 256

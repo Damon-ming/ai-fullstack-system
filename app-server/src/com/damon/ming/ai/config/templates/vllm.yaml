@@ -1,0 +1,44 @@
+# app-server/src/com/damon/ming/ai/config/templates/vllm.yaml
+# vLLM 模板 —— 部署时复制为 ../backends.yaml
+#
+# vLLM 多实例 + Gateway 路由模式。
+# api_key 决定路由到哪个 vLLM 实例，gateway 自动注入 model。
+
+base_url: http://vllm-gateway:8080/v1
+default_timeout: 180
+
+roles:
+  chat:
+    api_key: ak_chat_001
+    model: ""
+    temperature: 0.7
+    top_p: 0.9
+    max_tokens: 4096
+
+  intent:
+    api_key: ak_intent_001
+    model: ""
+    temperature: 0.3
+    top_p: 0.95
+    max_tokens: 512
+
+  rewrite:
+    api_key: ak_rewrite_001
+    model: ""
+    temperature: 0.5
+    top_p: 0.9
+    max_tokens: 256
+
+  summary:
+    api_key: ak_summary_001
+    model: ""
+    temperature: 0.4
+    top_p: 0.9
+    max_tokens: 4096
+
+  guardrail:
+    api_key: ak_intent_001
+    model: ""
+    temperature: 0.1
+    top_p: 0.95
+    max_tokens: 256

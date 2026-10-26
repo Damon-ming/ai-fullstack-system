@@ -63,26 +63,30 @@ class BaseInferenceService(ABC):
     @abstractmethod
     async def text_generation(
         self,
-        model_name: str,
         messages: list[dict[str, str]],
         reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
+        model_name: str = "",
     ) -> str:
-        """一次性返回完整文本/结构化JSON。"""
+        """一次性返回完整文本/结构化JSON。
+
+        model_name 可空：API Gateway 模式下由 gateway 自动注入。
+        """
 
     @abstractmethod
     async def stream_generate(
         self,
-        model_name: str,
         messages: list[dict[str, str]],
         reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
+        model_name: str = "",
     ) -> AsyncGenerator[StreamToken, None]:
         """流式SSE输出 —— 产出 StreamToken 区分 reasoning / content。
 
         response_schema 不为 None 时，LLM 输出结构化 JSON（前端在 done 事件后解析）。
+        model_name 可空：API Gateway 模式下由 gateway 自动注入。
         """
 
     @abstractmethod
@@ -124,7 +128,6 @@ class BaseInferenceService(ABC):
             f"直接输出意图名称："
         )
         result = await self.text_generation(
-            model_name=model_name,
             messages=[{"role": "user", "content": prompt}],
             options={"temperature": 0.0},
         )
@@ -172,7 +175,6 @@ class BaseInferenceService(ABC):
                 f"优化检索问句："
             )
         return await self.text_generation(
-            model_name=model_name,
             messages=[{"role": "user", "content": prompt}],
             options={"temperature": 0.1},
         )

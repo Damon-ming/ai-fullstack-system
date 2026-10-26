@@ -1,25 +1,53 @@
 # app-server/src/com/damon/ming/ai/config/backends/vllm.yaml
-# vLLM 后端 —— 模型名 + 连接地址（静态，部署后几乎不改）
+# vLLM 后端 —— 唯一权威配置
 #
-# vLLM 多实例：每个角色独立容器，各自 base_url。
-# 上层业务参数（temperature/top_p/timeout）通过环境变量注入，不在本文件中。
+# 包含：
+#   1. gateway 路由表（api_key → 上游容器 + model名）
+#   2. 各角色的公共业务参数（temperature / top_p / max_tokens）
+#
+# 新增推理服务：新建 docker-compose + 本文件格式的 yaml 即可。
 
-chat:
-  model: Qwen/Qwen2.5-7B-Instruct
-  api_base: http://vllm-chat:8000/v1
+gateway_url: http://vllm-gateway:8080/v1
+upstream_key: akUpstream           # vLLM 实例自身的 api_key（双层校验）
+default_timeout: 180
 
-intent:
-  model: Qwen/Qwen2.5-0.5B-Instruct
-  api_base: http://vllm-intent:8000/v1
+roles:
+  chat:
+    api_key: ak_chat_001
+    upstream: http://vllm-chat:8000
+    model: Qwen2.5-7B-Instruct
+    temperature: 0.7
+    top_p: 0.9
+    max_tokens: 4096
 
-rewrite:
-  model: Qwen/Qwen2.5-1.8B-Instruct
-  api_base: http://vllm-rewrite:8000/v1
+  intent:
+    api_key: ak_intent_001
+    upstream: http://vllm-intent:8000
+    model: Qwen2.5-0.5B-Instruct
+    temperature: 0.3
+    top_p: 0.95
+    max_tokens: 512
 
-summary:
-  model: Qwen/Qwen2.5-1.5B-Instruct
-  api_base: http://vllm-summary:8000/v1
+  rewrite:
+    api_key: ak_rewrite_001
+    upstream: http://vllm-rewrite:8000
+    model: Qwen2.5-1.8B-Instruct
+    temperature: 0.5
+    top_p: 0.9
+    max_tokens: 256
 
-guardrail:
-  model: Qwen/Qwen2.5-0.5B-Instruct
-  api_base: http://vllm-intent:8000/v1
+  summary:
+    api_key: ak_summary_001
+    upstream: http://vllm-summary:8000
+    model: Qwen2.5-1.5B-Instruct
+    temperature: 0.4
+    top_p: 0.9
+    max_tokens: 4096
+
+  guardrail:
+    api_key: ak_intent_001          # 复用 intent 实例（同模型）
+    upstream: http://vllm-intent:8000
+    model: Qwen2.5-0.5B-Instruct
+    temperature: 0.1
+    top_p: 0.95
+    max_tokens: 256

@@ -20,9 +20,7 @@
 #
 # 流水线 - 开发/预发打包:
 #   docker build --build-arg FRONTEND_BUILD_ENV=1 -t web-app:dev .
-#
-# ── 项目拆分后 ───────────────────────────────────────────────────
-# 拆为独立仓库时，本文件命令不变，只去掉根目录 include 行即可。
+# todo: web应用后期要拆出来，放到不同服务器上
 
 services:
   # ── React 前端 ────────────────────────────────────────────────────
@@ -36,3 +34,5 @@ services:
     restart: always
     ports:
       - "80:80"
+    networks:
+      - ai-network
