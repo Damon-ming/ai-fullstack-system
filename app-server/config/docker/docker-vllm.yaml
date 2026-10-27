@@ -8,7 +8,7 @@ services:
   # ── API Gateway ──────────────────────────────────────────────────
   vllm-gateway:
     build:
-      context: .
+      context: ../../inference
       dockerfile: Dockerfile.gateway
     container_name: vllm-gateway
     restart: always
