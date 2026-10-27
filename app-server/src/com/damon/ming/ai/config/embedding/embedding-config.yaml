@@ -5,36 +5,21 @@
 # 上层调用方通过 EmbeddingConfigLoader().load_all() 全量加载后按名字引用
 # 引擎名称与实现类的映射在 embedding/__init__.py 中通过 @register_engine 维护。
 #
-# 可选引擎：
-#   ollama      → OllamaEmbedding（Ollama 服务）
-#   huggingface → HuggingFaceEmbedding（本地 GPU/CPU）
+# 模型路径统一在 /models/embedding/ 下，Docker 挂载 /root/ming/models → /models
+#
+# 当前使用：huggingface（本地推理）
+# ollama 引擎代码保留但未配置，启用时在下方添加 ollama 段即可。
 
 embedding_engines:
-  ollama:
-    params:
-      model_name: bge-m3
-      base_url: http://ollama-server:11434
-      # ollama 服务端无本地推理问题
-      timeout: 30
-      max_retries: 3
-      # Ollama 为远程服务，无本地推理并发问题；concurrency 仅作占位必填
-      concurrency: 4
-      device: ""
-      normalize_embeddings: true
-      cache_folder: ""
-      cache_max: 2000  # 查询缓存 LRU 上限（约 16MB）
-      query_prefix: "query: "      # BGE-M3 等模型要求 query 编码加前缀（分布对齐）
-      passage_prefix: "passage: "  # 文档编码前缀（与训练时一致）
-
   huggingface:
     params:
       model_name: BAAI/bge-m3
       base_url: ""
       timeout: 0                   # 本地推理无网络超时，保留字段占位
       max_retries: 0
-      concurrency: 2              # 本地 GPU 推理并发上限（与 inference 池一致）
+      concurrency: 2              # 本地 GPU 推理并发上限
       device: cpu                 # cpu 或 cuda（本机有 GPU 时改为 cuda）
       normalize_embeddings: true
-      cache_folder: ""            # 模型下载缓存目录，空=默认 ~/.cache/huggingface
+      cache_folder: /models/embedding    # HF Hub 下载缓存目录
       query_prefix: "query: "     # BGE-M3 等模型要求 query 编码加前缀（分布对齐）
       passage_prefix: "passage: " # 文档编码前缀（与训练时一致）

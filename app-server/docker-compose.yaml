@@ -19,7 +19,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - /root/ming/models:/app-server/models
+      - /root/ming/models:/models
       - /root/ming/logs/app-server:/app-server/logs
       - /root/ming/chroma_data:/app-server/chroma_data
       - /root/ming/knowledges:/app-server/src/com/damon/ming/knowledges

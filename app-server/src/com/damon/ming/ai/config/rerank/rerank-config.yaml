@@ -7,13 +7,15 @@
 #   4. 级联：轻量模型先粗排，重量级再精排
 #   5. 主备降级：主力 GPU 模型 + CPU 轻量 fallback
 #
+# 模型路径统一在 /models/rerank/ 下，Docker 挂载 /root/ming/models → /models
+#
 # 上层通过 RerankerConfigLoader().load("<name>") 获取指定实例。
 rerankers:
   # ── 主力模型（中文场景）────────────────────────────
   zh_primary:
     rerank_engine: cross_encoder
     params:
-      model_name: ./models/bge-reranker-v2-gemma
+      model_name: /models/rerank/bge-reranker-v2-gemma
       batch_size: 16
       max_seq_len: 1024
       device: null
@@ -22,7 +24,7 @@ rerankers:
   zh_light:
     rerank_engine: cross_encoder
     params:
-      model_name: ./models/bge-reranker-v2-m3
+      model_name: /models/rerank/bge-reranker-v2-m3
       batch_size: 32
       max_seq_len: 512
       device: null
@@ -31,7 +33,7 @@ rerankers:
   cpu_fallback:
     rerank_engine: cross_encoder
     params:
-      model_name: ./models/bge-reranker-v2-m3
+      model_name: /models/rerank/bge-reranker-v2-m3
       batch_size: 8
       max_seq_len: 512
       device: cpu
@@ -40,7 +42,7 @@ rerankers:
   # en_primary:
   #   rerank_engine: cross_encoder
   #   params:
-  #     model_name: ./models/bge-reranker-v2-mini
+  #     model_name: /models/rerank/bge-reranker-v2-mini
   #     batch_size: 16
   #     max_seq_len: 512
   #     device: null
@@ -49,7 +51,7 @@ rerankers:
   # legal_specialized:
   #   rerank_engine: cross_encoder
   #   params:
-  #     model_name: ./models/legal-reranker-v1
+  #     model_name: /models/rerank/legal-reranker-v1
   #     batch_size: 8
   #     max_seq_len: 512
   #     device: null

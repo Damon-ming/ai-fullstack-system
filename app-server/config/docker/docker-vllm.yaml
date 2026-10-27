@@ -38,7 +38,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/Qwen2.5-0.5B-Instruct
+      --model /models/inference/Qwen2.5-0.5B-Instruct
       --trust-remote-code
       --gpu-memory-utilization 0.3
       --max-model-len 2048
@@ -59,7 +59,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/Qwen2.5-1.8B-Instruct
+      --model /models/inference/Qwen2.5-1.8B-Instruct
       --trust-remote-code
       --gpu-memory-utilization 0.4
       --max-model-len 4096
@@ -80,7 +80,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/Qwen2.5-7B-Instruct
+      --model /models/inference/Qwen2.5-7B-Instruct
       --trust-remote-code
       --gpu-memory-utilization 0.7
       --max-model-len 8192
@@ -101,7 +101,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/Qwen2.5-1.5B-Instruct
+      --model /models/inference/Qwen2.5-1.5B-Instruct
       --trust-remote-code
       --gpu-memory-utilization 0.4
       --max-model-len 4096
