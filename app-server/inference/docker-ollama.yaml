@@ -1,12 +1,11 @@
-# app-server/config/compose/ollama.yaml
-# Ollama 推理服务 —— INFERENCE_SERVER=ollama + COMPOSE_PROFILES=ollama 时启动
+# app-server/inference/docker-ollama.yaml
+# Ollama 推理服务 —— INFERENCE_SERVER=ollama 时启动
 
 services:
   ollama-server:
     image: ollama/ollama:0.32.14
     container_name: ollama-server
     restart: always
-    profiles: ["ollama"]
     ports:
       - "11434:11434"
     volumes:

@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════════════
 # 根目录 docker-compose.yaml —— 一键部署入口
 #
-# 推理后端通过 INFERENCE_SERVER 环境变量选择：
+# 推理后端通过 INFERENCE_SERVER 环境变量选择（唯一开关）：
 #   INFERENCE_SERVER=ollama  → 启动 Ollama 容器（默认）
 #   INFERENCE_SERVER=vllm    → 启动 vLLM 集群 + Gateway
 #
