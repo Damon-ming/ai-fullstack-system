@@ -1,18 +1,19 @@
 # app-server/docker-compose.yaml
-# 后端应用服务
+# 后端应用服务 + 推理后端（通过 include 按需加载）
 #
-# 启动命令（根目录一键）：
-#   SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 INFERENCE_SERVER=vllm docker compose up -d --build
+# 启动命令：
+#   SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 INFERENCE_SERVER=vllm COMPOSE_PROFILES=vllm docker compose up -d --build
 #
-# 推理后端通过 INFERENCE_SERVER 环境变量控制。
-# 业务参数集中在 config/backends.yaml（部署时从模板生成）。
-#
-# API Key 路由：
-#   app-server 只连 gateway，不同角色用不同 api_key 路由到对应 vLLM 实例。
-#
-# 部署时配置生成（启动命令第一步）：
-#   INFERENCE_SERVER=vllm  → templates/vllm.yaml  → backends.yaml
-#   INFERENCE_SERVER=ollama → templates/ollama.yaml → backends.yaml
+# INFERENCE_SERVER 控制 app 读哪个连接模板（config/templates/{ollama|vllm}.yaml）
+# COMPOSE_PROFILES 控制启哪组推理容器（ollama / vllm）
+
+include:
+  - inference/docker-ollama.yaml
+  - inference/docker-vllm.yaml
+
+networks:
+  ai-network:
+    driver: bridge
 
 services:
   app-server:
@@ -20,7 +21,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        SERVER_BUILD_ENV: ${SERVER_BUILD_ENV:-0}   # 0=锁定release(默认) | 1=可切换
+        SERVER_BUILD_ENV: ${SERVER_BUILD_ENV:-0}
     container_name: app-server
     restart: always
     ports:
@@ -32,7 +33,6 @@ services:
       - /root/ming/knowledges:/app-server/src/com/damon/ming/knowledges
     environment:
       - LOG_LEVEL=DEBUG
-      # ── 推理后端选择（ollama / vllm / sglang）──
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
     logging:
       driver: "json-file"
@@ -42,8 +42,5 @@ services:
     networks:
       - ai-network
     command: >
-      sh -c "\
-        cp /app-server/src/com/damon/ming/ai/config/templates/$${INFERENCE_SERVER:-ollama}.yaml \
-           /app-server/src/com/damon/ming/ai/config/backends.yaml \
-        && mkdir -p /app-server/logs \
+      sh -c "mkdir -p /app-server/logs \
         && python3 -m src.com.damon.ming.main > /app-server/logs/app.log 2>&1"

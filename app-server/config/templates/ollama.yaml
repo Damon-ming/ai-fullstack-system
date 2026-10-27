@@ -1,0 +1,28 @@
+# app-server/config/templates/ollama.yaml
+# Ollama 连接模板 —— 部署时复制为 ../inference.yaml
+#
+# 仅包含连接/路由参数（推理服务相关）。
+# 模型参数（temperature/top_p/max_tokens）在 AI 模块内 config/inference-params.yaml，与后端无关。
+#
+# Ollama 单容器多模型，直连，无 gateway。
+# api_key 为空（Ollama 不校验），model 必须指定。
+
+engine: ollama
+base_url: http://ollama-server:11434
+default_timeout: 180
+
+roles:
+  chat:
+    model: qwen2.5:7b-instruct
+
+  intent:
+    model: qwen:0.5b
+
+  rewrite:
+    model: qwen:1.8b
+
+  summary:
+    model: qwen2.5-1.5b-instruct
+
+  guardrail:
+    model: qwen:0.5b

@@ -7,7 +7,7 @@ vLLM API Gateway —— 按 API key 路由推理请求。
 职责：
   - 校验请求的 Authorization: Bearer <key>
   - 根据 key 映射到对应的上游推理实例
-  - 自动注入 model 参数（每个上游只加载一个模型）
+  - 各上游只加载一个模型，无需 gateway 注入 model
   - 透传 OpenAI 兼容接口
 """
 
@@ -24,8 +24,7 @@ _CONFIG_PATH = os.environ.get(
     "/etc/gateway/gateway.yaml",
 )
 
-ROUTING_TABLE: dict[str, str] = {}   # api_key → upstream_base
-MODEL_TABLE: dict[str, str] = {}     # api_key → model_name
+ROUTING_TABLE: dict[str, str] = {}  # api_key → upstream_base
 UPSTREAM_KEY: str = "akUpstream"
 
 
@@ -45,10 +44,8 @@ def _load_config() -> None:
 
     for api_key, route_cfg in cfg["routes"].items():
         upstream = route_cfg.get("upstream", "")
-        model = route_cfg.get("model", "")
         if api_key and upstream:
             ROUTING_TABLE[api_key] = upstream
-            MODEL_TABLE[api_key] = model
 
 
 _load_config()
@@ -76,7 +73,6 @@ async def proxy(request: Request):
         raise HTTPException(status_code=401, detail="无效的 API key")
 
     upstream_base = ROUTING_TABLE[api_key]
-    model_name = MODEL_TABLE.get(api_key, "")
 
     target_url = f"{upstream_base}{request.url.path}"
     if request.url.query:
@@ -88,17 +84,6 @@ async def proxy(request: Request):
     upstream_headers.pop("host", None)
     upstream_headers.pop("authorization", None)
     upstream_headers["Authorization"] = f"Bearer {UPSTREAM_KEY}"
-
-    if request.method in ("POST", "PUT", "PATCH") and body:
-        try:
-            import json
-
-            payload = json.loads(body)
-            if model_name:
-                payload["model"] = model_name
-            body = json.dumps(payload).encode("utf-8")
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
 
     is_stream = False
     if request.method == "POST" and body:

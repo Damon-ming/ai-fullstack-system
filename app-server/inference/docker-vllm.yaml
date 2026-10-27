@@ -1,15 +1,8 @@
-# app-server/inference/docker-vllm.yaml
-# vLLM 推理服务集群 —— 多实例部署 + API Gateway
+# app-server/config/compose/vllm.yaml
+# vLLM 推理服务集群 —— INFERENCE_SERVER=vllm + COMPOSE_PROFILES=vllm 时启动
 #
-# 通过根目录 docker-compose.yaml 的 include 机制按 INFERENCE_SERVER=vllm 自动加载。
-#
-# 架构：
-#   app-server → gateway (按 api_key 路由) → vllm-{role} 实例
-#
-# 新增推理服务：
-#   1. 在下方 services 中新增 vllm-* 容器
-#   2. 在 templates/vllm.yaml 的 roles 中加一条
-#   3. 无需改代码
+# 架构：app-server → gateway (按 api_key 路由) → vllm-{role} 实例
+# 配套：inference/gateway.py + inference/gateway.yaml + inference/Dockerfile.gateway
 
 services:
   # ── API Gateway ──────────────────────────────────────────────────
@@ -19,6 +12,7 @@ services:
       dockerfile: Dockerfile.gateway
     container_name: vllm-gateway
     restart: always
+    profiles: ["vllm"]
     ports:
       - "8010:8080"
     volumes:
@@ -36,6 +30,7 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-intent
     restart: always
+    profiles: ["vllm"]
     ports:
       - "8011:8000"
     volumes:
@@ -57,6 +52,7 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-rewrite
     restart: always
+    profiles: ["vllm"]
     ports:
       - "8012:8000"
     volumes:
@@ -78,6 +74,7 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-chat
     restart: always
+    profiles: ["vllm"]
     ports:
       - "8013:8000"
     volumes:
@@ -99,6 +96,7 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-summary
     restart: always
+    profiles: ["vllm"]
     ports:
       - "8014:8000"
     volumes:
