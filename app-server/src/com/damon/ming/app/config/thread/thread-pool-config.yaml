@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/app/config/thread/thread-pool-config.yaml
 # 线程池配置（ThreadPoolExecutor）—— 由 ThreadPoolConfigLoader 读取，注入 pool_manager。
-# 注意：Semaphore 并发控制配置在 app/config/ai/chat-config.yaml
+# 注意：Semaphore 并发控制配置在 app/config/inference/inference-runtime.yaml 的 chat 段
 
 retrieval: 4      # HybridRetriever 稠密+稀疏并发 + 余量
 document: 8       # PDF 加载 / 文档分割

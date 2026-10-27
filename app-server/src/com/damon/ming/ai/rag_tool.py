@@ -29,9 +29,6 @@ from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.config.embedding.embedding_config_loader import (
     EmbeddingConfigLoader,
 )
-from src.com.damon.ming.ai.config.inference.inference_config_loader import (
-    InferenceConfigLoader,
-)
 from src.com.damon.ming.ai.config.rerank.rerank_config_loader import (
     RerankerConfigLoader,
 )
@@ -63,6 +60,9 @@ from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
 from src.com.damon.ming.ai.summary import SummaryService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
+    InferenceConfigLoader,
+)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import CancellationToken, ThreadPoolManager
 from src.com.damon.ming.utils.time import now_iso

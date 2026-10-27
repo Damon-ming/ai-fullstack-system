@@ -423,7 +423,7 @@ class AppInitializer:
         """聊天配置：加载 YAML 中的 Semaphore 参数、超时、多 locale 系统 prompt。"""
         import asyncio
 
-        from src.com.damon.ming.app.config.ai.chat_config_loader import (
+        from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
             ChatConfigLoader,
             ChatLocaleText,
         )
@@ -462,12 +462,12 @@ class AppInitializer:
 
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""
-        from src.com.damon.ming.ai.config.inference.inference_config_loader import (
-            InferenceConfigLoader,
-        )
         from src.com.damon.ming.ai.rag_tool import get_rag_container
         from src.com.damon.ming.ai.registry.inference_registry import (
             register_all_inferences,
+        )
+        from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
+            InferenceConfigLoader,
         )
 
         register_all_inferences()
@@ -479,7 +479,7 @@ class AppInitializer:
             knowledge_dir=self.system_config.knowledge_dir,
         )
 
-        # 全量加载推理引擎和模型（双源合并：config/inference.yaml 连接 + inference-params.yaml 模型参数）
+        # 全量加载推理引擎和模型（双源合并：config/connections/{engine}.yaml 连接 + inference-runtime.yaml 模型参数）
         _loader = InferenceConfigLoader()
         _loaded = _loader.load_all()
         self.inference = _loaded

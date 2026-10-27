@@ -12,7 +12,7 @@ from src.com.damon.ming.ai.schemas.response import (
     ChatDeltaData,
 )
 from src.com.damon.ming.ai.security import InputValidator
-from src.com.damon.ming.app.config.ai.chat_config_loader import (
+from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
     ChatConfigLoader,
     ChatLocaleText,
 )

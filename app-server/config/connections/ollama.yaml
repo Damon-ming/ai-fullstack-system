@@ -1,8 +1,8 @@
-# app-server/config/templates/ollama.yaml
-# Ollama 连接模板 —— 部署时复制为 ../inference.yaml
+# app-server/config/connections/ollama.yaml
+# Ollama 连接配置 —— INFERENCE_SERVER=ollama 时使用
 #
 # 仅包含连接/路由参数（推理服务相关）。
-# 模型参数（temperature/top_p/max_tokens）在 AI 模块内 config/inference-params.yaml，与后端无关。
+# 模型参数（temperature/top_p/max_tokens）在 app/config/inference/inference-runtime.yaml，与后端无关。
 #
 # Ollama 单容器多模型，直连，无 gateway。
 # api_key 为空（Ollama 不校验），model 必须指定。

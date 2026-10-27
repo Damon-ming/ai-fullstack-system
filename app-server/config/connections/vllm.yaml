@@ -1,8 +1,8 @@
-# app-server/config/templates/vllm.yaml
-# vLLM 连接模板 —— 部署时复制为 ../inference.yaml
+# app-server/config/connections/vllm.yaml
+# vLLM 连接配置 —— INFERENCE_SERVER=vllm 时使用
 #
 # 仅包含连接/路由参数（推理服务相关）。
-# 模型参数（temperature/top_p/max_tokens）在 AI 模块内 config/inference-params.yaml，与后端无关。
+# 模型参数（temperature/top_p/max_tokens）在 app/config/inference/inference-runtime.yaml，与后端无关。
 #
 # vLLM 多实例 + Gateway 路由模式。
 # api_key 决定路由到哪个 vLLM 实例，gateway 自动注入 model。

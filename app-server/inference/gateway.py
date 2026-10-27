@@ -1,7 +1,7 @@
 """
 vLLM API Gateway —— 按 API key 路由推理请求。
 
-配置来源：inference/gateway.yaml（路由表）
+配置来源：config/gateway.yaml（路由表）
 启动时读取，无需硬编码。
 
 职责：

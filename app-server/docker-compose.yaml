@@ -1,7 +1,7 @@
 # app-server/docker-compose.yaml
 # 后端应用服务（推理后端由根 compose 通过 INFERENCE_SERVER 条件加载）
 #
-# INFERENCE_SERVER 控制 app 读哪个连接模板（config/templates/{ollama|vllm}.yaml）
+# INFERENCE_SERVER 控制 app 读哪个连接配置（config/connections/{ollama|vllm}.yaml）
 
 networks:
   ai-network:

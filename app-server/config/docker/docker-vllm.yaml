@@ -1,8 +1,8 @@
-# app-server/inference/docker-vllm.yaml
+# app-server/config/docker/docker-vllm.yaml
 # vLLM 推理服务集群 —— INFERENCE_SERVER=vllm 时启动
 #
 # 架构：app-server → gateway (按 api_key 路由) → vllm-{role} 实例
-# 配套：inference/gateway.py + inference/gateway.yaml + inference/Dockerfile.gateway
+# 配套：inference/gateway.py + config/gateway.yaml + inference/Dockerfile.gateway
 
 services:
   # ── API Gateway ──────────────────────────────────────────────────
@@ -15,7 +15,7 @@ services:
     ports:
       - "8010:8080"
     volumes:
-      - /app-server/inference/gateway.yaml:/etc/gateway/gateway.yaml:ro
+      - /app-server/config/gateway.yaml:/etc/gateway/gateway.yaml:ro
     networks:
       - ai-network
     healthcheck:
