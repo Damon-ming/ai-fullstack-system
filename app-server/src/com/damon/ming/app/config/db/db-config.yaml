@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/app/config/db-config.yaml
+# app-server/src/com/damon/ming/app/config/db/db-config.yaml
 # 数据库连接配置 —— 由 DbConfigLoader 读取，注入 db 模块。
 # db 模块本身不包含任何配置文件，纯参数化调用。
 #
@@ -6,17 +6,24 @@
 #   PostgreSQL:  dialect: postgresql
 #   MySQL:       dialect: mysql  driver: pymysql
 #   SQLite:      dialect: sqlite  dbname: /path/to/db.sqlite
+#
+# 连接信息无默认值，缺失任意必填字段直接终止启动：
+#   - 必填：host / port / dbname / user / password / dialect
+#   - 可选：driver（留空则 SQLAlchemy 按 dialect 自动选）
+#   - 必填：pool_size / max_overflow / retry / backoff（基础设施参数）
+#
+# 环境变量覆盖（优先级高于 YAML）：
+#   DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / DB_DIALECT / DB_DRIVER
 
 db:
-  # 通用环境：本地 PostgreSQL
+  # 通用环境：Docker 内 PostgreSQL（容器名 app-postgres）
   common:
     dialect: postgresql
     driver: psycopg2
-    host: localhost
+    host: app-postgres
     port: 5432
     dbname: damon
     user: postgres
-    password: "12345678"
     pool_size: 5
     max_overflow: 10
     connect_timeout: 10

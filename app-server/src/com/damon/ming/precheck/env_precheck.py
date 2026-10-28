@@ -10,14 +10,14 @@ logger = pin("app.precheck")
 def _check_master_key(is_debug: bool) -> list[str]:
     """检查 MASTER_KEY 是否设置。
 
-    开发环境未设置时自动生成（不报错）。
-    生产环境必须设置。
+    所有环境都必须通过 .env 设置 MATER_KEY，不允许自动生成。
+    生产环境：密钥长度必须 ≥32 字符。
     """
     errors = []
     master_key = os.environ.get("MASTER_KEY", "")
 
-    if not master_key and not is_debug:
-        errors.append("MASTER_KEY 未设置（生产环境必须通过密钥管理系统注入）")
+    if not master_key:
+        errors.append("MASTER_KEY 未设置（所有环境必须通过 .env 注入）")
 
     return errors
 

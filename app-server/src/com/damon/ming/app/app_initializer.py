@@ -132,7 +132,6 @@ class AppInitializer:
 
     def _init_i18n(self) -> None:
         """i18n 模块初始化：加载配置 + 注入 LocalResolver。"""
-        import os
 
         # 加载 YAML 配置
         from src.com.damon.ming.app.config.i18n.i18n_config_loader import (
@@ -372,14 +371,6 @@ class AppInitializer:
         try:
             from src.com.damon.ming.app.encryption.key_store import PgKeyStore
             from src.com.damon.ming.encryption.key_store import derive_kek
-
-            if self._is_debug and not os.environ.get("MASTER_KEY"):
-                from src.com.damon.ming.encryption.key_store.generate_master_key import (
-                    inject_to_env,
-                )
-
-                key = inject_to_env()
-                logger.warning("开发环境自动生成 MASTER_KEY（长度: %d）", len(key))
 
             # KEK 派生参数从业务配置读取（encryption 模块不包含这些协议常量）
             kek_salt = b""

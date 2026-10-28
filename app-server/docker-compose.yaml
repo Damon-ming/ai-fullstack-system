@@ -1,15 +1,39 @@
 # app-server/docker-compose.yaml
-# 后端应用服务（推理由独立的 inference-gateway 子系统处理）
+# 后端应用服务 + PostgreSQL 数据库 —— 同生同死的私有基础设施
 #
 # 连接 inference-gateway 的方式：
 #   INFERENCE_SERVER  推理后端类型：ollama / vllm / sglang（决定连接配置）
 #   INFERENCE_GATEWAY_URL 网关地址（默认 http://inference-gateway:8080/v1）
-
-networks:
-  ai-network:
-    driver: bridge
+#
+# 环境变量全部来自根目录 .env，不在此文件重复定义
 
 services:
+  # ── PostgreSQL ─────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: app-postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: damon
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+      TZ: "Asia/Shanghai"
+      LANG: "C.UTF-8"
+    volumes:
+      - /root/damon/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d damon"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - ai-network
+
+  # ── FastAPI 后端 ───────────────────────────────────────────────────
   app-server:
     build:
       context: .
@@ -29,6 +53,9 @@ services:
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
       - INFERENCE_GATEWAY_URL=http://inference-gateway:8080/v1
       - INFERENCE_API_KEYS={"chat":"ak_pool_001","intent":"ak_pool_002","rewrite":"ak_pool_003","summary":"ak_pool_004","guardrail":"ak_pool_005"}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - MASTER_KEY=${MASTER_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://your-production-domain.com}
     logging:
       driver: "json-file"
       options:
@@ -38,6 +65,7 @@ services:
       - ai-network
     depends_on:
       - inference-gateway
+      - postgres
     command: >
       sh -c "mkdir -p /app-server/logs \
         && python3 -m src.com.damon.ming.main > /app-server/logs/app.log 2>&1"
