@@ -6,6 +6,9 @@
 #   INFERENCE_SERVER=ollama  → 启动 Ollama 容器（默认）
 #   INFERENCE_SERVER=vllm    → 启动 vLLM 集群 + Gateway
 #
+# 优先级：命令行传值 > .env 文件 > 默认值（ollama）
+# 建议始终在 .env 中设置 INFERENCE_SERVER，或命令行显式传入
+#
 # 可直接执行的命令：
 #
 #   开发（Ollama）:

@@ -7,10 +7,7 @@
 #
 # 网关配置（路由表）烘焙进镜像，运行时不可变。
 # 推理后端配置在本目录 config/docker/ 下。
-
-networks:
-  ai-network:
-    driver: bridge
+# ai-network 在根 docker-compose.yaml 统一声明，此处不再重复定义。
 
 services:
   # ── API Gateway ──────────────────────────────────────────────────

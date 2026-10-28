@@ -15,7 +15,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - /root/damon/models:/models
+      - ${DATA_DIR}/models:/models
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
@@ -36,7 +36,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - /root/damon/models:/models
+      - ${DATA_DIR}/models:/models
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
@@ -57,7 +57,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - /root/damon/models:/models
+      - ${DATA_DIR}/models:/models
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
@@ -78,7 +78,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - /root/damon/models:/models
+      - ${DATA_DIR}/models:/models
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
@@ -99,7 +99,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - /root/damon/models:/models
+      - ${DATA_DIR}/models:/models
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
