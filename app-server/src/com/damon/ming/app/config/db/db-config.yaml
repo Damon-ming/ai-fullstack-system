@@ -14,9 +14,9 @@ db:
     driver: psycopg2
     host: localhost
     port: 5432
-    dbname: damon_dev
+    dbname: damon
     user: postgres
-    password: ""
+    password: "12345678"
     pool_size: 5
     max_overflow: 10
     connect_timeout: 10
