@@ -45,9 +45,9 @@ services:
     expose:
       - "8000"
     volumes:
-      - /root/damon/logs/app-server:/app-server/logs
-      - /root/damon/chroma:/app-server/chroma
-      - /root/damon/knowledges:/app-server/knowledges
+      - ${DATA_DIR}/logs/app-server:/app-server/logs
+      - ${DATA_DIR}/chroma:/app-server/chroma
+      - ${DATA_DIR}/knowledges:/app-server/knowledges
     environment:
       - LOG_LEVEL=DEBUG
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
