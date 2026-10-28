@@ -10,14 +10,18 @@ logger = pin("app.precheck")
 def _check_master_key(is_debug: bool) -> list[str]:
     """检查 MASTER_KEY 是否设置。
 
-    所有环境都必须通过 .env 设置 MATER_KEY，不允许自动生成。
-    生产环境：密钥长度必须 ≥32 字符。
+    所有环境都必须通过 .env 设置 MASTER_KEY，不允许自动生成。
+    生产环境（非 debug）：密钥长度必须 ≥32 字符。
     """
     errors = []
     master_key = os.environ.get("MASTER_KEY", "")
 
     if not master_key:
         errors.append("MASTER_KEY 未设置（所有环境必须通过 .env 注入）")
+    elif not is_debug and len(master_key) < 32:
+        errors.append(
+            f"MASTER_KEY 长度不足（当前 {len(master_key)} 字符，生产环境要求 ≥32）"
+        )
 
     return errors
 
@@ -61,10 +65,20 @@ def _check_encryption_config(is_debug: bool) -> None:
 
 
 def _check_database(is_debug: bool) -> list[str]:
-    """检查数据库配置是否可用（仅从 YAML 加载）。
+    """检查数据库配置是否可用。
 
-    缺失直接报错，不做环境变量回退。
+    先检查环境变量（直接给出变量名提示），再加载完整配置。
     """
+    errors = []
+
+    # 环境变量预检：缺失时直接指出变量名，不用等到 DbConfigLoader 报错
+    for env_key in ("DB_NAME", "DB_USER", "DB_PASSWORD"):
+        if not os.environ.get(env_key):
+            errors.append(f"数据库环境变量 {env_key} 未设置（请检查 .env 文件）")
+
+    if errors:
+        return errors
+
     try:
         from src.com.damon.ming.app.config.db.db_config_loader import DbConfigLoader
 
@@ -72,7 +86,7 @@ def _check_database(is_debug: bool) -> list[str]:
         db_config = loader.load(profile="common")
         if not db_config.url and not db_config.host:
             return [
-                "数据库配置缺少连接信息（url 或 host），请检查 db/db-config.yaml 的 common 剖面"
+                "数据库配置缺少连接信息（url 或 host），请检查 db-config.yaml 的 common 剖面"
             ]
     except FileNotFoundError as e:
         return [f"数据库配置文件不存在：{e}"]

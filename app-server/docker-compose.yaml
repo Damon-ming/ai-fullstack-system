@@ -16,8 +16,8 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: damon
-      POSTGRES_USER: postgres
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
       TZ: "Asia/Shanghai"
@@ -53,6 +53,8 @@ services:
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
       - INFERENCE_GATEWAY_URL=http://inference-gateway:8080/v1
       - INFERENCE_API_KEYS={"chat":"ak_pool_001","intent":"ak_pool_002","rewrite":"ak_pool_003","summary":"ak_pool_004","guardrail":"ak_pool_005"}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - MASTER_KEY=${MASTER_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-https://your-production-domain.com}

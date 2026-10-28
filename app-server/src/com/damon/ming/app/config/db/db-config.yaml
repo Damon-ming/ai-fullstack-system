@@ -12,18 +12,19 @@
 #   - 可选：driver（留空则 SQLAlchemy 按 dialect 自动选）
 #   - 必填：pool_size / max_overflow / retry / backoff（基础设施参数）
 #
-# 环境变量覆盖（优先级高于 YAML）：
+# 环境变量覆盖（优先级高于 YAML，DB_ 前缀 + 字段名大写）：
 #   DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / DB_DIALECT / DB_DRIVER
+#   DB_POOL_SIZE / DB_MAX_OVERFLOW / DB_RETRY / DB_BACKOFF
 
 db:
   # 通用环境：Docker 内 PostgreSQL（容器名 app-postgres）
+  # dbname / user 无默认值，必须通过环境变量注入（DB_DBNAME / DB_USER）
   common:
     dialect: postgresql
     driver: psycopg2
     host: app-postgres
+    # todo: 端口统一管理
     port: 5432
-    dbname: damon
-    user: postgres
     pool_size: 5
     max_overflow: 10
     connect_timeout: 10

@@ -33,7 +33,7 @@ class DbConfigLoader:
     KEYS = (
         "host",
         "port",
-        "dbname",
+        "name",
         "user",
         "password",
         "dialect",
@@ -58,10 +58,10 @@ class DbConfigLoader:
 
         raw = self._read_yaml(profile)
 
-        # 合并：环境变量 > YAML
+        # 合并：环境变量 > YAML（环境变量名 = DB_ + 字段名大写）
         merged = dict(raw)
         for key in self.KEYS:
-            env_value = os.environ.get(key.upper())
+            env_value = os.environ.get(f"DB_{key.upper()}")
             if env_value is not None:
                 merged[key] = env_value
 
@@ -75,7 +75,7 @@ class DbConfigLoader:
         return DbConfig(
             host=merged["host"],
             port=int(merged["port"]),
-            dbname=merged["dbname"],
+            dbname=merged["name"],
             user=merged["user"],
             password=merged["password"],
             dialect=merged["dialect"],
