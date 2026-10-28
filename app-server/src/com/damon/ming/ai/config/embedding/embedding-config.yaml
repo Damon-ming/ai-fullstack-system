@@ -5,7 +5,7 @@
 # 上层调用方通过 EmbeddingConfigLoader().load_all() 全量加载后按名字引用
 # 引擎名称与实现类的映射在 embedding/__init__.py 中通过 @register_engine 维护。
 #
-# 模型路径统一在 /models/embedding/ 下，Docker 挂载 /root/ming/models → /models
+# 模型路径统一在 /models/embedding/ 下，Docker 挂载 /root/damon/models → /models
 #
 # 当前使用：huggingface（本地推理）
 # ollama 引擎代码保留但未配置，启用时在下方添加 ollama 段即可。

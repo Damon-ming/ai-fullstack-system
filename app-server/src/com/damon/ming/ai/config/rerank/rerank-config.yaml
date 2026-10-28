@@ -7,7 +7,7 @@
 #   4. 级联：轻量模型先粗排，重量级再精排
 #   5. 主备降级：主力 GPU 模型 + CPU 轻量 fallback
 #
-# 模型路径统一在 /models/rerank/ 下，Docker 挂载 /root/ming/models → /models
+# 模型路径统一在 /models/rerank/ 下，Docker 挂载 /root/damon/models → /models
 #
 # 上层通过 RerankerConfigLoader().load("<name>") 获取指定实例。
 rerankers:

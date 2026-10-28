@@ -49,14 +49,15 @@ class GuardrailConfigLoader:
             return {"engine": self._engine}
 
         raw_cfg = self._read_yaml()
-        engine_cfg = raw_cfg.get("engine", {})
 
-        params = GuardrailParams(
-            model_name=engine_cfg["model_name"],
-            prompt_template=engine_cfg["prompt_template"],
-        )
+        prompt_template = raw_cfg.get("prompt_template")
+        if not prompt_template:
+            raise ValueError("护栏配置缺少 'prompt_template' 字段")
 
-        impl_cls = resolve_guardrail(engine_cfg["type"])
+        params = GuardrailParams(prompt_template=prompt_template)
+
+        # 引擎类型由护栏注册表决定，默认 qwen；如需切换可在注册表扩展
+        impl_cls = resolve_guardrail("qwen-guardrail")
         self._engine = impl_cls(params, inference=inference)
 
         return {"engine": self._engine}
@@ -68,6 +69,6 @@ class GuardrailConfigLoader:
             raise FileNotFoundError(f"护栏配置文件不存在: {self._config_path}")
         with open(self._config_path, "r", encoding="utf-8") as f:
             raw_cfg = yaml.safe_load(f)
-        if raw_cfg is None or "engine" not in raw_cfg:
-            raise ValueError("护栏配置文件格式错误：缺少 'engine' 根节点")
+        if raw_cfg is None or "prompt_template" not in raw_cfg:
+            raise ValueError("护栏配置文件格式错误：缺少 'prompt_template' 字段")
         return raw_cfg

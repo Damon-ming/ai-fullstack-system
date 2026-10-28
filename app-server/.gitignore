@@ -27,4 +27,4 @@ venv/
 
 # ── 知识库 / 向量库（运行时数据，不入库）──────────────
 knowledges/
-chroma_data/
+chroma/

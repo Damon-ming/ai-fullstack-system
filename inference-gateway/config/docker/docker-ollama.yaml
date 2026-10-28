@@ -9,7 +9,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - /root/ming/ollama/.ollama:/root/.ollama
+      - /root/damon/ollama/.ollama:/root/.ollama
     runtime: nvidia
     environment:
       OLLAMA_HOST: 0.0.0.0

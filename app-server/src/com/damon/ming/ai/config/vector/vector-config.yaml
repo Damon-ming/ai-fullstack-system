@@ -13,7 +13,7 @@ vector_engines:
   chroma:
     params:
       collection_name: rag_collection
-      persist_directory: ./chroma_data
+      persist_directory: ./chroma
       embedding_dimension: 1024
       cache_max: 5000
 

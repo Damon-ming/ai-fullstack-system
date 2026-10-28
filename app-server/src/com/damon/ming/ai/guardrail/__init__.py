@@ -20,7 +20,7 @@ def register_engine(name: str):
     """护栏引擎注册装饰器。
 
     使用方式：
-        @register_engine("qwen")
+        @register_engine("qwen-guardrail")
         class QwenGuardrail(BaseGuardrail):
             ...
 

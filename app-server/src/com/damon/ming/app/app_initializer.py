@@ -494,13 +494,14 @@ class AppInitializer:
         )
 
     def _init_guardrail(self) -> None:
-        """护栏系统：加载配置，初始化护栏引擎（复用推理引擎）。"""
+        """护栏系统：加载配置，初始化护栏引擎（使用 guardrail 角色自己的引擎）。"""
         from src.com.damon.ming.ai.config.guardrail.guardrail_config_loader import (
             GuardrailConfigLoader,
         )
 
         loader = GuardrailConfigLoader()
-        loaded = loader.load_all(inference=self.infer_service)
+        guardrail_engine, _ = self._loader.get_engine_for_model("guardrail")
+        loaded = loader.load_all(inference=guardrail_engine)
         self.guardrail = loaded["engine"]
         logger.info("护栏系统初始化完成 | engine=%s", type(self.guardrail).__name__)
 

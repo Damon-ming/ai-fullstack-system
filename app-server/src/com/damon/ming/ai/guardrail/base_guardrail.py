@@ -9,12 +9,15 @@
 引擎接口极简：check(query) -> GuardrailResult。
 具体引擎（Qwen / 关键词黑名单等）各自实现检测逻辑。
 
+护栏引擎复用推理引擎（guardrail 角色），模型由 gateway 路由决定
+（api_key → vLLM 实例），配置中不包含模型信息。
+
 配置见 ai/config/guardrail/guardrail-config.yaml，本模块不感知配置来源。
 
 用法：
   from src.com.damon.ming.ai.guardrail import BaseGuardrail, GuardrailParams, register_engine
 
-  @register_engine("qwen")
+  @register_engine("qwen-guardrail")
   class QwenGuardrail(BaseGuardrail):
       ...
 """
@@ -43,12 +46,10 @@ class GuardrailResult:
 class GuardrailParams:
     """护栏参数（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。
 
-    护栏引擎复用已初始化的推理引擎，因此 params 不包含连接信息，
-    只包含护栏自身的模型名和检测 prompt。
+    护栏引擎复用已初始化的推理引擎，模型由 gateway 路由决定
+    （api_key → vLLM 实例 → 实例加载的模型），因此 params 不包含模型信息，
+    只包含护栏自身的检测 prompt。
     """
-
-    model_name: str
-    """护栏使用的模型名（建议使用小模型，如 qwen:0.5b）。"""
 
     prompt_template: str
     """检测 prompt 模板，接收 {query} 占位符。"""

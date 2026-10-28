@@ -1,15 +1,15 @@
 # app-server/src/com/damon/ming/ai/guardrail/qwen_guardrail.py
 """
-Qwen 护栏引擎 —— 利用小模型对用户输入进行安全分类。
+Qwen 护栏引擎 —— 对用户输入进行安全分类。
 
-使用已初始化的推理引擎调用指定模型（如 qwen:0.5b），
+使用已初始化的推理引擎（guardrail 角色，由 gateway 路由到对应 vLLM 实例），
 通过结构化输出获取 {safe: bool, reason: str} 判定结果。
 
 容错策略：
   - 推理超时时 fail-open（放行），避免护栏故障阻断正常服务
   - 解析异常时同样 fail-open
 
-注册名: "qwen"
+注册名: "qwen-guardrail"
 """
 
 import asyncio
@@ -87,7 +87,7 @@ class _GuardrailResponse(BaseModel):
 # ── 引擎实现 ──────────────────────────────────────────────────────
 
 
-@register_engine("qwen")
+@register_engine("qwen-guardrail")
 class QwenGuardrail(BaseGuardrail):
     """Qwen 护栏引擎。"""
 
@@ -104,15 +104,10 @@ class QwenGuardrail(BaseGuardrail):
         prompt = self.params.prompt_template.replace("{query}", query, 1)
         messages = [{"role": "user", "content": prompt}]
 
-        logger.debug(
-            "护栏检测开始 | model=%s | query_length=%d",
-            self.params.model_name,
-            len(query),
-        )
+        logger.debug("护栏检测开始 | query_length=%d", len(query))
 
         try:
             raw = await self.inference.text_generation(
-                model_name=self.params.model_name,
                 messages=messages,
                 response_schema=_GuardrailResponse.model_json_schema(),
                 options={"temperature": 0.1},

@@ -212,12 +212,6 @@ export const ChatChatroom: React.FC = () => {
                   message.text !== t("reasoning") &&
                   message.msgId && (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-400">
-                      {message.model && (
-                        <span className="rounded-md bg-gray-50 px-2 py-1">
-                          model: {message.model}
-                          <span className="sr-only">model: {message.model}</span>
-                        </span>
-                      )}
                       {message.createdAt && (
                         <span className="rounded-md bg-gray-50 px-2 py-1">
                           {new Date(message.createdAt * 1000).toLocaleTimeString()}
