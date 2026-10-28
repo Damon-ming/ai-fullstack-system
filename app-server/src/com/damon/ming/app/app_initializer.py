@@ -31,7 +31,7 @@ class AppInitializer:
 
     def __init__(self, is_debug: bool = True) -> None:
         self._is_debug = is_debug
-        self._profile = "common" if is_debug else "production"
+        self._profile = "common"  # 仅 common 剖面，无 production
 
         # 子系统状态（startup 后填充）
         self.system_config = None
@@ -479,7 +479,7 @@ class AppInitializer:
             knowledge_dir=self.system_config.knowledge_dir,
         )
 
-        # 全量加载推理引擎和模型（双源合并：config/connections/{engine}.yaml 连接 + inference-runtime.yaml 模型参数）
+        # 全量加载推理引擎和模型（双源合并：环境变量连接 + inference-runtime.yaml 模型参数）
         _loader = InferenceConfigLoader()
         _loaded = _loader.load_all()
         self.inference = _loaded

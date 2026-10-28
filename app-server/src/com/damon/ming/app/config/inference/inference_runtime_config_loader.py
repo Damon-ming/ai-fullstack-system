@@ -1,22 +1,19 @@
-# 推理运行时配置加载器 —— 双源合并 + 聊天并发控制。
+# 推理运行时配置加载器 —— 运行时配置 + 网关路由 + 聊天并发控制。
 #
-# 配置分为两层：
-#   1. 静态连接：config/connections/{engine}.yaml（base_url / api_key / timeout / engine）
-#      -> 引擎选择由 INFERENCE_SERVER 环境变量决定，部署时固定
-#   2. 动态运行时：inference-runtime.yaml（与本加载器同级）
-#      -> roles 段：模型参数（temperature/top_p/max_tokens），与后端无关
-#      -> chat 段：并发控制（信号量、超时）和多 locale 系统 prompt
-#      -> 可按业务场景（profile）动态调整，请求时读取
+# 连接路径：
+#   app-server → inference-gateway (http://inference-gateway:8080/v1)
+#                              → 按 api_key 路由到 vllm-{role}
 #
-# 文件布局：
-#   app-server/config/                      ← 静态部署配置（connections/docker/gateway）
-#   app/config/inference/inference-runtime.yaml  ← 动态运行时配置（本文件同级）
-#   app/config/inference/inference_runtime_config_loader.py  ← 本加载器
+# api_key 由环境变量注入（由 docker-compose 提供），格式：
+#   INFERENCE_API_KEYS  → JSON 字典，如 {"chat":"ak_chat_001","intent":"ak_intent_001"}
 #
-# 合并逻辑：
-#   engine 类型取自 INFERENCE_SERVER 环境变量 -> config/connections/{engine}.yaml
-#   base_url、timeout、api_key、model 取自连接配置
-#   temperature、top_p、max_tokens 取自 inference-runtime.yaml roles 段
+# 也可单独设置某个角色的 key：
+#   INFERENCE_API_KEY_CHAT=ak_chat_001
+#   INFERENCE_API_KEY_INTENT=ak_intent_001
+#
+# 动态运行时配置（inference-runtime.yaml）：
+#   → roles 段：模型参数（temperature/top_p/max_tokens），与后端无关
+#   → chat 段：并发控制（信号量、超时）和多 locale 系统 prompt
 #
 # 用法：
 #   loader = InferenceConfigLoader()
@@ -27,6 +24,7 @@
 #   configs = chat_loader.load_all()
 #   configs["zh_CN"].system_prompt
 
+import json
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -38,22 +36,12 @@ from src.com.damon.ming.ai.inference.base_inference import (
     InferenceParams,
 )
 
-# ── 静态部署配置根目录（app-server/config/）────────────────────────────
-# connections/docker/gateway 等部署时固定的配置
-_STATIC_CONFIG_ROOT = os.path.normpath(
-    os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..",
-        "..",
-        "..",
-        "..",
-        "..",
-        "config",
-    )
-)
-
-# ── 连接配置目录 ──────────────────────────────────────────────────────
-_CONNECTIONS_DIR = os.path.join(_STATIC_CONFIG_ROOT, "connections")
+# ── 连接参数来源：环境变量（由 docker-compose 注入）────────────────────
+# INFERENCE_GATEWAY_URL: 推理网关地址，如 http://inference-gateway:8080/v1
+# INFERENCE_SERVER:      引擎类型，如 ollama / vllm / sglang
+# INFERENCE_TIMEOUT:     超时秒数（可选，默认 180）
+# INFERENCE_API_KEYS:    JSON 字典 {role: api_key}（必须覆盖所有角色，否则启动报错）
+# INFERANCE_API_KEY_{ROLE}: 单个角色的 api_key（优先级高于 JSON）
 
 # ── 动态运行时配置（与本加载器同级，可按业务动态调整）────────────────
 _RUNTIME_CONFIG_PATH = os.path.normpath(
@@ -63,6 +51,9 @@ _RUNTIME_CONFIG_PATH = os.path.normpath(
 # ── 环境变量覆盖模式 ──────────────────────────────────────────────────
 # CHAT_TEMPERATURE=0.5  -> 覆盖 chat 角色的 temperature
 # 格式：{ROLE_UPPER}_{PARAM}
+
+# api_key 完全由环境变量注入，不设默认值。
+# 未配置的角色在 load_all() 中明确报错。
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -170,13 +161,49 @@ def _apply_env_overrides(role: str, options: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _resolve_api_keys() -> dict[str, str]:
+    """解析各角色的 api_key。
+
+    来源（优先级从高到低）：
+      1. INFERENCE_API_KEY_{ROLE} 环境变量（单个角色）
+      2. INFERENCE_API_KEYS JSON 环境变量（批量）
+
+    未配置的角色不兜底，由 load_all() 报错。
+    """
+    keys: dict[str, str] = {}
+
+    # 批量 JSON
+    json_str = os.environ.get("INFERENCE_API_KEYS", "")
+    if json_str:
+        try:
+            keys.update(json.loads(json_str))
+        except json.JSONDecodeError:
+            pass
+
+    # 单个角色（覆盖 JSON + 拾取未在 JSON 中声明的角色）
+    for env_key, env_val in os.environ.items():
+        prefix = "INFERENCE_API_KEY_"
+        if env_key.startswith(prefix) and env_val:
+            role = env_key[len(prefix) :].lower()
+            keys[role] = env_val
+
+    return keys
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # 推理引擎配置加载器
 # ═══════════════════════════════════════════════════════════════════════
 
 
 class InferenceConfigLoader:
-    """双源合并：config/connections/{engine}.yaml（连接） + inference-runtime.yaml（模型参数）。"""
+    """连接参数（环境变量） + 运行时配置（YAML）双源合并。
+
+    连接参数由 docker-compose 注入：
+      INFERENCE_GATEWAY_URL  → base_url（如 http://inference-gateway:8080/v1）
+      INFERENCE_SERVER      → engine_type（如 ollama / vllm / sglang）
+      INFERENCE_TIMEOUT     → timeout（可选，默认 180）
+      INFERENCE_API_KEYS    → {role: api_key} JSON 字典（必须覆盖所有角色）
+    """
 
     def __init__(self):
         self._engine_type: str = ""
@@ -184,24 +211,16 @@ class InferenceConfigLoader:
         self._models: dict[str, ModelEntry] = {}
 
     def load_all(self) -> dict:
-        """一次性加载引擎和模型配置，合并两个 YAML 源。"""
-        # ── 确定引擎类型和连接配置路径 ──
+        """一次性加载引擎和模型配置，合并环境变量 + YAML 两个源。"""
+        # ── 连接参数：环境变量 ──
         self._engine_type = os.environ.get("INFERENCE_SERVER", "ollama")
-        conn_path = os.path.join(_CONNECTIONS_DIR, f"{self._engine_type}.yaml")
+        base_url = os.environ.get(
+            "INFERENCE_GATEWAY_URL", "http://inference-gateway:8080/v1"
+        )
+        timeout = float(os.environ.get("INFERENCE_TIMEOUT", "180"))
+        api_keys = _resolve_api_keys()
 
-        if not os.path.exists(conn_path):
-            raise FileNotFoundError(
-                f"连接配置不存在: {conn_path}（INFERENCE_SERVER={self._engine_type}）"
-            )
-
-        # ── 读取连接配置 ──
-        with open(conn_path, "r", encoding="utf-8") as f:
-            conn_cfg = yaml.safe_load(f)
-
-        if not conn_cfg or "roles" not in conn_cfg:
-            raise ValueError(f"连接配置格式错误，缺少 roles: {conn_path}")
-
-        # ── 读取模型参数（inference-runtime.yaml 的 roles 段）──
+        # ── 模型参数：inference-runtime.yaml 的 roles 段 ──
         if not os.path.exists(_RUNTIME_CONFIG_PATH):
             raise FileNotFoundError(f"运行时配置不存在: {_RUNTIME_CONFIG_PATH}")
 
@@ -213,25 +232,23 @@ class InferenceConfigLoader:
 
         params_roles = runtime_cfg["roles"]
 
+        # ── 校验：所有角色必须有 api_key 配置 ──
+        missing_roles = [r for r in params_roles if r not in api_keys]
+        if missing_roles:
+            raise RuntimeError(
+                f"以下推理角色缺少 api_key 配置（环境变量 INFERENCE_API_KEY_{{ROLE}} "
+                f"或 INFERENCE_API_KEYS JSON）：{', '.join(missing_roles)}"
+            )
+
         # ── 解析引擎类型 ──
-        # 优先取 YAML 中的 engine 字段，其次用 INFERENCE_SERVER 环境变量
-        engine_type = conn_cfg.get("engine") or self._engine_type
-        self._engine_type = engine_type
-        base_url = conn_cfg.get("base_url", "")
-        timeout = conn_cfg.get("default_timeout", 180)
+        engine_type = self._engine_type
         impl_cls = resolve_engine(engine_type)
 
-        # ── 逐角色合并 ──
-        for role, role_conn in conn_cfg["roles"].items():
-            if role not in params_roles:
-                raise ValueError(
-                    f"连接配置中的角色 '{role}' 在运行时配置中缺少对应参数"
-                )
+        # ── 逐角色创建引擎（不同 api_key → 不同引擎实例）──
+        for role, role_params in params_roles.items():
+            api_key = api_keys.get(role, "")
 
-            api_key = role_conn.get("api_key", "")
-            model_name = role_conn.get("model", "")
-
-            # api_key 为空时（如 Ollama），共享引擎
+            # api_key 相同的角色共享引擎（如 guardrail 复用 intent）
             engine_key = api_key or "__shared__"
             if engine_key not in self._engines:
                 params = InferenceParams(
@@ -242,11 +259,11 @@ class InferenceConfigLoader:
                 self._engines[engine_key] = impl_cls(params)
 
             # 模型参数来自 inference-runtime.yaml + 环境变量覆盖
-            raw_options = {k: v for k, v in params_roles[role].items()}
+            raw_options = {k: v for k, v in role_params.items()}
             options = _apply_env_overrides(role, raw_options)
 
             self._models[role] = ModelEntry(
-                model_name=model_name,
+                model_name=role,  # 网关模式下 model 由 gateway 注入，这里用 role 占位
                 options=options,
                 api_key=api_key,
                 engine_type=engine_type,

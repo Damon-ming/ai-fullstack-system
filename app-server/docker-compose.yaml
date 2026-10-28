@@ -1,7 +1,9 @@
 # app-server/docker-compose.yaml
-# 后端应用服务（推理后端由根 compose 通过 INFERENCE_SERVER 条件加载）
+# 后端应用服务（推理由独立的 inference-gateway 子系统处理）
 #
-# INFERENCE_SERVER 控制 app 读哪个连接配置（config/connections/{ollama|vllm}.yaml）
+# 连接 inference-gateway 的方式：
+#   INFERENCE_SERVER  推理后端类型：ollama / vllm / sglang（决定连接配置）
+#   INFERENCE_GATEWAY_URL 网关地址（默认 http://inference-gateway:8080/v1）
 
 networks:
   ai-network:
@@ -16,16 +18,17 @@ services:
         SERVER_BUILD_ENV: ${SERVER_BUILD_ENV:-0}
     container_name: app-server
     restart: always
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
-      - /root/ming/models:/models
       - /root/ming/logs/app-server:/app-server/logs
       - /root/ming/chroma_data:/app-server/chroma_data
-      - /root/ming/knowledges:/app-server/src/com/damon/ming/knowledges
+      - /root/ming/knowledges:/app-server/knowledges
     environment:
       - LOG_LEVEL=DEBUG
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
+      - INFERENCE_GATEWAY_URL=http://inference-gateway:8080/v1
+      - INFERENCE_API_KEYS={"chat":"ak_chat_001","intent":"ak_intent_001","rewrite":"ak_rewrite_001","summary":"ak_summary_001","guardrail":"ak_intent_001"}
     logging:
       driver: "json-file"
       options:
@@ -33,6 +36,8 @@ services:
         max-file: "3"
     networks:
       - ai-network
+    depends_on:
+      - inference-gateway
     command: >
       sh -c "mkdir -p /app-server/logs \
         && python3 -m src.com.damon.ming.main > /app-server/logs/app.log 2>&1"

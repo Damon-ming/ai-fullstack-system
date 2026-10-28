@@ -1,4 +1,4 @@
-# app-server/config/gateway.yaml
+# inference-gateway/config/gateway.yaml
 # vLLM Gateway 路由表 —— INFERENCE_SERVER=vllm 时使用
 #
 # INFERENCE_SERVER=vllm  → 使用本文件

@@ -1,4 +1,4 @@
-# app-server/config/connections/vllm.yaml
+# inference-gateway/config/connections/vllm.yaml
 # vLLM 连接配置 —— INFERENCE_SERVER=vllm 时使用
 #
 # 仅包含连接/路由参数（推理服务相关）。

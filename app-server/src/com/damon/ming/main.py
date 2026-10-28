@@ -12,7 +12,10 @@
 【可选（本地开发用，生产镜像通过 build_info.py 固化）】
   APP_ENV                 环境标志：debug / release（默认 debug）
   LOG_LEVEL               日志级别：DEBUG / INFO / WARNING / ERROR（默认 INFO）
-  INFERENCE_SERVER        推理后端：ollama / vllm / sglang（默认 ollama，连接信息由 config/connections/{engine}.yaml 提供）
+  INFERENCE_SERVER        推理后端：ollama / vllm / sglang（默认 ollama，连接信息由环境变量注入）
+  INFERENCE_GATEWAY_URL   推理网关地址（默认 http://inference-gateway:8080/v1）
+  INFERENCE_TIMEOUT       推理超时秒数（默认 180）
+  INFERENCE_API_KEYS      各角色 api_key 映射 JSON（可选，默认见 inference_runtime_config_loader.py）
   CHAT_TEMPERATURE        聊天采样温度（环境变量覆盖 inference-runtime.yaml，格式 ROLE_PARAM）
   DB_CONFIG_PATH          DB YAML 配置文件路径（默认 app/config/db-config.yaml，可选）
   ENCRYPTION_CONFIG_PATH  加密 YAML 配置文件路径（默认 encryption/encryption-config.yaml）
@@ -163,7 +166,7 @@ if __name__ == "__main__":
     logger.info("启动 FastAPI 服务 | host=127.0.0.1 | port=8000 | debug=%s", IS_DEBUG)
     uvicorn.run(
         app,
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8000,
         workers=1,  # GPU项目必须保持1个worker，不能多（多worker导致CUDA上下文重复加载，显存爆炸）
         limit_concurrency=50,  # 并发连接上限含SSE长连接；GPU推理能力(1-4并发)才是真正瓶颈，此值足够。

@@ -18,15 +18,16 @@
 #     docker compose down
 #
 # 新增推理后端（如 sglang）：
-#   1. 新建 app-server/config/docker/docker-sglang.yaml（容器编排）
-#   2. 新建 app-server/config/gateway.yaml（路由表，如需要 gateway）
-#   3. 新建 app-server/config/connections/sglang.yaml（连接配置）
+#   1. 新建 inference-gateway/config/docker/docker-sglang.yaml（容器编排）
+#   2. 新建 inference-gateway/config/gateway.yaml（路由表）
+#   3. 新建 inference-gateway/config/connections/sglang.yaml（连接配置）
 #   4. 部署时 INFERENCE_SERVER=sglang
 #   app-server 代码零改动
 # ═══════════════════════════════════════════════════════════════════
 
 include:
-  - app-server/config/docker/docker-${INFERENCE_SERVER:-ollama}.yaml
+  - inference-gateway/config/docker/docker-${INFERENCE_SERVER:-ollama}.yaml
+  - inference-gateway/docker-compose.yaml
   - app-server/docker-compose.yaml
   - web-app/docker-compose.yaml
 

@@ -26,5 +26,5 @@ venv/
 .env
 
 # ── 知识库 / 向量库（运行时数据，不入库）──────────────
-src/com/damon/ming/knowledges/
-src/com/damon/ming/chroma_data/
+knowledges/
+chroma_data/

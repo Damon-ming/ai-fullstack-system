@@ -1,4 +1,4 @@
-# config/models-directory.md
+# inference-gateway/config/models-directory.md
 # 模型目录结构 —— 所有 AI 模型统一在 /root/ming/models/ 下
 #
 # Docker 挂载: /root/ming/models → /models（所有容器统一入口）

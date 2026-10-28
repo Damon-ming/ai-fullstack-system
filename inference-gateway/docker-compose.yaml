@@ -1,0 +1,32 @@
+# inference-gateway/docker-compose.yaml
+# 推理路由网关 + 推理后端容器 —— 独立子系统
+#
+# 通过 INFERENCE_SERVER 环境变量选择推理后端：
+#   INFERENCE_SERVER=ollama  → 启动 Ollama 容器（默认）
+#   INFERENCE_SERVER=vllm    → 启动 vLLM 集群
+#
+# 网关配置（路由表）烘焙进镜像，运行时不可变。
+# 推理后端配置在本目录 config/docker/ 下。
+
+networks:
+  ai-network:
+    driver: bridge
+
+services:
+  # ── API Gateway ──────────────────────────────────────────────────
+  # 按 api_key 路由到对应推理实例，透传 OpenAI 兼容接口
+  inference-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inference-gateway
+    restart: always
+    expose:
+      - "8080"
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

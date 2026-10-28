@@ -34,9 +34,7 @@ def _check_encryption_config(is_debug: bool) -> None:
     )
 
     try:
-        config = EncryptionConfigLoader().load(
-            profile="common" if is_debug else "production"
-        )
+        config = EncryptionConfigLoader().load(profile="common")
     except FileNotFoundError:
         raise RuntimeError(
             "加密配置文件不存在，启动终止。"
@@ -58,7 +56,7 @@ def _check_encryption_config(is_debug: bool) -> None:
     if missing:
         raise RuntimeError(
             f"加密配置缺失必要字段，启动终止：{', '.join(missing)}。"
-            f"请检查 app/config/encryption/encryption-config.yaml 的 {'common' if is_debug else 'production'} 剖面。"
+            f"请检查 app/config/encryption/encryption-config.yaml 的 common 剖面。"
         )
 
 
@@ -71,10 +69,10 @@ def _check_database(is_debug: bool) -> list[str]:
         from src.com.damon.ming.app.config.db.db_config_loader import DbConfigLoader
 
         loader = DbConfigLoader()
-        db_config = loader.load(profile="common" if is_debug else "production")
+        db_config = loader.load(profile="common")
         if not db_config.url and not db_config.host:
             return [
-                f"数据库配置缺少连接信息（url 或 host），请检查 db/db-config.yaml 的 {'common' if is_debug else 'production'} 剖面"
+                "数据库配置缺少连接信息（url 或 host），请检查 db/db-config.yaml 的 common 剖面"
             ]
     except FileNotFoundError as e:
         return [f"数据库配置文件不存在：{e}"]

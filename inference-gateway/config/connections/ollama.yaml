@@ -1,4 +1,4 @@
-# app-server/config/connections/ollama.yaml
+# inference-gateway/config/connections/ollama.yaml
 # Ollama 连接配置 —— INFERENCE_SERVER=ollama 时使用
 #
 # 仅包含连接/路由参数（推理服务相关）。

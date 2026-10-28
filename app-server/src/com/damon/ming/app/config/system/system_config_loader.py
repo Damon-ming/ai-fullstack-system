@@ -48,7 +48,7 @@ class SystemConfigLoader:
                 f"系统配置中 knowledge_dir 不能为空 | path={self._config_path}"
             )
 
-        # 相对路径基于 app-server/ 根目录（src/ 的父目录）解析
+        # 支持绝对路径（直接使用）或相对路径（基于 app-server/ 根目录解析）
         # __file__ = src/com/damon/ming/app/config/system/system_config_loader.py
         # parents[7] = app-server/
         if not os.path.isabs(knowledge_dir):

@@ -1,4 +1,4 @@
-# app-server/config/docker/docker-ollama.yaml
+# inference-gateway/config/docker/docker-ollama.yaml
 # Ollama 推理服务 —— INFERENCE_SERVER=ollama 时启动
 
 services:
