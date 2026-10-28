@@ -5,11 +5,11 @@
 #                              → 按 api_key 路由到 vllm-{role}
 #
 # api_key 由环境变量注入（由 docker-compose 提供），格式：
-#   INFERENCE_API_KEYS  → JSON 字典，如 {"chat":"ak_chat_001","intent":"ak_intent_001"}
+#   INFERENCE_API_KEYS  → JSON 字典，如 {"chat":"ak_pool_001","intent":"ak_pool_002"}
 #
 # 也可单独设置某个角色的 key：
-#   INFERENCE_API_KEY_CHAT=ak_chat_001
-#   INFERENCE_API_KEY_INTENT=ak_intent_001
+#   INFERENCE_API_KEY_CHAT=ak_pool_001
+#   INFERENCE_API_KEY_INTENT=ak_pool_002
 #
 # 动态运行时配置（inference-runtime.yaml）：
 #   → roles 段：模型参数（temperature/top_p/max_tokens），与后端无关

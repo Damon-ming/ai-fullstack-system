@@ -1,22 +1,26 @@
 # inference-gateway/config/gateway.yaml
-# vLLM Gateway 路由表 —— INFERENCE_SERVER=vllm 时使用
+# 推理网关路由表 —— INFERENCE_SERVER=vllm 时使用
+#
+# 路由层不感知业务语义，只认 api_key → upstream 映射。
+# 各 vLLM 实例只加载一个模型，路由表决定哪张"门禁卡"进哪个实例。
 #
 # INFERENCE_SERVER=vllm  → 使用本文件
 # INFERENCE_SERVER=ollama → 不使用 gateway
-#
-# 格式：api_key → upstream（模型名无需指定，各 vLLM 实例只加载一个模型）
 
 upstream_key: akUpstream
 
 routes:
-  ak_chat_001:
-    upstream: http://vllm-chat:8000
+  ak_pool_001:
+    upstream: http://vllm-pool-1:8000
 
-  ak_intent_001:
-    upstream: http://vllm-intent:8000
+  ak_pool_002:
+    upstream: http://vllm-pool-2:8000
 
-  ak_rewrite_001:
-    upstream: http://vllm-rewrite:8000
+  ak_pool_003:
+    upstream: http://vllm-pool-3:8000
 
-  ak_summary_001:
-    upstream: http://vllm-summary:8000
+  ak_pool_004:
+    upstream: http://vllm-pool-4:8000
+
+  ak_pool_005:
+    upstream: http://vllm-pool-5:8000

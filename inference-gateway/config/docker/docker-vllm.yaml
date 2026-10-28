@@ -1,56 +1,16 @@
 # inference-gateway/config/docker/docker-vllm.yaml
-# vLLM 推理服务集群 —— INFERENCE_SERVER=vllm 时启动
+# vLLM 推理实例池 —— INFERENCE_SERVER=vllm 时启动
 #
-# 架构：app-server → inference-gateway (按 api_key 路由) → vllm-{role} 实例
-# Gateway 服务定义在本目录的 docker-compose.yaml，本文件仅定义推理实例。
+# 架构：app-server → inference-gateway (按 api_key 路由) → vllm-pool-{n}
+# 路由层不感知业务语义，只认 api_key → upstream 映射。
+#
+# 新增实例：加一个 vllm-pool-{n} 服务 + gateway.yaml 加一条 route
 
 services:
-  # ── vLLM 实例 ────────────────────────────────────────────────────
-  vllm-intent:
+  # ── vLLM 实例池 ──────────────────────────────────────────────────
+  vllm-pool-1:
     image: vllm/vllm-openai:latest
-    container_name: vllm-intent
-    restart: always
-    expose:
-      - "8000"
-    volumes:
-      - /root/ming/models:/models
-    runtime: nvidia
-    environment:
-      NVIDIA_VISIBLE_DEVICES: all
-    command: >
-      --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen2.5-0.5B-Instruct
-      --trust-remote-code
-      --gpu-memory-utilization 0.3
-      --max-model-len 2048
-      --api-key akUpstream
-    networks:
-      - ai-network
-
-  vllm-rewrite:
-    image: vllm/vllm-openai:latest
-    container_name: vllm-rewrite
-    restart: always
-    expose:
-      - "8000"
-    volumes:
-      - /root/ming/models:/models
-    runtime: nvidia
-    environment:
-      NVIDIA_VISIBLE_DEVICES: all
-    command: >
-      --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen2.5-1.8B-Instruct
-      --trust-remote-code
-      --gpu-memory-utilization 0.4
-      --max-model-len 4096
-      --api-key akUpstream
-    networks:
-      - ai-network
-
-  vllm-chat:
-    image: vllm/vllm-openai:latest
-    container_name: vllm-chat
+    container_name: vllm-pool-1
     restart: always
     expose:
       - "8000"
@@ -69,9 +29,51 @@ services:
     networks:
       - ai-network
 
-  vllm-summary:
+  vllm-pool-2:
     image: vllm/vllm-openai:latest
-    container_name: vllm-summary
+    container_name: vllm-pool-2
+    restart: always
+    expose:
+      - "8000"
+    volumes:
+      - /root/ming/models:/models
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model /models/inference/Qwen2.5-0.5B-Instruct
+      --trust-remote-code
+      --gpu-memory-utilization 0.3
+      --max-model-len 2048
+      --api-key akUpstream
+    networks:
+      - ai-network
+
+  vllm-pool-3:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-pool-3
+    restart: always
+    expose:
+      - "8000"
+    volumes:
+      - /root/ming/models:/models
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model /models/inference/Qwen2.5-1.8B-Instruct
+      --trust-remote-code
+      --gpu-memory-utilization 0.4
+      --max-model-len 4096
+      --api-key akUpstream
+    networks:
+      - ai-network
+
+  vllm-pool-4:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-pool-4
     restart: always
     expose:
       - "8000"
@@ -85,6 +87,27 @@ services:
       --model /models/inference/Qwen2.5-1.5B-Instruct
       --trust-remote-code
       --gpu-memory-utilization 0.4
+      --max-model-len 4096
+      --api-key akUpstream
+    networks:
+      - ai-network
+
+  vllm-pool-5:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-pool-5
+    restart: always
+    expose:
+      - "8000"
+    volumes:
+      - /root/ming/models:/models
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model /models/inference/Qwen3Guard-Gen-4B
+      --trust-remote-code
+      --gpu-memory-utilization 0.3
       --max-model-len 4096
       --api-key akUpstream
     networks:

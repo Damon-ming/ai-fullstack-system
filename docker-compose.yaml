@@ -19,10 +19,10 @@
 #
 # 新增推理后端（如 sglang）：
 #   1. 新建 inference-gateway/config/docker/docker-sglang.yaml（容器编排）
-#   2. 新建 inference-gateway/config/gateway.yaml（路由表）
-#   3. 新建 inference-gateway/config/connections/sglang.yaml（连接配置）
-#   4. 部署时 INFERENCE_SERVER=sglang
-#   app-server 代码零改动
+#   2. inference-gateway/config/gateway.yaml 加路由条目
+#   3. app-server/docker-compose.yaml 的 INFERENCE_API_KEYS 加映射
+#   4. app-server inference-runtime.yaml 加 roles 参数
+#   5. 部署时 INFERENCE_SERVER=sglang
 # ═══════════════════════════════════════════════════════════════════
 
 include:

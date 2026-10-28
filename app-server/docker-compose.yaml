@@ -28,7 +28,7 @@ services:
       - LOG_LEVEL=DEBUG
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
       - INFERENCE_GATEWAY_URL=http://inference-gateway:8080/v1
-      - INFERENCE_API_KEYS={"chat":"ak_chat_001","intent":"ak_intent_001","rewrite":"ak_rewrite_001","summary":"ak_summary_001","guardrail":"ak_intent_001"}
+      - INFERENCE_API_KEYS={"chat":"ak_pool_001","intent":"ak_pool_002","rewrite":"ak_pool_003","summary":"ak_pool_004","guardrail":"ak_pool_005"}
     logging:
       driver: "json-file"
       options:
