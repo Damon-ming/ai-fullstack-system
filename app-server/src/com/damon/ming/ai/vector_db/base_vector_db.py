@@ -8,14 +8,15 @@
 
 不提供：
   - 配置加载 → 见 ai/config/vector_config_loader.py
-  - 具体实现 → 见 chroma_store.py 等实现文件
+  - 具体实现 → 见 chroma_store.py / pgvector_store.py
 
 用法：
   from src.com.damon.ming.ai.vector_db import BaseVectorStore, VectorStoreParams
   from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
+  from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 
-  params = VectorStoreParams(collection_name="rag", persist_directory="./data")
-  store = ChromaStore(params)
+  params = VectorStoreParams(connection_string="postgresql://...", embedding_dimension=1024)
+  store = PGVectorStore(params)
   nodes = store.similarity_search_by_vector(query_vector, k=4)
 """
 
@@ -36,20 +37,21 @@ class VectorStoreParams:
     关键决策参数无默认值，必须在 YAML 中显式声明。
     """
 
-    # ---- 通用（必填）----
-    embedding_dimension: int
-
-    # ---- ChromaDB ----
+    # ---- 全部无默认值，由 YAML 显式注入 ----
+    # ChromaDB
     collection_name: str
     persist_directory: str
-    host: str = ""
-    port: int = 0
-
-    # ---- PGVector（预留）----
-    connection_string: str = ""
-    table_name: str = "documents"
-    pool_min_conn: int = 2
-    pool_max_conn: int = 10
+    host: str
+    port: int
+    # PGVector
+    connection_string: str
+    table_name: str
+    pool_min_conn: int
+    pool_max_conn: int
+    hnsw_m: int
+    hnsw_ef_construction: int
+    # 通用
+    embedding_dimension: int
 
     # ---- 扩展（各实现特有参数透传）----
     extra: dict[str, Any] = field(default_factory=dict)
@@ -65,7 +67,9 @@ class BaseVectorStore(ABC):
     异常行为规范（所有实现类必须遵守）：
       add_documents           → 失败抛 Exception
       delete / clear          → 失败返回 False
-      similarity_search*      → 失败返回 []
+      similarity_search       → 失败抛 NotImplementedError（不支持文本直查）
+      similarity_search_by_vector → 失败返回 []
+      delete_by_metadata      → 默认失败返回 0；PGVector 实现覆盖为抛 RuntimeError
       get_by_id               → 失败返回 None
       get_by_metadata         → 失败返回 []
       count                   → 失败返回 0
@@ -111,7 +115,12 @@ class BaseVectorStore(ABC):
 
     @abstractmethod
     def delete_by_metadata(self, metadata_filter: dict[str, Any], **kwargs) -> int:
-        """根据元数据删除文档，返回删除数量。失败返回 0。"""
+        """根据元数据删除文档，返回删除数量。
+
+        默认契约：失败返回 0。
+        PGVector 实现覆盖为失败抛 RuntimeError，确保调用方可感知。
+        调用方应按需 try/except RuntimeError 处理。
+        """
         ...
 
     @abstractmethod
@@ -135,7 +144,7 @@ class BaseVectorStore(ABC):
         """批量元数据查询（OR 语义：匹配任意一个 filter 的文档）。
 
         默认实现：逐个调用 get_by_metadata 后合并。
-        具体实现可覆盖为原生批量查询（如 ChromaDB 的 $or），减少 SQLite 扫描次数。
+        具体实现可覆盖为原生批量查询（如 pgvector 的 OR 条件合并），减少数据库扫描次数。
         """
         ...
 

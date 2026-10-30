@@ -79,8 +79,8 @@ class SectionReconstructor:
     ) -> list[TextNode]:
         """批量获取所有章节的完整分片。
 
-        通过 vector_store.get_by_metadata_batch 合并为单次 $or 查询，
-        将 N 次 SQLite 扫描降为 1 次，显著减少 ChromaDB 查询耗时。
+        通过 vector_store.get_by_metadata_batch 合并为单次 OR 查询，
+        将 N 次数据库扫描降为 1 次，显著减少向量查询耗时。
         executor 由上层 RAGContainer 注入，通过 run_in_executor 提交到集中式线程池。
         """
         if not section_keys:

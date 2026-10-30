@@ -27,6 +27,8 @@ sentence-transformers==5.1.2
 
 # ── Vector DB & Retrieval ────────────────────────────────────
 chromadb==1.5.9
+# pgvector 由 SQLAlchemy + psycopg2 驱动，无需额外 pip 包
+# PostgreSQL 服务端需安装 pgvector 扩展
 rank-bm25==0.2.2
 
 # ── Document Processing ──────────────────────────────────────

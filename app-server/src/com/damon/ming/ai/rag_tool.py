@@ -138,7 +138,7 @@ class RAGContainer:
         self.embedders = _embedders
 
         # 步骤3：初始化向量库
-        self.vector_store: BaseVectorStore = VectorConfigLoader().load("chroma")
+        self.vector_store: BaseVectorStore = VectorConfigLoader().load("pgvector")
 
         # 步骤4：初始化章节重构 + 摘要服务
         _infer_loader = InferenceConfigLoader()
@@ -331,11 +331,11 @@ class RAGContainer:
         # 已知限制：锁临界区包含 get_by_metadata（SQLite 读）+ add_documents（SQLite 写），
         # 持锁期间 ~15-110ms，多用户并发上传时在此串行化排队。
         # 串行化是正确性必需的（防 check-then-act 去重击穿），不可去掉。
-        # 锁内 I/O 耗时主要来自 ChromaDB 内部串行化（应用层省不了），当前可接受。
+        # 锁内 I/O 耗时主要来自 pgvector 查询（应用层可接受），当前可接受。
         # 若未来并发上传成为瓶颈（>20 用户同时上传），可考虑内存 Set 缩小临界区，
-        # 但需处理 Set 与 ChromaDB 的同步及崩溃恢复，复杂度较高。
+        # 但需处理 Set 与 pgvector 的同步及崩溃恢复，复杂度较高。
         def _locked_ingest() -> tuple[list[dict], list[TextNode], list[str]]:
-            """持 threading.Lock 执行 ChromaDB 去重 + 写入。"""
+            """持 threading.Lock 执行 pgvector 去重 + 写入。"""
             accepted: list[dict] = []
             new_nodes: list[TextNode] = []
             failed_shas: list[str] = []
@@ -343,9 +343,9 @@ class RAGContainer:
             with self._knowledge_lock:
                 for key, nodes, file_sha256 in parsed:
                     # get_by_metadata 查询失败时返回 []（异常被底层吞掉），
-                    # 无法区分"查询失败"和"文件不存在"。ChromaDB 为本地 SQLite 极难抖动，
+                    # 无法区分"查询失败"和"文件不存在"。pgvector 查询异常极罕见，
                     # 若出现极端情况会导致去重被击穿产生重复 chunk（非数据丢失，仅检索冗余）。
-                    # 暂不区分处理，保持代码简洁；如 ChromaDB 频繁抖动可在此加单次重试。
+                    # 暂不区分处理，保持代码简洁；如 pgvector 频繁异常可在此加单次重试。
                     existing = self.vector_store.get_by_metadata(
                         {"file_sha256": file_sha256}
                     )

@@ -26,8 +26,8 @@ def register_engine(name: str):
     """装饰器：将实现类注册到引擎注册表。
 
     用法：
-        @register_engine("chroma")
-        class ChromaDBStore(BaseVectorStore):
+        @register_engine("pgvector")
+        class PGVectorStore(BaseVectorStore):
             ...
     """
 
@@ -65,10 +65,12 @@ def list_engines() -> list[str]:
 
 # ── 触发注册（必须放在注册器定义之后）──────────────────────────────
 from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
+from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 
 __all__ = [
     "BaseVectorStore",
     "ChromaDBStore",
+    "PGVectorStore",
     "VectorStoreParams",
     "list_engines",
     "register_engine",

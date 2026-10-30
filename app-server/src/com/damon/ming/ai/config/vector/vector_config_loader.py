@@ -52,6 +52,22 @@ class VectorConfigLoader:
         params_raw = raw.get("params", {})
 
         known_fields = {f.name for f in VectorStoreParams.__dataclass_fields__.values()}
+        # 校验：无默认值的字段必须在 YAML 中显式声明
+        from dataclasses import MISSING
+
+        missing = [
+            f_name
+            for f_name, f_obj in VectorStoreParams.__dataclass_fields__.items()
+            if f_obj.default is MISSING
+            and f_obj.default_factory is MISSING
+            and f_name not in params_raw
+        ]
+        if missing:
+            raise ValueError(
+                "引擎 '%s' 配置缺少必填字段: %s。请在 vector-config.yaml 的 params 下补充。"
+                % (engine, missing)
+            )
+
         base_kwargs = {k: v for k, v in params_raw.items() if k in known_fields}
         extra_kwargs = {k: v for k, v in params_raw.items() if k not in known_fields}
         params = VectorStoreParams(**base_kwargs, extra=extra_kwargs)
