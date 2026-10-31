@@ -80,9 +80,18 @@ async def lifespan(app: FastAPI):
     await _http_client.aclose()
 
 
+# SECURITY: P1-24 FastAPI 默认暴露 /docs (Swagger UI) + /redoc，泄露路由/schema/版本信息。
+# 当前仅 ai-network 内网可达，风险可控。
+# 上公网前：加 docs_url=None, redoc_url=None，并新增 /health 端点替换 healthcheck 探测。
 app = FastAPI(title="vLLM Gateway", version="1.0", lifespan=lifespan)
 
 
+# SECURITY: P1-25 网关无速率限制，单 key 可无限请求耗尽 GPU。
+# 当前可接受：
+#   - 仅 ai-network 内网可达，唯一调用方为 app-server（已有 slowapi 12 端点限速）
+#   - vLLM 有 max_num_seqs 队列兜底，Ollama 单模型串行，不雪崩
+#   - 拿到 upstream_key = 已突破容器/宿主机，此时限速亦无效
+# 上公网 / 多租户前加 per-key 限速（slowapi 或 token bucket）。
 def _extract_api_key(request: Request) -> str | None:
     """从 Authorization header 提取 Bearer token。"""
     auth = request.headers.get("authorization", "")
@@ -132,6 +141,10 @@ async def proxy(request: Request):
             pass
 
     if is_stream:
+        # SECURITY: P1-20 流式路径无总时长/字节上限。
+        # httpx timeout=180 是 per-read timeout（字节间隔），非总超时。
+        # 当前可接受：上游为受信任的 vLLM/Ollama，且 max_tokens/上下文窗口天然约束输出长度。
+        # 上公网前加总超时（asyncio.wait_for）+ 响应字节上限，防 slow loris 变体耗尽连接。
 
         async def stream_generator():
             try:
@@ -154,7 +167,9 @@ async def proxy(request: Request):
                 logger.warning(
                     "流式上游异常 | upstream=%s | error=%s", upstream_base, e
                 )
-                yield f'event: error\ndata: {{"type":"upstream_error","message":"{e!s}"}}\n\n'.encode()
+                # SECURITY: P1-19 e!s 可能含内部地址/URL，替换为固定文本。
+                # 完整错误已在流式上游异常日志中记录（upstream=%s, error=%s）。
+                yield 'event: error\ndata: {"type":"upstream_error","message":"上游服务异常"}\n\n'.encode()
             except Exception as e:
                 logger.error(
                     "流式转发未知异常 | upstream=%s | error=%s", upstream_base, e
@@ -163,7 +178,11 @@ async def proxy(request: Request):
 
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
-    # 非流式：连接失败时重试 1 次
+    # 非流式：连接失败时重试 1 次。
+    # SECURITY: P1-18 无退避无熔断。
+    # 当前架构下可接受：upstream 数量少（≤5 vLLM / 1 Ollama），故障不会级联扩散；
+    # vLLM 内部有排队（max_num_seqs），Ollama 单模型串行推理，不会雪崩。
+    # 上公网或 upstream 扩容时考虑加指数退避 + 熔断器（连续 N 次失败后 fast-fail）。
     for attempt in range(2):
         try:
             resp = await _http_client.request(
@@ -176,9 +195,9 @@ async def proxy(request: Request):
         except httpx.ConnectError:
             if attempt == 0:
                 continue
-            raise HTTPException(
-                status_code=502, detail=f"上游服务不可达: {upstream_base}"
-            )
+            # SECURITY: P1-19 不暴露 upstream_base 到客户端（防内网拓扑泄露）。
+            # 诊断信息已在连接失败日志中记录（upstream=%s）。
+            raise HTTPException(status_code=502, detail="上游服务不可达")
         except httpx.TimeoutException:
             raise HTTPException(status_code=504, detail="上游服务超时")
 

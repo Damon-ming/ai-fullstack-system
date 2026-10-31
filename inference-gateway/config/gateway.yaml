@@ -8,6 +8,14 @@
 # 避免单密钥泄露导致全部 5 个实例沦陷（P0-4 修复）。
 # upstream_key 与 docker-vllm.yaml 中的 --api-key 一一对应。
 #
+# SECURITY: P1-21 网关→上游全明文 HTTP（http://vllm-pool-N:8000）。
+# 通信限于 Docker ai-network 内部，不经过宿主机/公网网卡。
+# 当前可接受：
+#   - 上游 key 为 per-pool 独立，单 key 泄露不扩散
+#   - 嗅探需先突破容器网络隔离（此时 HTTPS 也不防内存 dump）
+#   - 攻击者拿 key 只能消耗 GPU 算力，有请求日志可追溯
+# 上公网 / 多租户场景考虑 mTLS 或服务网格（如 Istio/Linkerd）。
+#
 # INFERENCE_SERVER=vllm  → 使用本文件
 # INFERENCE_SERVER=ollama → 不使用 gateway
 

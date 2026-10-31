@@ -5,6 +5,10 @@
 # 路由层不感知业务语义，只认 api_key → upstream 映射。
 #
 # 新增实例：加一个 vllm-pool-{n} 服务 + gateway.yaml 加一条 route
+#
+# SECURITY: P1-23 --trust-remote-code 允许执行模型仓库中自定义 Python 代码。
+# 当前 Qwen2.5 / Qwen3 系列均为 vLLM 原生架构，无需自定义代码，可安全删除。
+# 上公网或多租户前确认并移除；若加载非原生架构模型时需评估是否恢复。
 
 services:
   # ── vLLM 实例池 ──────────────────────────────────────────────────

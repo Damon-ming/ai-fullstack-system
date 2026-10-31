@@ -10,6 +10,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制网关代码
 COPY gateway.py .
 
+# SECURITY: P1-22 以非 root 用户运行（纵深防御）。
+# 端口 8080 非特权，gateway 不写磁盘，无副作用。
+RUN useradd -r -u 1000 gateway && chown -R gateway /gateway
+USER gateway
+
 # SECURITY: gateway.yaml 包含明文路由 key（ak_pool_*），不烘焙进镜像层。
 # 通过 docker-compose.yaml 的 bind mount 在运行时以只读方式挂载，
 # 防止 key 随镜像分发（docker push / docker save）泄露。

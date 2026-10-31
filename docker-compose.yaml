@@ -48,6 +48,11 @@ include:
   - app-server/docker-compose.yaml
   - web-app/docker-compose.yaml
 
+# SECURITY: P1-27 全 compose 无 CPU/内存 limits。
+# 单租户可控（自己不会打自己）；vLLM 无 limits 时多实例可争抢宿主机 RAM，
+# OOM killer 可能误杀 postgres / app-server。
+# 上公网 / 多租户前加 deploy.resources.limits（按实际使用量调校，vLLM 需预留 KV cache 空间）。
+
 # 共享网络：所有服务通过容器名互相发现
 networks:
   ai-network:
