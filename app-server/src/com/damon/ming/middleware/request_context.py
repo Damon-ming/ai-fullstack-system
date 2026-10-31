@@ -27,9 +27,6 @@ from src.com.damon.ming.middleware.header_constants import (
 )
 from src.com.damon.ming.middleware.ua_fingerprint import parse_ua_header
 
-# Token 提取时使用的 key 名（与前端约定一致）
-TOKEN_COOKIE_NAME = "device_auth_token"
-
 
 @dataclass
 class RequestContext:
@@ -124,14 +121,11 @@ def build_request_context(request: "Request") -> RequestContext:
 
 
 def _extract_token(headers) -> str | None:
-    """从 headers 中提取 device_auth_token（Cookie / Authorization Bearer）。"""
-    cookie_header = headers.get("cookie", "")
-    if cookie_header:
-        for pair in cookie_header.split(";"):
-            pair = pair.strip()
-            if pair.startswith(f"{TOKEN_COOKIE_NAME}="):
-                return pair[len(TOKEN_COOKIE_NAME) + 1 :].strip()
+    """从 Authorization Bearer 头中提取 device_auth_token。
 
+    SECURITY: 仅支持 Authorization Bearer，不支持 Cookie 通道。
+    消除双通道认证的 CSRF 攻击面和死代码风险（P1-2 修复）。
+    """
     auth_header = headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         return auth_header[7:].strip()

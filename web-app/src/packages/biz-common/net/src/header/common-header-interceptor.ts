@@ -55,10 +55,11 @@ export function createCommonHeaderInterceptor() {
         headers["X-Session-ID"] = ctx.sessionId;
       }
 
-      // token：设备认证令牌，有则注入 Cookie 头
+      // token：设备认证令牌，以 Authorization Bearer 方式传输
+      // SECURITY: 不使用 Cookie 头，避免 HttpOnly/Secure/SameSite 安全属性问题
       const token = getToken();
       if (token) {
-        headers["Cookie"] = `${TOKEN_COOKIE_NAME}=${token}`;
+        headers["Authorization"] = `Bearer ${token}`;
       }
 
       return {
