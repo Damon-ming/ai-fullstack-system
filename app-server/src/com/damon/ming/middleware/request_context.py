@@ -125,6 +125,12 @@ def _extract_token(headers) -> str | None:
 
     SECURITY: 仅支持 Authorization Bearer，不支持 Cookie 通道。
     消除双通道认证的 CSRF 攻击面和死代码风险（P1-2 修复）。
+
+    TODO: 取得证书并部署 HTTPS 后，应迁移到 HttpOnly + Secure + SameSite=Strict Cookie：
+      1. 前端删除 Authorization Bearer，启用 credentials: "same-origin"
+      2. 登录端点改用 response.set_cookie(httponely=True, secure=True, samesite="strict")
+      3. 本函数恢复 Cookie 读取（Authorization Bearer 作为 API 调用 fallback 保留）
+      4. SSE 调用从 EventSource 迁移到 fetch + ReadableStream
     """
     auth_header = headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
