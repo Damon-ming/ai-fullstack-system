@@ -58,6 +58,12 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - MASTER_KEY=${MASTER_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-https://your-production-domain.com}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -66,8 +72,10 @@ services:
     networks:
       - ai-network
     depends_on:
-      - inference-gateway
-      - postgres
+      postgres:
+        condition: service_healthy
+      inference-gateway:
+        condition: service_healthy
     command: >
       sh -c "mkdir -p /app-server/logs \
         && python3 -m src.com.damon.ming.main > /app-server/logs/app.log 2>&1"

@@ -13,6 +13,7 @@ vector_db/ 模块通过 VectorStoreParams 数据类接收参数，不感知配�
 """
 
 import os
+from dataclasses import MISSING
 
 import yaml
 from src.com.damon.ming.ai.vector_db import resolve_store
@@ -53,8 +54,6 @@ class VectorConfigLoader:
 
         known_fields = {f.name for f in VectorStoreParams.__dataclass_fields__.values()}
         # 校验：无默认值的字段必须在 YAML 中显式声明
-        from dataclasses import MISSING
-
         missing = [
             f_name
             for f_name, f_obj in VectorStoreParams.__dataclass_fields__.items()
@@ -64,8 +63,8 @@ class VectorConfigLoader:
         ]
         if missing:
             raise ValueError(
-                "引擎 '%s' 配置缺少必填字段: %s。请在 vector-config.yaml 的 params 下补充。"
-                % (engine, missing)
+                f"引擎 '{engine}' 配置缺少必填字段: {missing}。"
+                "请在 vector-config.yaml 的 params 下补充。"
             )
 
         base_kwargs = {k: v for k, v in params_raw.items() if k in known_fields}

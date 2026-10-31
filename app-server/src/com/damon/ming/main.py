@@ -99,6 +99,7 @@ app = FastAPI(
     debug=IS_DEBUG,
 )
 
+
 # ---- CORS ---------------------------------------------------------------
 if IS_DEBUG:
     app.add_middleware(
@@ -157,6 +158,11 @@ initializer.attach_to_app(app)
 
 # ---- 全局异常处理器 ---------------------------------------------------
 register_exception_handler(app)
+
+# ── 存活探针（/ping /health 绕过所有中间件，供 Docker 探测）─────────
+from src.com.damon.ming.middleware.health import wrap_health_app
+
+app = wrap_health_app(app)
 
 # ---------------------------------------------------------------------------
 # 入口

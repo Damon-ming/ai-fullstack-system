@@ -33,6 +33,7 @@ from collections import OrderedDict
 from typing import Any
 
 from llama_index.core.schema import TextNode
+from sqlalchemy import text
 from src.com.damon.ming.ai.vector_db import register_engine
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
@@ -116,7 +117,6 @@ class PGVectorStore(BaseVectorStore):
 
     def _ensure_schema(self):
         """确保 pgvector 扩展、表、索引存在。"""
-        from sqlalchemy import text
 
         dim = self.params.embedding_dimension
         table = self._table_name
@@ -185,8 +185,6 @@ class PGVectorStore(BaseVectorStore):
         if not nodes:
             return []
 
-        from sqlalchemy import text
-
         expected_dim = self.params.embedding_dimension
         ids = []
         rows = []
@@ -252,7 +250,6 @@ class PGVectorStore(BaseVectorStore):
         metadata_filter: dict[str, Any] | None = None,
         **kwargs,
     ) -> list[TextNode]:
-        from sqlalchemy import text
 
         table = self._table_name
         vec_literal = str(query_vector)
@@ -296,8 +293,6 @@ class PGVectorStore(BaseVectorStore):
         if not node_ids:
             return True
 
-        from sqlalchemy import text
-
         table = self._table_name
         try:
             with self._engine.connect() as conn:
@@ -331,7 +326,6 @@ class PGVectorStore(BaseVectorStore):
         使用 DELETE ... RETURNING 合并为单次查询。
         失败时抛 RuntimeError 而非静默返回 0，确保调用方可感知。
         """
-        from sqlalchemy import text
 
         table = self._table_name
         where_clause, where_params = self._build_metadata_filter(metadata_filter)
@@ -364,8 +358,6 @@ class PGVectorStore(BaseVectorStore):
         if cached is not None:
             return cached
 
-        from sqlalchemy import text
-
         table = self._table_name
         try:
             with self._engine.connect() as conn:
@@ -396,7 +388,6 @@ class PGVectorStore(BaseVectorStore):
         self, metadata_filter: dict[str, Any], **kwargs
     ) -> list[TextNode]:
         """按元数据查询。不缓存：调用方（ingest 去重、constructor）可能修改返回节点。"""
-        from sqlalchemy import text
 
         table = self._table_name
         where_clause, where_params = self._build_metadata_filter(metadata_filter)
@@ -439,8 +430,6 @@ class PGVectorStore(BaseVectorStore):
         if len(filters) == 1:
             return self.get_by_metadata(filters[0])
 
-        from sqlalchemy import text
-
         table = self._table_name
         try:
             # 构建 OR 条件的 WHERE 子句
@@ -474,7 +463,6 @@ class PGVectorStore(BaseVectorStore):
             return []
 
     def count(self, **kwargs) -> int:
-        from sqlalchemy import text
 
         try:
             with self._engine.connect() as conn:
@@ -489,7 +477,6 @@ class PGVectorStore(BaseVectorStore):
             return 0
 
     def clear(self, **kwargs) -> bool:
-        from sqlalchemy import text
 
         try:
             with self._engine.connect() as conn:
@@ -524,7 +511,6 @@ class PGVectorStore(BaseVectorStore):
     # ── 生命周期 ────────────────────────────────────────────────────
 
     def health_check(self) -> bool:
-        from sqlalchemy import text
 
         try:
             with self._engine.connect() as conn:

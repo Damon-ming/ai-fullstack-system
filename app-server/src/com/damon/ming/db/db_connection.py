@@ -13,6 +13,7 @@
 
 import time
 
+from sqlalchemy import text
 from src.com.damon.ming.db.db_config import DbConfig
 from src.com.damon.ming.exception import DatabaseError
 from src.com.damon.ming.log import pin
@@ -110,8 +111,6 @@ class DbConnection:
                 biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
             )
 
-        from sqlalchemy import text
-
         retry = retry if retry is not None else self._config.retry_count
         backoff = self._config.backoff_seconds
 
@@ -157,8 +156,6 @@ class DbConnection:
                 "DbConnection 未初始化。请先调用 initialize()。",
                 biz_code=ErrorCode.SYSTEM.DATABASE_FAILURE,
             )
-
-        from sqlalchemy import text
 
         retry = retry if retry is not None else self._config.retry_count
         backoff = self._config.backoff_seconds
