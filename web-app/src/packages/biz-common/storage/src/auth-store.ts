@@ -33,6 +33,10 @@ export function clearDeviceId(): void {
 // 会话上下文（token + session_id 原子读写）
 // ---------------------------------------------------------------------------
 
+// SECURITY: 存储在 localStorage，同域 JS 可读（P1-14）。
+// XSS 漏洞可直接窃取 token → 防御重心是防 XSS（react-markdown v9 默认转义 HTML +
+// 无第三方脚本 + 内部部署，XSS 攻击面小）。token TTL 90 天硬上限限制泄露窗口。
+// 上公网 + HTTPS 时评估迁移到 HttpOnly Cookie。
 const SESSION_CONTEXT_KEY = "__session_context__";
 
 export interface SessionContext {

@@ -181,6 +181,14 @@ class UploadService:
 
             content = b"".join(chunks)
 
+            # TODO: P1-8 文件上传仅校验扩展名，可上传伪装文件。
+            # 当前架构下风险可控：文件以 UUID 命名存盘、不经 Web 根目录、
+            # 不被浏览器渲染、仅供后端解析器消费。
+            # 上公网时加 python-magic 做内容嗅探（magic bytes 校验）：
+            #   _MAGIC = {".pdf": b"%PDF", ".docx": b"PK\x03\x04", ...}
+            #   if suffix in _MAGIC and not content.startswith(_MAGIC[suffix]): reject
+            # 文本格式（md/txt/csv/html）无可靠 magic bytes，跳过。
+
             # 总量上限校验（所有文件合计）
             total_uploaded += len(content)
             if total_uploaded > upload_config.max_total_upload_size:

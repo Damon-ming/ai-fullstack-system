@@ -1,6 +1,10 @@
 // web-app/src/packages/features/chat-chatroom/src/ui/ChatChatroom.tsx
 
 import React, { useRef, useEffect, useState } from "react";
+// SECURITY: react-markdown v9 默认不渲染原始 HTML（<script> 等被转义为纯文本），
+// 因此当前配置下反射型 XSS 不成立（P1-12 评估通过）。
+// 禁止添加 rehype-raw 插件——它会绕过 HTML 转义，引入 XSS 漏洞。
+// 上公网时考虑加 rehype-sanitize 做白名单纵深防御。
 import ReactMarkdown from "react-markdown";
 import { useChatMessageStateHook } from "../hook/useChatMessageStateHook";
 import { useChatSendStreamHook } from "../hook/useChatSendStreamHook";
@@ -29,9 +33,7 @@ function MessageBody({
     return (
       <span aria-label={t("reasoningAria")}>
         {t("reasoning")}
-        <span className="inline-flex min-w-[1.2em] animate-pulse">
-          ...
-        </span>
+        <span className="inline-flex min-w-[1.2em] animate-pulse">...</span>
       </span>
     );
   }
@@ -63,9 +65,7 @@ function MessageBody({
                 ▶
               </span>
               <span className="font-medium">
-                {message.isReasoning
-                  ? t("reasoning")
-                  : t("reasoningProcess")}
+                {message.isReasoning ? t("reasoning") : t("reasoningProcess")}
               </span>
               {message.isReasoning && (
                 <span className="inline-flex min-w-[1.2em] animate-pulse text-gray-400">
@@ -88,14 +88,12 @@ function MessageBody({
   }
 
   // 分支 3：用户消息 —— 纯文本
-  return (
-    <span className="whitespace-pre-wrap">{message.text}</span>
-  );
+  return <span className="whitespace-pre-wrap">{message.text}</span>;
 }
 
 export const ChatChatroom: React.FC = () => {
   const { t } = useTranslation("chat-chatroom");
-  const { input, setInput, sending, messages, reason, setReason } =
+  const { input, setInput, sending, messages, setMessages, reason, setReason } =
     useChatMessageStateHook();
   const { sendStream, abortStream } = useChatSendStreamHook();
   const send = sendStream;
@@ -214,7 +212,9 @@ export const ChatChatroom: React.FC = () => {
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-400">
                       {message.createdAt && (
                         <span className="rounded-md bg-gray-50 px-2 py-1">
-                          {new Date(message.createdAt * 1000).toLocaleTimeString()}
+                          {new Date(
+                            message.createdAt * 1000,
+                          ).toLocaleTimeString()}
                         </span>
                       )}
                       {message.traceId && (
@@ -231,7 +231,9 @@ export const ChatChatroom: React.FC = () => {
                 <button
                   type="button"
                   aria-label={t("copy")}
-                  title={copiedMessageId === message.id ? t("copied") : t("copy")}
+                  title={
+                    copiedMessageId === message.id ? t("copied") : t("copy")
+                  }
                   onClick={() => void copyMessage(message.text, message.id)}
                   className={`absolute bottom-1 flex h-7 w-7 items-center justify-center rounded-md text-gray-400 opacity-0 transition-all duration-150 hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100 focus-visible:opacity-100 ${
                     message.role === "user" ? "-left-9" : "-right-9"
@@ -270,13 +272,15 @@ export const ChatChatroom: React.FC = () => {
               type="button"
               onClick={() => setReason(!reason)}
               className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                reasoning
+                reason
                   ? "bg-purple-100 text-purple-700 ring-1 ring-purple-300"
                   : "bg-gray-100 text-gray-500 hover:bg-gray-200"
               }`}
               title={t("reasonToggle")}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${reason ? "bg-purple-500" : "bg-gray-400"}`} />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${reason ? "bg-purple-500" : "bg-gray-400"}`}
+              />
               {t("reasonToggle")}
             </button>
           </div>
