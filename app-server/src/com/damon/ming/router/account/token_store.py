@@ -38,8 +38,15 @@ logger = pin("account.store")
 # ---------------------------------------------------------------------------
 # 常量
 # ---------------------------------------------------------------------------
-# todo
+# SECURITY: token TTL 常量（P1-7 修复）
 SESSION_TTL = timedelta(days=30)  # 会话有效期
+TOKEN_TTL = timedelta(days=30)  # token 滚动过期：30 天不活跃则失效
+TOKEN_HARD_TTL = timedelta(days=90)  # token 绝对过期：90 天强制重新登录
+
+# 首次部署时执行一次迁移（已有 users 表无 expires_at 列）：
+#   ALTER TABLE users
+#     ADD COLUMN expires_at TIMESTAMP NOT NULL DEFAULT NOW() + INTERVAL '30 days',
+#     ADD COLUMN hard_expires_at TIMESTAMP NOT NULL DEFAULT NOW() + INTERVAL '90 days';
 
 
 # ---------------------------------------------------------------------------
@@ -74,14 +81,20 @@ def get_phone_by_token(token: str) -> str | None:
 
 
 def is_token_valid(token: str) -> bool:
-    """检查 token 是否存在。"""
+    """检查 token 是否存在且未过期（滚动 TTL + 绝对 TTL 双重检查）。"""
     with _db().engine.connect() as conn:
-        result = conn.execute(users.select().where(users.c.token == token))
+        result = conn.execute(
+            users.select().where(
+                users.c.token == token,
+                users.c.expires_at > text("NOW()"),
+                users.c.hard_expires_at > text("NOW()"),
+            )
+        )
         return result.fetchone() is not None
 
 
 def bind_token(phone: str, token: str) -> str:
-    """绑定 phone → token 映射。
+    """绑定 phone → token 映射，写入初始 TTL。
 
     采用 INSERT 优先策略：先尝试插入，phone 冲突时 DO NOTHING，
     然后查出当前绑定的 token 返回。并发场景下竞争失败方不会 500，
@@ -90,7 +103,8 @@ def bind_token(phone: str, token: str) -> str:
     返回最终生效的 token（自己或竞争者的）。
     """
     _db().execute(
-        "INSERT INTO users (token, phone, name, created_at) VALUES (%s, %s, '', %s) "
+        "INSERT INTO users (token, phone, name, created_at, expires_at, hard_expires_at) "
+        "VALUES (%s, %s, '', %s, NOW() + INTERVAL '30 days', NOW() + INTERVAL '90 days') "
         "ON CONFLICT (phone) DO NOTHING",
         (token, phone, now()),
         commit=True,
@@ -310,6 +324,26 @@ def create_or_refresh_session(token: str, device_id: str, ua_hash: str = "") -> 
         )
 
     return session_id
+
+
+def refresh_token_ttl(token: str) -> None:
+    """刷新 token 的滚动过期时间（登录成功时调用）。
+
+    仅更新 expires_at（滚动 TTL），不更新 hard_expires_at（绝对 TTL）。
+    即使用户持续活跃，90 天后也必须重新登录。
+
+    TODO: 当前 token 值不变（phone 1:1 绑定），仅靠 TTL 兜底。
+      若要缩短被盗窗口至"下次登录即失效"，需引入多 token 表：
+      新建 tokens 表 (token, phone, device_id, expires_at, hard_expires_at)，
+      每次登录生成新 token 行不覆盖旧值，各设备独立持有 token。
+      届时 refresh_token_ttl 改为 INSERT 新行 + 清理过期行，
+      is_token_valid 改为查 tokens 表。
+    """
+    _db().execute(
+        "UPDATE users SET expires_at = NOW() + INTERVAL '30 days' WHERE token = :tok",
+        {"tok": token},
+        commit=True,
+    )
 
 
 def revoke_sessions_by_token(token: str) -> int:

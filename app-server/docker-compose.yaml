@@ -13,8 +13,10 @@ services:
     image: postgres:16-alpine
     container_name: app-postgres
     restart: always
-    ports:
-      - "5432:5432"
+    # SECURITY: 仅暴露给 Docker 内部网络，不映射到宿主机端口（P1-6 修复）
+    # 容器名 postgres 在 ai-network 内可正常解析，app-server 不受影响
+    expose:
+      - "5432"
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}

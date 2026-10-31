@@ -41,6 +41,7 @@ from src.com.damon.ming.router.account.token_store import (
     get_token_by_phone,
     get_user_profile,
     is_token_valid,
+    refresh_token_ttl,
     register_device,
     update_user_name,
 )
@@ -91,6 +92,9 @@ async def login(body: TokenRequest, request: Request):
 
     # 5. 创建/刷新会话（原子操作：过期旧会话 + 插入新会话）
     session_id = create_or_refresh_session(existing_token, device_id, ua_hash)
+
+    # 6. SECURITY: 登录成功，刷新 token 滚动 TTL（P1-7 修复）
+    refresh_token_ttl(existing_token)
 
     logger.info(
         "登录完成 | phone=%s device_id=%s session_id=%s",

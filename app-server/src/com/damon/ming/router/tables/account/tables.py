@@ -25,6 +25,11 @@ users = Table(
     Column("phone", String(32), nullable=False, unique=True),
     Column("name", String(64), nullable=False, server_default=""),
     Column("created_at", nullable=False, server_default=_NOW),
+    # SECURITY: token TTL（P1-7 修复）
+    # expires_at — 滚动过期：30 天不活跃则失效
+    # hard_expires_at — 绝对过期：90 天强制重新登录
+    Column("expires_at", nullable=False),
+    Column("hard_expires_at", nullable=False),
 )
 
 
@@ -34,6 +39,8 @@ class UserRow:
     phone: str
     name: str = ""
     created_at: datetime | None = None
+    expires_at: datetime | None = None
+    hard_expires_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
