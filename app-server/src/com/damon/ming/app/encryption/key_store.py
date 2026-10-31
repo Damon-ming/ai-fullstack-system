@@ -136,9 +136,10 @@ class PgKeyStore(BaseKeyStore):
             encryption_sessions.c.key_id == key_id,
             encryption_sessions.c.expires_at > text("NOW()"),
         )
-        # 归属校验：session_id 非空时仅返回属于该 session_id 的记录
-        if session_id:
-            query = query.where(encryption_sessions.c.session_id == session_id)
+        # SECURITY: 拒绝空 session_id，始终执行归属过滤（P1-1 修复）
+        if not session_id:
+            return None
+        query = query.where(encryption_sessions.c.session_id == session_id)
         with self._db.engine.connect() as conn:
             result = conn.execute(query)
             row = result.fetchone()

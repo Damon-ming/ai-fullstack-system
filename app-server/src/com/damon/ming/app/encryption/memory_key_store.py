@@ -42,8 +42,10 @@ class MemoryKeyStore(BaseKeyStore):
             if session.is_expired:
                 del self._sessions[key_id]
                 return None
-            # 归属校验：调用者传了 session_id 且记录有 session_id 时必须匹配
-            if session_id and session.session_id and session.session_id != session_id:
+            # SECURITY: 拒绝空 session_id，始终执行归属校验（P1-1 修复）
+            if not session_id:
+                return None
+            if session.session_id and session.session_id != session_id:
                 return None
             return session
 

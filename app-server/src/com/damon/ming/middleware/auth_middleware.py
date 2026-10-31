@@ -80,7 +80,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         phone = get_phone_by_token(ctx.token)
 
-        # 3. 校验 session_id
+        # 3. 校验 session_id（SECURITY: 受保护路由强制要求非空 session_id，
+        #    防止空 session_id 绕过加密归属校验 —— P1-1 修复）
+        if not ctx.session_id:
+            logger.warning(
+                "认证失败: 缺少 session_id | path=%s phone_prefix=%s",
+                request.url.path,
+                phone[:3] + "***" if phone else "unknown",
+            )
+            return JSONResponse(
+                status_code=401,
+                content=BaseFailedResponse(
+                    code=ErrorCode.AUTH.MISSING_SESSION,
+                    data=BaseBizFailedData(
+                        error_msg=t(I18nKey.AUTH_INVALID_SESSION)
+                    ),
+                ).model_dump(),
+            )
         if ctx.session_id:
             session = get_session(ctx.session_id)
             if session is None:

@@ -176,6 +176,13 @@ class SessionService:
             session_id: 业务 session_id。非空时执行归属校验，
                         仅返回属于该 session_id 的密钥（防跨用户密钥泄露）。
         """
+        # SECURITY: 拒绝空 session_id，防止绕过归属校验（P1-1 修复）
+        if not session_id:
+            logger.warning(
+                "加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12]
+            )
+            return None
+
         # 1. 内存查找
         with self._lock:
             session = self._sessions.get(key_id)
@@ -184,17 +191,16 @@ class SessionService:
                     del self._sessions[key_id]
                     self._key_to_session.pop(key_id, None)
                     return None
-                # 归属校验：调用者传了 session_id 时，检查内存映射
-                if session_id:
-                    owner = self._key_to_session.get(key_id)
-                    if owner and owner != session_id:
-                        logger.warning(
-                            "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
-                            key_id[:12],
-                            owner[:8],
-                            session_id[:8],
-                        )
-                        return None
+                # 归属校验：检查内存映射
+                owner = self._key_to_session.get(key_id)
+                if owner and owner != session_id:
+                    logger.warning(
+                        "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
+                        key_id[:12],
+                        owner[:8],
+                        session_id[:8],
+                    )
+                    return None
                 session.touch()
                 return session
 
@@ -236,6 +242,13 @@ class SessionService:
             session_id: 业务 session_id。非空时执行归属校验，
                         仅返回属于该 session_id 的密钥（防跨用户密钥泄露）。
         """
+        # SECURITY: 拒绝空 session_id，防止绕过归属校验（P1-1 修复）
+        if not session_id:
+            logger.warning(
+                "加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12]
+            )
+            return None
+
         # 1. 内存查找（同步，极快，锁内仅 dict 操作）
         with self._lock:
             session = self._sessions.get(key_id)
@@ -244,16 +257,16 @@ class SessionService:
                     del self._sessions[key_id]
                     self._key_to_session.pop(key_id, None)
                     return None
-                if session_id:
-                    owner = self._key_to_session.get(key_id)
-                    if owner and owner != session_id:
-                        logger.warning(
-                            "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
-                            key_id[:12],
-                            owner[:8],
-                            session_id[:8],
-                        )
-                        return None
+                # 归属校验：检查内存映射
+                owner = self._key_to_session.get(key_id)
+                if owner and owner != session_id:
+                    logger.warning(
+                        "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
+                        key_id[:12],
+                        owner[:8],
+                        session_id[:8],
+                    )
+                    return None
                 session.touch()
                 return session
 
