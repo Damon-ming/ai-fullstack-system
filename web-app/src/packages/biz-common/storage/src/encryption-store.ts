@@ -30,6 +30,11 @@ interface StorableEncryptionSession {
 export async function setEncryptionSession(
   session: EncryptionSession,
 ): Promise<void> {
+  // SECURITY: P1-15 AES 密钥以 raw hex 明文存 localStorage。
+  // XSS 可读取后解密全部加密通信 / 伪造签名。
+  // 当前依赖 React 默认 XSS 防护 + nginx CSP（预留，等 HTTPS 部署时启用）。
+  // 上公网时评估 non-extractable CryptoKey（extractable=false）+ 每次刷新重交换密钥，
+  // 但需处理多 tab 断连 / 服务端 session 膨胀 / 离线不可用等副作用。
   const rawKeyBuffer = await crypto.subtle.exportKey("raw", session.aesKey);
   const storable: StorableEncryptionSession = {
     keyId: session.keyId,
