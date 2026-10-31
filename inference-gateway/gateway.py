@@ -2,7 +2,7 @@
 """
 vLLM API Gateway —— 按 API key 路由推理请求。
 
-配置来源：/etc/gateway/gateway.yaml（路由表，Dockerfile 构建时烘焙进镜像）
+配置来源：/etc/gateway/gateway.yaml（路由表，运行时 bind mount 挂载）
 启动时读取，无需硬编码。
 
 职责：
@@ -10,6 +10,7 @@ vLLM API Gateway —— 按 API key 路由推理请求。
   - 根据 key 映射到对应的上游推理实例
   - 各上游只加载一个模型，无需 gateway 注入 model
   - 透传 OpenAI 兼容接口
+  - 每个上游实例使用独立的 upstream_key，避免单密钥全局复用
 """
 
 import json
@@ -31,15 +32,15 @@ _CONFIG_PATH = os.environ.get(
 )
 _MAX_BODY_SIZE = int(os.environ.get("GATEWAY_MAX_BODY_SIZE", "10485760"))  # 10MB
 
-ROUTING_TABLE: dict[str, str] = {}  # api_key → upstream_base
-UPSTREAM_KEY: str = "akUpstream"
+# api_key → {upstream_base, upstream_key}（每实例独立密钥，P0-4 修复）
+ROUTING_TABLE: dict[str, dict] = {}
 
 # ── 共享连接池 ────────────────────────────────────────────────────
 _http_client: httpx.AsyncClient | None = None
 
 
 def _load_config() -> None:
-    """从 gateway.yaml 加载路由表。"""
+    """从 gateway.yaml 加载路由表（含每实例独立 upstream_key）。"""
     if not os.path.exists(_CONFIG_PATH):
         raise FileNotFoundError(f"网关配置文件不存在: {_CONFIG_PATH}")
 
@@ -49,13 +50,19 @@ def _load_config() -> None:
     if not cfg or "routes" not in cfg:
         raise ValueError(f"配置格式错误，缺少 routes: {_CONFIG_PATH}")
 
-    global UPSTREAM_KEY
-    UPSTREAM_KEY = cfg.get("upstream_key", "akUpstream")
-
     for api_key, route_cfg in cfg["routes"].items():
         upstream = route_cfg.get("upstream", "")
+        upstream_key = route_cfg.get("upstream_key", "")
         if api_key and upstream:
-            ROUTING_TABLE[api_key] = upstream
+            if not upstream_key:
+                raise ValueError(
+                    f"路由 {api_key} 缺少 upstream_key，"
+                    f"每个实例必须配置独立密钥（P0-4 安全要求）"
+                )
+            ROUTING_TABLE[api_key] = {
+                "upstream": upstream,
+                "upstream_key": upstream_key,
+            }
 
 
 _load_config()
@@ -98,7 +105,9 @@ async def proxy(request: Request):
     if not api_key or api_key not in ROUTING_TABLE:
         raise HTTPException(status_code=401, detail="无效的 API key")
 
-    upstream_base = ROUTING_TABLE[api_key]
+    route = ROUTING_TABLE[api_key]
+    upstream_base = route["upstream"]
+    upstream_key = route["upstream_key"]
 
     target_url = f"{upstream_base}{request.url.path}"
     if request.url.query:
@@ -112,13 +121,14 @@ async def proxy(request: Request):
     upstream_headers.pop("host", None)
     upstream_headers.pop("content-length", None)
     upstream_headers.pop("authorization", None)
-    upstream_headers["Authorization"] = f"Bearer {UPSTREAM_KEY}"
+    upstream_headers["Authorization"] = f"Bearer {upstream_key}"
 
     is_stream = False
     if request.method == "POST" and body:
         try:
             is_stream = json.loads(body).get("stream", False)
-        except Exception:
+        except (json.JSONDecodeError, AttributeError):
+            # 非 JSON body 或 JSON 不是 dict → 默认非流式
             pass
 
     if is_stream:

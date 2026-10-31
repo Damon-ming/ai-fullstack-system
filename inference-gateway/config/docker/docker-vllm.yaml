@@ -25,7 +25,7 @@ services:
       --trust-remote-code
       --gpu-memory-utilization 0.7
       --max-model-len 8192
-      --api-key akUpstream
+      --api-key uk_pool_001
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -52,7 +52,7 @@ services:
       --trust-remote-code
       --gpu-memory-utilization 0.3
       --max-model-len 2048
-      --api-key akUpstream
+      --api-key uk_pool_002
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -79,7 +79,7 @@ services:
       --trust-remote-code
       --gpu-memory-utilization 0.4
       --max-model-len 4096
-      --api-key akUpstream
+      --api-key uk_pool_003
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -106,7 +106,7 @@ services:
       --trust-remote-code
       --gpu-memory-utilization 0.4
       --max-model-len 4096
-      --api-key akUpstream
+      --api-key uk_pool_004
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -133,7 +133,7 @@ services:
       --trust-remote-code
       --gpu-memory-utilization 0.3
       --max-model-len 4096
-      --api-key akUpstream
+      --api-key uk_pool_005
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s

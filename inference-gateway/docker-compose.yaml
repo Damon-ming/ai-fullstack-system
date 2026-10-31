@@ -5,7 +5,9 @@
 #   INFERENCE_SERVER=ollama  → 启动 Ollama 容器（默认）
 #   INFERENCE_SERVER=vllm    → 启动 vLLM 集群
 #
-# 网关配置（路由表）烘焙进镜像，运行时不可变。
+# 网关配置（路由表）通过 bind mount 运行时挂载，不烘焙进镜像。
+# 原因：gateway.yaml 含明文路由 key（ak_pool_*），避免 key 进镜像层随镜像分发泄露。
+# 若改为 COPY 进 Dockerfile，请先评估镜像是否会上传公共/共享仓库。
 # 推理后端配置在本目录 config/docker/ 下。
 # ai-network 在根 docker-compose.yaml 统一声明，此处不再重复定义。
 
@@ -20,6 +22,10 @@ services:
     restart: always
     expose:
       - "8080"
+    volumes:
+      # SECURITY: 路由配置含明文 ak_pool_* key，bind mount 只读挂载，
+      # 不烘焙进镜像层，防止随镜像分发泄露。
+      - ./config/gateway.yaml:/etc/gateway/gateway.yaml:ro
     networks:
       - ai-network
     healthcheck:

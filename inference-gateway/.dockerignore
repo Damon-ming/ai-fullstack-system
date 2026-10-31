@@ -3,3 +3,7 @@ __pycache__/
 .git/
 .gitignore
 *.md
+
+# SECURITY: gateway.yaml 含明文路由 key（ak_pool_*），
+# 不烘焙进镜像层，通过 docker-compose bind mount 运行时挂载。
+config/gateway.yaml

@@ -7,9 +7,13 @@ WORKDIR /gateway
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制网关代码 + 配置（gateway.yaml 烘焙进镜像，运行时不可变）
+# 复制网关代码
 COPY gateway.py .
-COPY config/gateway.yaml /etc/gateway/gateway.yaml
+
+# SECURITY: gateway.yaml 包含明文路由 key（ak_pool_*），不烘焙进镜像层。
+# 通过 docker-compose.yaml 的 bind mount 在运行时以只读方式挂载，
+# 防止 key 随镜像分发（docker push / docker save）泄露。
+# 若恢复 COPY，请先评估镜像是否会上传公共/共享仓库。
 
 EXPOSE 8080
 

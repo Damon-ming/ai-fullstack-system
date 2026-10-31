@@ -4,23 +4,30 @@
 # 路由层不感知业务语义，只认 api_key → upstream 映射。
 # 各 vLLM 实例只加载一个模型，路由表决定哪张"门禁卡"进哪个实例。
 #
+# SECURITY: 每个 vLLM 实例使用独立的 upstream_key，
+# 避免单密钥泄露导致全部 5 个实例沦陷（P0-4 修复）。
+# upstream_key 与 docker-vllm.yaml 中的 --api-key 一一对应。
+#
 # INFERENCE_SERVER=vllm  → 使用本文件
 # INFERENCE_SERVER=ollama → 不使用 gateway
-
-upstream_key: akUpstream
 
 routes:
   ak_pool_001:
     upstream: http://vllm-pool-1:8000
+    upstream_key: uk_pool_001
 
   ak_pool_002:
     upstream: http://vllm-pool-2:8000
+    upstream_key: uk_pool_002
 
   ak_pool_003:
     upstream: http://vllm-pool-3:8000
+    upstream_key: uk_pool_003
 
   ak_pool_004:
     upstream: http://vllm-pool-4:8000
+    upstream_key: uk_pool_004
 
   ak_pool_005:
     upstream: http://vllm-pool-5:8000
+    upstream_key: uk_pool_005
