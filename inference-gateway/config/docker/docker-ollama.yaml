@@ -6,17 +6,17 @@ services:
     image: ollama/ollama:0.32.14
     container_name: ollama-server
     restart: always
-    ports:
-      # SECURITY: P1-17 Ollama 无认证，11434 映射到宿主机所有网卡。
-      # 内网可接受；上公网前应改为 expose: ["11434"]，仅 ai-network 内部可达。
-      # 同时考虑 OLLAMA_HOST 收紧为容器内网 IP、OLLAMA_ORIGINS 清空。
-      - "11434:11434"
+    expose:
+      # SECURITY: P1-17/P1-28 改为 expose，仅 ai-network 内部可达。
+      # Ollama 无认证，切断宿主机/外部直接访问。
+      # OLLAMA_HOST 保持 0.0.0.0（容器内网需要），ORIGINS 清空（网关已处理 CORS）。
+      - "11434"
     volumes:
       - ${DATA_DIR}/ollama/.ollama:/root/.ollama
     runtime: nvidia
     environment:
       OLLAMA_HOST: 0.0.0.0
-      OLLAMA_ORIGINS: "*"
+      OLLAMA_ORIGINS: ""
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     networks:
