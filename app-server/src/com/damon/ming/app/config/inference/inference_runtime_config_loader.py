@@ -48,10 +48,6 @@ _RUNTIME_CONFIG_PATH = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "inference-runtime.yaml")
 )
 
-# ── 环境变量覆盖模式 ──────────────────────────────────────────────────
-# CHAT_TEMPERATURE=0.5  -> 覆盖 chat 角色的 temperature
-# 格式：{ROLE_UPPER}_{PARAM}
-
 # api_key 完全由环境变量注入，不设默认值。
 # 未配置的角色在 load_all() 中明确报错。
 
@@ -142,23 +138,6 @@ _COMMON_FIELDS = (
 # ═══════════════════════════════════════════════════════════════════════
 # 环境变量覆盖
 # ═══════════════════════════════════════════════════════════════════════
-
-
-def _apply_env_overrides(role: str, options: dict[str, Any]) -> dict[str, Any]:
-    """应用环境变量覆盖（格式：{ROLE_UPPER}_{PARAM}）。"""
-    result = dict(options)
-    role_upper = role.upper()
-    for param in ("temperature", "top_p", "max_tokens"):
-        env_key = f"{role_upper}_{param.upper()}"
-        env_val = os.environ.get(env_key)
-        if env_val is not None:
-            # 尝试保持原类型
-            original_type = type(options[param])
-            try:
-                result[param] = original_type(env_val)
-            except (ValueError, TypeError):
-                result[param] = env_val
-    return result
 
 
 def _resolve_api_keys() -> dict[str, str]:
@@ -258,9 +237,8 @@ class InferenceConfigLoader:
                 )
                 self._engines[engine_key] = impl_cls(params)
 
-            # 模型参数来自 inference-runtime.yaml + 环境变量覆盖
-            raw_options = {k: v for k, v in role_params.items()}
-            options = _apply_env_overrides(role, raw_options)
+            # 模型参数来自 inference-runtime.yaml
+            options = dict(role_params.items())
 
             self._models[role] = ModelEntry(
                 model_name=role,  # 网关模式下 model 由 gateway 注入，这里用 role 占位

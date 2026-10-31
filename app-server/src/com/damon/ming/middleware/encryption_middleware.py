@@ -151,13 +151,20 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
     # ── nonce 重放防护缓存 ──────────────────────────────────────────
     # key = "session_key_id:nonce", value = 首次接收时间戳（秒）
     _nonce_cache: ClassVar[OrderedDict[str, float]] = OrderedDict()
-    _nonce_cache_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
+    _nonce_cache_lock: ClassVar[asyncio.Lock | None] = None
     _NONCE_TTL_SECONDS: ClassVar[int] = 600  # 10 分钟（2 × 5 分钟签名容差）
     _NONCE_CACHE_MAX: ClassVar[int] = 10_000  # LRU 上限
     _NONCE_EVICT_RATIO: ClassVar[float] = 0.2  # 超限时淘汰最老的 20%
 
     def __init__(self, app: ASGIApp):
         super().__init__(app)
+
+    @classmethod
+    def _ensure_lock(cls) -> asyncio.Lock:
+        """惰性创建 nonce 缓存锁（首次请求时绑定到当前事件循环）。"""
+        if cls._nonce_cache_lock is None:
+            cls._nonce_cache_lock = asyncio.Lock()
+        return cls._nonce_cache_lock
 
     @classmethod
     async def _check_and_store_nonce(cls, session_key_id: str, nonce: str) -> bool:
@@ -172,7 +179,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         cache_key = f"{session_key_id}:{nonce}"
         now = time.time()
 
-        async with cls._nonce_cache_lock:
+        async with cls._ensure_lock():
             # 检查是否存在且未过期
             if cache_key in cls._nonce_cache:
                 first_seen = cls._nonce_cache[cache_key]
@@ -240,6 +247,8 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                         session = await self._decrypt_and_verify_json(
                             request, sm, body_json
                         )
+                        if isinstance(session, Response):
+                            return session
                         if session is None:
                             return JSONResponse(
                                 status_code=401,
@@ -267,6 +276,8 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         elif "multipart/form-data" in content_type:
             try:
                 session = await self._decrypt_and_verify_formdata(request, sm)
+                if isinstance(session, Response):
+                    return session
                 if session is None:
                     return JSONResponse(
                         status_code=401,
@@ -304,7 +315,13 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
     async def _decrypt_and_verify_json(
         self, request: Request, sm, body_json: dict
     ) -> SessionKey | None:
-        """解密 JSON 请求并验证签名。返回 session 或 None。"""
+        """解密 JSON 请求并验证签名。
+
+        返回:
+          SessionKey  — 验证全部通过
+          None        — 会话失效或签名错误（由调用方返回 SESSION_INVALID）
+          JSONResponse — 空 nonce 或重放命中（已构建好的错误响应，调用方应直接返回）
+        """
         key_id = body_json.get("keyId", "")
         session = await sm.get_session_async(
             key_id, session_id=request.state.ctx.session_id
@@ -338,20 +355,19 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
-        # 返回 None 而非 JSONResponse，使调用方 `if session is None` 正确拦截
         nonce = decrypted_json.get("nonce", "")
         if not nonce:
             logger.warning(
                 "JSON 请求空 nonce 拒绝 | key_id=%s", session.key_id[:12] + "..."
             )
-            return None
+            return _empty_nonce_response()
         if not await self._check_and_store_nonce(session.key_id, nonce):
             logger.warning(
                 "JSON 请求重放拦截 | key_id=%s | nonce=%s",
                 session.key_id[:12] + "...",
                 nonce[:16] + "...",
             )
-            return None
+            return _replay_response()
 
         _patch_request_body(request, decrypted_str)
         request.state.enc_session = session
@@ -361,7 +377,13 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
     async def _decrypt_and_verify_formdata(
         self, request: Request, sm
     ) -> SessionKey | None:
-        """解密 FormData 的 meta_json_encrypted 并验证签名。"""
+        """解密 FormData 的 meta_json_encrypted 并验证签名。
+
+        返回:
+          SessionKey  — 验证全部通过
+          None        — 会话失效或签名错误（由调用方返回 SESSION_INVALID）
+          JSONResponse — 空 nonce 或重放命中（已构建好的错误响应，调用方应直接返回）
+        """
         form = await request.form()
         meta_encrypted_str = form.get("meta_json_encrypted")
         timestamp = int(form.get("timestamp", 0))
@@ -408,19 +430,18 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         # nonce 重放防护（签名通过后检查，确保同一请求不被重复执行）
-        # 返回 None 而非 JSONResponse，使调用方 `if session is None` 正确拦截
         if not nonce:
             logger.warning(
                 "FormData 请求空 nonce 拒绝 | key_id=%s", session.key_id[:12] + "..."
             )
-            return None
+            return _empty_nonce_response()
         if not await self._check_and_store_nonce(session.key_id, nonce):
             logger.warning(
                 "FormData 请求重放拦截 | key_id=%s | nonce=%s",
                 session.key_id[:12] + "...",
                 nonce[:16] + "...",
             )
-            return None
+            return _replay_response()
 
         # 将解密后的 meta 注入 request.state，供路由读取
         request.state.decrypted_meta = meta

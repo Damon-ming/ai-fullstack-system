@@ -13,6 +13,7 @@ vLLM API Gateway —— 按 API key 路由推理请求。
 """
 
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -20,6 +21,8 @@ import httpx
 import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+
+logger = logging.getLogger("gateway")
 
 # ── 配置路径 ──────────────────────────────────────────────────────
 _CONFIG_PATH = os.environ.get(
@@ -121,19 +124,36 @@ async def proxy(request: Request):
     if is_stream:
 
         async def stream_generator():
-            async with _http_client.stream(
-                method=request.method,
-                url=target_url,
-                content=body,
-                headers=upstream_headers,
-            ) as resp:
-                async for chunk in resp.aiter_bytes():
-                    yield chunk
+            try:
+                async with _http_client.stream(
+                    method=request.method,
+                    url=target_url,
+                    content=body,
+                    headers=upstream_headers,
+                ) as resp:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+            except (httpx.TimeoutException, httpx.ReadTimeout):
+                logger.warning(
+                    "流式上游超时 | upstream=%s | path=%s",
+                    upstream_base,
+                    request.url.path,
+                )
+                yield 'event: error\ndata: {"type":"upstream_timeout","message":"上游服务响应超时，请重试"}\n\n'.encode()
+            except httpx.HTTPError as e:
+                logger.warning(
+                    "流式上游异常 | upstream=%s | error=%s", upstream_base, e
+                )
+                yield f'event: error\ndata: {{"type":"upstream_error","message":"{e!s}"}}\n\n'.encode()
+            except Exception as e:
+                logger.error(
+                    "流式转发未知异常 | upstream=%s | error=%s", upstream_base, e
+                )
+                yield 'event: error\ndata: {"type":"gateway_error","message":"网关内部错误"}\n\n'.encode()
 
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
-    # 非流式：失败时重试 1 次
-    last_error: Exception | None = None
+    # 非流式：连接失败时重试 1 次
     for attempt in range(2):
         try:
             resp = await _http_client.request(
@@ -143,8 +163,7 @@ async def proxy(request: Request):
                 headers=upstream_headers,
             )
             break
-        except httpx.ConnectError as e:
-            last_error = e
+        except httpx.ConnectError:
             if attempt == 0:
                 continue
             raise HTTPException(
@@ -152,9 +171,6 @@ async def proxy(request: Request):
             )
         except httpx.TimeoutException:
             raise HTTPException(status_code=504, detail="上游服务超时")
-    else:
-        # 重试耗尽但没 break（理论上不会到这里）
-        raise HTTPException(status_code=502, detail=f"上游服务不可达: {upstream_base}")
 
     excluded_headers = {"transfer-encoding", "connection", "content-length"}
     response_headers = {

@@ -149,11 +149,13 @@ def save_history(
     conversation_id = str(uuid.uuid4())
 
     # UPSERT：并发时一个成功 INSERT，另一个走 ON CONFLICT UPDATE
-    _db().execute(
+    # RETURNING id 一次往返拿到实际 id（UPDATE 时返回旧 id，INSERT 时返回新 uuid）
+    rows = _db().execute(
         "INSERT INTO history_conversations (id, token, title, messages, msg_count, created_at, updated_at) "
         "VALUES (:id, :token, :title, :messages, :msg_count, :now, :now) "
         "ON CONFLICT (token, title) DO UPDATE SET "
-        "messages = EXCLUDED.messages, msg_count = EXCLUDED.msg_count, updated_at = EXCLUDED.updated_at",
+        "messages = EXCLUDED.messages, msg_count = EXCLUDED.msg_count, updated_at = EXCLUDED.updated_at "
+        "RETURNING id",
         {
             "id": conversation_id,
             "token": token,
@@ -163,13 +165,6 @@ def save_history(
             "now": current,
         },
         commit=True,
-    )
-
-    # 查出实际 id（UPDATE 时 id 不变，INSERT 时是新 uuid）
-    rows = _db().execute(
-        "SELECT id FROM history_conversations WHERE token = :token AND title = :title",
-        {"token": token, "title": title},
-        commit=False,
         fetch=True,
     )
     actual_id = rows[0][0] if rows else conversation_id

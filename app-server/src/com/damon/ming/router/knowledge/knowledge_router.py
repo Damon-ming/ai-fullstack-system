@@ -120,5 +120,5 @@ def get_knowledge_tree(request: Request):
         logger.exception("知识库目录查询失败")
         fail_data = BaseBizFailedData(error_msg=get_safe_error_message(e))
         return BaseFailedResponse(
-            code=ErrorCode.SYSTEM.DATABASE_FAILURE, data=fail_data
+            code=ErrorCode.SYSTEM.FILESYSTEM_FAILURE, data=fail_data
         )
