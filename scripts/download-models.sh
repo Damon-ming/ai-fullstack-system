@@ -7,7 +7,6 @@
 #   bash scripts/download-models.sh --vllm           # 仅 vLLM 推理模型
 #   bash scripts/download-models.sh --embedding      # 仅 Embedding 模型
 #   bash scripts/download-models.sh --rerank         # 仅 Rerank 模型
-#   bash scripts/download-models.sh --ollama         # 仅 Ollama 模型（自动 pull）
 #
 # 环境变量：
 #   MODELS_DIR   模型根目录（默认 /root/damon/models）
@@ -109,31 +108,6 @@ download_rerank_models() {
     download_hf_model "BAAI/bge-reranker-v2-m3" "$MODELS_DIR/rerank/bge-reranker-v2-m3" "BGE-Reranker v2 M3（轻量/降级）"
 }
 
-# ── Ollama 模型（通过 ollama pull）─────────────────────────────────
-download_ollama_models() {
-    log_info "═══ Ollama 模型 ═══"
-
-    if ! command -v ollama &>/dev/null; then
-        log_error "ollama 未安装，请先安装 Ollama: https://ollama.com/download"
-        log_info "安装后启动服务: systemctl start ollama"
-        return 1
-    fi
-
-    # 根据 inference-runtime.yaml 的角色，需要以下 Ollama 模型
-    local models=(
-        "qwen2.5:7b-instruct-q4_K_M:聊天主模型 (7B)"
-        "qwen2.5:0.5b-instruct-q4_K_M:意图识别模型 (0.5B)"
-        "qwen2.5:1.8b-instruct-q4_K_M:查询改写模型 (1.8B)"
-        "qwen2.5:1.5b-instruct-q4_K_M:摘要模型 (1.5B)"
-    )
-
-    for entry in "${models[@]}"; do
-        IFS=':' read -r model_tag desc <<< "$entry"
-        log_info "Pull Ollama 模型: $model_tag ($desc)"
-        ollama pull "$model_tag" && log_ok "$model_tag pull 完成" || log_error "$model_tag pull 失败"
-    done
-}
-
 # ── 创建目录结构 ──────────────────────────────────────────────────
 create_directories() {
     log_info "创建模型目录结构..."
@@ -185,11 +159,8 @@ main() {
         --rerank)
             download_rerank_models
             ;;
-        --ollama)
-            download_ollama_models
-            ;;
         *)
-            echo "用法: $0 [--all|--vllm|--embedding|--rerank|--ollama]"
+            echo "用法: $0 [--all|--vllm|--embedding|--rerank]"
             exit 1
             ;;
     esac

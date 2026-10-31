@@ -471,10 +471,10 @@ class AppInitializer:
         )
 
         # 全量加载推理引擎和模型（双源合并：环境变量连接 + inference-runtime.yaml 模型参数）
-        _loader = InferenceConfigLoader()
-        _loaded = _loader.load_all()
+        self._loader = InferenceConfigLoader()
+        _loaded = self._loader.load_all()
         self.inference = _loaded
-        _chat_engine, _chat_entry = _loader.get_engine_for_model("chat")
+        _chat_engine, _chat_entry = self._loader.get_engine_for_model("chat")
         self.infer_service = _chat_engine
         self.llm_model_name = _chat_entry.model_name
         self.llm_options = _chat_entry.options
