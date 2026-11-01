@@ -1,12 +1,10 @@
 // web-app/src/packages/features/account/src/api/index.ts
-// API 层导出 —— HTTP 调用 + 持久化封装 + 编排函数
+// API 层导出 —— 纯透传：存储原语 + 网络请求
 export {
   login,
   fetchProfile,
   updateProfile,
   SIMULATED_PHONE,
-  initDeviceToken,
-  refreshDeviceToken,
   getSessionContext,
   setSessionContext,
   clearSessionContext,

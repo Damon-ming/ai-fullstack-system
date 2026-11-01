@@ -1,3 +1,4 @@
+export * from "./app-auth";
 export * from "./app-state";
 export * from "./biz/chat-state";
 export * from "./biz/upload-state";

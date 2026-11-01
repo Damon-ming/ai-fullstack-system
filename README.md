@@ -556,16 +556,19 @@ app → features → data-layer / store / i18n → biz-common → core
 
 #### api/ 层细则
 
-- 持久化（LocalStorage）和请求服务端都由 **api 层** 处理
-- 只能通过 `@ming/data-layer` 和 `@ming/biz-common-net-net` 进行网络请求
-- 提供接口给 hook 层调用，后续迁移持久化方式只需改 api 层，不用改 hook 层
-- **LocalStorage 操作放在 api/ 层，但业务逻辑在 hook/ 层**——api/ 层只做原始读写（透传），hook/ 层决定何时读写、数据的含义和编排
+- 网络请求和持久化（LocalStorage）的原始入口
+- 网络请求只能通过 `@ming/data-layer` 和 `@ming/biz-common-net-api` 进行
+- api/ 层只做 **原始读写（透传）**：
+  - 网络：发请求，返回原始 `DataApiResponse`，不解包、不转换、不做业务判断
+  - 存储：re-export 存储原语（如 `getSessionContext`），不附加任何逻辑
+- **禁止在 api/ 层做业务编排**——不含条件判断、不含"有缓存就跳过"、不含"失败了怎么办"
 - `request` / `response` 为请求服务端的入参/出参或本地存储的 bean
 
 #### hook/ 层细则
 
+- **所有涉及存储读写的业务决策都在 hook/ 层**：何时读缓存、何时调 API、何时写缓存、失败如何处理
 - 同模块下 ui 与 hook 之间的通讯封装实体（非网络请求）放在 `hook/bean.ts`
-- 通过 api 层提供的接口调用网络请求和持久化
+- 通过 api/ 层提供的接口调用网络请求和持久化，不直接依赖存储实现（如 `@ming/biz-common-storage`）
 
 #### ui/ 层细则
 
@@ -600,17 +603,23 @@ ui/ → hook/ → {module}-api/ → 目标模块
 
 - 所有模块间的状态通知和数据同步都通过 `@ming/store` 模块
 
+### api/ vs hook/ 分离示例（account 模块）
+
+以 `features/account` 为例，展示 api/ 层透传与 hook/ 层编排的
+核心原则：**api/ 层是"能力原子"（能做什么），hook/ 层是"业务编排"（什么时候做、做了之后怎么办）。**
+
+
 ### 目录规范
 
 ```
 features/{module}/
 ├── src/
-│   ├── api/                # 网络 + 持久化
+│   ├── api/                # 纯透传：网络请求 + 存储原语 re-export
 │   │   ├── index.ts
 │   │   ├── {module}.api.ts
 │   │   ├── types/          # request / response / bean
 │   │   └── {module}-query.ts  # query/mutation hooks (queryFactory 在此)
-│   ├── hook/               # 业务逻辑
+│   ├── hook/               # 业务编排：状态管理 + 存储决策 + 数据转换
 │   │   ├── index.ts
 │   │   ├── {Module}Hook.ts
 │   │   └── bean.ts         # 模块内部 UI↔Hook 通讯实体

@@ -4,5 +4,5 @@ import zh from "./locales/zh.json";
 
 registerNS("chat-page", en, zh);
 
-export * from './ui'
-export * from './hook'
+export * from "./ui";
+export * from "./hook";

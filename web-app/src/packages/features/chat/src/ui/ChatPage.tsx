@@ -1,6 +1,6 @@
 // web-app/src/packages/features/chat/src/ui/ChatPage.tsx
-import { ChatDrawer, KnowledgeModal } from "@ming/feature-chat-drawer";
-import { ChatChatroom } from "@ming/feature-chat-chatroom";
+import { ChatDrawer, KnowledgeModal } from "@ming/feature-chat-drawer-api";
+import { ChatChatroom } from "@ming/feature-chat-chatroom-api";
 import React, { useEffect } from "react";
 import { useChatPageHook } from "../hook";
 import { i18n, useTranslation } from "@ming/i18n";

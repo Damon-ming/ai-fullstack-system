@@ -15,7 +15,7 @@
  * 所有模块通过 @ming/store 统一访问。
  */
 
-import { clearSessionContext } from "@ming/biz-common-storage";
+import { clearSession } from "./app-auth";
 import { createAppStore } from "./app-store";
 
 export interface AppState {
@@ -29,7 +29,7 @@ export const useAppStore = createAppStore<AppState>(() => ({
   token: {
     clearToken: () => {
       // 原子清除：token + device_id + session_id 同时失效，拦截器不再携带
-      clearSessionContext();
+      clearSession();
       // TODO: 后期可在此触发重新登录流程（事件发布等）
     },
   },

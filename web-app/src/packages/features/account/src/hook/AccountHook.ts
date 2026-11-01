@@ -1,23 +1,74 @@
 // web-app/src/packages/features/account/src/hook/AccountHook.ts
 /**
- * 账号 Hook 层 —— 业务编排 + 服务端状态管理。
+ * 账号 Hook 层 —— 业务编排 + 状态管理。
  *
  * 职责：
  *   - 用户资料状态（服务端为唯一数据源）
- *   - 通过 api 层调用网络和持久化，不直接依赖 biz-common-storage
+ *   - Token 生命周期编排：读缓存 → 判断 → 调 API → 写缓存
+ *   - 通过 api/ 层调用网络和持久化，不直接依赖 biz-common-storage 实现
  *
- * API 层负责 HTTP + 持久化 + 编排函数（initDeviceToken / refreshDeviceToken）。
+ * 所有涉及存储读写的决策（何时读、何时写、读了之后怎么做）都在本层完成，
+ * api/ 层只做原始透传。
  */
 
 import { useEffect, useState } from "react";
 import { createLogger } from "@ming/core-log";
-import { fetchProfile, updateProfile } from "../api";
+import {
+  fetchProfile,
+  updateProfile,
+  login,
+  getSessionContext,
+  setSessionContext,
+  clearSessionContext,
+  setDeviceId,
+  SIMULATED_PHONE,
+} from "../api";
 import type { AccountProfile } from "../api/types";
 
 const log = createLogger("account/hook");
 
 // ---------------------------------------------------------------------------
-// Hook
+// Token 编排 —— 业务决策层：何时读缓存、何时调 API、何时写缓存
+// ---------------------------------------------------------------------------
+
+/**
+ * 登录申请 token，已有则跳过。
+ * 编排：读缓存 → 有则返回 → 无则调 API → 写缓存 → 返回 token。
+ */
+export async function initDeviceToken(): Promise<string> {
+  const existing = getSessionContext();
+  if (existing?.token) return existing.token;
+
+  const res = await login({ phone: SIMULATED_PHONE });
+
+  if (!res.data?.token) {
+    throw new Error("登录失败: 服务端未返回有效 token");
+  }
+
+  if (res.data.device_id) {
+    setDeviceId(res.data.device_id);
+  }
+
+  setSessionContext({
+    token: res.data.token,
+    sessionId: res.data.session_id,
+  });
+
+  log.info("Token 已签发", {
+    device_id: res.data.device_id?.slice(0, 12) + "...",
+    session_id: res.data.session_id?.slice(0, 8) + "...",
+  });
+  return res.data.token;
+}
+
+/** 重新登录（清除缓存后重新申请）。 */
+export async function refreshDeviceToken(): Promise<string> {
+  clearSessionContext();
+  return initDeviceToken();
+}
+
+// ---------------------------------------------------------------------------
+// 用户资料 Hook
 // ---------------------------------------------------------------------------
 
 export function useAccount() {

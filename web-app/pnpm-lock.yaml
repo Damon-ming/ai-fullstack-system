@@ -212,12 +212,9 @@ importers:
       '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../account-api
-      '@ming/feature-chat-chatroom':
+      '@ming/feature-chat-chatroom-api':
         specifier: workspace:*
-        version: link:../chat-chatroom
-      '@ming/feature-chat-drawer':
-        specifier: workspace:*
-        version: link:../chat-drawer
+        version: link:../chat-chatroom-api
       '@ming/feature-chat-drawer-api':
         specifier: workspace:*
         version: link:../chat-drawer-api
@@ -272,6 +269,18 @@ importers:
       react-markdown:
         specifier: ^9.0.1
         version: 9.1.0(@types/react@19.3.0)(react@18.3.1)
+
+  src/packages/features/chat-chatroom-api:
+    dependencies:
+      '@ming/feature-chat-chatroom':
+        specifier: workspace:*
+        version: link:../chat-chatroom
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.0.0
+        version: 18.3.1(react@18.3.1)
 
   src/packages/features/chat-drawer:
     dependencies:
@@ -359,9 +368,6 @@ importers:
 
   src/packages/features/search-api:
     dependencies:
-      '@ming/feature-history-api':
-        specifier: workspace:*
-        version: link:../history-api
       '@ming/feature-search':
         specifier: workspace:*
         version: link:../search
@@ -398,9 +404,6 @@ importers:
 
   src/packages/store:
     dependencies:
-      '@ming/biz-common-storage':
-        specifier: workspace:*
-        version: link:../biz-common/storage
       react:
         specifier: '>=18.0.0'
         version: 18.3.1

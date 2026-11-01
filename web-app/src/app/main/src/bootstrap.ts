@@ -3,7 +3,11 @@ import { initNetApi } from "@ming/biz-common-net-api";
 import { createLogger } from "@ming/core-log";
 import { isDebug, initDebugEnv } from "@ming/biz-common-debug";
 import { i18n } from "@ming/i18n";
-import { setEncryptionSession } from "@ming/biz-common-storage";
+import {
+  setEncryptionSession,
+  clearSessionContext,
+} from "@ming/biz-common-storage";
+import { setClearSessionCallback } from "@ming/store";
 import { initDeviceToken } from "@ming/feature-account-api";
 import { exchangeKeys } from "@ming/feature-encryption-api";
 
@@ -18,6 +22,9 @@ export async function bootstrap(): Promise<void> {
 
   // 0. 初始化环境标志（开发构建下读取 localStorage 覆盖，生产构建为 no-op）
   initDebugEnv();
+
+  // 0.1 注册认证清除回调（setter 注入，解耦 store → biz-common-storage）
+  setClearSessionCallback(clearSessionContext);
 
   // 1. 最高优先级：初始化网络层
   await initGlobalNetwork();
