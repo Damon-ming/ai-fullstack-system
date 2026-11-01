@@ -5,7 +5,7 @@
 
 /** 知识库目录树节点 */
 export interface KnowledgeNode {
-  /** 节点名称（目录名或文件名） */
+  /** 节点名称（原始文件名或目录名） */
   name: string;
   /** 节点类型：directory | file */
   type: "directory" | "file";
@@ -15,8 +15,6 @@ export interface KnowledgeNode {
   size: number;
   /** 文件创建时间（ISO8601），目录为空 */
   created_at: string;
-  /** 文件 SHA256，目录为空 */
-  file_sha256: string;
   /** 子节点（仅 directory 类型） */
   children: KnowledgeNode[];
 }

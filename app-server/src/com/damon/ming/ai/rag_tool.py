@@ -242,6 +242,7 @@ class RAGContainer:
         file_paths: list[str],
         file_uid: str = "",
         disk_file_at: str = "",
+        file_name: str = "",
     ) -> dict:
         """增量处理上传文件（支持 PDF / TXT / MD）。
 
@@ -355,11 +356,13 @@ class RAGContainer:
                         )
                         continue
 
-                    # 注入 chunk metadata：file_uid + 时间戳
+                    # 注入 chunk metadata：file_uid + 时间戳 + 原始文件名
                     indexed_at = now_iso()
                     for node in nodes:
                         if file_uid:
                             node.metadata["file_uid"] = file_uid
+                        if file_name:
+                            node.metadata["file_name"] = file_name
                         node.metadata["disk_file_at"] = disk_file_at
                         node.metadata["indexed_at"] = indexed_at
 

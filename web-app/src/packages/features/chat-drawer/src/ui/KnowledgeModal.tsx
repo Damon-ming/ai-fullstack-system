@@ -2,26 +2,7 @@ import React, { useState } from "react";
 import { useDrawerKnowledgeHook } from "../hook/useDrawerKnowledgeHook";
 import { useTranslation } from "@ming/i18n";
 import type { KnowledgeNode } from "../api/types/knowledge";
-
-/** 扁平化收集所有文件节点 */
-function collectFiles(nodes: KnowledgeNode[]): KnowledgeNode[] {
-  const result: KnowledgeNode[] = [];
-  for (const node of nodes) {
-    if (node.type === "file") {
-      result.push(node);
-    } else {
-      result.push(...collectFiles(node.children));
-    }
-  }
-  return result;
-}
-
-/** 格式化文件大小 */
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+import type { KnowledgeGroup } from "../hook/useDrawerKnowledgeHook";
 
 /** 递归渲染目录树节点 */
 function TreeItem({ node, depth }: { node: KnowledgeNode; depth: number }) {
@@ -66,21 +47,60 @@ function TreeItem({ node, depth }: { node: KnowledgeNode; depth: number }) {
       <span className="w-4 text-center text-xs text-gray-300">·</span>
       <span className="flex-1 truncate text-gray-700">{node.name}</span>
       <span className="shrink-0 text-xs text-gray-400">
-        {formatSize(node.size)}
+        {node.size >= 1024 * 1024
+          ? `${(node.size / (1024 * 1024)).toFixed(2)} MB`
+          : node.size >= 1024
+            ? `${(node.size / 1024).toFixed(1)} KB`
+            : `${node.size} B`}
       </span>
+    </div>
+  );
+}
+
+/** 按日期分组的文件列表 — 纯展示，数据由 hook 预处理好 */
+function DateGroupedList({ groups }: { groups: KnowledgeGroup[] }) {
+  return (
+    <div className="space-y-4">
+      {groups.map((group) => (
+        <div key={group.date}>
+          <div className="sticky top-0 z-10 bg-white px-3 py-1.5 text-xs font-medium text-gray-500">
+            {group.dateLabel} · {group.files.length} 个文件
+          </div>
+          <div className="space-y-0.5">
+            {group.files.map((file) => (
+              <div
+                key={file.path}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-gray-50"
+              >
+                <span className="flex-1 truncate text-gray-700">
+                  {file.name}
+                </span>
+                <span className="shrink-0 text-xs text-gray-400">
+                  {file.sizeMB}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
 export const KnowledgeModal: React.FC = () => {
   const { t } = useTranslation("chat-drawer");
-  const { open, closeKnowledge, treeData, isLoading, isError } =
-    useDrawerKnowledgeHook();
+  const {
+    open,
+    closeKnowledge,
+    treeData,
+    knowledgeGroups,
+    totalFileCount,
+    isLoading,
+    isError,
+  } = useDrawerKnowledgeHook();
   const [tab, setTab] = useState<"tree" | "list">("list");
 
   if (!open) return null;
-
-  const files = treeData ? collectFiles(treeData.root.children) : [];
 
   return (
     <div
@@ -145,44 +165,23 @@ export const KnowledgeModal: React.FC = () => {
               {t("knowledge.error")}
             </div>
           )}
-          {!isLoading && !isError && files.length === 0 && (
+          {!isLoading && !isError && totalFileCount === 0 && (
             <div className="flex items-center justify-center py-12 text-sm text-gray-400">
               {t("knowledge.empty")}
             </div>
           )}
-          {!isLoading && !isError && files.length > 0 && (
+          {!isLoading && !isError && totalFileCount > 0 && (
             <>
-              {tab === "list" && (
-                <div className="space-y-1">
-                  {files.map((file) => (
-                    <div
-                      key={file.path}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-gray-50"
-                    >
-                      <span className="flex-1 truncate text-gray-700">
-                        {file.name}
-                      </span>
-                      <span className="shrink-0 text-xs text-gray-400">
-                        {formatSize(file.size)}
-                      </span>
-                      {file.created_at && (
-                        <span className="shrink-0 text-xs text-gray-300">
-                          {new Date(file.created_at).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {tab === "list" && <DateGroupedList groups={knowledgeGroups} />}
               {tab === "tree" && <TreeItem node={treeData!.root} depth={0} />}
             </>
           )}
         </div>
 
         {/* 底部 */}
-        {files.length > 0 && (
+        {totalFileCount > 0 && (
           <div className="border-t border-gray-100 px-6 py-3 text-xs text-gray-400">
-            {t("knowledge.fileCount", { count: files.length })}
+            {t("knowledge.fileCount", { count: totalFileCount })}
           </div>
         )}
       </section>

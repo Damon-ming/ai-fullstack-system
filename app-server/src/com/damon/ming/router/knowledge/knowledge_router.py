@@ -3,11 +3,13 @@
 知识库目录树 —— 查看已上传资料的整体结构。
 
 接口：
-  GET /api/knowledge/tree/v1  获取知识库目录树 + 文件属性（size / created_at / sha256）
+  GET /api/knowledge/tree/v1  获取知识库目录树 + 文件属性（size / created_at）
 
+磁盘文件名格式: {UUID}_{原始文件名}.ext — 展示时自动剥除 UUID 前缀。
 多用户共享知识库，所有登录用户看到同一份目录，不按用户过滤。
 """
 
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -28,6 +30,9 @@ logger = pin("knowledge.router")
 
 router = APIRouter(prefix="/api/knowledge", tags=["知识库"])
 
+# 磁盘文件名格式: {UUID}_{原始文件名}.ext — 展示时剥除 UUID 前缀
+_UUID_PREFIX = re.compile(r"^[0-9a-f]{32}_")
+
 
 def _build_tree(node_path: Path, rel_base: Path) -> KnowledgeNode:
     """递归构建目录树节点。
@@ -37,7 +42,7 @@ def _build_tree(node_path: Path, rel_base: Path) -> KnowledgeNode:
         rel_base: 计算相对路径的基准目录（KNOWLEDGES_DIR）。
 
     Returns:
-        带完整属性的 KnowledgeNode。
+        带完整属性的 KnowledgeNode。文件展示名已剥除 UUID 前缀。
     """
     rel_path = (
         str(node_path.relative_to(rel_base).as_posix()) if node_path != rel_base else ""
@@ -61,13 +66,10 @@ def _build_tree(node_path: Path, rel_base: Path) -> KnowledgeNode:
             name=node_path.name or "knowledge",
             type="directory",
             path=rel_path,
-            size=0,
-            created_at="",
-            file_sha256="",
             children=children,
         )
 
-    # 文件节点：补充 size / created_at / file_sha256
+    # 文件节点：补充 size / created_at
     try:
         size = file_size(node_path)
         created_iso = file_creation_time(node_path).isoformat()
@@ -78,13 +80,15 @@ def _build_tree(node_path: Path, rel_base: Path) -> KnowledgeNode:
         size = 0
         created_iso = ""
 
+    # 剥除 UUID_ 前缀，恢复原始文件名用于展示
+    display_name = _UUID_PREFIX.sub("", node_path.name)
+
     return KnowledgeNode(
-        name=node_path.name,
+        name=display_name,
         type="file",
         path=rel_path,
         size=size,
         created_at=created_iso,
-        file_sha256="",  # 首次版本不计算 sha，按需后续补充
     )
 
 
@@ -94,12 +98,11 @@ def get_knowledge_tree(request: Request):
     """获取知识库目录树。
 
     返回完整目录结构，每个文件节点携带 size / created_at 属性。
-    前端递归渲染 children 即可得到树形展示。
+    文件展示名已自动剥除 UUID_ 前缀，前端直接渲染即可。
     """
     try:
         knowledge_dir = Path(request.app.state.system_config.knowledge_dir)
         if not knowledge_dir.exists():
-            # 目录不存在时返回空树
             root = KnowledgeNode(
                 name="knowledge",
                 type="directory",

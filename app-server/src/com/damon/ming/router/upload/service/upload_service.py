@@ -127,14 +127,14 @@ class UploadService:
         # 逐文件独立处理：读取 → 校验 → 写盘 → 入库 → 释放内存
         # 单循环设计：任意时刻内存最多持有 1 个文件，避免批量 OOM
         for file in file_list:
-            origin_name = Path(file.filename or "unnamed").name
-            suffix = Path(origin_name).suffix.lower()
+            file_name = Path(file.filename or "unnamed").name
+            suffix = Path(file_name).suffix.lower()
 
             # 类型白名单校验
             if not upload_config.is_type_allowed(suffix):
                 failed_files.append(
                     {
-                        "filename": origin_name,
+                        "filename": file_name,
                         "file_size": 0,
                         "file_sha256": "",
                         "error": t(
@@ -167,7 +167,7 @@ class UploadService:
             except ValueError as e:
                 failed_files.append(
                     {
-                        "filename": origin_name,
+                        "filename": file_name,
                         "file_size": 0,
                         "file_sha256": "",
                         "error": str(e),
@@ -201,7 +201,7 @@ class UploadService:
                 "收到用户上传文件 | token=%s | device=%s | filename=%s | size=%s | type=%s",
                 token[:8] if token else "anon",
                 device_id[:8] if device_id else "-",
-                repr(origin_name),
+                repr(file_name),
                 len(content),
                 suffix,
             )
@@ -210,11 +210,13 @@ class UploadService:
             file_uid = uuid.uuid4().hex
             file_sha256 = hashlib.sha256(content).hexdigest()
 
-            # 构建存储路径
+            # 构建存储路径: UUID_原始文件名.扩展名
+            # 原始文件名去除路径分隔符防止路径遍历
+            safe_name = file_name.replace("/", "_").replace("\\", "_").replace("\0", "")
             sub_folder_name = suffix.lstrip(".") if suffix else "no_ext"
             target_base_dir = UploadService.upload_dir / sub_folder_name
             target_base_dir.mkdir(parents=True, exist_ok=True)
-            store_name = f"{file_uid}{suffix}"
+            store_name = f"{file_uid}_{safe_name}"
             file_path = target_base_dir / store_name
 
             written_to_disk = False
@@ -272,6 +274,7 @@ class UploadService:
                     cancellation_token=cancellation_token,
                     file_uid=file_uid,
                     disk_file_at=disk_file_at,
+                    file_name=file_name,
                 )
 
                 # ── 阶段3：确认入库结果 ──
@@ -282,7 +285,7 @@ class UploadService:
                     # 三库一致：成功
                     success_files.append(
                         {
-                            "filename": origin_name,
+                            "filename": file_name,
                             "file_uid": file_uid,
                         }
                     )
@@ -303,7 +306,7 @@ class UploadService:
 
                     logger.info(
                         "文件上传成功 | filename=%s | sha=%s",
-                        origin_name,
+                        file_name,
                         file_sha256[:16],
                     )
                 else:
@@ -321,7 +324,7 @@ class UploadService:
                     rag_app=rag_app,
                 )
                 failed_files.append(
-                    {"filename": origin_name, "error": "上传被客户端取消"}
+                    {"filename": file_name, "error": "上传被客户端取消"}
                 )
                 raise
 
@@ -337,11 +340,11 @@ class UploadService:
                 )
                 logger.warning(
                     "文件上传失败已回滚 | filename=%s | sha=%s | error=%s",
-                    origin_name,
+                    file_name,
                     file_sha256[:16],
                     e,
                 )
-                failed_files.append({"filename": origin_name, "error": str(e)})
+                failed_files.append({"filename": file_name, "error": str(e)})
 
         logger.info(
             "批量上传完成 | 总计=%d | 成功=%d | 失败=%d",
