@@ -1,5 +1,5 @@
 // src/app/main/src/bootstrap.ts
-import { initNetApi } from "@ming/biz-common-net-api";
+import { initNetApi, setLanguageGetter } from "@ming/biz-common-net-api";
 import { createLogger } from "@ming/core-log";
 import { isDebug, initDebugEnv } from "@ming/biz-common-debug";
 import { i18n } from "@ming/i18n";
@@ -25,6 +25,9 @@ export async function bootstrap(): Promise<void> {
 
   // 0.1 注册认证清除回调（setter 注入，解耦 store → biz-common-storage）
   setClearSessionCallback(clearSessionContext);
+
+  // 0.2 注册语言 getter（setter 注入，解耦 biz-common/net → i18n）
+  setLanguageGetter(() => i18n.language);
 
   // 1. 最高优先级：初始化网络层
   await initGlobalNetwork();

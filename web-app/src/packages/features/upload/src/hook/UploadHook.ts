@@ -1,5 +1,5 @@
 // web-app/src/packages/features/upload/src/hook/UploadHook.ts
-import { uploadFile as requestUploadFile } from "../api";
+import { uploadFile as requestUploadFile, isFailure } from "../api";
 import type { UploadRequest, UploadResponse } from "../api/types";
 import { createLogger } from "@ming/core-log";
 
@@ -64,6 +64,10 @@ export async function uploadFiles(
     fileNames: files.map((file) => file.name).join(", "),
   });
   const result = await requestUploadFile(createUploadRequest(files), signal);
+  if (isFailure(result.code)) {
+    log.error("upload failed", { code: result.code });
+    throw new Error(`上传失败: ${result.code}`);
+  }
   log.debug("upload finished", { fileCount: files.length });
-  return result;
+  return result.data!;
 }

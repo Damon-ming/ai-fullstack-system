@@ -22,7 +22,7 @@ import {
 } from "@ming/biz-common-storage";
 import { envCode, clientTypeCode } from "@ming/biz-common-debug";
 import { VERSION } from "../../../../../version";
-import { i18n } from "@ming/i18n";
+import { getLanguage } from "./language-getter";
 
 const TOKEN_COOKIE_NAME = "device_auth_token";
 
@@ -41,7 +41,8 @@ export function createCommonHeaderInterceptor() {
 
       // X-Language：当前语言偏好，服务端据此返回对应 locale 的词条
       // 后端 negotiate_locale 支持前缀匹配（zh → zh_CN, en → en_US）
-      headers["X-Language"] = i18n.language;
+      // 通过 setter 注入读取，避免 biz-common/net 直接依赖 @ming/i18n
+      headers["X-Language"] = getLanguage();
 
       // device_id：独立存储，设备生命周期（登出后仍存在）
       const deviceId = getDeviceId();

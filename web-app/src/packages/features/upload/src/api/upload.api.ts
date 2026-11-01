@@ -1,7 +1,12 @@
 // web-app/src/packages/features/upload/src/api/upload.api.ts
 import { dataApi } from "@ming/data-layer";
+import type { DataApiResponse } from "@ming/data-layer";
+
 import type { UploadRequest, UploadResponse } from "./types";
 import { createLogger } from "@ming/core-log";
+export { isFailure } from "@ming/biz-common-net-api";
+
+// re-export biz-common-net-api 工具函数，供 hook/ 层通过本模块 api/ 层使用
 
 const log = createLogger("upload/api");
 
@@ -10,7 +15,7 @@ const log = createLogger("upload/api");
 export async function uploadFile(
   request: UploadRequest,
   signal?: AbortSignal,
-): Promise<UploadResponse> {
+): Promise<DataApiResponse<UploadResponse>> {
   log.debug("upload request", {
     endpoint: "/api/files/upload/v1",
     fileCount: request.files.length,
@@ -25,5 +30,5 @@ export async function uploadFile(
     { timeout: 1 * 60 * 1000, signal },
   );
   log.debug("upload response received");
-  return result.data!;
+  return result;
 }

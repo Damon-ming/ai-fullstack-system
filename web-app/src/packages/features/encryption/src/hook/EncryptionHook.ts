@@ -1,3 +1,4 @@
+// web-app/src/packages/features/encryption/src/hook/EncryptionHook.ts
 /**
  * 加密密钥交换编排。
  *
@@ -7,6 +8,8 @@
  *   3. HKDF 派生签名密钥（从 AES 主密钥）
  *   4. 注册会话，获取 keyId
  *   5. 返回 EncryptionSession（含派生后的签名密钥）
+ *
+ * api/ 层返回原始 BizResult 元组，hook/ 层负责解包和错误处理。
  */
 import { createLogger } from "@ming/core-log";
 import {
@@ -34,7 +37,8 @@ const SIGN_CONTEXT = "ai-fullstack-signature-v1";
 /** 执行密钥交换，返回加密会话 */
 export async function exchangeKeys(): Promise<EncryptionSession> {
   // 1. 获取服务端 RSA 公钥
-  const pubResp = await fetchPublicKey();
+  const [pubErr, pubResp] = await fetchPublicKey();
+  if (pubErr) throw pubErr;
   if (!pubResp?.data) {
     throw new Error("获取公钥失败: 服务端未返回有效公钥");
   }
@@ -53,7 +57,8 @@ export async function exchangeKeys(): Promise<EncryptionSession> {
   const signatureKeyHex = bytesToHex(signKeyBytes);
 
   // 4. 注册会话，获取 keyId
-  const sessionResp = await registerSession(encryptedKeyB64);
+  const [sessErr, sessionResp] = await registerSession(encryptedKeyB64);
+  if (sessErr) throw sessErr;
   if (!sessionResp?.data) {
     throw new Error("会话注册失败: 服务端未返回有效会话信息");
   }

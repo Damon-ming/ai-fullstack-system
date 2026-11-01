@@ -1,6 +1,7 @@
 // src/packages/biz-common/net-api/index.ts
 
 export { initNetApi } from "./init";
+export { setLanguageGetter } from "@ming/biz-common-net";
 export { netClient } from "./net-client";
 
 export type { INetClient } from "@ming/biz-common-net"; // re-export 接口

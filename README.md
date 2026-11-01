@@ -567,8 +567,10 @@ app → features → data-layer / store / i18n → biz-common → core
 #### hook/ 层细则
 
 - **所有涉及存储读写的业务决策都在 hook/ 层**：何时读缓存、何时调 API、何时写缓存、失败如何处理
+- **hook/ 层可包含 UI 相关的业务逻辑和展示工具函数**：消息格式化、时间格式化、traceId 截断等供 UI 直接渲染的函数，放在 hook/ 层而非 ui/ 层。ui/ 层只做 JSX 渲染和样式绑定
 - 同模块下 ui 与 hook 之间的通讯封装实体（非网络请求）放在 `hook/bean.ts`
 - 通过 api/ 层提供的接口调用网络请求和持久化，不直接依赖存储实现（如 `@ming/biz-common-storage`）
+- **hook/ 层不直接 import `@ming/biz-common-net-api`**（biz-common 公共工具的门面层）——需要的工具函数（如 `isFailure`、`ErrorCode` 等）由本模块的 `api/` 层 re-export，hook/ 层从 `../api` 获取，保持 api/hook 边界完整
 
 #### ui/ 层细则
 
@@ -588,6 +590,12 @@ app → features → data-layer / store / i18n → biz-common → core
 - 复用其他模块的页面也必须通过该模块的 `-api` 层暴露
 - `-api` 是纯透通讯道（re-export），**不做任何业务逻辑处理**，只透传具体模块的能力
 
+#### api/ vs hook/ 分离示例（account 模块）
+
+以 `features/account` 为例，展示 api/ 层透传与 hook/ 层编排的
+核心原则：**api/ 层是"能力原子"（能做什么），hook/ 层是"业务编排"（什么时候做、做了之后怎么办）。**
+
+
 #### 跨模块调用链路
 
 ```
@@ -603,27 +611,21 @@ ui/ → hook/ → {module}-api/ → 目标模块
 
 - 所有模块间的状态通知和数据同步都通过 `@ming/store` 模块
 
-### api/ vs hook/ 分离示例（account 模块）
-
-以 `features/account` 为例，展示 api/ 层透传与 hook/ 层编排的
-核心原则：**api/ 层是"能力原子"（能做什么），hook/ 层是"业务编排"（什么时候做、做了之后怎么办）。**
-
-
 ### 目录规范
 
 ```
 features/{module}/
 ├── src/
-│   ├── api/                # 纯透传：网络请求 + 存储原语 re-export
+│   ├── api/                # 纯透传：网络请求 + 存储原语 re-export（按需）
 │   │   ├── index.ts
 │   │   ├── {module}.api.ts
 │   │   ├── types/          # request / response / bean
 │   │   └── {module}-query.ts  # query/mutation hooks (queryFactory 在此)
-│   ├── hook/               # 业务编排：状态管理 + 存储决策 + 数据转换
+│   ├── hook/               # 业务编排：状态管理 + 存储决策 + 数据转换（必须）
 │   │   ├── index.ts
 │   │   ├── {Module}Hook.ts
 │   │   └── bean.ts         # 模块内部 UI↔Hook 通讯实体
-│   └── ui/                 # 纯展示
+│   └── ui/                 # 纯展示（按需）
 │       ├── index.ts
 │       └── {Module}.tsx
 ```
@@ -636,7 +638,22 @@ features/{module}-api/      # 跨模块通信中间件
         └── {module}-api.api.ts  # 纯 re-export
 ```
 
-### 公共能力归属
+> **按需原则**：`api/` 和 `ui/` 目录根据模块实际职责决定是否创建。
+> - **无 api/**：模块自身无网络请求或持久化需求，数据全部来自其他模块的 `-api`（如 `chat` 模块，作为主页面仅编排其他 feature）。`hook/` 层直接通过跨模块 `-api` 获取数据。
+> - **无 ui/**：模块无独立页面，UI 由其他模块组合消费（如 `upload`、`encryption`、`history` 等模块的组件被 `chat-drawer` 组合使用）。
+
+### 跨模块 -api 依赖澄清
+
+**跨模块 -api 依赖一律通过 hook/ 层获取，不在 api/ 层引用。**
+
+- 每个 feature 模块自身的 `api/` 层仅包含**本模块**的网络请求（HTTP）和存储原语 re-export
+- 如果模块 A 需要使用模块 B 的业务能力，**在 A 的 hook/ 层**通过 `@ming/feature-b-api` 调用
+- api/ 层不引用其他 feature 的 `-api` 模块，避免 api/ 层形成跨模块耦合链
+- 此规则与「跨模块调用都在 hook/ 层发起」一致
+
+示例：`ChatPageHook.ts`（chat/hook/）通过 `@ming/feature-history-api`、`@ming/feature-account-api` 获取其他模块能力——这是正确的路径。而 `chat/api/` 层只负责 chat 自身模块的数据通道。
+
+## 公共能力归属
 
 #### 基础能力模块（core）
 

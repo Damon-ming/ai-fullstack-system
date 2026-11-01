@@ -13,7 +13,7 @@ import {
   formatTraceId,
 } from "../hook/useChatSendStreamHook";
 import { useTranslation } from "@ming/i18n";
-import type { ChatMessage } from "../hook/useChatMessageStateHook";
+import type { ChatMessage } from "../hook/bean";
 
 /**
  * 单条消息内容渲染 —— 替代原嵌套三元，用早期返回扁平化分支。

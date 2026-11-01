@@ -11,18 +11,12 @@
  *   - 业务编排（由 hook 层负责）
  */
 
-import { dataApi, queryFactory } from "@ming/data-layer";
+import { dataApi } from "@ming/data-layer";
 import type { DataApiResponse } from "@ming/data-layer";
 import { createLogger } from "@ming/core-log";
 import type { HistoryMessage, SaveHistoryRequest } from "./types";
 
 const log = createLogger("history/api");
-
-// ---------------------------------------------------------------------------
-// 缓存 key
-// ---------------------------------------------------------------------------
-
-const HISTORY_LIST_KEY = ["history", "list"] as const;
 
 // ---------------------------------------------------------------------------
 // 纯 fetcher —— 只发请求 + 日志，返回完整 DataApiResponse 透传给 hook 层
@@ -62,29 +56,6 @@ export async function removeFromServer(
   log.debug("remove history", { id });
   return dataApi.delete<void>(`/api/history/v1/${id}`);
 }
-
-// ---------------------------------------------------------------------------
-// 预配置 query/mutation hook（仅配置缓存策略，不含业务逻辑）
-// ---------------------------------------------------------------------------
-
-/** 列表查询 hook —— 30s 内不重新拉取 */
-export const useHistoryListQuery = queryFactory.createQueryHook<unknown[]>(
-  HISTORY_LIST_KEY,
-  fetchList,
-  { staleTime: 30 * 1000 },
-);
-
-/** 保存 mutation —— 成功后自动刷新列表 */
-export const useSaveHistoryMutation = queryFactory.createMutationHook<
-  unknown,
-  SaveHistoryRequest
->(saveToServer, { invalidateKeys: [HISTORY_LIST_KEY] });
-
-/** 删除 mutation —— 成功后自动刷新列表 */
-export const useRemoveHistoryMutation = queryFactory.createMutationHook<
-  void,
-  string
->(removeFromServer, { invalidateKeys: [HISTORY_LIST_KEY] });
 
 // ---------------------------------------------------------------------------
 // 同步调用对象（非 React 上下文使用，不走缓存）—— 纯透传 fetcher
