@@ -566,6 +566,7 @@ app → features → data-layer / store / i18n → biz-common → core
 - 同模块下 ui 与 hook 之间的通讯封装实体（非网络请求）放在 `hook/bean.ts`
 - 通过 api 层提供的接口调用网络请求和持久化
 
+
 ### 跨模块通信
 
 #### 模块间业务通信 — 必须通过 `-api` 中间件
@@ -577,6 +578,17 @@ app → features → data-layer / store / i18n → biz-common → core
 - **不能**直接依赖另一个 feature 模块的具体实现（包括 UI 页面）
 - 复用其他模块的页面也必须通过该模块的 `-api` 层暴露
 - `-api` 是纯透通讯道（re-export），**不做任何业务逻辑处理**，只透传具体模块的能力
+
+#### 跨模块调用链路
+
+```
+ui/ → hook/ → {module}-api/ → 目标模块
+```
+
+- 跨模块调用都通过 **模块 -api** 层进行
+- 跨模块调用都在 **hook/** 层发起，不直接在 UI 层发起
+- 如果 UI 层需要用到其他模块的能力，由 **hook/** 层封装或透传该模块的 `-api` 调用，再提供给 UI
+- **UI 层不直接调用其他模块的 -api**
 
 #### 模块间信息通信 — 只能通过 store 订阅通知
 
