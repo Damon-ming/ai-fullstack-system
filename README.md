@@ -537,9 +537,12 @@ app → features → data-layer / store / i18n → biz-common → core
 ```
 
 - **biz-common** 是项目所有公共业务逻辑的封装模块
-- **模块不能反向依赖**，模块之间可以互相依赖，但必须避免循环依赖
+- **features 之间通过 api/ 层互相依赖**，不能直接 import 其他 feature 的具体实现
+- **biz-common、i18n、store、data-layer 同级的模块之间不能互相依赖**
+- 所有网络调用必须走 **biz-common/net-api** 或 **data-layer**（app、features 均适用）
+- **除网络模块外，app 和 features 可以直接调用 biz-common 和 core 模块**
 - **core 层可被任意层直接依赖**（纯技术能力，与业务无关）
-- 除网络模块外，其他模块都可以直接依赖 core 层
+- 避免循环依赖
 
 ### 模块职责
 
