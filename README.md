@@ -631,9 +631,9 @@ features/{module}-api/      # 跨模块通信中间件
   - `@ming/biz-common-storage` — 存储抽象层
   - `@ming/biz-common-net` — 网络请求客户端
   - `@ming/biz-common-debug` — 调试工具
-  - `@ming/data-layer` — HTTP 客户端 + TanStack QueryFactory
-  - `@ming/store` — 全局状态管理
-  - `@ming/i18n` — 国际化
+- `@ming/data-layer` — HTTP 客户端 + TanStack QueryFactory
+- `@ming/store` — 全局状态管理
+- `@ming/i18n` — 国际化
 
 ## License
 
