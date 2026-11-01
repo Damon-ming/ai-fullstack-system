@@ -424,6 +424,29 @@ def revoke_sessions_by_device(device_id: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# 跨模块查询 —— 供其他模块调用，不暴露表结构
+# ---------------------------------------------------------------------------
+
+
+def get_file_uploader_map() -> dict[str, str]:
+    """查询所有文件的上传者昵称，返回 {file_path: uploader_name}。
+
+    供知识库等模块调用，调用方无需感知 upload_records / users 表结构。
+    """
+
+    try:
+        with _db().engine.connect() as conn:
+            rows = conn.execute(
+                "SELECT ur.file_path, u.name "
+                "FROM upload_records ur "
+                "LEFT JOIN users u ON ur.token = u.token"
+            ).fetchall()
+        return {row[0]: (row[1] or "") for row in rows}
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # 调试 / 管理
 # ---------------------------------------------------------------------------
 

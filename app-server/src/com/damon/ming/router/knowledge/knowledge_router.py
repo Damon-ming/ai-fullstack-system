@@ -17,6 +17,7 @@ from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
+from src.com.damon.ming.router.account.token_store import get_file_uploader_map
 from src.com.damon.ming.router.knowledge.schemas.bean import KnowledgeNode
 from src.com.damon.ming.schemas.response import (
     BaseBizFailedData,
@@ -34,12 +35,17 @@ router = APIRouter(prefix="/api/knowledge", tags=["知识库"])
 _UUID_PREFIX = re.compile(r"^[0-9a-f]{32}_")
 
 
-def _build_tree(node_path: Path, rel_base: Path) -> KnowledgeNode:
+def _build_tree(
+    node_path: Path,
+    rel_base: Path,
+    uploader_map: dict[str, str] | None = None,
+) -> KnowledgeNode:
     """递归构建目录树节点。
 
     Args:
         node_path: 当前节点的绝对路径。
         rel_base: 计算相对路径的基准目录（KNOWLEDGES_DIR）。
+        uploader_map: 文件路径 → 上传者昵称映射（由 account 模块提供）。
 
     Returns:
         带完整属性的 KnowledgeNode。文件展示名已剥除 UUID 前缀。
@@ -60,7 +66,7 @@ def _build_tree(node_path: Path, rel_base: Path) -> KnowledgeNode:
             # 跳过残留临时文件
             if entry.is_file() and entry.suffix.endswith(".tmp"):
                 continue
-            children.append(_build_tree(entry, rel_base))
+            children.append(_build_tree(entry, rel_base, uploader_map))
 
         return KnowledgeNode(
             name=node_path.name or "knowledge",
@@ -89,6 +95,7 @@ def _build_tree(node_path: Path, rel_base: Path) -> KnowledgeNode:
         path=rel_path,
         size=size,
         created_at=created_iso,
+        uploader=(uploader_map or {}).get(str(node_path), ""),
     )
 
 
@@ -101,6 +108,9 @@ def get_knowledge_tree(request: Request):
     文件展示名已自动剥除 UUID_ 前缀，前端直接渲染即可。
     """
     try:
+        # 通过 account 模块获取上传者映射（不直接碰 account 的表）
+        uploader_map = get_file_uploader_map()
+
         knowledge_dir = Path(request.app.state.system_config.knowledge_dir)
         if not knowledge_dir.exists():
             root = KnowledgeNode(
@@ -110,7 +120,7 @@ def get_knowledge_tree(request: Request):
                 children=[],
             )
         else:
-            root = _build_tree(knowledge_dir, knowledge_dir)
+            root = _build_tree(knowledge_dir, knowledge_dir, uploader_map)
 
         return BaseSuccessResponse(
             code=ErrorCode.OK,
