@@ -559,6 +559,7 @@ app → features → data-layer / store / i18n → biz-common → core
 - 持久化（LocalStorage）和请求服务端都由 **api 层** 处理
 - 只能通过 `@ming/data-layer` 和 `@ming/biz-common-net-net` 进行网络请求
 - 提供接口给 hook 层调用，后续迁移持久化方式只需改 api 层，不用改 hook 层
+- **LocalStorage 操作放在 api/ 层，但业务逻辑在 hook/ 层**——api/ 层只做原始读写（透传），hook/ 层决定何时读写、数据的含义和编排
 - `request` / `response` 为请求服务端的入参/出参或本地存储的 bean
 
 #### hook/ 层细则
