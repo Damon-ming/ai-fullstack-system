@@ -33,6 +33,12 @@ router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
 # 轻量级输入校验器（模块级单例，无状态，可并发）
 _input_validator = InputValidator()
 
+# RAG 检索上下文 token 上限（与 vLLM max-model-len 对齐）
+# 约束：system(~200) + context_budget + query(~50) + max_tokens(1024) ≤ 2048
+# 跑通模式：budget=512 → 总占用 ~1826 ≤ 2048 ✅
+# 完整模式：换大模型后同步调高（max-model-len 4096 → budget 可设 2048）
+MAX_CONTEXT_TOKEN_BUDGET = 512
+
 
 def _get_chat_text_cfg(app_state) -> ChatLocaleText:
     """获取当前请求 locale 对应的聊天文本配置。"""
@@ -138,6 +144,7 @@ async def chat(req: Request, body: ChatRequest):
             async with rag_sem:
                 ref_content = await req.app.state.rag_app.query_rag(
                     body.query,
+                    max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
                     cancellation_token=ctx.cancellation_token,
                 )
 
@@ -285,6 +292,7 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             async with rag_sem:
                 ref_content = await req.app.state.rag_app.query_rag(
                     body.query,
+                    max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
                     cancellation_token=ctx.cancellation_token,
                 )
 

@@ -12,36 +12,11 @@
 
 services:
   # ── vLLM 实例池 ──────────────────────────────────────────────────
+  # 跑通模式：3 个 pool 全部 Qwen2.5-0.5B，共享 1 GPU（16GB）
+  # 完整模式：换大模型（7B/1.5B/4B），pool 与 GPU 按需分配
   vllm-pool-1:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.6.3
     container_name: vllm-pool-1
-    restart: always
-    expose:
-      - "8000"
-    volumes:
-      - ${DATA_DIR}/models:/models
-    runtime: nvidia
-    environment:
-      NVIDIA_VISIBLE_DEVICES: all
-    command: >
-      --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen2.5-7B-Instruct
-      --trust-remote-code
-      --gpu-memory-utilization 0.7
-      --max-model-len 8192
-      --api-key uk_pool_001
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 15s
-      timeout: 10s
-      retries: 3
-      start_period: 300s
-    networks:
-      - ai-network
-
-  vllm-pool-2:
-    image: vllm/vllm-openai:latest
-    container_name: vllm-pool-2
     restart: always
     expose:
       - "8000"
@@ -56,45 +31,73 @@ services:
       --trust-remote-code
       --gpu-memory-utilization 0.3
       --max-model-len 2048
-      --api-key uk_pool_002
+      --api-key uk_pool_001
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 10s
       retries: 3
-      start_period: 120s
+      start_period: 300s
     networks:
       - ai-network
 
-  vllm-pool-3:
-    image: vllm/vllm-openai:latest
-    container_name: vllm-pool-3
-    restart: always
-    expose:
-      - "8000"
-    volumes:
-      - ${DATA_DIR}/models:/models
-    runtime: nvidia
-    environment:
-      NVIDIA_VISIBLE_DEVICES: all
-    command: >
-      --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen2.5-1.8B-Instruct
-      --trust-remote-code
-      --gpu-memory-utilization 0.4
-      --max-model-len 4096
-      --api-key uk_pool_003
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 15s
-      timeout: 10s
-      retries: 3
-      start_period: 180s
-    networks:
-      - ai-network
+  # ═══ 以下为完整模式下的独立模型池，跑通环境后按需启用 ═══
+  # vllm-pool-2:
+  #   image: vllm/vllm-openai:v0.6.3
+  #   container_name: vllm-pool-2
+  #   restart: always
+  #   expose:
+  #     - "8000"
+  #   volumes:
+  #     - ${DATA_DIR}/models:/models
+  #   runtime: nvidia
+  #   environment:
+  #     NVIDIA_VISIBLE_DEVICES: all
+  #   command: >
+  #     --host 0.0.0.0 --port 8000
+  #     --model /models/inference/Qwen2.5-0.5B-Instruct
+  #     --trust-remote-code
+  #     --gpu-memory-utilization 0.3
+  #     --max-model-len 2048
+  #     --api-key uk_pool_002
+  #   healthcheck:
+  #     test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+  #     interval: 15s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 120s
+  #   networks:
+  #     - ai-network
+
+  # vllm-pool-3:
+  #   image: vllm/vllm-openai:v0.6.3
+  #   container_name: vllm-pool-3
+  #   restart: always
+  #   expose:
+  #     - "8000"
+  #   volumes:
+  #     - ${DATA_DIR}/models:/models
+  #   runtime: nvidia
+  #   environment:
+  #     NVIDIA_VISIBLE_DEVICES: all
+  #   command: >
+  #     --host 0.0.0.0 --port 8000
+  #     --model /models/inference/Qwen2.5-1.8B-Instruct
+  #     --trust-remote-code
+  #     --gpu-memory-utilization 0.4
+  #     --max-model-len 4096
+  #     --api-key uk_pool_003
+  #   healthcheck:
+  #     test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+  #     interval: 15s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 180s
+  #   networks:
+  #     - ai-network
 
   vllm-pool-4:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.6.3
     container_name: vllm-pool-4
     restart: always
     expose:
@@ -106,10 +109,10 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen2.5-1.5B-Instruct
+      --model /models/inference/Qwen2.5-0.5B-Instruct
       --trust-remote-code
-      --gpu-memory-utilization 0.4
-      --max-model-len 4096
+      --gpu-memory-utilization 0.3
+      --max-model-len 2048
       --api-key uk_pool_004
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -121,7 +124,7 @@ services:
       - ai-network
 
   vllm-pool-5:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.6.3
     container_name: vllm-pool-5
     restart: always
     expose:
@@ -133,10 +136,10 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen3Guard-Gen-4B
+      --model /models/inference/Qwen2.5-0.5B-Instruct
       --trust-remote-code
       --gpu-memory-utilization 0.3
-      --max-model-len 4096
+      --max-model-len 2048
       --api-key uk_pool_005
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

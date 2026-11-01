@@ -68,12 +68,19 @@ download_hf_model() {
 download_vllm_models() {
     log_info "═══ vLLM 推理模型 ═══"
 
+    # 跑通模式：3 个 pool 全部复用 Qwen2.5-0.5B（~1GB）
+    # 完整模式：恢复 7B + 1.8B + 1.5B + 0.5B + Qwen3Guard 全套
     local models=(
-        "Qwen/Qwen2.5-7B-Instruct:inference/Qwen2.5-7B-Instruct:聊天主模型 (7B)"
-        "Qwen/Qwen2.5-0.5B-Instruct:inference/Qwen2.5-0.5B-Instruct:意图识别模型 (0.5B)"
-        "Qwen/Qwen2.5-1.8B-Instruct:inference/Qwen2.5-1.8B-Instruct:查询改写模型 (1.8B)"
-        "Qwen/Qwen2.5-1.5B-Instruct:inference/Qwen2.5-1.5B-Instruct:摘要模型 (1.5B)"
+        "Qwen/Qwen2.5-0.5B-Instruct:inference/Qwen2.5-0.5B-Instruct:通用推理模型 (0.5B)"
     )
+
+    # ═══ 完整模式（跑通后按需启用）═══
+    # local models=(
+    #     "Qwen/Qwen2.5-7B-Instruct:inference/Qwen2.5-7B-Instruct:聊天主模型 (7B)"
+    #     "Qwen/Qwen2.5-0.5B-Instruct:inference/Qwen2.5-0.5B-Instruct:意图识别模型 (0.5B)"
+    #     "Qwen/Qwen2.5-1.8B-Instruct:inference/Qwen2.5-1.8B-Instruct:查询改写模型 (1.8B)"
+    #     "Qwen/Qwen2.5-1.5B-Instruct:inference/Qwen2.5-1.5B-Instruct:摘要模型 (1.5B)"
+    # )
 
     for entry in "${models[@]}"; do
         IFS=':' read -r repo_id local_subdir desc <<< "$entry"

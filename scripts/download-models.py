@@ -23,25 +23,24 @@ from pathlib import Path
 # ── 模型清单 ──────────────────────────────────────────────────────
 # 格式: (HuggingFace repo_id, 本地子目录, 描述)
 
+# 跑通模式：3 个 pool 全部复用 Qwen2.5-0.5B（~1GB 下载，单卡 16GB 能装）
+# 完整模式：取消注释下方大模型，同时调整 docker-vllm.yaml 和 gateway.yaml
 VLLM_MODELS = [
-    ("Qwen/Qwen2.5-7B-Instruct", "inference/Qwen2.5-7B-Instruct", "聊天主模型 (7B)"),
     (
         "Qwen/Qwen2.5-0.5B-Instruct",
         "inference/Qwen2.5-0.5B-Instruct",
-        "意图识别模型 (0.5B)",
+        "通用推理模型 (0.5B) - chat/intent/rewrite/summary/guardrail 复用",
     ),
-    (
-        "Qwen/Qwen2.5-1.8B-Instruct",
-        "inference/Qwen2.5-1.8B-Instruct",
-        "查询改写模型 (1.8B)",
-    ),
-    (
-        "Qwen/Qwen2.5-1.5B-Instruct",
-        "inference/Qwen2.5-1.5B-Instruct",
-        "摘要模型 (1.5B)",
-    ),
-    ("Qwen/Qwen3Guard-Gen-4B", "inference/Qwen3Guard-Gen-4B", "护栏安全模型 (4B)"),
 ]
+
+# ═══ 完整模式模型（跑通后按需启用）═══
+# VLLM_MODELS = [
+#     ("Qwen/Qwen2.5-7B-Instruct",    "inference/Qwen2.5-7B-Instruct",    "聊天主模型 (7B)"),
+#     ("Qwen/Qwen2.5-0.5B-Instruct",  "inference/Qwen2.5-0.5B-Instruct",  "意图识别模型 (0.5B)"),
+#     ("Qwen/Qwen2.5-1.8B-Instruct",  "inference/Qwen2.5-1.8B-Instruct",  "查询改写模型 (1.8B)"),
+#     ("Qwen/Qwen2.5-1.5B-Instruct",  "inference/Qwen2.5-1.5B-Instruct",  "摘要模型 (1.5B)"),
+#     ("Qwen/Qwen3Guard-Gen-4B",      "inference/Qwen3Guard-Gen-4B",     "护栏安全模型 (4B)"),
+# ]
 
 EMBEDDING_MODELS = [
     ("BAAI/bge-m3", "embedding/BAAI/bge-m3", "BGE-M3 多语言嵌入"),

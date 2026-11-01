@@ -434,8 +434,8 @@ class RAGContainer:
     async def query_rag(
         self,
         query: str,
+        max_context_tokens: int,
         top_k: int | None = None,
-        max_context_tokens: int = 4096,
         cancellation_token: CancellationToken | None = None,
     ) -> str:
         """RAG 检索主流程。
