@@ -7,6 +7,16 @@ import { createLogger } from "@ming/core-log";
 
 const log = createLogger("chat-chatroom/hook/sendStream");
 
+/** 格式化消息时间戳（unix秒 → 本地时间字符串）供 UI 直接渲染 */
+export function formatMessageTime(unixSeconds: number | undefined): string {
+  return unixSeconds ? new Date(unixSeconds * 1000).toLocaleTimeString() : "";
+}
+
+/** 截断 traceId 供 UI 直接渲染 */
+export function formatTraceId(traceId: string | undefined): string {
+  return traceId ? `${traceId.slice(0, 8)}…` : "";
+}
+
 /** SSE 流式请求（默认使用） */
 export function useChatSendStreamHook() {
   const { t } = useTranslation("chat-chatroom");
@@ -59,103 +69,111 @@ export function useChatSendStreamHook() {
     try {
       const req: ChatRoomRequest = { query, reason };
 
-      await streamChatRoomMessage(req, {
-        // meta.event 来自 SSE 协议 event: 字段，payload 是解析后的 data JSON
-        onMessage: (payload, meta) => {
-          const eventType = meta?.event;
-          log.debug("sendStream received event", { event: eventType });
+      await streamChatRoomMessage(
+        req,
+        {
+          // meta.event 来自 SSE 协议 event: 字段，payload 是解析后的 data JSON
+          onMessage: (payload, meta) => {
+            const eventType = meta?.event;
+            log.debug("sendStream received event", { event: eventType });
 
-          if (eventType === "start") {
-            // 记录本次会话的元信息，挂到 assistant 消息上供 UI 展示
-            const startData = payload.data as ChatStartData;
-            log.debug("sendStream start metadata", {
-              msgId: startData.msgId,
-              model: startData.model,
-            });
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMsgId
-                  ? {
-                      ...msg,
-                      msgId: startData.msgId,
-                      conversationId: startData.conversationId,
-                      model: startData.model,
-                      createdAt: startData.createdAt,
-                      traceId: startData.traceId,
-                    }
-                  : msg,
-              ),
-            );
-          } else if (eventType === "reasoning") {
-            // 推理过程分片 —— 累加到 reasoning 字段，不干扰正文
-            const data = payload.data as { content: string };
-            const reasoning = data.content || "";
-            if (reasoning) {
+            if (eventType === "start") {
+              // 记录本次会话的元信息，挂到 assistant 消息上供 UI 展示
+              const startData = payload.data as ChatStartData;
+              log.debug("sendStream start metadata", {
+                msgId: startData.msgId,
+                model: startData.model,
+              });
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === assistantMsgId
                     ? {
                         ...msg,
-                        reasoning: (msg.reasoning ?? "") + reasoning,
-                        isReasoning: true,
+                        msgId: startData.msgId,
+                        conversationId: startData.conversationId,
+                        model: startData.model,
+                        createdAt: startData.createdAt,
+                        traceId: startData.traceId,
                       }
                     : msg,
                 ),
               );
-            }
-          } else if (eventType === "delta") {
-            const data = payload.data as { content: string };
-            const delta = data.content || "";
-            // 首包为空时不翻转 firstChunk，保留"正在思考中..."占位，避免闪烁
-            if (firstChunk) {
-              if (delta) {
-                firstChunk = false;
-                // 正文开始输出 → 自动折叠 reasoning 区域
+            } else if (eventType === "reasoning") {
+              // 推理过程分片 —— 累加到 reasoning 字段，不干扰正文
+              const data = payload.data as { content: string };
+              const reasoning = data.content || "";
+              if (reasoning) {
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMsgId
-                      ? { ...msg, text: delta, isReasoning: false, reasoningCollapsed: true }
+                      ? {
+                          ...msg,
+                          reasoning: (msg.reasoning ?? "") + reasoning,
+                          isReasoning: true,
+                        }
                       : msg,
                   ),
                 );
               }
-              return;
-            }
-            if (delta) {
+            } else if (eventType === "delta") {
+              const data = payload.data as { content: string };
+              const delta = data.content || "";
+              // 首包为空时不翻转 firstChunk，保留"正在思考中..."占位，避免闪烁
+              if (firstChunk) {
+                if (delta) {
+                  firstChunk = false;
+                  // 正文开始输出 → 自动折叠 reasoning 区域
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMsgId
+                        ? {
+                            ...msg,
+                            text: delta,
+                            isReasoning: false,
+                            reasoningCollapsed: true,
+                          }
+                        : msg,
+                    ),
+                  );
+                }
+                return;
+              }
+              if (delta) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? { ...msg, text: msg.text + delta }
+                      : msg,
+                  ),
+                );
+              }
+            } else if (eventType === "done") {
+              streamFinished = true;
+            } else if (eventType === "error") {
+              streamFinished = true;
+              const errData = payload.data as { error_msg: string };
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === assistantMsgId
-                    ? { ...msg, text: msg.text + delta }
+                    ? { ...msg, text: `请求异常：${errData.error_msg}` }
                     : msg,
                 ),
               );
             }
-          } else if (eventType === "done") {
+          },
+          onError: (error) => {
             streamFinished = true;
-          } else if (eventType === "error") {
-            streamFinished = true;
-            const errData = payload.data as { error_msg: string };
+            const message = error.data?.error_msg || t("error.streamFailed");
+            log.error("sendStream response failed", error);
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.id === assistantMsgId
-                  ? { ...msg, text: `请求异常：${errData.error_msg}` }
-                  : msg,
+                msg.id === assistantMsgId ? { ...msg, text: message } : msg,
               ),
             );
-          }
+          },
         },
-        onError: (error) => {
-          streamFinished = true;
-          const message =
-            error.data?.error_msg || t("error.streamFailed");
-          log.error("sendStream response failed", error);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMsgId ? { ...msg, text: message } : msg,
-            ),
-          );
-        },
-      }, { signal: controller.signal });
+        { signal: controller.signal },
+      );
     } catch (e) {
       // 被主动取消时不显示错误
       if (controller.signal.aborted) {

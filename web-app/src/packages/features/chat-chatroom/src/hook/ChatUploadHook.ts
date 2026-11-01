@@ -19,17 +19,18 @@ export function chatUploadHook() {
     setError("");
     setUploading(true);
     startUpload(files.map((f) => f.name));
-    const [err, res] = await uploadFiles(files);
-    if (err) {
-      const errMsg = err.data?.error_msg || "CLIENT:Upload failed";
+    try {
+      const res = await uploadFiles(files);
+      const uploadedFiles = res?.files ?? [];
+      const failedFiles = res?.failed_files ?? [];
+      finishUpload("success", uploadedFiles, failedFiles);
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : "CLIENT:Upload failed";
       setError(errMsg);
       finishUpload("error");
-    } else {
-      const uploadedFiles = res?.data?.files ?? [];
-      const failedFiles = res?.data?.failed_files ?? [];
-      finishUpload("success", uploadedFiles, failedFiles);
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   return { uploading, error, handleFileChange };

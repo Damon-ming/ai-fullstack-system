@@ -1,5 +1,6 @@
 export interface UploadFileResult {
   filename: string;
+  file_uid: string;
 }
 
 export interface UploadFailedFile {

@@ -7,7 +7,11 @@ import React, { useRef, useEffect, useState } from "react";
 // 上公网时考虑加 rehype-sanitize 做白名单纵深防御。
 import ReactMarkdown from "react-markdown";
 import { useChatMessageStateHook } from "../hook/useChatMessageStateHook";
-import { useChatSendStreamHook } from "../hook/useChatSendStreamHook";
+import {
+  useChatSendStreamHook,
+  formatMessageTime,
+  formatTraceId,
+} from "../hook/useChatSendStreamHook";
 import { useTranslation } from "@ming/i18n";
 import type { ChatMessage } from "@ming/store/biz/chat-state";
 
@@ -212,9 +216,7 @@ export const ChatChatroom: React.FC = () => {
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-400">
                       {message.createdAt && (
                         <span className="rounded-md bg-gray-50 px-2 py-1">
-                          {new Date(
-                            message.createdAt * 1000,
-                          ).toLocaleTimeString()}
+                          {formatMessageTime(message.createdAt)}
                         </span>
                       )}
                       {message.traceId && (
@@ -222,7 +224,7 @@ export const ChatChatroom: React.FC = () => {
                           className="cursor-help rounded-md bg-gray-50 px-2 py-1 font-mono"
                           title={message.traceId}
                         >
-                          trace: {message.traceId.slice(0, 8)}…
+                          trace: {formatTraceId(message.traceId)}
                         </span>
                       )}
                     </div>

@@ -18,8 +18,8 @@ import {
   bytesToHex,
   deriveKeyMaterial,
 } from "@ming/core-encryption";
-import type { EncryptionSession } from "@ming/biz-common-net-api";
 import { fetchPublicKey, registerSession } from "../api";
+import type { EncryptionSession } from "../api";
 
 const log = createLogger("encryption/hook");
 
@@ -34,7 +34,11 @@ const SIGN_CONTEXT = "ai-fullstack-signature-v1";
 /** 执行密钥交换，返回加密会话 */
 export async function exchangeKeys(): Promise<EncryptionSession> {
   // 1. 获取服务端 RSA 公钥
-  const { publicKey: publicKeyPem } = await fetchPublicKey();
+  const pubResp = await fetchPublicKey();
+  if (!pubResp?.data) {
+    throw new Error("获取公钥失败: 服务端未返回有效公钥");
+  }
+  const { publicKey: publicKeyPem } = pubResp.data;
 
   // 2. 生成 AES-256 密钥，用 RSA 公钥加密
   const { rawKeyBytes } = await generateAesKey();
@@ -49,7 +53,11 @@ export async function exchangeKeys(): Promise<EncryptionSession> {
   const signatureKeyHex = bytesToHex(signKeyBytes);
 
   // 4. 注册会话，获取 keyId
-  const sessionRes = await registerSession(encryptedKeyB64);
+  const sessionResp = await registerSession(encryptedKeyB64);
+  if (!sessionResp?.data) {
+    throw new Error("会话注册失败: 服务端未返回有效会话信息");
+  }
+  const sessionRes = sessionResp.data;
 
   // 5. 构造会话（预留 5 分钟缓冲）
   return {
@@ -60,4 +68,3 @@ export async function exchangeKeys(): Promise<EncryptionSession> {
     expiresAt: Date.now() + (sessionRes.expiresIn - 300) * 1000,
   };
 }
-

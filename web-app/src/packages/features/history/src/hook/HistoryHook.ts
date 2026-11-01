@@ -1,14 +1,77 @@
 // web-app/src/packages/features/history/src/hook/HistoryHook.ts
 import { useCallback, useMemo } from "react";
-import type { HistoryMessage } from "../api/types";
+import type { HistoryItem, HistoryMessage } from "../api/types";
 import {
+  fetchList,
+  fetchMessages,
+  saveToServer,
+  addConversation,
+  removeFromServer,
   useHistoryListQuery,
   useSaveHistoryMutation,
   useRemoveHistoryMutation,
-  historyStore,
 } from "../api";
-import { unpackList } from "../api/unpack";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
+
+// 内部类型 —— 用于数据解包函数参数
+interface DataEnvelope {
+  data?: unknown;
+}
+interface HistoryApiRecord {
+  id: unknown;
+  title?: unknown;
+  updatedAt?: string;
+  updated_at?: string;
+  createdAt?: unknown;
+  created_at?: unknown;
+  messages?: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// 数据解包 —— 服务端响应 → 前端业务对象（业务逻辑，非纯网络层）
+// ---------------------------------------------------------------------------
+
+function parseTimestamp(raw: unknown): number {
+  if (!raw) return Date.now();
+  const ms = new Date(raw as string).getTime();
+  return Number.isNaN(ms) ? Date.now() : ms;
+}
+
+function unpackDetail(res: DataEnvelope | undefined): unknown {
+  const d = res?.data as { conversation?: unknown };
+  return d?.conversation ?? d;
+}
+
+function parseListRecord(item: unknown): HistoryItem {
+  const obj = item as HistoryApiRecord;
+  return {
+    id: String(obj.id),
+    title: String(obj.title ?? ""),
+    meta: String(obj.updatedAt || obj.updated_at || ""),
+    createdAt: parseTimestamp(obj.createdAt || obj.created_at),
+    messages: [],
+  };
+}
+
+function parseMessages(raw: unknown): HistoryMessage[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((m: { id: unknown; text?: unknown; role: unknown }) => ({
+    id: String(m.id),
+    text: String(m.text ?? ""),
+    role: m.role === "assistant" ? "assistant" : "user",
+  }));
+}
+
+function unpackList(res: DataEnvelope | undefined): HistoryItem[] {
+  const items = (res?.data ?? []) as unknown[];
+  return items.map(parseListRecord);
+}
+
+async function fetchAndUnpackMessages(id: string): Promise<HistoryMessage[]> {
+  const res = await fetchMessages(id);
+  const detail = unpackDetail(res) as { messages?: unknown } | undefined;
+  return parseMessages(detail?.messages);
+}
 
 // ---------------------------------------------------------------------------
 // 业务逻辑（纯函数，UI 层特有，不属于 core 时间工具）
@@ -29,7 +92,6 @@ function getHistoryGroupLabel(createdAt: number): string {
 // ---------------------------------------------------------------------------
 
 export function useHistory() {
-  // api 层 hook 已经封装了 query/mutation + 缓存失效，此处只做编排
   const listQuery = useHistoryListQuery();
   const list = useMemo(() => unpackList(listQuery.data), [listQuery.data]);
 
@@ -50,7 +112,6 @@ export function useHistory() {
     [removeMutation],
   );
 
-  // 业务逻辑：按时间分组（UI 层需求，非通用工具）
   const groups = useMemo(() => {
     const grouped = new Map<string, typeof list>();
     for (const item of [...list].sort((a, b) => b.createdAt - a.createdAt)) {
@@ -64,18 +125,18 @@ export function useHistory() {
     list,
     groups,
     loading: listQuery.isLoading,
-    getMessages: historyStore.messages,
+    getMessages: fetchAndUnpackMessages,
     saveMessages,
     remove,
-    add: historyStore.add,
+    add: addConversation,
   };
 }
 
 /** 非 React 上下文的同步调用（返回 Promise，供事件回调等场景使用）。 */
 export const historyActions = {
-  list: historyStore.list,
-  messages: historyStore.messages,
-  saveMessages: historyStore.saveMessages,
-  add: historyStore.add,
-  remove: historyStore.remove,
+  list: fetchList,
+  messages: fetchAndUnpackMessages,
+  saveMessages: saveToServer,
+  add: addConversation,
+  remove: removeFromServer,
 };

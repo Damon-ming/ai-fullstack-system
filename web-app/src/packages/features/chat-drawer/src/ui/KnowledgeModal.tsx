@@ -1,11 +1,17 @@
 import React, { useState } from "react";
-import { useDrawerKnowledgeHook } from "../hook/useDrawerKnowledgeHook";
+import {
+  useDrawerKnowledgeHook,
+  formatFileSize,
+} from "../hook/useDrawerKnowledgeHook";
 import { useTranslation } from "@ming/i18n";
 import type { KnowledgeNode } from "../api/types/knowledge";
 import type { KnowledgeGroup } from "../hook/useDrawerKnowledgeHook";
 
 /** 递归渲染目录树节点 */
-function TreeItem({ node, depth }: { node: KnowledgeNode; depth: number }) {
+function TreeItem({
+  node,
+  depth,
+}: Readonly<{ node: KnowledgeNode; depth: number }>) {
   const [expanded, setExpanded] = useState(depth === 0);
 
   if (node.type === "directory") {
@@ -47,18 +53,14 @@ function TreeItem({ node, depth }: { node: KnowledgeNode; depth: number }) {
       <span className="w-4 text-center text-xs text-gray-300">·</span>
       <span className="flex-1 truncate text-gray-700">{node.name}</span>
       <span className="shrink-0 text-xs text-gray-400">
-        {node.size >= 1024 * 1024
-          ? `${(node.size / (1024 * 1024)).toFixed(2)} MB`
-          : node.size >= 1024
-            ? `${(node.size / 1024).toFixed(1)} KB`
-            : `${node.size} B`}
+        {formatFileSize(node.size)}
       </span>
     </div>
   );
 }
 
 /** 按日期分组的文件列表 — 纯展示，数据由 hook 预处理好 */
-function DateGroupedList({ groups }: { groups: KnowledgeGroup[] }) {
+function DateGroupedList({ groups }: Readonly<{ groups: KnowledgeGroup[] }>) {
   return (
     <div className="space-y-4">
       {groups.map((group) => (

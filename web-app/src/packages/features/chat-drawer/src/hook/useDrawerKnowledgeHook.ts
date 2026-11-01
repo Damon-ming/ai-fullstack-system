@@ -1,16 +1,14 @@
 import { useCallback, useMemo } from "react";
-import { queryFactory } from "@ming/data-layer";
 import { useKnowledgeStore } from "@ming/store";
-import { fetchKnowledgeTree } from "../api/knowledge.api";
-import type { KnowledgeNode, KnowledgeTreeData } from "../api/types/knowledge";
+import { useKnowledgeQuery } from "../api";
+import type { KnowledgeNode } from "../api/types/knowledge";
 
-const KNOWLEDGE_TREE_KEY = ["knowledge", "tree"] as const;
-
-const useKnowledgeQuery = queryFactory.createQueryHook<KnowledgeTreeData>(
-  KNOWLEDGE_TREE_KEY,
-  fetchKnowledgeTree,
-  { staleTime: 30_000, refetchOnWindowFocus: false },
-);
+/** 格式化文件大小 — 共享工具函数，hook/UI 均可使用 */
+export function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
 
 /** 按日期分组的文件列表 — UI 直接渲染，不做额外处理 */
 export interface KnowledgeGroup {
@@ -55,7 +53,7 @@ function groupByDate(files: KnowledgeNode[]): KnowledgeGroup[] {
         files: items.map((f) => ({
           name: f.name,
           path: f.path,
-          sizeMB: `${(f.size / (1024 * 1024)).toFixed(2)} MB`,
+          sizeMB: formatFileSize(f.size),
         })),
       };
     });

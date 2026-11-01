@@ -1,9 +1,8 @@
 // web-app/src/packages/features/chat/src/ui/ChatPage.tsx
-import { ChatDrawer } from "@ming/feature-chat-drawer";
-import { KnowledgeModal } from "@ming/feature-chat-drawer";
+import { ChatDrawer, KnowledgeModal } from "@ming/feature-chat-drawer";
 import { ChatChatroom } from "@ming/feature-chat-chatroom";
 import { DataProvider } from "@ming/data-layer";
-import React, { useMemo, useEffect } from "react";
+import React, { useEffect } from "react";
 import { useChatPageHook } from "../hook";
 import { i18n, useTranslation } from "@ming/i18n";
 export const ChatPage: React.FC = () => {
@@ -22,30 +21,11 @@ export const ChatPage: React.FC = () => {
     saveAccount,
     loadHistory,
     upload,
+    uploadMessage,
     closeUpload,
     abortUpload,
     knowledgeOpen,
-    closeKnowledge,
   } = useChatPageHook();
-
-  const uploadMessage = useMemo(() => {
-    switch (upload.status) {
-      case "uploading":
-        return t("upload.uploading");
-      case "error":
-        return t("upload.error");
-      case "success": {
-        const allIndexed =
-          upload.files.length === 0 ||
-          upload.files.every((f) => f.indexed || f.duplicate);
-        return allIndexed
-          ? t("upload.successAllIndexed")
-          : t("upload.successPartial");
-      }
-      default:
-        return "";
-    }
-  }, [upload.status, upload.files, t]);
 
   // 页面关闭/刷新前取消进行中的上传，避免服务端继续空跑
   useEffect(() => {
@@ -228,21 +208,15 @@ export const ChatPage: React.FC = () => {
                 <div className="mt-4 max-h-[150px] overflow-auto rounded-xl border border-gray-100 bg-gray-50 p-2 text-left">
                   {upload.files.map((file) => (
                     <div
-                      key={file.file_sha256}
+                      key={file.file_uid || file.filename}
                       className="flex items-center gap-2 px-2 py-2 text-xs text-gray-500"
                     >
-                      <span className="text-base text-emerald-500">
-                        {file.indexed || file.duplicate ? "✓" : "◌"}
-                      </span>
+                      <span className="text-base text-emerald-500">✓</span>
                       <strong className="min-w-0 flex-1 truncate font-semibold text-gray-700">
                         {file.filename}
                       </strong>
                       <em className="whitespace-nowrap not-italic text-blue-500">
-                        {file.duplicate
-                          ? t("upload.fileExists")
-                          : file.indexed
-                            ? t("upload.fileIndexed")
-                            : t("upload.fileIndexing")}
+                        {t("upload.fileIndexed")}
                       </em>
                     </div>
                   ))}

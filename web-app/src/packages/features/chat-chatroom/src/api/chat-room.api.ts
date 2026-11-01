@@ -26,12 +26,7 @@ export const sendChatRoomMessageFn = (
     endpoint: "/api/llm/send/v1",
     queryLength: request.query.length,
   });
-  return dataApi
-    .post("/api/llm/send/v1", request, { signal })
-    .then((response) => {
-      log.debug("send response received");
-      return response;
-    });
+  return dataApi.post("/api/llm/send/v1", request, { signal });
 };
 
 /**

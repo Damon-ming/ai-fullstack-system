@@ -46,7 +46,7 @@ export function useChatPageHook() {
   );
   const upload = useChatUploadStore((state) => state.upload);
   const closeUpload = useChatUploadStore((state) => state.closeUpload);
-  const { abortUpload } = useDrawerUploadHook();
+  const { abortUpload, message: uploadMessage } = useDrawerUploadHook();
   const knowledgeOpen = useKnowledgeStore((state) => state.open);
   const closeKnowledge = useKnowledgeStore((state) => state.closeKnowledge);
 
@@ -106,6 +106,7 @@ export function useChatPageHook() {
     saveAccount,
     loadHistory,
     upload,
+    uploadMessage,
     closeUpload,
     abortUpload,
     knowledgeOpen,
