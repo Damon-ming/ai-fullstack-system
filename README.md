@@ -566,6 +566,11 @@ app → features → data-layer / store / i18n → biz-common → core
 - 同模块下 ui 与 hook 之间的通讯封装实体（非网络请求）放在 `hook/bean.ts`
 - 通过 api 层提供的接口调用网络请求和持久化
 
+#### ui/ 层细则
+
+- 可直接读取 **i18n**（`t` 函数）和 **store**（`useStore`），无需通过 hook 层
+- 跨模块能力通过 hook 层透传获得，**不直接调用其他模块的 -api**
+
 
 ### 跨模块通信
 

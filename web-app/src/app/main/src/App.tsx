@@ -1,7 +1,12 @@
 // src/app/main/src/App.tsx
-import React from 'react'
-import { ChatPage } from '@ming/feature-chat'
+import React from "react";
+import { DataProvider } from "@ming/data-layer";
+import { ChatPage } from "@ming/feature-chat-api";
 
 export const App: React.FC = () => {
-  return <ChatPage />
-}
+  return (
+    <DataProvider>
+      <ChatPage />
+    </DataProvider>
+  );
+};

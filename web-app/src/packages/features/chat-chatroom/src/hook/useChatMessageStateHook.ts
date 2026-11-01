@@ -1,5 +1,8 @@
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 
+/** 透传 store 的 ChatMessage 供 UI 层类型使用（避免 UI 直连 store） */
+export type { ChatMessage } from "@ming/store/biz/chat-state";
+
 /** 公共：消息状态 + 写入方法（同步/流式发送共用） */
 export function useChatMessageStateHook() {
   const input = useChatMessageStore((s) => s.input);
@@ -11,5 +14,14 @@ export function useChatMessageStateHook() {
   const reason = useChatMessageStore((s) => s.reason);
   const setReason = useChatMessageStore((s) => s.setReason);
 
-  return { input, setInput, messages, setMessages, sending, setSending, reason, setReason };
+  return {
+    input,
+    setInput,
+    messages,
+    setMessages,
+    sending,
+    setSending,
+    reason,
+    setReason,
+  };
 }

@@ -1,1 +1,1 @@
-export { searchHistory } from "./api/search-api.api"
+export { searchItems } from "./api/search-api.api";

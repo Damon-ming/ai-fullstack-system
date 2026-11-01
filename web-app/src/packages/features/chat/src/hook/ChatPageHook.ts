@@ -11,9 +11,10 @@ import {
   useKnowledgeStore,
 } from "@ming/store";
 import { useHistory } from "@ming/feature-history-api";
-import { searchHistory } from "@ming/feature-search-api";
+import { searchItems } from "@ming/feature-search-api";
 import { useAccount } from "@ming/feature-account-api";
 import { useDrawerUploadHook } from "@ming/feature-chat-drawer-api";
+import type { HistoryItem } from "@ming/feature-history-api";
 
 const log = createLogger("chat/page");
 
@@ -41,7 +42,7 @@ export function useChatPageHook() {
   const closeSearch = useSearchStore((state) => state.closeSearch);
   const setSearchKeyword = useSearchStore((state) => state.setKeyword);
   const searchResults = useMemo(
-    () => searchHistory(historyList, searchKeyword),
+    () => searchItems<HistoryItem>(historyList, searchKeyword),
     [historyList, searchKeyword],
   );
   const upload = useChatUploadStore((state) => state.upload);

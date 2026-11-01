@@ -1,5 +1,1 @@
-export {
-  useAccount,
-  initDeviceToken,
-  refreshDeviceToken,
-} from "./AccountHook";
+export { useAccount } from "./AccountHook";

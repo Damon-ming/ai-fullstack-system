@@ -1,13 +1,11 @@
 import React from "react";
 import { useDrawerHistoryHook } from "../hook/useDrawerHistoryHook";
-import { useHistoryStore } from "@ming/store/biz/history-state";
 import { useTranslation } from "@ming/i18n";
 
 export const DrawerHistory: React.FC = () => {
   const { t } = useTranslation("chat-drawer");
-  const { list, groups, activeId, selectChat } =
+  const { list, groups, activeId, loading, selectChat } =
     useDrawerHistoryHook();
-  const loading = useHistoryStore((s) => s.loading);
 
   if (loading) {
     return (
