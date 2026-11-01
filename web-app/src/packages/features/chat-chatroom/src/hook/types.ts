@@ -1,6 +1,6 @@
-// web-app/src/packages/features/chat-chatroom/src/hook/bean.ts
+// web-app/src/packages/features/chat-chatroom/src/hook/types.ts
 /**
- * 模块内部 UI ↔ Hook 通讯实体。
+ * 模块内部 UI ↔ Hook 通讯类型。
  *
  * 定义 chat-chatroom 模块的消息类型，避免 UI 层直连 @ming/store 内部类型。
  * store 的 chat-state.ts 实现此接口，但 feature 模块通过本类型引用，

@@ -568,7 +568,7 @@ app → features → data-layer / store / i18n → biz-common → core
 
 - **所有涉及存储读写的业务决策都在 hook/ 层**：何时读缓存、何时调 API、何时写缓存、失败如何处理
 - **hook/ 层可包含 UI 相关的业务逻辑和展示工具函数**：消息格式化、时间格式化、traceId 截断等供 UI 直接渲染的函数，放在 hook/ 层而非 ui/ 层。ui/ 层只做 JSX 渲染和样式绑定
-- 同模块下 ui 与 hook 之间的通讯封装实体（非网络请求）放在 `hook/bean.ts`
+- 同模块下 ui 与 hook 之间的通讯类型（非网络请求）放在 `hook/types.ts`
 - 通过 api/ 层提供的接口调用网络请求和持久化，不直接依赖存储实现（如 `@ming/biz-common-storage`）
 - **hook/ 层不直接 import `@ming/biz-common-net-api`**（biz-common 公共工具的门面层）——需要的工具函数（如 `isFailure`、`ErrorCode` 等）由本模块的 `api/` 层 re-export，hook/ 层从 `../api` 获取，保持 api/hook 边界完整
 
@@ -624,10 +624,13 @@ features/{module}/
 │   ├── hook/               # 业务编排：状态管理 + 存储决策 + 数据转换（必须）
 │   │   ├── index.ts
 │   │   ├── {Module}Hook.ts
-│   │   └── bean.ts         # 模块内部 UI↔Hook 通讯实体
-│   └── ui/                 # 纯展示（按需）
-│       ├── index.ts
-│       └── {Module}.tsx
+│   │   └── types.ts        # 模块内部 UI↔Hook 通讯类型
+│   ├── ui/                 # 纯展示（按需）
+│   │   ├── index.ts
+│   │   └── {Module}.tsx
+│   └── locales/            # 多语言词条（按需）
+│       ├── en.json
+│       └── zh.json
 ```
 
 ```
