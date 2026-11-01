@@ -1,17 +1,8 @@
 from pydantic import BaseModel, Field
-from src.com.damon.ming.schemas.request import BaseBizRequest
 from src.com.damon.ming.schemas.response import BaseBizSuccessData
 
 
-# ================= 1. 文件上传请求 =================
-class FileUploadRequest(BaseBizRequest):
-    """文件上传请求：继承全局基类，补充文件特有参数"""
-
-    description: str | None = Field(None, description="文件描述或备注")
-    category: str | None = Field(None, description="文件分类（如：合同、发票）")
-
-
-# ================= 2. 文件上传响应 =================
+# ================= 1. 文件上传响应 =================
 class FileUploadItem(BaseModel):
     """成功文件"""
 

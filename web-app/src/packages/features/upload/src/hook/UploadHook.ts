@@ -5,11 +5,6 @@ import { createLogger } from "@ming/core-log";
 
 const log = createLogger("upload/hook");
 
-export interface UploadMeta {
-  description?: string;
-  category?: string;
-}
-
 // ── 上传限制常量（与后端 upload-config.yaml 保持一致）─────────────────
 const MAX_FILES_PER_REQUEST = 10;
 
@@ -34,7 +29,7 @@ const ALLOWED_EXTENSIONS = /\.(pdf|md|txt|csv|xlsx|docx|doc|pptx|html|htm)$/i;
 const ALLOWED_EXTENSIONS_LIST =
   ".pdf, .md, .txt, .csv, .xlsx, .docx, .doc, .pptx, .html";
 
-function createUploadRequest(files: File[], meta?: UploadMeta): UploadRequest {
+function createUploadRequest(files: File[]): UploadRequest {
   if (!files.length) throw new Error("至少选择一个文件");
 
   if (files.length > MAX_FILES_PER_REQUEST) {
@@ -57,27 +52,18 @@ function createUploadRequest(files: File[], meta?: UploadMeta): UploadRequest {
     }
   }
 
-  return {
-    files,
-    description: meta?.description,
-    category: meta?.category,
-  };
+  return { files };
 }
 
 export async function uploadFiles(
   files: File[],
-  meta?: UploadMeta,
   signal?: AbortSignal,
 ): Promise<UploadResponse> {
   log.debug("upload started", {
     fileCount: String(files.length),
     fileNames: files.map((file) => file.name).join(", "),
-    hasMeta: String(!!meta),
   });
-  const result = await requestUploadFile(
-    createUploadRequest(files, meta),
-    signal,
-  );
+  const result = await requestUploadFile(createUploadRequest(files), signal);
   log.debug("upload finished", { fileCount: files.length });
   return result;
 }

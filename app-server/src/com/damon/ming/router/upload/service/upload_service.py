@@ -14,9 +14,6 @@ from src.com.damon.ming.ai.rag_tool import RAGContainer
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.router.upload.schemas.bean import (
-    FileUploadRequest,
-)
 from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.file_stat import file_creation_time
 from src.com.damon.ming.utils.time import now_iso
@@ -90,7 +87,6 @@ class UploadService:
     @staticmethod
     async def batch_save_files(
         file_list: list[UploadFile],
-        req: FileUploadRequest,
         upload_config,
         rag_app: RAGContainer,
         cancellation_token: CancellationToken | None = None,
