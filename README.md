@@ -528,6 +528,97 @@ data: {"code": 200005001, "message": "请求超时"}
 | i18n | react-i18next + 后端 X-Language 协商 |
 | 限流 | slowapi |
 
+## 前端架构设计
+
+### 依赖层次
+
+```
+app → features → data-layer / store / i18n → biz-common → core
+```
+
+- **biz-common** 是项目所有公共业务逻辑的封装模块
+- **模块不能反向依赖**，模块之间可以互相依赖，但必须避免循环依赖
+- **core 层可被任意层直接依赖**（纯技术能力，与业务无关）
+- 除网络模块外，其他模块都可以直接依赖 core 层
+
+### 模块职责
+
+#### features 三层分离
+
+| 层 | 职责 | 禁止 |
+|----|------|------|
+| **api/** | 网络请求（dataApi / netClient）、打印日志、LocalStorage 读写、返回原始 DataApiResponse | 业务逻辑、数据转换、字段映射、响应解包 |
+| **hook/** | 业务逻辑、数据转换、状态管理、编排 api 层 | 直调 `@ming/data-layer` 或 `@ming/biz-common-net-*`、UI 渲染 |
+| **ui/** | 纯页面展示 | 业务逻辑、数据转换、格式化计算 |
+
+#### api/ 层细则
+
+- 持久化（LocalStorage）和请求服务端都由 **api 层** 处理
+- 只能通过 `@ming/data-layer` 和 `@ming/biz-common-net-net` 进行网络请求
+- 提供接口给 hook 层调用，后续迁移持久化方式只需改 api 层，不用改 hook 层
+- `request` / `response` 为请求服务端的入参/出参或本地存储的 bean
+
+#### hook/ 层细则
+
+- 同模块下 ui 与 hook 之间的通讯封装实体（非网络请求）放在 `hook/bean.ts`
+- 通过 api 层提供的接口调用网络请求和持久化
+
+### 跨模块通信
+
+#### 模块间业务通信 — 必须通过 `-api` 中间件
+
+```
+模块 A 需要模块 B 的业务 → A 依赖 @ming/feature-b-api → 模块 B
+```
+
+- **不能**直接依赖另一个 feature 模块的具体实现
+- `-api` 是纯透通讯道（re-export），不包含实现
+- 页面（UI）可以直接依赖模块，不需要通过 `-api`
+
+#### 模块间信息通信 — 只能通过 store 订阅通知
+
+- 所有模块间的状态通知和数据同步都通过 `@ming/store` 模块
+
+### 目录规范
+
+```
+features/{module}/
+├── src/
+│   ├── api/                # 网络 + 持久化
+│   │   ├── index.ts
+│   │   ├── {module}.api.ts
+│   │   ├── types/          # request / response / bean
+│   │   └── {module}-query.ts  # query/mutation hooks (queryFactory 在此)
+│   ├── hook/               # 业务逻辑
+│   │   ├── index.ts
+│   │   ├── {Module}Hook.ts
+│   │   └── bean.ts         # 模块内部 UI↔Hook 通讯实体
+│   └── ui/                 # 纯展示
+│       ├── index.ts
+│       └── {Module}.tsx
+```
+
+```
+features/{module}-api/      # 跨模块通信中间件
+└── src/
+    ├── index.ts
+    └── api/
+        └── {module}-api.api.ts  # 纯 re-export
+```
+
+### 公共能力归属
+
+只跟技术有关、与业务无关的能力放到 `core` 模块，供上层所有模块复用：
+
+- `@ming/core-log` — 日志
+- `@ming/core-encryption` — 加密原语
+- `@ming/core-util` — 通用工具
+- `@ming/core-network` — 网络基础
+- `@ming/data-layer` — HTTP 客户端 + TanStack QueryFactory
+- `@ming/biz-common-*` — 业务公共层（net-api / storage / net）
+- `@ming/store` — 全局状态管理
+- `@ming/i18n` — 国际化
+
 ## License
 
 MIT
