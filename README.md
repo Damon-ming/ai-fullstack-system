@@ -576,7 +576,7 @@ app → features → data-layer / store / i18n → biz-common → core
 
 - **不能**直接依赖另一个 feature 模块的具体实现（包括 UI 页面）
 - 复用其他模块的页面也必须通过该模块的 `-api` 层暴露
-- `-api` 是纯透通讯道（re-export），不包含实现
+- `-api` 是纯透通讯道（re-export），**不做任何业务逻辑处理**，只透传具体模块的能力
 
 #### 模块间信息通信 — 只能通过 store 订阅通知
 
