@@ -576,7 +576,8 @@ app → features → data-layer(可选) → biz-common / store / i18n → core
 
 #### ui/ 层细则
 
-- 可直接读取 **i18n**（`t` 函数）和 **store**（`useStore`），无需通过 hook 层
+- 可直接读取 **i18n**（`t` 函数），无需通过 hook 层
+- **store 的读取必须通过 hook/ 层**：store selector 可能包含业务派生逻辑（computed、derived state），且 store API 可能变更；hook/ 层封装 store 订阅，ui/ 层只消费 hook 返回的数据和 action，不直接 import store
 - 可直接导入其他模块 `-api` 暴露的**纯展示组件**进行页面组合（如 `ChatChatroom`、`ChatDrawer` 等无业务逻辑的 UI 组件）
 - **跨模块业务能力**（hooks / 函数）通过 hook 层透传获得，ui/ 层不直接调用其他模块 `-api` 中的业务逻辑
 

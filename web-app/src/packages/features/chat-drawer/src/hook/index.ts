@@ -5,3 +5,4 @@ export { useDrawerUploadHook } from "./useDrawerUploadHook";
 export { useDrawerSearchHook } from "./useDrawerSearchHook";
 export { useDrawerHistoryHook } from "./useDrawerHistoryHook";
 export { useDrawerAccountHook } from "./useDrawerAccountHook";
+export { useDrawerKnowledgeHook } from "./useDrawerKnowledgeHook";

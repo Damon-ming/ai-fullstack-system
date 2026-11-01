@@ -1,9 +1,9 @@
 import React from "react";
-import { useKnowledgeStore } from "@ming/store";
 import { useDrawerHeaderHook } from "../hook/useDrawerHeaderHook";
 import { useDrawerSearchHook } from "../hook/useDrawerSearchHook";
 import { useDrawerNewChatHook } from "../hook/useDrawerNewChatHook";
 import { useDrawerUploadHook } from "../hook/useDrawerUploadHook";
+import { useDrawerKnowledgeHook } from "../hook/useDrawerKnowledgeHook";
 import { useTranslation } from "@ming/i18n";
 
 export const DrawerCollapsed: React.FC = () => {
@@ -12,7 +12,7 @@ export const DrawerCollapsed: React.FC = () => {
   const { openSearch } = useDrawerSearchHook();
   const { newChat } = useDrawerNewChatHook();
   const { handleUpload } = useDrawerUploadHook();
-  const openKnowledge = useKnowledgeStore((s) => s.openKnowledge);
+  const { openKnowledge } = useDrawerKnowledgeHook();
 
   return (
     <div className="flex flex-col items-center gap-2 py-3">
