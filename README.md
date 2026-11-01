@@ -574,9 +574,9 @@ app → features → data-layer / store / i18n → biz-common → core
 模块 A 需要模块 B 的业务 → A 依赖 @ming/feature-b-api → 模块 B
 ```
 
-- **不能**直接依赖另一个 feature 模块的具体实现
+- **不能**直接依赖另一个 feature 模块的具体实现（包括 UI 页面）
+- 复用其他模块的页面也必须通过该模块的 `-api` 层暴露
 - `-api` 是纯透通讯道（re-export），不包含实现
-- 页面（UI）可以直接依赖模块，不需要通过 `-api`
 
 #### 模块间信息通信 — 只能通过 store 订阅通知
 
@@ -611,14 +611,27 @@ features/{module}-api/      # 跨模块通信中间件
 
 ### 公共能力归属
 
-只跟技术有关、与业务无关的能力放到 `core` 模块，供上层所有模块复用：
+#### 基础能力模块（core）
 
+纯技术能力，与业务无关，可被任意层直接调用，无需通过中间层。核心原则是只跟技术有关，不包含任何业务逻辑：
+
+- `@ming/core` — 核心基础设施
 - `@ming/core-log` — 日志
 - `@ming/core-encryption` — 加密原语
 - `@ming/core-util` — 通用工具
 - `@ming/core-network` — 网络基础
+- `@ming/core-storage` — 存储基础能力
+
+#### 公共业务模块
+
+业务相关的公共封装，供 features 和 app 层复用：
+
+- `@ming/biz-common` — 公共业务逻辑
+  - `@ming/biz-common-net-api` — 网络公共业务对外调用的 api 模块
+  - `@ming/biz-common-storage` — 存储抽象层
+  - `@ming/biz-common-net` — 网络请求客户端
+  - `@ming/biz-common-debug` — 调试工具
 - `@ming/data-layer` — HTTP 客户端 + TanStack QueryFactory
-- `@ming/biz-common-*` — 业务公共层（net-api / storage / net）
 - `@ming/store` — 全局状态管理
 - `@ming/i18n` — 国际化
 
