@@ -558,7 +558,7 @@ app → features → data-layer(可选) → biz-common / store / i18n → core
 
 #### api/ 层细则
 
-- 网络请求和持久化（LocalStorage）的原始入口
+- 网络请求和持久化（LocalStorage）的原始入口，每个 feature 的 api/ 仅包含**本模块**的网络请求和存储原语 re-export，不引用其他 feature 的 `-api`
 - 网络请求只能通过 `@ming/data-layer` 和 `@ming/biz-common-net-api` 进行
 - api/ 层只做 **原始读写（透传）**：
   - 网络：发请求，返回原始 `DataApiResponse`，不解包、不转换、不做业务判断
@@ -572,7 +572,7 @@ app → features → data-layer(可选) → biz-common / store / i18n → core
 - **hook/ 层可包含 UI 相关的业务逻辑和展示工具函数**：消息格式化、时间格式化、traceId 截断等供 UI 直接渲染的函数，放在 hook/ 层而非 ui/ 层。ui/ 层只做 JSX 渲染和样式绑定
 - 同模块下 ui 与 hook 之间的通讯类型（非网络请求）放在 `hook/types.ts`
 - 通过 api/ 层提供的接口调用网络请求和持久化，不直接依赖存储实现（如 `@ming/biz-common-storage`）
-- **hook/ 层不直接 import `@ming/biz-common-net-api`**（biz-common 公共工具的门面层）——需要的工具函数（如 `isFailure`、`ErrorCode` 等）由本模块的 `api/` 层 re-export，hook/ 层从 `../api` 获取，保持 api/hook 边界完整
+- **hook/ 层是跨模块业务调用的唯一发起层**——通过 `@ming/feature-x-api` 获取其他模块的业务能力（hooks / 函数）；不直接 import `@ming/biz-common-net-api` 或 `@ming/data-layer`，需要的工具函数由本模块的 `api/` 层 re-export（如 `isFailure`、`EncryptionSession`），hook/ 层从 `../api` 获取，保持 api/hook 边界完整
 
 #### ui/ 层细则
 
@@ -583,31 +583,18 @@ app → features → data-layer(可选) → biz-common / store / i18n → core
 
 ### 跨模块通信
 
-#### 模块间业务通信 — 必须通过 `-api` 中间件
-
-```
-模块 A 需要模块 B 的业务 → A 依赖 @ming/feature-b-api → 模块 B
-```
-
-- **不能**直接依赖另一个 feature 模块的具体实现（包括 UI 页面）
-- 复用其他模块的页面也必须通过该模块的 `-api` 层暴露
-- `-api` 是纯透通讯道，**不做任何业务逻辑处理**，只透传具体模块的能力。透传方式可以是 `re-export`（`export { fn } from`）或**签名一致的薄包装**（`export const fn = (...args) => origFn(...args)`），两者等价
-
-#### api/ vs hook/ 分离示例（account 模块）
-
-以 `features/account` 为例，展示 api/ 层透传与 hook/ 层编排的
-核心原则：**api/ 层是"能力原子"（能做什么），hook/ 层是"业务编排"（什么时候做、做了之后怎么办）。**
-
-
 #### 跨模块调用链路
 
 ```
 ui/ → hook/ → {module}-api/ → 目标模块
 ```
 
-- 跨模块**业务能力调用**（hooks / 函数）通过 **模块 -api** 层进行，在 **hook/** 层发起，不直接在 UI 层发起
-- 如果 UI 层需要用到其他模块的业务能力，由 **hook/** 层封装或透传该模块的 `-api` 调用，再提供给 UI
-- UI 层可以直接导入其他模块 `-api` 暴露的**纯展示组件**（无业务逻辑），不视为跨模块业务调用
+核心原则：**api/ 层是"能力原子"（能做什么），hook/ 层是"业务编排"（什么时候做、做了之后怎么办）。**
+
+- 跨模块**业务能力调用**（hooks / 函数）必须通过 **模块 -api** 层进行，在 **hook/** 层发起，不直接在 UI 层发起
+- **不能**直接依赖另一个 feature 模块的具体实现；复用其他模块的页面也必须通过该模块的 `-api` 层暴露
+- `-api` 是纯透通讯道，**不做任何业务逻辑处理**，只透传具体模块的能力。透传方式可以是 `re-export`（`export { fn } from`）或**签名一致的薄包装**（`export const fn = (...args) => origFn(...args)`），两者等价
+- UI 层可以直接导入其他模块 `-api` 暴露的**纯展示组件**（无业务逻辑）进行页面组合，不视为跨模块业务调用
 
 #### 模块间信息通信 — 通过 store 订阅通知
 
@@ -646,19 +633,8 @@ features/{module}-api/      # 跨模块通信中间件
 ```
 
 > **按需原则**：`api/` 和 `ui/` 目录根据模块实际职责决定是否创建。
-> - **无 api/**：模块自身无网络请求或持久化需求，数据全部来自其他模块的 `-api`（如 `chat` 模块，作为主页面仅编排其他 feature）。`hook/` 层直接通过跨模块 `-api` 获取数据。
-> - **无 ui/**：模块无独立页面，UI 由其他模块组合消费（如 `upload`、`encryption`、`history` 等模块的组件被 `chat-drawer` 组合使用）。
-
-### 跨模块 -api 依赖澄清
-
-**跨模块 -api 依赖一律通过 hook/ 层获取，不在 api/ 层引用。**
-
-- 每个 feature 模块自身的 `api/` 层仅包含**本模块**的网络请求（HTTP）和存储原语 re-export
-- 如果模块 A 需要使用模块 B 的业务能力，**在 A 的 hook/ 层**通过 `@ming/feature-b-api` 调用
-- api/ 层不引用其他 feature 的 `-api` 模块，避免 api/ 层形成跨模块耦合链
-- 此规则与「跨模块调用都在 hook/ 层发起」一致
-
-示例：`ChatPageHook.ts`（chat/hook/）通过 `@ming/feature-history-api`、`@ming/feature-account-api` 获取其他模块能力——这是正确的路径。而 `chat/api/` 层只负责 chat 自身模块的数据通道。
+> - **无 api/**：模块无网络请求或持久化需求，数据全部来自其他模块（如 `chat` 作为主页面仅编排其他 feature，hook/ 层通过跨模块 `-api` 获取能力）。
+> - **无 ui/**：模块无独立页面，UI 由其他模块组合消费（如 `upload`、`encryption`、`history` 的组件被 `chat-drawer` 组合使用）。
 
 ## 公共能力归属
 
