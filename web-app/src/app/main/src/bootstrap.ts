@@ -8,7 +8,6 @@ import {
   clearSessionContext,
 } from "@ming/biz-common-storage";
 import { setClearSessionCallback } from "@ming/store";
-import { login } from "@ming/feature-account-api";
 import { exchangeKeys } from "@ming/feature-encryption-api";
 
 const log = createLogger("app/bootstrap");
@@ -35,9 +34,7 @@ export async function bootstrap(): Promise<void> {
   // 2. 初始化 i18n
   log.info(`i18n initialized, language: ${i18n.language}`);
 
-  // 3. 登录（hook 层已处理 localStorage 写入）
-  await login();
-
+  // 3. 登录改为 UI 流程（LoginPage），不再自动登录
   log.info("Initialization complete.");
 }
 

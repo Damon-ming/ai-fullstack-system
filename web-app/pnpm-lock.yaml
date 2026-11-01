@@ -188,6 +188,9 @@ importers:
       '@ming/data-layer':
         specifier: workspace:*
         version: link:../../data-layer
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
       react:
         specifier: ^18.2.0
         version: 18.3.1

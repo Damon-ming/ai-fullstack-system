@@ -5,6 +5,7 @@
  * 使用 import type + 相对路径，编译后不产生运行时依赖。
  * i18n 的 package.json 中不声明 feature 依赖，避免循环。
  */
+import type { AccountResources } from "../../features/account/src/locales/resources";
 import type { ChatDrawerResources } from "../../features/chat-drawer/src/locales/resources";
 import type { ChatPageResources } from "../../features/chat/src/locales/resources";
 import type { ChatChatroomResources } from "../../features/chat-chatroom/src/locales/resources";
@@ -12,6 +13,7 @@ import type { SearchResources } from "../../features/search/src/locales/resource
 import type { KnowledgeResources } from "../../features/knowledge/src/locales/resources";
 
 export interface AppResources {
+  account: AccountResources;
   "chat-drawer": ChatDrawerResources;
   "chat-page": ChatPageResources;
   "chat-chatroom": ChatChatroomResources;

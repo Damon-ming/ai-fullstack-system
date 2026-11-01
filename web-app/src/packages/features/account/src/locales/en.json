@@ -1,0 +1,13 @@
+{
+  "login": {
+    "title": "Sign In",
+    "subtitle": "Sign in to get started",
+    "phoneLabel": "Phone",
+    "phonePlaceholder": "+8613800138000",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "passwordHint": "At least 8 characters with uppercase, lowercase, digit, and . or _",
+    "submit": "Sign In / Up",
+    "submitting": "Signing in..."
+  }
+}

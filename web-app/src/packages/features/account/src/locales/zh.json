@@ -1,0 +1,13 @@
+{
+  "login": {
+    "title": "登录",
+    "subtitle": "登录以开始使用",
+    "phoneLabel": "手机号",
+    "phonePlaceholder": "+8613800138000",
+    "passwordLabel": "密码",
+    "passwordPlaceholder": "请输入密码",
+    "passwordHint": "密码至少 8 位，需同时包含大写字母、小写字母、数字，以及 . 或 _ 中至少一个",
+    "submit": "登录 / 注册",
+    "submitting": "登录中..."
+  }
+}

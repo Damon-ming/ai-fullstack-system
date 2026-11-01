@@ -3,12 +3,16 @@
   "version": "0.0.1",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./locales": "./src/locales/resources.ts",
+    "./locales/en.json": "./src/locales/en.json",
+    "./locales/zh.json": "./src/locales/zh.json"
   },
   "dependencies": {
     "@ming/biz-common-storage": "workspace:*",
     "@ming/core-log": "workspace:*",
-    "@ming/data-layer": "workspace:*"
+    "@ming/data-layer": "workspace:*",
+    "@ming/i18n": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.2.0"
