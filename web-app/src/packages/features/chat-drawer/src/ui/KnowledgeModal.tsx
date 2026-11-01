@@ -52,9 +52,20 @@ function TreeItem({
     >
       <span className="w-4 text-center text-xs text-gray-300">·</span>
       <span className="flex-1 truncate text-gray-700">{node.name}</span>
+      <span className="shrink-0 max-w-[120px] truncate text-xs text-gray-400">
+        {node.uploader || "—"}
+      </span>
       <span className="shrink-0 text-xs text-gray-400">
         {formatFileSize(node.size)}
       </span>
+      <button
+        type="button"
+        className="shrink-0 rounded p-1 text-xs text-gray-400 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
+        disabled
+        title="删除功能开发中"
+      >
+        ✕
+      </button>
     </div>
   );
 }
@@ -77,9 +88,20 @@ function DateGroupedList({ groups }: Readonly<{ groups: KnowledgeGroup[] }>) {
                 <span className="flex-1 truncate text-gray-700">
                   {file.name}
                 </span>
+                <span className="shrink-0 max-w-[120px] truncate text-xs text-gray-400">
+                  {file.uploader || "—"}
+                </span>
                 <span className="shrink-0 text-xs text-gray-400">
                   {file.sizeMB}
                 </span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded p-1 text-xs text-gray-400 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
+                  disabled
+                  title="删除功能开发中"
+                >
+                  ✕
+                </button>
               </div>
             ))}
           </div>

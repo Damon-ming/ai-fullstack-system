@@ -109,6 +109,7 @@ class UploadService:
             {"files": [成功文件meta...], "failed_files": [失败文件信息...]}
         """
         success_files: list[dict] = []
+        duplicate_files: list[dict] = []
         failed_files: list[dict] = []
         allowed_exts = sorted(upload_config.allowed_types.keys())
         total_uploaded = 0  # 累计已读字节数（总量上限防护）
@@ -281,8 +282,8 @@ class UploadService:
                 indexed_shas = {item["file_sha256"] for item in index_result["indexed"]}
                 skipped_shas = {item["file_sha256"] for item in index_result["skipped"]}
 
-                if file_sha256 in indexed_shas or file_sha256 in skipped_shas:
-                    # 三库一致：成功
+                if file_sha256 in indexed_shas:
+                    # 真正入库成功
                     success_files.append(
                         {
                             "filename": file_name,
@@ -291,7 +292,7 @@ class UploadService:
                     )
 
                     # ── 写入审计表（fire-and-forget，不阻塞上传响应）──
-                    if db_conn is not None and file_sha256 in indexed_shas:
+                    if db_conn is not None:
                         loop.run_in_executor(
                             executor,
                             _record_upload_metadata,
@@ -303,6 +304,14 @@ class UploadService:
                             token,
                             device_id,
                         )
+
+                elif file_sha256 in skipped_shas:
+                    # 重复文件（内容已存在，跳过入库）
+                    duplicate_files.append(
+                        {
+                            "filename": file_name,
+                        }
+                    )
 
                     logger.info(
                         "文件上传成功 | filename=%s | sha=%s",
@@ -352,7 +361,11 @@ class UploadService:
             len(success_files),
             len(failed_files),
         )
-        return {"files": success_files, "failed_files": failed_files}
+        return {
+            "success_files": success_files,
+            "duplicate_files": duplicate_files,
+            "failed_files": failed_files,
+        }
 
 
 def _rollback_file(

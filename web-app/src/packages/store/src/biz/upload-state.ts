@@ -10,6 +10,10 @@ export interface ChatUploadFileResult {
   file_uid: string;
 }
 
+export interface ChatUploadDuplicateFile {
+  filename: string;
+}
+
 export interface ChatUploadFailedFile {
   filename: string;
   error: string;
@@ -19,27 +23,52 @@ export interface ChatUploadState {
   upload: {
     status: UploadStatus;
     fileNames: string[];
-    files: ChatUploadFileResult[];
+    successFiles: ChatUploadFileResult[];
+    duplicateFiles: ChatUploadDuplicateFile[];
     failedFiles: ChatUploadFailedFile[];
   };
   startUpload: (fileNames: string[]) => void;
   finishUpload: (
     status: "success" | "error",
-    files?: ChatUploadFileResult[],
+    successFiles?: ChatUploadFileResult[],
+    duplicateFiles?: ChatUploadDuplicateFile[],
     failedFiles?: ChatUploadFailedFile[],
   ) => void;
   closeUpload: () => void;
 }
 
 export const useChatUploadStore = createAppStore<ChatUploadState>((set) => ({
-  upload: { status: "idle", fileNames: [], files: [], failedFiles: [] },
+  upload: {
+    status: "idle",
+    fileNames: [],
+    successFiles: [],
+    duplicateFiles: [],
+    failedFiles: [],
+  },
   startUpload: (fileNames) =>
     set({
-      upload: { status: "uploading", fileNames, files: [], failedFiles: [] },
+      upload: {
+        status: "uploading",
+        fileNames,
+        successFiles: [],
+        duplicateFiles: [],
+        failedFiles: [],
+      },
     }),
-  finishUpload: (status, files = [], failedFiles = []) =>
+  finishUpload: (
+    status,
+    successFiles = [],
+    duplicateFiles = [],
+    failedFiles = [],
+  ) =>
     set((state) => ({
-      upload: { ...state.upload, status, files, failedFiles },
+      upload: {
+        ...state.upload,
+        status,
+        successFiles,
+        duplicateFiles,
+        failedFiles,
+      },
     })),
   closeUpload: () =>
     set((state) => ({ upload: { ...state.upload, status: "idle" } })),

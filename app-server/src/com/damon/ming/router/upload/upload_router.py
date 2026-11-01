@@ -15,7 +15,6 @@ from src.com.damon.ming.schemas.response import (
     BaseFailedResponse,
     BaseSuccessResponse,
 )
-from src.com.damon.ming.utils.time import now
 
 logger = pin("upload.router")
 
@@ -58,8 +57,8 @@ async def save_files(
         )
 
         response_data = FileUploadResponse(
-            server_time=now().isoformat(),
-            files=result["files"],
+            success_files=result["success_files"],
+            duplicate_files=result["duplicate_files"],
             failed_files=result["failed_files"],
         )
         return BaseSuccessResponse(code=ErrorCode.OK, data=response_data)

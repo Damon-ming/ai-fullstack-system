@@ -3,13 +3,17 @@ export interface UploadFileResult {
   file_uid: string;
 }
 
+export interface UploadDuplicateFile {
+  filename: string;
+}
+
 export interface UploadFailedFile {
   filename: string;
   error: string;
 }
 
 export interface UploadResponse {
-  server_time: string;
-  files: UploadFileResult[];
+  success_files: UploadFileResult[];
+  duplicate_files: UploadDuplicateFile[];
   failed_files: UploadFailedFile[];
 }

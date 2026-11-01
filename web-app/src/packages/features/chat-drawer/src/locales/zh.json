@@ -11,6 +11,7 @@
     "uploading": "◌ 正在上传文件...",
     "success_allIndexed": "文件已经进入语料库",
     "success_with_failed": "上传完成：{{success_count}} 个成功，{{failed_count}} 个失败",
+    "success_with_duplicates": "上传完成：{{success_count}} 个成功，{{duplicate_count}} 个已存在（已跳过）",
     "error": "文件上传失败"
   },
   "knowledge": {

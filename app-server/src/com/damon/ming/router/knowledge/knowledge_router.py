@@ -25,7 +25,6 @@ from src.com.damon.ming.schemas.response import (
     BaseSuccessResponse,
 )
 from src.com.damon.ming.utils.file_stat import file_creation_time, file_size
-from src.com.damon.ming.utils.time import now_iso
 
 logger = pin("knowledge.router")
 
@@ -125,7 +124,6 @@ def get_knowledge_tree(request: Request):
         return BaseSuccessResponse(
             code=ErrorCode.OK,
             data={
-                "server_time": now_iso(),
                 "root": root,
             },
         )

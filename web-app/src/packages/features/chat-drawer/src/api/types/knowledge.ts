@@ -15,14 +15,14 @@ export interface KnowledgeNode {
   size: number;
   /** 文件创建时间（ISO8601），目录为空 */
   created_at: string;
+  /** 上传者昵称，未匹配到则为空 */
+  uploader: string;
   /** 子节点（仅 directory 类型） */
   children: KnowledgeNode[];
 }
 
 /** 知识库目录树接口响应数据 */
 export interface KnowledgeTreeData {
-  /** 服务器时间（ISO8601） */
-  server_time: string;
   /** 根节点 */
   root: KnowledgeNode;
 }

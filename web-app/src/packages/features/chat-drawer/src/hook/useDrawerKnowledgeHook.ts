@@ -21,6 +21,7 @@ export interface KnowledgeGroupFile {
   name: string;
   path: string;
   sizeMB: string;
+  uploader: string;
 }
 
 /** 扁平化收集所有文件节点 */
@@ -54,6 +55,7 @@ function groupByDate(files: KnowledgeNode[]): KnowledgeGroup[] {
           name: f.name,
           path: f.path,
           sizeMB: formatFileSize(f.size),
+          uploader: f.uploader,
         })),
       };
     });

@@ -34,19 +34,33 @@ export function useDrawerUploadHook() {
       case "error":
         return t("upload.error");
       case "success": {
-        if (upload.failedFiles.length > 0) {
+        const { successFiles, duplicateFiles, failedFiles } = upload;
+        if (failedFiles.length > 0) {
           const opts = {
-            success_count: String(upload.files.length),
-            failed_count: String(upload.failedFiles.length),
+            success_count: String(successFiles.length),
+            failed_count: String(failedFiles.length),
           };
           return t("upload.success_with_failed", opts as any);
+        }
+        if (duplicateFiles.length > 0) {
+          const opts = {
+            success_count: String(successFiles.length),
+            duplicate_count: String(duplicateFiles.length),
+          };
+          return t("upload.success_with_duplicates", opts as any);
         }
         return t("upload.success_allIndexed");
       }
       default:
         return t("upload.idle");
     }
-  }, [upload.status, upload.files, upload.failedFiles, t]);
+  }, [
+    upload.status,
+    upload.successFiles,
+    upload.duplicateFiles,
+    upload.failedFiles,
+    t,
+  ]);
 
   const handleUpload = async (fileList?: FileList | null) => {
     const files = fileList ? Array.from(fileList) : [];
@@ -66,11 +80,16 @@ export function useDrawerUploadHook() {
         return;
       }
       abortControllerRef.current = null;
-      const resultFiles = Array.isArray(response?.files) ? response.files : [];
+      const successFiles = Array.isArray(response?.success_files)
+        ? response.success_files
+        : [];
+      const duplicateFiles = Array.isArray(response?.duplicate_files)
+        ? response.duplicate_files
+        : [];
       const failedFiles = Array.isArray(response?.failed_files)
         ? response.failed_files
         : [];
-      finishUpload("success", resultFiles, failedFiles);
+      finishUpload("success", successFiles, duplicateFiles, failedFiles);
     } catch {
       finishUpload("error");
     }

@@ -4,6 +4,7 @@ import { useDrawerUploadHook } from "../hook/useDrawerUploadHook";
 export const DrawerUpload: React.FC = () => {
   const { message, handleUpload, abortUpload, upload, failedFiles } =
     useDrawerUploadHook();
+  const duplicateFiles = upload.duplicateFiles;
 
   if (upload.status === "uploading") {
     return (
@@ -30,6 +31,16 @@ export const DrawerUpload: React.FC = () => {
           onChange={(event) => handleUpload(event.target.files)}
         />
       </label>
+      {duplicateFiles.length > 0 && (
+        <div className="ml-3 mt-1 space-y-1 border-l-2 border-yellow-300 pl-3">
+          {duplicateFiles.map((f) => (
+            <p key={f.filename} className="text-xs text-yellow-600">
+              <span className="font-medium">{f.filename}</span>
+              <span className="ml-1 text-yellow-500">— 已存在，跳过</span>
+            </p>
+          ))}
+        </div>
+      )}
       {failedFiles.length > 0 && (
         <div className="ml-3 mt-1 space-y-1 border-l-2 border-red-300 pl-3">
           {failedFiles.map((f) => (
