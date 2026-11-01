@@ -16,13 +16,14 @@ import { createLogger } from "@ming/core-log";
 import {
   fetchProfile,
   updateProfile,
-  login,
   getSessionContext,
   setSessionContext,
   clearSessionContext,
   setDeviceId,
   SIMULATED_PHONE,
+  SIMULATED_PASSWORD,
 } from "../api";
+import { login as loginApi } from "../api/account.api";
 import type { AccountProfile } from "../api/types";
 
 const log = createLogger("account/hook");
@@ -32,14 +33,17 @@ const log = createLogger("account/hook");
 // ---------------------------------------------------------------------------
 
 /**
- * 登录申请 token，已有则跳过。
+ * 登录（已有缓存则跳过，否则调 API 登录/自动注册）。
  * 编排：读缓存 → 有则返回 → 无则调 API → 写缓存 → 返回 token。
  */
-export async function initDeviceToken(): Promise<string> {
+export async function login(): Promise<string> {
   const existing = getSessionContext();
   if (existing?.token) return existing.token;
 
-  const res = await login({ phone: SIMULATED_PHONE });
+  const res = await loginApi({
+    phone: SIMULATED_PHONE,
+    password: SIMULATED_PASSWORD,
+  });
 
   if (!res.data?.token) {
     throw new Error("登录失败: 服务端未返回有效 token");
@@ -54,17 +58,17 @@ export async function initDeviceToken(): Promise<string> {
     sessionId: res.data.session_id,
   });
 
-  log.info("Token 已签发", {
+  log.info("登录完成", {
     device_id: res.data.device_id?.slice(0, 12) + "...",
     session_id: res.data.session_id?.slice(0, 8) + "...",
   });
   return res.data.token;
 }
 
-/** 重新登录（清除缓存后重新申请）。 */
+/** 重新登录（清除缓存后重新登录）。 */
 export async function refreshDeviceToken(): Promise<string> {
   clearSessionContext();
-  return initDeviceToken();
+  return login();
 }
 
 // ---------------------------------------------------------------------------

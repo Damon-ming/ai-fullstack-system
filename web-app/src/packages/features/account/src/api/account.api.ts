@@ -20,7 +20,7 @@ import type { DataApiResponse } from "@ming/data-layer";
 import { createLogger } from "@ming/core-log";
 
 import type {
-  DeviceTokenRequest,
+  LoginRequest,
   DeviceTokenResponse,
   ProfileRequest,
   ProfileResponse,
@@ -30,6 +30,9 @@ const log = createLogger("account/api");
 
 /** 模拟手机号（开发用） */
 export const SIMULATED_PHONE = "+8613800138000";
+
+/** 模拟密码（开发用，≥8 位，含大小写+数字+_） */
+export const SIMULATED_PASSWORD = "Abc123_45";
 
 // ---------------------------------------------------------------------------
 // 存储原语 —— 直接 re-export，api 层不附加任何逻辑
@@ -46,9 +49,9 @@ export {
 // 网络请求 —— 纯 HTTP 调用，返回原始 DataApiResponse
 // ---------------------------------------------------------------------------
 
-/** 登录（申请设备 Token）。 */
+/** 登录（手机号未注册时自动注册）。 */
 export async function login(
-  body: DeviceTokenRequest,
+  body: LoginRequest,
 ): Promise<DataApiResponse<DeviceTokenResponse>> {
   log.debug("登录请求", { phone: body.phone.slice(0, 3) + "***" });
   return dataApi.post<DeviceTokenResponse>("/api/account/login/v1", body);

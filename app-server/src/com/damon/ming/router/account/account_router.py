@@ -11,15 +11,13 @@ Account 路由 —— 用户登录 / Token 签发 / 资料管理
   - 用户资料读取与修改（昵称）
 
 用法：
-  POST /api/account/login/v1     body: { "phone": "+8613800138000" }
-    → { "token": "xxx", "device_id": "dev_sha256abc...", "session_id": "uuid..." }
+  POST /api/account/login/v1     body: { "phone": "+8613800138000", "password": "Abc123_45" }
+    → { "token": "xxx", "device_id": "dev_sha256abc...", "session_id": "uuid...", "is_new": false }
   GET  /api/account/profile/v1
     → { "name": "Murphy" }
   POST /api/account/profile/v1   body: { "name": "NewName" }
     → { "name": "NewName" }
 """
-
-import secrets
 
 from fastapi import APIRouter, Request
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -31,21 +29,24 @@ from src.com.damon.ming.middleware.ua_fingerprint import (
     compute_ua_hash,
 )
 from src.com.damon.ming.router.account.schemas.bean import (
+    LoginRequest,
     ProfileResponseData,
-    TokenRequest,
     TokenResponseData,
 )
 from src.com.damon.ming.router.account.token_store import (
-    bind_token,
     create_or_refresh_session,
-    get_token_by_phone,
     get_user_profile,
     is_token_valid,
+    login_or_register,
     refresh_token_ttl,
     register_device,
     update_user_name,
 )
-from src.com.damon.ming.schemas.response import BaseSuccessResponse
+from src.com.damon.ming.schemas.response import (
+    BaseBizFailedData,
+    BaseFailedResponse,
+    BaseSuccessResponse,
+)
 
 logger = pin("account.router")
 
@@ -54,24 +55,34 @@ router = APIRouter(prefix="/api/account", tags=["账号体系"])
 
 @router.post("/login/v1", response_model=BaseSuccessResponse[TokenResponseData])
 @limiter.limit("5/minute")
-async def login(body: TokenRequest, request: Request):
+async def login(body: LoginRequest, request: Request):
     """
-    登录 —— 签发用户 Token。
+    登录 / 自动注册 —— 手机号 + 密码一键完成。
 
     流程：
-      1. 解析 X-Client-UA header → 计算 device_id
-      2. 注册/更新设备（设备身份独立，不归属用户）
-      3. 检查该 phone 是否已有 token → 有则复用（幂等）
-      4. 无 → 生成 token → 绑定 phone
-      5. 查找或创建 session（同一 token+device 复用）
+      1. phone 已注册 → 验 password → 对则登录，错则返回 200004002
+      2. phone 未注册 → 自动注册 + 登录
+      3. 解析 X-Client-UA → 计算 device_id → 注册设备
+      4. 创建 session → 返回 token + device_id + session_id + is_new
     """
-    # 1. 从 ctx 获取 UA → 计算设备指纹
+    # 1. 登录或自动注册
+    try:
+        user_token, is_new = login_or_register(body.phone, body.password)
+    except ValueError as e:
+        if str(e) == "PHONE_PASSWORD_MISMATCH":
+            return BaseFailedResponse(
+                code=ErrorCode.ACCOUNT.PHONE_PASSWORD_MISMATCH,
+                data=BaseBizFailedData(error_msg="手机号或密码错误"),
+            )
+        raise
+
+    # 2. 从 ctx 获取 UA → 计算设备指纹
     ctx = request.state.ctx
     ua_profile = get_ua_profile(ctx)
     device_id = compute_device_id(ua_profile) if ua_profile else ""
     ua_hash = compute_ua_hash(ua_profile)
 
-    # 2. 注册设备（设备身份独立，不绑定 phone）
+    # 3. 注册设备（设备身份独立，不绑定 phone）
     if device_id and ua_profile:
         register_device(
             device_id=device_id,
@@ -83,32 +94,28 @@ async def login(body: TokenRequest, request: Request):
             tz=ua_profile.tz,
         )
 
-    # 3. 检查该 phone 是否已有 token（幂等）
-    existing_token = get_token_by_phone(body.phone)
-    if not existing_token:
-        # 4. 新 phone → 签发 token（INSERT 优先，并发时返回竞争者的 token）
-        new_token = secrets.token_hex(32)
-        existing_token = bind_token(body.phone, new_token)
+    # 4. 创建/刷新会话（原子操作：过期旧会话 + 插入新会话）
+    session_id = create_or_refresh_session(user_token, device_id, ua_hash)
 
-    # 5. 创建/刷新会话（原子操作：过期旧会话 + 插入新会话）
-    session_id = create_or_refresh_session(existing_token, device_id, ua_hash)
+    # 5. SECURITY: 登录成功，刷新 token 滚动 TTL（P1-7 修复）
+    refresh_token_ttl(user_token)
 
-    # 6. SECURITY: 登录成功，刷新 token 滚动 TTL（P1-7 修复）
-    refresh_token_ttl(existing_token)
-
+    action = "注册+登录" if is_new else "登录"
     logger.info(
-        "登录完成 | phone=%s device_id=%s session_id=%s",
+        "%s完成 | phone=%s device_id=%s session_id=%s",
+        action,
         _mask_phone(body.phone),
-        device_id[:12] + "...",
+        device_id[:12] + "..." if device_id else "",
         session_id[:8] + "...",
     )
 
     return BaseSuccessResponse(
         code=ErrorCode.OK,
         data=TokenResponseData(
-            token=existing_token,
+            token=user_token,
             device_id=device_id,
             session_id=session_id,
+            is_new=is_new,
         ),
     )
 

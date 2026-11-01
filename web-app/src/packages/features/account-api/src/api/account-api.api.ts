@@ -3,9 +3,5 @@
  * 账号模块对外 API —— 仅做 re-export，不包含实现。
  */
 
-export {
-  useAccount,
-  initDeviceToken,
-  refreshDeviceToken,
-} from "@ming/feature-account";
+export { useAccount, login, refreshDeviceToken } from "@ming/feature-account";
 export type { AccountProfile } from "@ming/feature-account";

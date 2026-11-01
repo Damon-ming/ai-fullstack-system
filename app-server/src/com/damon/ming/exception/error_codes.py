@@ -130,7 +130,9 @@ class _Auth:
 class _Account:
     """账号体系错误 (2 00 004 xxx)"""
 
-    # 预留
+    PHONE_EXISTS = _build(detail=1, business=Business.ACCOUNT)  # 200004001
+    PHONE_PASSWORD_MISMATCH = _build(detail=2, business=Business.ACCOUNT)  # 200004002
+    NOT_REGISTERED = _build(detail=3, business=Business.ACCOUNT)  # 200004003
 
 
 class _Chat:

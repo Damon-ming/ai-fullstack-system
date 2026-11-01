@@ -8,7 +8,7 @@ import {
   clearSessionContext,
 } from "@ming/biz-common-storage";
 import { setClearSessionCallback } from "@ming/store";
-import { initDeviceToken } from "@ming/feature-account-api";
+import { login } from "@ming/feature-account-api";
 import { exchangeKeys } from "@ming/feature-encryption-api";
 
 const log = createLogger("app/bootstrap");
@@ -35,8 +35,8 @@ export async function bootstrap(): Promise<void> {
   // 2. 初始化 i18n
   log.info(`i18n initialized, language: ${i18n.language}`);
 
-  // 3. 初始化设备 Token（hook 层已处理 localStorage 写入）
-  await initDeviceToken();
+  // 3. 登录（hook 层已处理 localStorage 写入）
+  await login();
 
   log.info("Initialization complete.");
 }
@@ -48,7 +48,7 @@ export async function bootstrap(): Promise<void> {
  *   debug:    加密关、日志开、认证关
  *   release:  加密开、日志关、认证开
  *
- * release 模式下，token 初始化和密钥交换必须成功，否则抛错中止启动。
+ * release 模式下，登录和密钥交换必须成功，否则抛错中止启动。
  */
 async function initGlobalNetwork(): Promise<void> {
   const debug = isDebug();

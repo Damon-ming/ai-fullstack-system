@@ -17,6 +17,8 @@
 复杂语句（ON CONFLICT、事务内多步）仍用 raw SQL。
 """
 
+import hashlib
+import secrets
 import uuid
 from datetime import timedelta
 
@@ -113,6 +115,55 @@ def bind_token(phone: str, token: str) -> str:
     # 无论自己是否插入成功，都返回数据库中当前绑定的 token
     existing = get_token_by_phone(phone)
     return existing or token
+
+
+def _hash_password(password: str) -> str:
+    """SHA-256 密码哈希（简单实现，生产环境建议 bcrypt）。"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def _generate_default_name() -> str:
+    """生成随机默认昵称：用户_XXXX（4位 hex）。"""
+    return f"用户_{secrets.token_hex(2).upper()}"
+
+
+def login_or_register(phone: str, password: str) -> tuple[str, bool]:
+    """登录或自动注册，返回 (token, is_new)。
+
+    流程：
+      1. phone 已注册 → 验 password → 对则返回 (token, False)，错则抛 ValueError
+      2. phone 未注册 → 自动注册 → 返回 (token, True)
+    """
+    existing_token = get_token_by_phone(phone)
+
+    if existing_token:
+        # 已有用户 → 验证密码
+        password_hash = _hash_password(password)
+        with _db().engine.connect() as conn:
+            result = conn.execute(
+                users.select().where(
+                    users.c.phone == phone,
+                    users.c.password == password_hash,
+                )
+            )
+            row = result.fetchone()
+        if not row:
+            raise ValueError("PHONE_PASSWORD_MISMATCH")
+        return existing_token, False
+
+    # 新用户 → 自动注册（生成随机默认昵称）
+    new_token = secrets.token_hex(32)
+    password_hash = _hash_password(password)
+    default_name = _generate_default_name()
+    _db().execute(
+        "INSERT INTO users (token, phone, password, name, created_at, expires_at, hard_expires_at) "
+        "VALUES (%s, %s, %s, %s, %s, NOW() + INTERVAL '30 days', NOW() + INTERVAL '90 days') "
+        "ON CONFLICT (phone) DO NOTHING",
+        (new_token, phone, password_hash, default_name, now()),
+        commit=True,
+    )
+    existing_token = get_token_by_phone(phone)
+    return existing_token or new_token, True
 
 
 # ---------------------------------------------------------------------------
