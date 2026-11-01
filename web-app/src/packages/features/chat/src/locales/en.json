@@ -1,8 +1,4 @@
 {
-  "search": {
-    "placeholder": "Search conversations...",
-    "noResults": "No matching conversations"
-  },
   "account": {
     "title": "Account Info",
     "hint": "Info is saved in this browser only.",

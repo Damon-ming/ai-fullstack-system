@@ -1,8 +1,4 @@
 export interface ChatPageResources {
-  search: {
-    placeholder: string;
-    noResults: string;
-  };
   account: {
     title: string;
     hint: string;

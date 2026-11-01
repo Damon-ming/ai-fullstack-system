@@ -4,7 +4,7 @@ import { useDrawerUploadHook } from "./useDrawerUploadHook";
 import { useDrawerSearchHook } from "./useDrawerSearchHook";
 import { useDrawerHistoryHook } from "./useDrawerHistoryHook";
 import { useDrawerAccountHook } from "./useDrawerAccountHook";
-import { useDrawerKnowledgeHook } from "./useDrawerKnowledgeHook";
+import { useKnowledgeStore } from "@ming/store";
 
 /** 兼容旧用法 —— 组合所有子 hook 暴露统一接口 */
 export function useDrawerHook() {
@@ -14,7 +14,8 @@ export function useDrawerHook() {
   const search = useDrawerSearchHook();
   const history = useDrawerHistoryHook();
   const account = useDrawerAccountHook();
-  const knowledge = useDrawerKnowledgeHook();
+  const knowledgeOpen = useKnowledgeStore((s) => s.open);
+  const openKnowledge = useKnowledgeStore((s) => s.openKnowledge);
 
   return {
     open: header.open,
@@ -30,8 +31,7 @@ export function useDrawerHook() {
     selectChat: history.selectChat,
     uploadFiles: upload.handleUpload,
     deleteHistory: history.deleteHistory,
-    knowledgeOpen: knowledge.open,
-    openKnowledge: knowledge.openKnowledge,
-    knowledgeTree: knowledge.treeData,
+    knowledgeOpen,
+    openKnowledge,
   };
 }

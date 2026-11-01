@@ -1,1 +1,2 @@
-export { searchItems } from "./api/search-api.api";
+// search-api/src/index.ts
+export { searchItems, SearchModal, useSearchModalHook } from "./api/search-api.api";

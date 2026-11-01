@@ -1,10 +1,11 @@
+// chat-drawer/src/ui/DrawerKnowledge.tsx
 import React from "react";
-import { useDrawerKnowledgeHook } from "../hook/useDrawerKnowledgeHook";
+import { useKnowledgeStore } from "@ming/store";
 import { useTranslation } from "@ming/i18n";
 
 export const DrawerKnowledge: React.FC = () => {
   const { t } = useTranslation("chat-drawer");
-  const { openKnowledge } = useDrawerKnowledgeHook();
+  const openKnowledge = useKnowledgeStore((s) => s.openKnowledge);
 
   return (
     <button

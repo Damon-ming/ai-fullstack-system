@@ -1,16 +1,17 @@
+// knowledge/src/hook/useKnowledgeModalHook.ts
 import { useCallback, useMemo } from "react";
 import { useKnowledgeStore } from "@ming/store";
 import { useKnowledgeQuery } from "../api";
 import type { KnowledgeNode } from "../api/types/knowledge";
 
-/** 格式化文件大小 — 共享工具函数，hook/UI 均可使用 */
+/** 格式化文件大小 —— 共享工具函数，hook/UI 均可使用 */
 export function formatFileSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${bytes} B`;
 }
 
-/** 按日期分组的文件列表 — UI 直接渲染，不做额外处理 */
+/** 按日期分组的文件列表 —— UI 直接渲染，不做额外处理 */
 export interface KnowledgeGroup {
   date: string;
   dateLabel: string;
@@ -61,7 +62,7 @@ function groupByDate(files: KnowledgeNode[]): KnowledgeGroup[] {
     });
 }
 
-export function useDrawerKnowledgeHook() {
+export function useKnowledgeModalHook() {
   const open = useKnowledgeStore((s) => s.open);
   const openKnowledge = useKnowledgeStore((s) => s.openKnowledge);
   const closeKnowledge = useKnowledgeStore((s) => s.closeKnowledge);

@@ -1,3 +1,1 @@
-export { fetchKnowledgeTree } from "./knowledge.api";
-export { useKnowledgeQuery, KNOWLEDGE_TREE_KEY } from "./knowledge-query";
-export type { KnowledgeNode, KnowledgeTreeData } from "./types/knowledge";
+// chat-drawer/src/api/index.ts

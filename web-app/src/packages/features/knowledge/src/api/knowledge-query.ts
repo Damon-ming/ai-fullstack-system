@@ -1,4 +1,4 @@
-// web-app/src/packages/features/chat-drawer/src/api/knowledge-query.ts
+// knowledge/src/api/knowledge-query.ts
 /**
  * 知识库目录树 Query Hook —— queryFactory 缓存策略配置。
  *

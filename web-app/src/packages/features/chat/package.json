@@ -15,12 +15,12 @@
     "@ming/feature-chat-chatroom-api": "workspace:*",
     "@ming/feature-history-api": "workspace:*",
     "@ming/feature-search-api": "workspace:*",
+    "@ming/feature-knowledge-api": "workspace:*",
     "@ming/feature-account-api": "workspace:*",
-    "@ming/data-layer": "workspace:*",
     "@ming/i18n": "workspace:*"
   },
   "peerDependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   }
 }

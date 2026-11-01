@@ -1,1 +1,2 @@
-export { useSearch, searchItems } from "./SearchHook"
+export { useSearch, searchItems } from "./SearchHook";
+export { useSearchModalHook } from "./useSearchModalHook";

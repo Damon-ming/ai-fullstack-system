@@ -1,5 +1,5 @@
-// web-app/src/packages/features/chat/src/hook/ChatPageHook.ts
-import { useEffect, useMemo } from "react";
+// chat/src/hook/ChatPageHook.ts
+import { useEffect } from "react";
 import { createLogger } from "@ming/core-log";
 import {
   useChatUiStore,
@@ -11,10 +11,8 @@ import {
   useKnowledgeStore,
 } from "@ming/store";
 import { useHistory } from "@ming/feature-history-api";
-import { searchItems } from "@ming/feature-search-api";
 import { useAccount } from "@ming/feature-account-api";
 import { useDrawerUploadHook } from "@ming/feature-chat-drawer-api";
-import type { HistoryItem } from "@ming/feature-history-api";
 
 const log = createLogger("chat/page");
 
@@ -38,13 +36,7 @@ export function useChatPageHook() {
   const closeAccount = useAccountStore((state) => state.closeDialog);
   const { update: updateAccount } = useAccount();
   const searchOpen = useSearchStore((state) => state.open);
-  const searchKeyword = useSearchStore((state) => state.keyword);
   const closeSearch = useSearchStore((state) => state.closeSearch);
-  const setSearchKeyword = useSearchStore((state) => state.setKeyword);
-  const searchResults = useMemo(
-    () => searchItems<HistoryItem>(historyList, searchKeyword),
-    [historyList, searchKeyword],
-  );
   const upload = useChatUploadStore((state) => state.upload);
   const closeUpload = useChatUploadStore((state) => state.closeUpload);
   const { abortUpload, message: uploadMessage } = useDrawerUploadHook();
@@ -96,10 +88,7 @@ export function useChatPageHook() {
     chatSessionId,
     toggleDrawer,
     searchOpen,
-    searchKeyword,
     closeSearch,
-    setSearchKeyword,
-    searchResults,
     accountOpen,
     draftName,
     closeAccount,

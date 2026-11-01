@@ -12,12 +12,9 @@
     "@ming/store": "workspace:*",
     "@ming/core-log": "workspace:*",
     "@ming/feature-history-api": "workspace:*",
-    "@ming/feature-search-api": "workspace:*",
     "@ming/feature-account-api": "workspace:*",
     "@ming/feature-upload-api": "workspace:*",
-    "@ming/core-util": "workspace:*",
-    "@ming/i18n": "workspace:*",
-    "@ming/data-layer": "workspace:*"
+    "@ming/i18n": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.0.0"

@@ -1,18 +1,18 @@
-// web-app/src/packages/features/chat/src/ui/ChatPage.tsx
-import { ChatDrawer, KnowledgeModal } from "@ming/feature-chat-drawer-api";
+// chat/src/ui/ChatPage.tsx
+import { ChatDrawer } from "@ming/feature-chat-drawer-api";
+import { KnowledgeModal } from "@ming/feature-knowledge-api";
+import { SearchModal } from "@ming/feature-search-api";
 import { ChatChatroom } from "@ming/feature-chat-chatroom-api";
 import React, { useEffect } from "react";
 import { useChatPageHook } from "../hook";
 import { i18n, useTranslation } from "@ming/i18n";
+
 export const ChatPage: React.FC = () => {
   const { t } = useTranslation("chat-page");
   const {
     chatSessionId,
     searchOpen,
-    searchKeyword,
     closeSearch,
-    setSearchKeyword,
-    searchResults,
     accountOpen,
     draftName,
     closeAccount,
@@ -43,6 +43,11 @@ export const ChatPage: React.FC = () => {
     i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
   };
 
+  const handleSearchSelect = async (id: string) => {
+    await loadHistory(id);
+    closeSearch();
+  };
+
   return (
     <div className="relative flex h-full w-full overflow-hidden font-sans text-gray-800 bg-gray-50">
       {/* 右上角语言切换小图标 */}
@@ -60,55 +65,6 @@ export const ChatPage: React.FC = () => {
         <ChatDrawer />
         <ChatChatroom key={chatSessionId} />
       </div>
-
-      {/* 搜索弹窗 */}
-      {searchOpen && (
-        <div
-          className="fixed inset-0 z-30 grid place-items-center bg-black/40 backdrop-blur-sm"
-          onClick={closeSearch}
-        >
-          <section
-            className="w-full max-w-[480px] rounded-2xl bg-white p-6 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 className="m-0 mb-3 text-lg font-semibold text-gray-800">
-              {t("search.placeholder")}
-            </h2>
-            <input
-              autoFocus
-              value={searchKeyword}
-              onChange={(event) => setSearchKeyword(event.target.value)}
-              placeholder={t("search.placeholder")}
-              className="block w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-gray-700 outline-0 focus:border-blue-400 focus:bg-white"
-            />
-            <div className="mt-4 max-h-[300px] overflow-auto">
-              {searchKeyword.trim() && searchResults.length === 0 && (
-                <p className="py-3 text-center text-sm text-gray-400">
-                  {t("search.noResults")}
-                </p>
-              )}
-              {searchResults.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    loadHistory(item.id);
-                    closeSearch();
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-gray-700 transition hover:bg-blue-50"
-                >
-                  <strong className="min-w-0 flex-1 truncate">
-                    {item.title}
-                  </strong>
-                  <small className="text-gray-400">{item.meta}</small>
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
 
       {/* 账户弹窗 */}
       {accountOpen && (
@@ -202,9 +158,9 @@ export const ChatPage: React.FC = () => {
                 {upload.fileNames.join("、")}
               </small>
             )}
-            {upload.files.length > 0 && (
+            {upload.successFiles.length > 0 && (
               <div className="mt-4 max-h-[150px] overflow-auto rounded-xl border border-gray-100 bg-gray-50 p-2 text-left">
-                {upload.files.map((file) => (
+                {upload.successFiles.map((file) => (
                   <div
                     key={file.file_uid || file.filename}
                     className="flex items-center gap-2 px-2 py-2 text-xs text-gray-500"
@@ -241,7 +197,10 @@ export const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* 知识库弹窗 */}
+      {/* 搜索弹窗 —— 由 search 模块自包含渲染 */}
+      {searchOpen && <SearchModal onSelect={handleSearchSelect} />}
+
+      {/* 知识库弹窗 —— 由 knowledge 模块自包含渲染 */}
       {knowledgeOpen && <KnowledgeModal />}
     </div>
   );

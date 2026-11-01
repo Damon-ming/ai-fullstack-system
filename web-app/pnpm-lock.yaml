@@ -206,9 +206,6 @@ importers:
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
-      '@ming/data-layer':
-        specifier: workspace:*
-        version: link:../../data-layer
       '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../account-api
@@ -221,6 +218,9 @@ importers:
       '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api
+      '@ming/feature-knowledge-api':
+        specifier: workspace:*
+        version: link:../knowledge-api
       '@ming/feature-search-api':
         specifier: workspace:*
         version: link:../search-api
@@ -231,10 +231,10 @@ importers:
         specifier: workspace:*
         version: link:../../store
       react:
-        specifier: ^18.0.0
+        specifier: ^18.2.0
         version: 18.3.1
       react-dom:
-        specifier: ^18.0.0
+        specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
 
   src/packages/features/chat-api:
@@ -287,21 +287,12 @@ importers:
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
-      '@ming/core-util':
-        specifier: workspace:*
-        version: link:../../core/util
-      '@ming/data-layer':
-        specifier: workspace:*
-        version: link:../../data-layer
       '@ming/feature-account-api':
         specifier: workspace:*
         version: link:../account-api
       '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api
-      '@ming/feature-search-api':
-        specifier: workspace:*
-        version: link:../search-api
       '@ming/feature-upload-api':
         specifier: workspace:*
         version: link:../upload-api
@@ -360,8 +351,44 @@ importers:
         specifier: workspace:*
         version: link:../history
 
+  src/packages/features/knowledge:
+    dependencies:
+      '@ming/data-layer':
+        specifier: workspace:*
+        version: link:../../data-layer
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
+      '@ming/store':
+        specifier: workspace:*
+        version: link:../../store
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
+  src/packages/features/knowledge-api:
+    dependencies:
+      '@ming/feature-knowledge':
+        specifier: workspace:*
+        version: link:../knowledge
+
   src/packages/features/search:
     dependencies:
+      '@ming/core-log':
+        specifier: workspace:*
+        version: link:../../core/log
+      '@ming/data-layer':
+        specifier: workspace:*
+        version: link:../../data-layer
+      '@ming/feature-history-api':
+        specifier: workspace:*
+        version: link:../history-api
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
+      '@ming/store':
+        specifier: workspace:*
+        version: link:../../store
       react:
         specifier: ^18.2.0
         version: 18.3.1

@@ -1,11 +1,9 @@
+// knowledge/src/ui/KnowledgeModal.tsx
 import React, { useState } from "react";
-import {
-  useDrawerKnowledgeHook,
-  formatFileSize,
-} from "../hook/useDrawerKnowledgeHook";
+import { useKnowledgeModalHook, formatFileSize } from "../hook/KnowledgeHook";
 import { useTranslation } from "@ming/i18n";
 import type { KnowledgeNode } from "../api/types/knowledge";
-import type { KnowledgeGroup } from "../hook/useDrawerKnowledgeHook";
+import type { KnowledgeGroup } from "../hook/KnowledgeHook";
 
 /** 递归渲染目录树节点 */
 function TreeItem({
@@ -111,8 +109,8 @@ function DateGroupedList({ groups }: Readonly<{ groups: KnowledgeGroup[] }>) {
   );
 }
 
-export const KnowledgeModal: React.FC = () => {
-  const { t } = useTranslation("chat-drawer");
+export function KnowledgeModal() {
+  const { t } = useTranslation("knowledge");
   const {
     open,
     closeKnowledge,
@@ -121,7 +119,7 @@ export const KnowledgeModal: React.FC = () => {
     totalFileCount,
     isLoading,
     isError,
-  } = useDrawerKnowledgeHook();
+  } = useKnowledgeModalHook();
   const [tab, setTab] = useState<"tree" | "list">("list");
 
   if (!open) return null;
@@ -211,4 +209,4 @@ export const KnowledgeModal: React.FC = () => {
       </section>
     </div>
   );
-};
+}

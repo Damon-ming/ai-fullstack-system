@@ -1,8 +1,4 @@
 {
-  "search": {
-    "placeholder": "搜索历史对话内容...",
-    "noResults": "没有找到匹配的对话"
-  },
   "account": {
     "title": "账户信息",
     "hint": "信息仅保存在当前浏览器。",

@@ -1,0 +1,16 @@
+{
+  "name": "@ming/feature-knowledge",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ming/store": "workspace:*",
+    "@ming/data-layer": "workspace:*",
+    "@ming/i18n": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}

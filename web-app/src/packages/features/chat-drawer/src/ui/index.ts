@@ -7,5 +7,4 @@ export { DrawerKnowledge } from "./DrawerKnowledge";
 export { DrawerHistory } from "./DrawerHistory";
 export { DrawerAccount } from "./DrawerAccount";
 export { DrawerCollapsed } from "./DrawerCollapsed";
-export { KnowledgeModal } from "./KnowledgeModal";
 export { ErrorBoundary } from "./ErrorBoundary";

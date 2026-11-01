@@ -1,1 +1,18 @@
-{"name":"@ming/feature-search","version":"0.0.1","type":"module","exports":{".":"./src/index.ts"},"peerDependencies":{"react":"^18.2.0"}}
+{
+  "name": "@ming/feature-search",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ming/store": "workspace:*",
+    "@ming/core-log": "workspace:*",
+    "@ming/data-layer": "workspace:*",
+    "@ming/feature-history-api": "workspace:*",
+    "@ming/i18n": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}
