@@ -533,12 +533,14 @@ data: {"code": 200005001, "message": "请求超时"}
 ### 依赖层次
 
 ```
-app → features → data-layer / store / i18n → biz-common → core
+app → features → data-layer(可选) → biz-common / store / i18n → core
 ```
 
 - **biz-common** 是项目所有公共业务逻辑的封装模块
+- **data-layer** 是可选中间层：提供 TanStack Query 的 queryFactory 和 DataApiResponse 统一解包。需要 Query 缓存/解包的模块走 data-layer，不需要的（如 encryption、account）直接走 biz-common-net-api
 - **features 之间通过 api/ 层互相依赖**，不能直接 import 其他 feature 的具体实现
-- **biz-common、i18n、store、data-layer 同级的模块之间不能互相依赖**
+- **biz-common、i18n、store 同级的模块之间不能互相依赖**
+- **data-layer → biz-common/net-api** 是唯一的跨组例外：data-layer 的职责是对 netClient 进行 Query 解包封装，因此依赖 `@ming/biz-common-net-api` 获取 `netClient` 和 `BizResult` 类型。这是组合关系，非业务耦合
 - 所有网络调用必须走 **biz-common/net-api** 或 **data-layer**（app、features 均适用）
 - **除网络模块外，app 和 features 可以直接调用 biz-common 和 core 模块**
 - **core 层可被任意层直接依赖**（纯技术能力，与业务无关）
@@ -575,7 +577,8 @@ app → features → data-layer / store / i18n → biz-common → core
 #### ui/ 层细则
 
 - 可直接读取 **i18n**（`t` 函数）和 **store**（`useStore`），无需通过 hook 层
-- 跨模块能力通过 hook 层透传获得，**不直接调用其他模块的 -api**
+- 可直接导入其他模块 `-api` 暴露的**纯展示组件**进行页面组合（如 `ChatChatroom`、`ChatDrawer` 等无业务逻辑的 UI 组件）
+- **跨模块业务能力**（hooks / 函数）通过 hook 层透传获得，ui/ 层不直接调用其他模块 `-api` 中的业务逻辑
 
 
 ### 跨模块通信
@@ -588,7 +591,7 @@ app → features → data-layer / store / i18n → biz-common → core
 
 - **不能**直接依赖另一个 feature 模块的具体实现（包括 UI 页面）
 - 复用其他模块的页面也必须通过该模块的 `-api` 层暴露
-- `-api` 是纯透通讯道（re-export），**不做任何业务逻辑处理**，只透传具体模块的能力
+- `-api` 是纯透通讯道，**不做任何业务逻辑处理**，只透传具体模块的能力。透传方式可以是 `re-export`（`export { fn } from`）或**签名一致的薄包装**（`export const fn = (...args) => origFn(...args)`），两者等价
 
 #### api/ vs hook/ 分离示例（account 模块）
 
@@ -602,14 +605,15 @@ app → features → data-layer / store / i18n → biz-common → core
 ui/ → hook/ → {module}-api/ → 目标模块
 ```
 
-- 跨模块调用都通过 **模块 -api** 层进行
-- 跨模块调用都在 **hook/** 层发起，不直接在 UI 层发起
-- 如果 UI 层需要用到其他模块的能力，由 **hook/** 层封装或透传该模块的 `-api` 调用，再提供给 UI
-- **UI 层不直接调用其他模块的 -api**
+- 跨模块**业务能力调用**（hooks / 函数）通过 **模块 -api** 层进行，在 **hook/** 层发起，不直接在 UI 层发起
+- 如果 UI 层需要用到其他模块的业务能力，由 **hook/** 层封装或透传该模块的 `-api` 调用，再提供给 UI
+- UI 层可以直接导入其他模块 `-api` 暴露的**纯展示组件**（无业务逻辑），不视为跨模块业务调用
 
-#### 模块间信息通信 — 只能通过 store 订阅通知
+#### 模块间信息通信 — 通过 store 订阅通知
 
-- 所有模块间的状态通知和数据同步都通过 `@ming/store` 模块
+- 所有模块间的 **UI 状态同步**（当前选中的会话、弹窗开关、上传进度等）都通过 `@ming/store` 模块
+- store 是**推模式**的跨模块通信渠道：模块 A 更新 store → 模块 B/C 通过订阅自动收到通知
+- store 与 `-api` 是互补关系：`-api` 用于**拉模式**的业务能力调用（"帮我做某事"），store 用于**推模式**的状态广播（"某个状态变了"）
 
 ### 目录规范
 
@@ -638,7 +642,7 @@ features/{module}-api/      # 跨模块通信中间件
 └── src/
     ├── index.ts
     └── api/
-        └── {module}-api.api.ts  # 纯 re-export
+        └── {module}-api.api.ts  # 纯透传（re-export 或签名一致的薄包装）
 ```
 
 > **按需原则**：`api/` 和 `ui/` 目录根据模块实际职责决定是否创建。
