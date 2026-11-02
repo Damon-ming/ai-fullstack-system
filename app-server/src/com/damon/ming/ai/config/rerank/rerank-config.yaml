@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/config/rerank/rerank-config.yaml
 # 重排器配置 —— 支持多个命名实例并存，上层按业务逻辑路由选择
 #
 # 工业场景典型用法：
@@ -19,6 +20,9 @@ rerankers:
       batch_size: 16
       max_seq_len: 1024
       device: null
+      # 滑动窗口：长 section 切窗打分后取 max，替代 rerank 前的 LLM 有损压缩
+      window_overlap: 128
+      max_windows_per_node: 5
 
   # ── 轻量模型（降级 / 高并发场景）────────────────────
   zh_light:
@@ -28,6 +32,8 @@ rerankers:
       batch_size: 32
       max_seq_len: 512
       device: null
+      window_overlap: 64
+      max_windows_per_node: 5
 
   # ── CPU fallback（GPU 不可用）─────────────────────
   cpu_fallback:
@@ -37,6 +43,8 @@ rerankers:
       batch_size: 8
       max_seq_len: 512
       device: cpu
+      window_overlap: 64
+      max_windows_per_node: 5
 
   # ── 英文模型（多语言场景示例）──────────────────────
   # en_primary:

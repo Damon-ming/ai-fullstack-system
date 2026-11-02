@@ -4,6 +4,91 @@
 
 ---
 
+## 2026-11-02 — rerank 滑动窗口（替代 LLM 有损压缩）
+
+### 问题
+
+`section 重构 → LLM 压缩 → rerank` 的顺序导致两个问题：
+
+1. **reranker 打分基于有损摘要**：超长 section（>1024 token）先被 LLM 压缩到 1024 再喂给 reranker。LLM 压缩时不知道 query，可能压缩掉 query 相关内容，导致打分不准。
+2. **候选池无法扩大**：压缩成本 O(候选池大小)，候选池 5→20 后 LLM 调用涨 4 倍，再扩大延迟爆炸。
+
+压缩是常态而非边缘情况：chunk 大小 768 token，section 合并后只要 >1 chunk（~1476 token）就超过 reranker 的 `max_seq_len=1024`，必然被压缩。
+
+### 方案
+
+将"rerank 前 LLM 压缩"改为"reranker 内部滑动窗口"：
+
+- 长 section 按 `max_seq_len - query_len` 切分为重叠窗口
+- 每个窗口独立打分，取 **max** 作为 section 分数
+- `rag_tool.py` 不再做 rerank 前压缩，章节原文直接喂给 reranker
+
+滑动窗口参数（**必填，无默认值，全部 YAML 显式声明**）：
+
+| 参数 | zh_primary | zh_light / cpu_fallback | 说明 |
+|---|---|---|---|
+| `window_overlap` | 128 | 64 | 窗口重叠 token 数，避免关键内容被切在边界 |
+| `max_windows_per_node` | 5 | 5 | 单 node 窗口数上限，超限时均匀采样保留首尾覆盖 |
+| `max_seq_len` | 1024（不变） | 512 | O(n²) 注意力，小窗口总计算量更低 |
+
+### 改动文件
+
+| 文件 | 改动 |
+|---|---|
+| `rerank/base_reranker.py` | `RerankerParams` 新增必填参数 `window_overlap` / `max_windows_per_node`（无默认值，全部 YAML 显式声明） |
+| `rerank/cross_encoder_reranker.py` | `rerank()` 改为先展开窗口再按 max 聚合；新增 `_split_into_windows()` / `_compute_window_size()`；新增模块级 `_uniform_sample()`；窗口数超 `max_windows_per_node` 时 `logger.warning` 记录原始 token 数与窗口数，便于后期统计降级频率 |
+| `config/rerank/rerank-config.yaml` | `zh_primary` 新增 `window_overlap: 128` / `max_windows_per_node: 5` |
+| `rag_tool.py` | 删除阶段 3（rerank 前 LLM 压缩）和阶段 5（恢复原文）；阶段重编号；docstring 同步更新 |
+
+### 改动量
+
+- 新增 ~70 行（滑动窗口逻辑）
+- 删除 ~20 行（压缩 + 恢复逻辑）
+- `rag_tool.py` 净减 ~20 行
+- `SummaryService.compress_nodes()` 保留但不再被调用（dead code，可后续清理）
+
+### 预期效果
+
+| 场景 | 修改前 | 修改后 |
+|---|---|---|
+| reranker 输入 | LLM 有损摘要 | 完整原文（滑动窗口） |
+| 信息完整性 | ❌ 丢失 30-60% | ✅ 100% 覆盖 |
+| 候选池 LLM 调用 | 8-12 次 | 0 次 |
+| 候选池可扩大 | ❌ 压缩成本线性增长 | ✅ 无 LLM 成本 |
+| rerank 延迟 | ~3-5s（含 LLM 压缩） | ~1-2s（纯 reranker） |
+| 最终 LLM 资料 | 完整 section | 完整 section（不变） |
+
+### 性能分析
+
+cross-encoder 注意力 O(n²)，滑动窗口保持 `max_seq_len=1024` 最优：
+
+| 方案 | 总计算量（20 section × 1500 token） |
+|---|---|
+| 1024 + 滑动窗口 | ~42M |
+| 2048 + 滑动窗口 | ~84M |
+| 4096 + 滑动窗口 | ~336M |
+
+窗口数预估（1024，重叠 128）：2-chunk section → 2 窗口，3-chunk → 3 窗口。
+
+### 边界情况
+
+| 情况 | 处理 |
+|---|---|
+| `window_overlap=0` | 退化为整段返回（原 truncate 行为） |
+| 短 section（≤ window_size） | 直接返回原文，不切 |
+| 窗口数超上限 | 均匀采样 `max_windows_per_node` 个，保留首尾 |
+| query 过长 | `window_size` 设下限 1，避免负数 |
+| 取消信号 | 复用 `score_pairs` 的 batch 间 cancel 检查 |
+
+### 验证建议
+
+1. 检索后日志确认 `[Rerank] 候选数量:N | 窗口总数:M → 输出:K`，M 应 ≥ N
+2. 对比同一 query 修改前后的最终 context，确认 rerank 排序变化（长 section 不再因压缩丢信息而被误判）
+3. 观察 rerank 阶段耗时，确认低于原 LLM 压缩方案
+4. 确认 `window_overlap=0` 时行为退回原 truncate（回归验证）
+
+---
+
 ## 2026-11-02 — rerank 候选池与最终输出解耦
 
 ### 问题

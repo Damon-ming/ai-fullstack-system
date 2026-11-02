@@ -26,6 +26,9 @@ class RerankerParams:
     model_name: str
     max_seq_len: int
     batch_size: int
+    # 滑动窗口：长节点切窗打分后按 max 聚合
+    window_overlap: int
+    max_windows_per_node: int
     device: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 

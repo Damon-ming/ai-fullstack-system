@@ -13,6 +13,17 @@ from src.com.damon.ming.ai.rerank.base_reranker import (
 from src.com.damon.ming.log import pin
 
 
+def _uniform_sample(items: list[str], k: int) -> list[str]:
+    """从列表中均匀采样 k 个元素，保留首尾。用于窗口数超上限时的降级。"""
+    n = len(items)
+    if k >= n:
+        return items
+    if k <= 1:
+        return [items[0]]
+    indices = [round(i * (n - 1) / (k - 1)) for i in range(k)]
+    return [items[i] for i in indices]
+
+
 class CrossEncoderModel:
     """
     CrossEncoder 底层推理封装
@@ -104,18 +115,32 @@ class CrossEncoderReranker(BaseReranker):
         if not nodes:
             return []
 
-        texts = [node.text for node in nodes]
+        # 长节点滑动窗口展开：每个 node → 1+ 个窗口文本
+        all_texts: list[str] = []
+        node_window_counts: list[int] = []
+        for node in nodes:
+            windows = self._split_into_windows(query, node.text)
+            node_window_counts.append(len(windows))
+            all_texts.extend(windows)
+
         # score_pairs 内部持 _infer_lock 保护 PyTorch 推理，返回后锁已释放
-        scores = self.model.score_pairs(query, texts, cancel_event)
+        scores = self.model.score_pairs(query, all_texts, cancel_event)
 
         # 取消时 score_pairs 返回空列表，直接短路
         if not scores:
             return []
 
+        # 按 node 聚合窗口分数（取 max）：任一部分高度相关即认为 node 相关
+        node_scores: list[float] = []
+        idx = 0
+        for count in node_window_counts:
+            node_scores.append(max(scores[idx : idx + count]))
+            idx += count
+
         # 锁外排序 + deepcopy：nodes 是 rerank() 局部参数，RAGContainer 顺序调用，
         # 执行期间不会并发修改这些节点对象，锁外操作安全。
         scored_pairs = sorted(
-            zip(nodes, scores),
+            zip(nodes, node_scores),
             key=lambda x: x[1],
             reverse=True,
         )
@@ -130,5 +155,47 @@ class CrossEncoderReranker(BaseReranker):
         if top_k is not None:
             out_nodes = out_nodes[:top_k]
 
-        self.logger.info(f"[Rerank] 候选数量:{len(nodes)} → 输出:{len(out_nodes)}")
+        self.logger.info(
+            f"[Rerank] 候选数量:{len(nodes)} | 窗口总数:{len(all_texts)} → 输出:{len(out_nodes)}"
+        )
         return out_nodes
+
+    # ── 滑动窗口 ────────────────────────────────────────────────────────
+
+    def _split_into_windows(self, query: str, text: str) -> list[str]:
+        """将长文本切分为滑动窗口，短文本直接返回原文。
+
+        window_overlap=0 时退化为整段返回（由 score_pairs 内部 truncate 兜底）。
+        """
+        if self.params.window_overlap <= 0:
+            return [text]
+
+        window_size = self._compute_window_size(query)
+        token_ids = self.model.tokenizer.encode(text, add_special_tokens=False)
+
+        if len(token_ids) <= window_size:
+            return [text]
+
+        step = max(window_size - self.params.window_overlap, 1)
+        windows: list[str] = []
+        for start in range(0, len(token_ids), step):
+            end = min(start + window_size, len(token_ids))
+            windows.append(self.model.tokenizer.decode(token_ids[start:end]))
+            if end >= len(token_ids):
+                break
+
+        # 安全上限：窗口数超限时均匀采样，保留首尾覆盖
+        max_windows = self.params.max_windows_per_node
+        if len(windows) > max_windows:
+            self.logger.warning(
+                f"[Rerank] 窗口数超限降级 | section_tokens:{len(token_ids)} | "
+                f"原始窗口数:{len(windows)} | 上限:{max_windows} | 已均匀采样保留首尾"
+            )
+            windows = _uniform_sample(windows, max_windows)
+        return windows
+
+    def _compute_window_size(self, query: str) -> int:
+        """计算窗口 token 数：max_seq_len 扣除 query 和 special tokens。"""
+        query_tokens = len(self.model.tokenizer.encode(query, add_special_tokens=False))
+        # [CLS] + query + [SEP] + document + [SEP]
+        return max(self.params.max_seq_len - query_tokens - 3, 1)

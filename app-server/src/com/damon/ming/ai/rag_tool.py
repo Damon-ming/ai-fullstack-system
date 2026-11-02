@@ -18,7 +18,7 @@ RAG 容器 —— 线程编排层 + 业务入口。
   - RAGContainer 是 ThreadPoolManager 的唯一持有者
   - 同步 AI 函数通过 loop.run_in_executor(pool, fn, ...) 提交到线程池
   - AI 模块（HybridRetriever/SectionReconstructor）通过参数接收 executor 用于内部并行
-  - 异步 AI 函数（SummaryService.run_summary / compress_nodes）直接调用
+  - 异步 AI 函数（SummaryService.run_summary）直接调用
 """
 
 import asyncio
@@ -445,11 +445,10 @@ class RAGContainer:
         线程编排层（executor 注入模式）：
           1. 混合检索（HybridRetriever，线程池注入）
           2. 章节重构（SectionReconstructor，线程池注入）
-          3. 超长章节压缩（仅超 max_seq_len 的节点，保存原文映射）
-          4. rerank 重排（_rerank_nodes）
-          5. 恢复原文 + 拼接（通过 id 映射恢复压缩节点）
-          6. 全局超限摘要（run_summary 或 truncate_by_token）
-          7. 取消由 asyncio.CancelledError 统一处理——任何 await 点立即中断
+          3. rerank 重排（长节点由 reranker 内部滑动窗口处理）
+          4. 拼接
+          5. 全局超限摘要（run_summary 或 truncate_by_token）
+          6. 取消由 asyncio.CancelledError 统一处理——任何 await 点立即中断
 
         Executor 注入模式：
           - RAGContainer 是 ThreadPoolManager 的唯一使用者
@@ -526,29 +525,8 @@ class RAGContainer:
                 )
             )
 
-            # ── 阶段 3: 超长章节压缩（仅处理超 max_seq_len 的节点） ──
-            # 压缩前保存原文到 metadata（deepcopy 后仍保留），再替换节点。
-            # 中断时直接抛弃，无需恢复。
-            max_seq_len = self.reranker.params.max_seq_len
-            nodes_to_compress: list[TextNode] = []
-            for node in reconstructed_nodes:
-                if self.summary.tokenizer.count_tokens(node.text) > max_seq_len:
-                    nodes_to_compress.append(node)
-            if nodes_to_compress:
-                compressed = await self.summary.compress_nodes(
-                    nodes_to_compress, max_seq_len
-                )
-                # 原文存入 metadata（rerank deepcopy 后仍保留），再替换节点
-                for orig, comp in zip(nodes_to_compress, compressed):
-                    comp.metadata["_original_text"] = orig.text
-                compress_map = {
-                    id(orig): comp for orig, comp in zip(nodes_to_compress, compressed)
-                }
-                reconstructed_nodes = [
-                    compress_map.get(id(n), n) for n in reconstructed_nodes
-                ]
-
-            # ── 阶段 4: rerank 重排（CPU/GPU 密集，提交到独立 rerank 池） ──
+            # ── 阶段 3: rerank 重排（CPU/GPU 密集，提交到独立 rerank 池） ──
+            # 长节点由 reranker 内部滑动窗口处理（逐窗口打分取 max），无需预压缩。
             # 使用独立池避免 rerank 长耗时占用 retrieval 线程（与 Stage 1/2 隔离）
             # 传入 cancel_event，使 rerank 内部可在取消信号下提前退出
             ranked_nodes = await loop.run_in_executor(
@@ -563,14 +541,10 @@ class RAGContainer:
                 logger.info("RAG 重排后无有效结果")
                 return ""
 
-            # ── 阶段 5: 恢复原文 + 拼接 ──
-            for node in ranked_nodes:
-                original = node.metadata.pop("_original_text", None)
-                if original is not None:
-                    node.text = original
+            # ── 阶段 4: 拼接 ──
             full_text = self.section_recon.merge_nodes_to_text(ranked_nodes)
 
-            # ── 阶段 6: 全局超限摘要 ──
+            # ── 阶段 5: 全局超限摘要 ──
             total_tokens = self.summary.tokenizer.count_tokens(full_text)
             if total_tokens > max_context_tokens:
                 full_text = await self.summary.run_summary(
