@@ -4,6 +4,79 @@
 
 ---
 
+## 2026-11-02 — rerank 候选池与最终输出解耦
+
+### 问题
+
+`top_k` 一个参数同时承担两种语义：
+
+1. **候选池大小** — `hybrid_retriever.retrieve(top_k=5)`，决定检索器返回多少 section
+2. **最终输出大小** — `reranker.rerank(..., top_k=5)`，决定保留多少 section
+
+两者被绑定为同一个值，导致 reranker 收到的候选就是最终输出（5 个）。rerank 的价值在于从更大的候选池中精选，候选池等于输出大小时，精度优化空间被彻底锁死。
+
+数据流（修改前，`top_k=None` 走 YAML 默认值 5）：
+
+```
+chat_router.query_rag()  →  effective_top_k = 5
+  → hybrid_retriever.retrieve(top_k=5, dense=10, sparse=10)
+      → RRF top_k = 5 × 3 = 15
+      → section 去重 → 5
+  → 章节重构 → 5
+  → reranker.rerank(5 个节点, top_k=5) → 5
+```
+
+reranker 只能对这 5 个重新排序，无法把排名第 6~20 的候选捞回来。
+
+### 方案
+
+将 `top_k` 拆分为两个独立参数，**全部由 YAML 配置驱动**（去掉 `query_rag` 的 `top_k` 入参，避免与 YAML 的 `top_k` 同名歧义）：
+
+| 参数 | 语义 | 值 |
+|---|---|---|
+| `retrieve_top_k` | 候选池大小：检索器返回多少 section 给 reranker | 20 |
+| `top_k` | 最终输出大小：reranker 精选后保留多少 section | 5 |
+
+同步放大 `dense_top_k` / `sparse_top_k`（10 → 30）保证候选充足，`rrf_oversample_multiplier` 3 → 2 避免 RRF 池过大。
+
+### 改动文件
+
+| 文件 | 改动 |
+|---|---|
+| `config/retriever/retriever-config.yaml` | 新增 `retrieve_top_k: 20`；`dense_top_k`/`sparse_top_k` 10→30；`rrf_oversample_multiplier` 3→2 |
+| `config/retriever/retriever_config_loader.py` | `RetrieverConfig` 新增 `retrieve_top_k` 字段（`__slots__` + `__init__` + `_build_one`） |
+| `rag_tool.py` | 删除 `query_rag` 的 `top_k` 入参；`effective_top_k` 拆为 `retrieve_top_k`（YAML）/ `rerank_top_k`（YAML `top_k`）；retrieve 传前者，rerank 传后者；日志输出两个值 |
+
+### 改动量
+
+- 新增 1 个配置字段
+- 修改 3 个文件
+- `HybridRetriever` / `SectionReconstructor` / `CrossEncoderReranker` **零改动**（接口不变，只是传入的数值不同）
+
+### 预期效果
+
+| 场景 | 修改前 | 修改后 |
+|---|---|---|
+| 候选池 | 5 | 20 |
+| rerank 输入 | 5 个 section | 20 个 section |
+| 最终输出 | 5 个 section | 5 个 section（不变） |
+| precision 上限 | 锁死在 top5 | 从 top20 中精选 |
+| 上下文 token | 不变 | 不变 |
+
+### 代价
+
+- rerank 推理量 5 → 20（约 4 倍），cross-encoder batch 推理绝对耗时增加几十 ms
+- 章节重构的 DB 批量查询量增加（已是单次 OR 查询，边际成本低）
+- 超长 section 的压缩节点可能增多（仅影响超 `max_seq_len` 的节点）
+
+### 验证建议
+
+1. 检索后在日志中确认 `retrieve_top_k=20 | rerank_top_k=5`
+2. 对比修改前后同一 query 的最终 context，确认 rerank 排序发生变化（候选池变大后，选中的 section 可能不同）
+3. 观察 rerank 阶段耗时，确认在可接受范围内
+
+---
+
 ## 2026-11-02 — 表格感知分块（Table-Aware Chunking）
 
 ### 问题

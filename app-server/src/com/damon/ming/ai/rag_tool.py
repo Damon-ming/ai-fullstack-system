@@ -438,7 +438,6 @@ class RAGContainer:
         self,
         query: str,
         max_context_tokens: int,
-        top_k: int | None = None,
         cancellation_token: CancellationToken | None = None,
     ) -> str:
         """RAG 检索主流程。
@@ -462,8 +461,9 @@ class RAGContainer:
             能直接取消当前协程，实现毫秒级中断
 
         参数：
-          - top_k: 为 None 时使用 YAML 配置的 retriever_config.top_k；
-                   传入具体值时覆盖（用于业务动态调整）。
+          - 候选池大小和最终输出大小均由 YAML 配置驱动，不再提供函数入参：
+            retrieve_top_k — 检索器返回多少 section 给 reranker（候选池，决定 precision 上限）
+            top_k          — reranker 精选后保留多少 section（最终上下文量级）
 
         Returns:
             检索结果文本。取消时抛出 asyncio.CancelledError。
@@ -476,11 +476,17 @@ class RAGContainer:
             cancellation_token.register_task(asyncio.current_task())
 
         cfg = self.retriever_config
-        # top_k 优先取传入值，否则使用 YAML 配置
-        effective_top_k = top_k if top_k is not None else cfg.top_k
+        # 候选池大小（retrieve）与最终输出大小（rerank）分离，全部由 YAML 配置驱动：
+        #   retrieve_top_k — 检索器返回多少 section 给 reranker（候选池，决定 precision 上限）
+        #   top_k          — reranker 精选后保留多少 section（最终上下文量级）
+        retrieve_top_k = cfg.retrieve_top_k
+        rerank_top_k = cfg.top_k
 
         logger.info(
-            "RAG 检索开始 | query_length=%s | top_k=%s", len(query), effective_top_k
+            "RAG 检索开始 | query_length=%s | retrieve_top_k=%s | rerank_top_k=%s",
+            len(query),
+            retrieve_top_k,
+            rerank_top_k,
         )
 
         loop = asyncio.get_running_loop()
@@ -498,7 +504,7 @@ class RAGContainer:
                 retrieval_pool,
                 lambda: self.hybrid_retriever.retrieve(
                     query=query,
-                    top_k=effective_top_k,
+                    top_k=retrieve_top_k,
                     dedup_by_section=cfg.dedup_by_section,
                     dense_top_k=cfg.dense_top_k,
                     sparse_top_k=cfg.sparse_top_k,
@@ -550,7 +556,7 @@ class RAGContainer:
                 self.reranker.rerank,
                 query,
                 reconstructed_nodes,
-                effective_top_k,
+                rerank_top_k,
                 cancel_event,
             )
             if not ranked_nodes:

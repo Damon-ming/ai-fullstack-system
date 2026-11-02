@@ -23,8 +23,12 @@ class RetrieverConfig:
     """HybridRetriever 配置参数。
 
     包含构造参数（dense_weight, sparse_weight, fuse_k）、检索参数
-    （top_k, dense_top_k, sparse_top_k, dedup_by_section）和去重调优参数
-    （max_section_oversample_multiplier, rrf_oversample_multiplier）。
+    （top_k, retrieve_top_k, dense_top_k, sparse_top_k, dedup_by_section）
+    和去重调优参数（max_section_oversample_multiplier, rrf_oversample_multiplier）。
+
+    top_k 与 retrieve_top_k 语义分离：
+      - retrieve_top_k：候选池大小，检索器返回多少 section 给 reranker
+      - top_k：最终输出大小，reranker 精选后保留多少 section
     """
 
     __slots__ = (
@@ -34,6 +38,7 @@ class RetrieverConfig:
         "fuse_k",
         "max_section_oversample_multiplier",
         "name",
+        "retrieve_top_k",
         "rrf_oversample_multiplier",
         "sparse_top_k",
         "sparse_weight",
@@ -44,6 +49,7 @@ class RetrieverConfig:
         self,
         name: str,
         top_k: int,
+        retrieve_top_k: int,
         dense_top_k: int,
         sparse_top_k: int,
         dedup_by_section: bool,
@@ -55,6 +61,7 @@ class RetrieverConfig:
     ):
         self.name = name
         self.top_k = top_k
+        self.retrieve_top_k = retrieve_top_k
         self.dense_top_k = dense_top_k
         self.sparse_top_k = sparse_top_k
         self.dedup_by_section = dedup_by_section
@@ -126,6 +133,7 @@ class RetrieverConfigLoader:
             return RetrieverConfig(
                 name=name,
                 top_k=raw["top_k"],
+                retrieve_top_k=raw["retrieve_top_k"],
                 dense_top_k=raw["dense_top_k"],
                 sparse_top_k=raw["sparse_top_k"],
                 dedup_by_section=raw["dedup_by_section"],
