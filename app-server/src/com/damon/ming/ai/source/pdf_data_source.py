@@ -1,29 +1,32 @@
 # app-server/src/com/damon/ming/ai/source/pdf_data_source.py
 """
-PDF 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+PDF 数据源 —— 路由层，线程编排由上层 RAGContainer 负责。
 
 本模块只负责"给定 PDF 文件路径，返回 Document 列表"，
-不感知线程池、取消令牌等基础设施。
+具体解析策略由 pdf/ 子包内的多策略解析器承担。
 """
 
-import hashlib
 import os
 import threading
 from pathlib import Path
 
-import pymupdf4llm
 from llama_index.core import Document
 from src.com.damon.ming.ai.source import register_engine
 from src.com.damon.ming.ai.source.base import BaseDataSource
+from src.com.damon.ming.ai.source.pdf import route_pdf_parser
 from src.com.damon.ming.log import pin
 
 
 @register_engine("pdf")
 class LocalPDFDataSource(BaseDataSource):
-    """PDF 文件加载实现，同步处理。
+    """PDF 文件加载实现 —— 多策略路由。
 
-    上层 RAGContainer 使用 asyncio.to_thread 或 ThreadPoolExecutor
-    将本类的调用提交到线程池，本类不感知线程环境。
+    根据 PDF 特征自动选择解析策略：
+      - 文本 PDF → pymupdf4llm 快速路径
+      - 扫描件 PDF → PaddleOCR 路径
+
+    新增解析策略只需在 pdf/__init__.py 的路由函数中追加规则，
+    本类无需改动。
     """
 
     def __init__(
@@ -39,10 +42,7 @@ class LocalPDFDataSource(BaseDataSource):
         self._ensure_dir_exists()
         self._images_dir = os.path.join(folder_path, "images")
 
-        # 实例级别锁，避免多实例竞争
         self._stats_lock = threading.Lock()
-
-        # 统计信息（线程安全）
         self._stats = {
             "total_files": 0,
             "success_files": 0,
@@ -55,99 +55,38 @@ class LocalPDFDataSource(BaseDataSource):
             os.makedirs(self.folder_path)
             self.logger.info(f"[PDFDataSource] 创建知识库目录: {self.folder_path}")
 
-    @staticmethod
-    def _get_file_sha256(file_path: str) -> str:
-        hash_sha256 = hashlib.sha256()
-        buffer_size = 8192
-        with open(file_path, "rb") as f:
-            while chunk := f.read(buffer_size):
-                hash_sha256.update(chunk)
-        return hash_sha256.hexdigest()
-
     def _process_single_pdf(self, file_path: str) -> list[Document]:
-        """处理单个PDF文件"""
+        """处理单个 PDF —— 自动路由到对应解析器"""
         file_name = os.path.basename(file_path)
 
         try:
-            file_sha256 = self._get_file_sha256(file_path)
-            md_pages = pymupdf4llm.to_markdown(
-                file_path,
-                page_chunks=True,
-                write_images=False,  # 图片由 fitz 直接提取 + OCR
-                dpi=150,
+            parser = route_pdf_parser(
+                file_path=file_path,
+                images_dir=self._images_dir,
+                enable_image_extract=self.enable_image_extract,
+                vlm_model=self.vlm_model,
             )
 
-            total_page_count = len(md_pages)
-            docs = []
+            self.logger.debug(
+                f"[PDFDataSource] 路由选择 | file={file_name} | "
+                f"parser={type(parser).__name__}"
+            )
 
-            for page_item in md_pages:
-                page_idx = page_item.get("page")
-                if page_idx is not None:
-                    page_no = page_idx + 1
-                else:
-                    meta = page_item.get("metadata", {})
-                    page_idx = meta.get("page_number", -1)
-                    page_no = page_idx
-                    if page_idx == -1:
-                        self.logger.warning(
-                            f"当前PDF块无法解析页码，原始数据：{page_item}"
-                        )
+            docs = parser.parse(file_path)
 
-                page_text = page_item.get("text", "")
-
-                # ── 图片提取 + OCR ────────────────────────────────
-                image_text = ""
-                image_paths: list[str] = []
-                if self.enable_image_extract:
-                    from src.com.damon.ming.ai.source.image_text_extractor import (
-                        extract_image_text,
-                        extract_images_from_pdf_page,
-                    )
-
-                    page_images = extract_images_from_pdf_page(
-                        file_path, page_idx, self._images_dir
-                    )
-                    for img_path in page_images:
-                        img_text = extract_image_text(img_path, self.vlm_model)
-                        if img_text:
-                            image_text += f"\n{img_text}"
-                        image_paths.append(img_path)
-
-                full_text = (page_text + image_text).strip()
-
-                doc = Document(
-                    text=full_text,
-                    metadata={
-                        "file_name": file_name,
-                        "file_path": file_path,
-                        "file_sha256": file_sha256,
-                        "source_refId": file_sha256,
-                        "page": page_no,
-                        "page_index": page_idx,
-                        "total_pages": total_page_count,
-                        "images": image_paths,
-                    },
-                )
-                docs.append(doc)
-
-            # 更新统计（线程安全）
             with self._stats_lock:
                 self._stats["success_files"] += 1
-                self._stats["total_pages"] += total_page_count
+                self._stats["total_pages"] += sum(
+                    d.metadata.get("total_pages", 1) for d in docs
+                )
 
-            self.logger.info(
-                f"[PDFDataSource] 解析成功 | file={file_name} | "
-                f"pages={total_page_count} | sha256={file_sha256[:8]}..."
-            )
             return docs
 
         except Exception as e:
-            # 更新失败统计（线程安全）
             with self._stats_lock:
                 self._stats["failed_files"] += 1
-
             self.logger.exception(
-                f"[PDFDataSource] 解析失败 | file={file_name} | error={e!s}",
+                f"[PDFDataSource] 解析失败 | file={file_name} | error={e!s}"
             )
             return []
 
@@ -155,7 +94,6 @@ class LocalPDFDataSource(BaseDataSource):
         """加载目录下所有 PDF 文件（同步）"""
         self.logger.info(f"[PDFDataSource] 开始加载目录: {self.folder_path}")
 
-        # 收集所有文件
         pdf_files = []
         for root, _, files in os.walk(self.folder_path):
             for file in files:
@@ -168,7 +106,6 @@ class LocalPDFDataSource(BaseDataSource):
             )
             return []
 
-        # 重置统计（默认行为）或累加（reset_stats=False）
         if reset_stats:
             with self._stats_lock:
                 self._stats["total_files"] = len(pdf_files)
@@ -180,13 +117,11 @@ class LocalPDFDataSource(BaseDataSource):
             f"[PDFDataSource] 发现 {len(pdf_files)} 个PDF文件，逐个同步处理"
         )
 
-        all_docs = []
-
+        all_docs: list[Document] = []
         for file_path in pdf_files:
             docs = self._process_single_pdf(file_path)
             all_docs.extend(docs)
 
-        # 输出最终统计
         with self._stats_lock:
             self.logger.info(
                 f"[PDFDataSource] 加载完成 | "
@@ -215,7 +150,6 @@ class LocalPDFDataSource(BaseDataSource):
         if not pdf_files:
             return []
 
-        # 重置统计（默认行为）或累加（reset_stats=False）
         if reset_stats:
             with self._stats_lock:
                 self._stats["total_files"] = len(pdf_files)
@@ -223,7 +157,7 @@ class LocalPDFDataSource(BaseDataSource):
                 self._stats["failed_files"] = 0
                 self._stats["total_pages"] = 0
 
-        all_docs = []
+        all_docs: list[Document] = []
         for file_path in pdf_files:
             docs = self._process_single_pdf(file_path)
             all_docs.extend(docs)

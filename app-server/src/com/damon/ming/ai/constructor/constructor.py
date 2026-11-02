@@ -54,10 +54,25 @@ class SectionReconstructor:
         nodes: list[TextNode],
         section_separator: str = "\n---\n",
     ) -> str:
-        """将多个 TextNode 文本拼接为单个字符串。"""
+        """将多个 TextNode 文本拼接为单个字符串。
+
+        每个节点前附加其章节标题链（如有），格式：
+        【性能要求 > 并发指标】
+        节点原文...
+        帮助 LLM 理解每个 chunk 在文档中的层级位置。
+        """
         if not nodes:
             return ""
-        return section_separator.join(n.text for n in nodes)
+        parts: list[str] = []
+        for node in nodes:
+            heading = node.metadata.get("heading_path", "")
+            if heading:
+                # heading_path 格式为 "/父标题/子标题/"，去除首尾 "/" 后用 " > " 连接
+                clean_path = heading.strip("/").replace("/", " > ")
+                parts.append(f"【{clean_path}】\n{node.text}")
+            else:
+                parts.append(node.text)
+        return section_separator.join(parts)
 
     # ── 私有：合并逻辑 ────────────────────────────────────────────────
 

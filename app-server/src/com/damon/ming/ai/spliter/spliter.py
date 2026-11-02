@@ -515,6 +515,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         node.metadata["char_end"] = char_end
         node.metadata["chunk_length"] = len(node.text)
         node.metadata["token_count"] = self._count_tokens(node.text)
+        # 保留 MarkdownNodeParser 自动生成的章节标题链，供 LLM 理解上下文层级
+        if "header_path" in node.metadata:
+            node.metadata["heading_path"] = node.metadata["header_path"]
 
     def get_stats(self) -> dict:
         """获取分割统计信息"""
