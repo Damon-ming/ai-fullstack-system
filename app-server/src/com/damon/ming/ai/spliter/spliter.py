@@ -7,6 +7,7 @@
 """
 
 import hashlib
+import re
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -17,6 +18,10 @@ from llama_index.core.schema import TextNode
 from src.com.damon.ming.log import pin
 
 from ..tokenizer.base_tokenizer import BaseTokenizer
+
+# Markdown 表格正则：匹配表格行和分隔行
+_TABLE_SEP_RE = re.compile(r"^\s*\|[\s\-:|]+\|\s*$")
+_TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
 
 
 class BaseDocumentSplitter(ABC):
@@ -62,7 +67,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         }
 
     def _gen_section_id(self, file_sha256: str, node_text: str):
-        seg_hash = hashlib.md5(node_text.encode("utf-8")).hexdigest()[:16]
+        seg_hash = hashlib.md5(
+            node_text.encode("utf-8"), usedforsecurity=False
+        ).hexdigest()[:16]
         return f"section_{file_sha256}_{seg_hash}"
 
     def _count_tokens(self, text: str) -> int:
@@ -183,9 +190,16 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                     f"tokens={section_tokens} | limit={limit}"
                 )
 
-                sub_nodes = self.token_splitter.get_nodes_from_documents(
-                    [Document(text=section_raw_text)]
-                )
+                # 表格感知分割：检测表格边界，确保表格不被切碎
+                table_blocks = self._find_table_blocks(section_raw_text)
+                if table_blocks:
+                    sub_nodes = self._table_aware_split(
+                        section_raw_text, table_blocks, limit
+                    )
+                else:
+                    sub_nodes = self.token_splitter.get_nodes_from_documents(
+                        [Document(text=section_raw_text)]
+                    )
 
                 for seq, sub_node in enumerate(sub_nodes):
                     if not sub_node.text.strip():
@@ -320,6 +334,159 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
 
         return all_nodes
 
+    def _find_table_blocks(self, text: str) -> list[tuple[int, int]]:
+        """检测文本中的所有 markdown 表格区域，返回 [(start, end), ...]。
+
+        表格定义：连续的行，首行为表头行（| col | col |），
+        第二行为分隔行（|---|---|），后续为数据行。
+        表格前后的空行视为表格的一部分（作为间隔）。
+        """
+        lines = text.split("\n")
+        blocks: list[tuple[int, int]] = []
+        i = 0
+        n = len(lines)
+
+        while i < n - 1:
+            # 找表头行：当前行是 |...|，下一行是 |---|---|
+            if _TABLE_ROW_RE.match(lines[i]) and _TABLE_SEP_RE.match(lines[i + 1]):
+                # 找到表格起点：向前吞并一个空行
+                start_line = i
+                if i > 0 and lines[i - 1].strip() == "":
+                    start_line = i - 1
+
+                # 向后找表格结束：连续的 |...| 行
+                j = i + 2
+                while j < n and _TABLE_ROW_RE.match(lines[j]):
+                    j += 1
+
+                # 表格在原文中的字符偏移
+                char_start = sum(len(lines[k]) + 1 for k in range(start_line))
+                char_end = sum(len(lines[k]) + 1 for k in range(j))
+                char_end = min(char_end, len(text))
+
+                blocks.append((char_start, char_end))
+                i = j
+            else:
+                i += 1
+
+        return blocks
+
+    def _split_table_with_header(self, table_text: str, limit: int) -> list[str]:
+        """将超大表格按行切分，每个子表格都带表头行。
+
+        例如 100 行数据的大表会被拆为多个子表，每个子表都包含
+        表头行和分隔行，确保每个 chunk 语义完整可读。
+        """
+        lines = [l for l in table_text.strip().split("\n") if l.strip()]
+        if len(lines) < 3:
+            return [table_text]  # 不够表头+分隔+一行数据，不拆
+
+        header = lines[0]
+        separator = lines[1]
+        data_rows = lines[2:]
+        header_block = f"{header}\n{separator}"
+        header_tokens = self._count_tokens(header_block)
+
+        chunks: list[str] = []
+        current_rows: list[str] = []
+        current_tokens = header_tokens
+
+        for row in data_rows:
+            row_tokens = self._count_tokens(row)
+            if current_tokens + row_tokens > limit and current_rows:
+                # 当前批次已满，组装一个子表格
+                chunks.append(f"{header_block}\n" + "\n".join(current_rows))
+                current_rows = [row]
+                current_tokens = header_tokens + row_tokens
+            else:
+                current_rows.append(row)
+                current_tokens += row_tokens
+
+        if current_rows:
+            chunks.append(f"{header_block}\n" + "\n".join(current_rows))
+
+        return chunks
+
+    def _table_aware_split(
+        self, text: str, table_blocks: list[tuple[int, int]], limit: int
+    ) -> list[TextNode]:
+        """表格感知的章节分割。
+
+        1. 将表格区域替换为占位符
+        2. 对剩余文本走 TokenTextSplitter
+        3. 将表格作为独立 chunk 插入原位置
+        4. 超大表格用 _split_table_with_header 拆分
+        """
+        # 提取表格文本，用占位符替换
+        segments: list[tuple[int, int, bool]] = []  # (start, end, is_table)
+        cursor = 0
+        for tb_start, tb_end in table_blocks:
+            if tb_start > cursor:
+                segments.append((cursor, tb_start, False))
+            segments.append((tb_start, tb_end, True))
+            cursor = tb_end
+        if cursor < len(text):
+            segments.append((cursor, len(text), False))
+
+        # 构建占位文本
+        placeholder_map: dict[str, str] = {}
+        parts: list[str] = []
+        for start, end, is_table in segments:
+            if is_table:
+                tbl_text = text[start:end]
+                placeholder = f"__TABLE_{len(placeholder_map)}__"
+                placeholder_map[placeholder] = tbl_text
+                parts.append(placeholder)
+            else:
+                parts.append(text[start:end])
+        placeholder_text = "".join(parts)
+
+        # 对占位文本做 TokenTextSplitter
+        raw_nodes = self.token_splitter.get_nodes_from_documents(
+            [Document(text=placeholder_text)]
+        )
+
+        # 还原：把占位符替换回表格文本
+        result_nodes: list[TextNode] = []
+        for node in raw_nodes:
+            node_text = node.text
+            node_start = node.start_char_idx or 0
+
+            # 检查 chunk 中是否包含任何占位符
+            found_placeholder = False
+            for placeholder, tbl_text in placeholder_map.items():
+                if placeholder in node_text:
+                    found_placeholder = True
+                    fragments = node_text.split(placeholder)
+                    for idx, fragment in enumerate(fragments):
+                        fragment = fragment.strip()
+                        if fragment:
+                            text_node = TextNode(text=fragment)
+                            text_node.start_char_idx = node_start
+                            text_node.end_char_idx = node_start + len(fragment)
+                            result_nodes.append(text_node)
+
+                        # 在 fragment 之后插入表格 chunk（最后一个后面不插）
+                        if idx < len(fragments) - 1:
+                            tbl_tokens = self._count_tokens(tbl_text)
+                            if tbl_tokens <= limit:
+                                table_node = TextNode(text=tbl_text)
+                                table_node.metadata["content_type"] = "table"
+                                result_nodes.append(table_node)
+                            else:
+                                # 超大表格，带表头重复拆分
+                                for tbl_sub in self._split_table_with_header(
+                                    tbl_text, limit
+                                ):
+                                    table_node = TextNode(text=tbl_sub)
+                                    table_node.metadata["content_type"] = "table"
+                                    result_nodes.append(table_node)
+
+            if not found_placeholder and node_text.strip():
+                result_nodes.append(node)
+
+        return result_nodes if result_nodes else [TextNode(text=text)]
+
     def _attach_metadata(
         self,
         node: TextNode,
@@ -332,7 +499,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         total_chunks_in_section: int,
     ):
         """附加元数据到节点"""
-        text_hash = hashlib.md5(node.text.encode("utf-8")).hexdigest()[:16]
+        text_hash = hashlib.md5(
+            node.text.encode("utf-8"), usedforsecurity=False
+        ).hexdigest()[:16]
         chunk_id = f"chunk_{file_sha256}_{text_hash}"
 
         node.node_id = chunk_id
