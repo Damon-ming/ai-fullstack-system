@@ -163,8 +163,10 @@ class SummaryService:
         prompt = SUMMARY_PROMPT_TEMPLATE.replace(
             "{max_tokens}", str(max_tokens), 1
         ).replace("{content}", text, 1)
-        opts = {"temperature": 0.1, "num_predict": max_tokens}
-        opts.update(self.summary_options)
+        # max_tokens 为通用输出上限键，由推理层按引擎翻译（vLLM 直用 / Ollama → num_predict）。
+        # 目标值覆盖角色默认值，保证摘要长度受调用方控制。
+        opts = dict(self.summary_options)
+        opts["max_tokens"] = max_tokens
         try:
             return await self.inference.text_generation(
                 model_name=self.summary_model,

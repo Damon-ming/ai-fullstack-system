@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-11-02 — 修复 vLLM 下 RAG 全局摘要失效（num_predict 参数名）
+
+### 问题
+
+`summary_service._run_single_summary` 硬编码 Ollama 专用参数 `num_predict`，vLLM 的 OpenAI 兼容接口不识别，`openai==2.16.0` 客户端直接抛 `TypeError`。异常被 `except Exception` 吞掉后降级为 `truncate_by_token`，导致**阶段 5 全局摘要在 vLLM 下从未真正执行**，实际行为是把拼接结果硬截断到 `max_context_tokens`。
+
+### 方案
+
+引擎相关参数的翻译收敛到推理层，`summary_service` 只使用通用键：
+
+- `summary_service` 统一用通用键 `max_tokens`（目标值覆盖角色默认值），不再自行拼接引擎参数
+- `ollama_inference` 新增 `_map_options()`：`max_tokens → num_predict`
+- `vllm_inference` 无需改动（`max_tokens` 本就是 OpenAI 键）
+
+### 改动文件
+
+| 文件 | 改动 |
+|---|---|
+| `summary/summary_service.py` | `_run_single_summary` 删除硬编码 `num_predict`，改为 `summary_options` + 通用 `max_tokens` 覆盖 |
+| `inference/ollama_inference.py` | 新增 `_map_options()`，`text_generation` / `stream_generate` 统一映射 `max_tokens → num_predict` |
+
+### 影响
+
+- vLLM：摘要调用不再报错，LLM 全局摘要正常执行
+- Ollama：`max_tokens` 从被忽略变为生效（翻译为 `num_predict`），与 YAML 配置意图一致
+
+---
+
 ## 2026-11-02 — rerank 滑动窗口（替代 LLM 有损压缩）
 
 ### 问题

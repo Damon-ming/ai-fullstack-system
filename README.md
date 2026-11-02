@@ -326,6 +326,26 @@ docker compose down
 - `INFERENCE_GATEWAY_URL` — 网关地址
 - `DB_PASSWORD` / `MASTER_KEY` — 敏感凭据
 
+### Token 预算分配
+
+主推理链路的 token 预算由三个参数共同约束，它们构成一条预算链，**必须同步调整**：
+
+```
+max_model_len ≥ system_prompt + labels + max_context_tokens + query + 模板开销 + max_tokens
+```
+
+| 参数 | 当前值 | 配置位置 | 作用 |
+|---|---|---|---|
+| `max_model_len` | 2048 | `inference-gateway/config/docker/docker-vllm.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
+| `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/inference/inference-runtime.yaml` → `roles.chat.max_tokens` | 主推理的**输出** token 上限 |
+| `max_context_tokens` | 512 | `app-server/src/com/damon/ming/router/chat/chat_router.py` → `MAX_CONTEXT_TOKEN_BUDGET` | RAG 检索上下文的**输入** token 上限（章节拼接 + 全局摘要后的最终值） |
+
+固定开销（zh_CN）：system prompt ≈ 230 token、参考资料/问题标签 ≈ 10 token、聊天模板 ≈ 15 token；query 未设上限。
+
+当前合计 ≈ 1840 token，余量约 200 token。**三者联动**：单独调大 `max_context_tokens` 而不动 `max_model_len`，会让 prompt 顶到 `max_model_len`，vLLM 截断输出或报错；单独调大 `max_tokens` 则挤压 RAG 上下文空间。
+
+> reranker 的 `max_seq_len`（`app-server/src/com/damon/ming/ai/config/rerank/rerank-config.yaml`）是**独立**参数，表示 reranker 单次打分的输入窗口，由 `max_windows_per_node` 配合决定单 section 的覆盖上限，与 LLM token 预算无关。
+
 ## 开发指南
 
 ### 后端（app-server）

@@ -17,6 +17,19 @@ from src.com.damon.ming.log import pin
 logger = pin("OllamaInference")
 
 
+def _map_options(options: dict[str, Any] | None) -> dict[str, Any]:
+    """将统一的模型级参数映射为 Ollama API 字段。
+
+    max_tokens → num_predict（Ollama 的输出 token 上限参数名）
+    """
+    if not options:
+        return {}
+    mapped = dict(options)
+    if "max_tokens" in mapped:
+        mapped["num_predict"] = mapped.pop("max_tokens")
+    return mapped
+
+
 @register_engine("ollama")
 class OllamaInference(BaseInferenceService):
     def __init__(self, params: InferenceParams):
@@ -32,7 +45,7 @@ class OllamaInference(BaseInferenceService):
         options: dict[str, Any] | None = None,
         model_name: str = "",
     ) -> str:
-        run_opts = dict(options) if options else {}
+        run_opts = _map_options(options)
         if reason:
             run_opts["think"] = True
         ollama_kwargs: dict[str, Any] = {
@@ -86,7 +99,7 @@ class OllamaInference(BaseInferenceService):
         options: dict[str, Any] | None = None,
         model_name: str = "",
     ) -> AsyncGenerator[StreamToken, None]:
-        run_opts = dict(options) if options else {}
+        run_opts = _map_options(options)
         if reason:
             run_opts["think"] = True
         stream = await self.client.chat(
