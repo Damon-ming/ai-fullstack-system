@@ -1,1 +1,4 @@
-export interface SearchResultItem { title: string; messages?: Array<{ text: string }> }
+export interface SearchResultItem {
+  title: string;
+  turns?: Array<{ query: string; content: string }>;
+}

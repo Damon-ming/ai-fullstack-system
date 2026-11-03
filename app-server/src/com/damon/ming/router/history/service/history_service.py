@@ -7,54 +7,54 @@
   - 组装返回给 router 的数据结构
 """
 
+from datetime import datetime
+
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.history import history_store
 from src.com.damon.ming.router.history.schemas.bean import (
     HistoryDetailData,
     HistoryListItem,
-    HistoryMessageItem,
+    HistoryTurnInput,
+    HistoryTurnItem,
 )
 from src.com.damon.ming.utils.time import iso_format
 
 logger = pin("history.service")
 
 
-def _format_row_common(row) -> dict:
-    """DB 行中与列表/详情共享的字段提取。"""
-    return {
-        "id": row.id,
-        "title": row.title,
-        "msg_count": row.msg_count or 0,
-        "created_at": iso_format(row.created_at),
-        "updated_at": iso_format(row.updated_at),
-    }
+def _turn_to_item(row) -> HistoryTurnItem:
+    """DB 行 → 轮次 schema。"""
+    return HistoryTurnItem(
+        turn_id=row.turn_id,
+        query=row.query,
+        reasoning=row.reasoning or "",
+        content=row.content,
+        query_at=iso_format(row.query_at),
+        first_token_at=iso_format(row.first_token_at),
+        reasoning_done_at=iso_format(row.reasoning_done_at),
+        answered_at=iso_format(row.answered_at),
+    )
 
 
-def _row_to_list_item(row) -> HistoryListItem:
-    """DB 行 → 列表项 schema。"""
-    return HistoryListItem(**_format_row_common(row))
+def _conv_to_list_item(row) -> HistoryListItem:
+    """DB 行 → 会话列表项 schema。"""
+    return HistoryListItem(
+        id=row.id,
+        title=row.title,
+        created_at=iso_format(row.created_at),
+        updated_at=iso_format(row.updated_at),
+    )
 
 
-def _messages_to_items(messages: list) -> list[HistoryMessageItem]:
-    """原始消息 dict 列表 → schema 列表。"""
-    items = []
-    for msg in messages or []:
-        if not isinstance(msg, dict):
-            continue
-        items.append(
-            HistoryMessageItem(
-                id=str(msg.get("id", "")),
-                text=str(msg.get("text", "")),
-                role=str(msg.get("role", "user")),
-            )
-        )
-    return items
-
-
-def _row_to_detail(row) -> HistoryDetailData:
-    """DB 行 → 详情 schema（含消息正文）。"""
+def _detail_to_data(row) -> HistoryDetailData:
+    """详情行（会话 + 轮次）→ 详情 schema。"""
+    conv = row.conversation
     return HistoryDetailData(
-        **_format_row_common(row), messages=_messages_to_items(row.messages)
+        id=conv.id,
+        title=conv.title,
+        created_at=iso_format(conv.created_at),
+        updated_at=iso_format(conv.updated_at),
+        turns=[_turn_to_item(t) for t in row.turns],
     )
 
 
@@ -66,53 +66,42 @@ class HistoryService:
         token: str,
         page: int,
         page_size: int,
-    ) -> dict:
-        """分页获取历史记录列表。"""
-        items, total = history_store.list_history(token, page, page_size)
-        return {
-            "items": [_row_to_list_item(r) for r in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        }
+    ) -> list[HistoryListItem]:
+        """分页获取会话列表（不含轮次正文）。"""
+        rows, _total = history_store.list_history(token, page, page_size)
+        return [_conv_to_list_item(r) for r in rows]
 
     @staticmethod
     def get_history(
         conversation_id: str,
         token: str,
     ) -> HistoryDetailData | None:
-        """获取单条历史记录详情。"""
+        """获取单个会话详情（含全部轮次）。"""
         row = history_store.get_history(conversation_id, token)
-        if row is None:
-            return None
-        return _row_to_detail(row)
+        return _detail_to_data(row) if row else None
 
     @staticmethod
     def save_history(
         token: str,
         title: str,
-        messages: list[dict],
-    ) -> HistoryDetailData:
-        """保存/更新对话历史。"""
-        # 清洗消息：只保留 {id, text, role} 三个字段，与前端持久化格式一致
-        cleaned = [
-            {
-                "id": str(m.get("id", "")),
-                "text": str(m.get("text", "")),
-                "role": str(m.get("role", "")),
-            }
-            for m in messages
-            if isinstance(m, dict)
-        ]
-        row = history_store.save_history(token, title.strip(), cleaned)
-        return _row_to_detail(row)
+        conversation_id: str | None,
+        turns: list[HistoryTurnInput],
+    ) -> HistoryDetailData | None:
+        """保存会话（客户端口径）：按 conversation_id 幂等 upsert，整体替换轮次。"""
+        row = history_store.save_history(
+            token=token,
+            conversation_id=conversation_id or "",
+            title=title.strip(),
+            turns=[t.model_dump() for t in turns],
+        )
+        return _detail_to_data(row) if row else None
 
     @staticmethod
     def delete_history(
         conversation_id: str,
         token: str,
     ) -> bool:
-        """删除单条历史记录。"""
+        """删除会话及其全部轮次。"""
         return history_store.delete_history(conversation_id, token)
 
     @staticmethod
@@ -120,16 +109,28 @@ class HistoryService:
         token: str,
         conversation_id: str,
         title: str,
-        messages: list[dict],
+        query: str,
+        reasoning: str,
+        content: str,
+        query_at: datetime,
+        first_token_at: datetime | None,
+        reasoning_done_at: datetime | None,
+        answered_at: datetime,
     ) -> str:
-        """追加一轮对话（服务端 chat 链路调用）。
+        """写入一轮对话（服务端 chat 链路调用）。
 
-        服务端是会话数据的唯一写入方，不再依赖客户端回传整段对话。
-        返回实际会话 id：新建会话时为服务端生成，已有会话时为传入值。
+        服务端是会话数据的唯一写入方，不依赖客户端回传整段对话。
+        返回实际会话 id；会话不属于当前 token 时为空串。
         """
-        return history_store.append_messages(
+        return history_store.append_turn(
             token=token,
             conversation_id=conversation_id,
             title=title.strip(),
-            messages=messages,
+            query=query,
+            reasoning=reasoning,
+            content=content,
+            query_at=query_at,
+            first_token_at=first_token_at,
+            reasoning_done_at=reasoning_done_at,
+            answered_at=answered_at,
         )

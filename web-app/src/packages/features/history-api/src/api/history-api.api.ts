@@ -1,2 +1,10 @@
-export { useHistory, historyActions } from "@ming/feature-history"
-export type { HistoryMessage, HistoryItem } from "@ming/feature-history"
+export {
+  useHistory,
+  historyActions,
+  turnsToChatMessages,
+} from "@ming/feature-history";
+export type {
+  HistoryTurn,
+  HistoryItem,
+  HistoryChatMessage,
+} from "@ming/feature-history";

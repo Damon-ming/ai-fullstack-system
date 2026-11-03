@@ -2,21 +2,24 @@
 对话历史 存储层。
 
 职责：
-  - 对话历史记录 CRUD（按 token 隔离，不同用户互不干扰）
-  - 分页列表查询（不含消息正文，按 updated_at 倒序）
-  - 按 title 幂等更新（同一 token + title 复用同一记录）
-  - 详情查询（含消息正文）
+  - 会话（history_conversations）与轮次（history_turns）的 CRUD
+  - 按 token 隔离，不同用户互不干扰
+  - 分页列表查询（不含轮次正文，按 updated_at 倒序）
+  - 详情查询（会话 + 轮次列表，按 query_at 升序）
+  - 服务端 chat 链路写入（append_turn：轮次纯 INSERT，无读改写竞态）
 
-存储：通过共享连接池持久化到 history_conversations 表。
+存储：通过共享连接池持久化。
 """
 
-import json
 import uuid
+from datetime import datetime
 
 from src.com.damon.ming.db.db_connection import get_default_db
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.tables.history import (
     HistoryConversationRow,
+    HistoryDetailRow,
+    HistoryTurnRow,
 )
 from src.com.damon.ming.utils.time import now
 
@@ -25,24 +28,6 @@ logger = pin("history.store")
 
 def _db():
     return get_default_db()
-
-
-def _row_to_detail(row, messages: list | None = None) -> HistoryConversationRow:
-    """将 DB 行映射为 HistoryConversationRow。"""
-    if row is None:
-        return None
-    msgs = messages
-    if msgs is None and row.messages is not None:
-        msgs = row.messages if isinstance(row.messages, list) else []
-    return HistoryConversationRow(
-        id=row.id,
-        token=row.token,
-        title=row.title,
-        messages=msgs,
-        msg_count=row.msg_count or 0,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -55,13 +40,12 @@ def list_history(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[HistoryConversationRow], int]:
-    """分页查询历史记录列表（不含消息正文），按 updated_at 倒序。
+    """分页查询会话列表（不含轮次正文），按 updated_at 倒序。
 
     返回 (items, total)。
     """
     offset = (page - 1) * page_size
 
-    # 总条数
     count_rows = _db().execute(
         "SELECT COUNT(*) FROM history_conversations WHERE token = :token",
         {"token": token},
@@ -70,9 +54,8 @@ def list_history(
     )
     total = count_rows[0][0] if count_rows else 0
 
-    # 分页列表 — 不取 messages 列，减少 IO
     rows = _db().execute(
-        "SELECT id, title, msg_count, created_at, updated_at "
+        "SELECT id, token, title, created_at, updated_at "
         "FROM history_conversations "
         "WHERE token = :token "
         "ORDER BY updated_at DESC "
@@ -85,9 +68,8 @@ def list_history(
     items = [
         HistoryConversationRow(
             id=r[0],
-            token=token,
-            title=r[1],
-            msg_count=r[2] or 0,
+            token=r[1],
+            title=r[2],
             created_at=r[3],
             updated_at=r[4],
         )
@@ -101,163 +83,210 @@ def list_history(
 # ---------------------------------------------------------------------------
 
 
-def get_history(conversation_id: str, token: str) -> HistoryConversationRow | None:
-    """查询单条历史记录详情（含消息正文）。"""
-    rows = _db().execute(
-        "SELECT id, token, title, messages, msg_count, created_at, updated_at "
+def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
+    """查询单个会话详情（含全部轮次，按提问时间升序）。"""
+    conv_rows = _db().execute(
+        "SELECT id, token, title, created_at, updated_at "
         "FROM history_conversations "
         "WHERE id = :id AND token = :token",
         {"id": conversation_id, "token": token},
         commit=False,
         fetch=True,
     )
-    if not rows:
+    if not conv_rows:
         return None
-    r = rows[0]
-    messages = r[3] if isinstance(r[3], list) else (json.loads(r[3]) if r[3] else [])
-    return HistoryConversationRow(
-        id=r[0],
-        token=r[1],
-        title=r[2],
-        messages=messages,
-        msg_count=r[4] or 0,
-        created_at=r[5],
-        updated_at=r[6],
+    c = conv_rows[0]
+    conversation = HistoryConversationRow(
+        id=c[0],
+        token=c[1],
+        title=c[2],
+        created_at=c[3],
+        updated_at=c[4],
     )
 
+    turn_rows = _db().execute(
+        "SELECT turn_id, conversation_id, query, reasoning, content, "
+        "query_at, first_token_at, reasoning_done_at, answered_at "
+        "FROM history_turns "
+        "WHERE conversation_id = :cid "
+        "ORDER BY query_at ASC, turn_id ASC",
+        {"cid": conversation_id},
+        commit=False,
+        fetch=True,
+    )
+    turns = [
+        HistoryTurnRow(
+            turn_id=r[0],
+            conversation_id=r[1],
+            query=r[2],
+            reasoning=r[3],
+            content=r[4],
+            query_at=r[5],
+            first_token_at=r[6],
+            reasoning_done_at=r[7],
+            answered_at=r[8],
+        )
+        for r in (turn_rows or [])
+    ]
+    return HistoryDetailRow(conversation=conversation, turns=turns)
+
 
 # ---------------------------------------------------------------------------
-# 保存（按 title 幂等更新）
+# 写入：服务端 chat 链路（append_turn）
 # ---------------------------------------------------------------------------
 
 
-def save_history(
+def append_turn(
     token: str,
+    conversation_id: str,
     title: str,
-    messages: list[dict],
-) -> HistoryConversationRow:
-    """保存对话历史。
+    query: str,
+    reasoning: str | None,
+    content: str,
+    query_at: datetime,
+    first_token_at: datetime | None,
+    reasoning_done_at: datetime | None,
+    answered_at: datetime,
+) -> str:
+    """写入一轮问答，返回会话 id（写入被拒绝时返回空串）。
 
-    同一 token + title 已存在则更新消息和更新时间（UPSERT）；
-    不存在则新建一条记录。
-    消除 SELECT + INSERT/UPDATE 之间的 TOCTOU 竞态。
-    返回保存后的完整记录（含消息正文）。
+    服务端是会话数据的唯一写入方：
+      - 会话不存在 → 按 conversation_id 新建
+      - 会话已存在 → 仅刷新 updated_at
+    会话必须属于当前 token，否则整轮写入被拒绝。
+
+    轮次为纯 INSERT，不像旧的「读出 messages → 拼接 → 写回」那样存在
+    并发覆盖竞态。
     """
-    current = now()
-    messages_json = json.dumps(messages, ensure_ascii=False)
-    msg_count = len(messages)
-    conversation_id = str(uuid.uuid4())
-
-    # UPSERT：并发时一个成功 INSERT，另一个走 ON CONFLICT UPDATE
-    # RETURNING id 一次往返拿到实际 id（UPDATE 时返回旧 id，INSERT 时返回新 uuid）
     rows = _db().execute(
-        "INSERT INTO history_conversations (id, token, title, messages, msg_count, created_at, updated_at) "
-        "VALUES (:id, :token, :title, :messages, :msg_count, :now, :now) "
-        "ON CONFLICT (token, title) DO UPDATE SET "
-        "messages = EXCLUDED.messages, msg_count = EXCLUDED.msg_count, updated_at = EXCLUDED.updated_at "
+        "INSERT INTO history_conversations (id, token, title, created_at, updated_at) "
+        "VALUES (:id, :token, :title, :answered_at, :answered_at) "
+        "ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at "
+        "WHERE history_conversations.token = EXCLUDED.token "
         "RETURNING id",
         {
             "id": conversation_id,
             "token": token,
             "title": title,
-            "messages": messages_json,
-            "msg_count": msg_count,
-            "now": current,
+            "answered_at": answered_at,
         },
         commit=True,
         fetch=True,
     )
-    actual_id = rows[0][0] if rows else conversation_id
+    if not rows:
+        logger.warning(
+            "会话不存在或不属于当前用户，已跳过轮次写入 | id=%s", conversation_id
+        )
+        return ""
 
-    logger.info(
-        "历史记录已保存 | id=%s | title=%s | msg_count=%d",
-        actual_id,
-        title,
-        msg_count,
+    turn_id = f"turn_{uuid.uuid4().hex[:12]}"
+    _db().execute(
+        "INSERT INTO history_turns "
+        "(turn_id, conversation_id, query, reasoning, content, "
+        " query_at, first_token_at, reasoning_done_at, answered_at) "
+        "VALUES (:turn_id, :conversation_id, :query, :reasoning, :content, "
+        " :query_at, :first_token_at, :reasoning_done_at, :answered_at)",
+        {
+            "turn_id": turn_id,
+            "conversation_id": conversation_id,
+            "query": query,
+            "reasoning": reasoning or None,
+            "content": content,
+            "query_at": query_at,
+            "first_token_at": first_token_at,
+            "reasoning_done_at": reasoning_done_at,
+            "answered_at": answered_at,
+        },
+        commit=True,
     )
-    return get_history(actual_id, token)
+    logger.info(
+        "轮次已写入 | conversation_id=%s | turn_id=%s | reasoning=%s",
+        conversation_id,
+        turn_id,
+        "yes" if reasoning else "no",
+    )
+    return conversation_id
 
 
 # ---------------------------------------------------------------------------
-# 追加（服务端 chat 链路写入）
+# 写入：客户端保存口径（save_history）
 # ---------------------------------------------------------------------------
 
 
-def _parse_messages(raw) -> list:
-    """把 messages 列的原始值统一成 list。"""
-    if isinstance(raw, list):
-        return raw
-    if isinstance(raw, str) and raw:
-        parsed = json.loads(raw)
-        return parsed if isinstance(parsed, list) else []
-    return []
-
-
-def append_messages(
+def save_history(
     token: str,
     conversation_id: str,
     title: str,
-    messages: list[dict],
-) -> str:
-    """追加一轮对话到指定会话，返回实际会话 id。
+    turns: list[dict],
+) -> HistoryDetailRow | None:
+    """保存会话（客户端口径）：按 conversation_id 幂等 upsert，整体替换轮次。
 
-    服务端是会话数据的唯一写入方：
-      - conversation_id 为空 → 新建会话，返回新生成的 id
-      - conversation_id 非空 → 读取现有消息后追加，返回原 id
-
-    成功路径：不含并发控制与写库失败兜底。
+    conversation_id 为空时新建会话。
+    token 级时刻（first_token_at 等）客户端无法观测：query_at/answered_at
+    由服务端盖章，first_token_at 留空，reasoning_done_at 仅在存在推理文本时
+    以保存时刻占位。
     """
-    current = now()
-    cleaned = [m for m in messages if isinstance(m, dict)]
-
     if not conversation_id:
         conversation_id = f"conv_{uuid.uuid4().hex[:8]}"
-        _db().execute(
-            "INSERT INTO history_conversations "
-            "(id, token, title, messages, msg_count, created_at, updated_at) "
-            "VALUES (:id, :token, :title, :messages, :msg_count, :now, :now)",
-            {
-                "id": conversation_id,
-                "token": token,
-                "title": title,
-                "messages": json.dumps(cleaned, ensure_ascii=False),
-                "msg_count": len(cleaned),
-                "now": current,
-            },
-            commit=True,
-        )
-        logger.info(
-            "历史会话已创建 | id=%s | title=%s | msg_count=%d",
-            conversation_id,
-            title,
-            len(cleaned),
-        )
-        return conversation_id
 
+    current = now()
     rows = _db().execute(
-        "SELECT messages FROM history_conversations WHERE id = :id AND token = :token",
-        {"id": conversation_id, "token": token},
-        commit=False,
-        fetch=True,
-    )
-    existing = _parse_messages(rows[0][0]) if rows else []
-    merged = existing + cleaned
-
-    _db().execute(
-        "UPDATE history_conversations "
-        "SET messages = :messages, msg_count = :msg_count, updated_at = :now "
-        "WHERE id = :id AND token = :token",
+        "INSERT INTO history_conversations (id, token, title, created_at, updated_at) "
+        "VALUES (:id, :token, :title, :now, :now) "
+        "ON CONFLICT (id) DO UPDATE SET "
+        "title = EXCLUDED.title, updated_at = EXCLUDED.updated_at "
+        "WHERE history_conversations.token = EXCLUDED.token "
+        "RETURNING id",
         {
             "id": conversation_id,
             "token": token,
-            "messages": json.dumps(merged, ensure_ascii=False),
-            "msg_count": len(merged),
+            "title": title,
             "now": current,
         },
         commit=True,
+        fetch=True,
     )
-    logger.info("历史会话已追加 | id=%s | msg_count=%d", conversation_id, len(merged))
-    return conversation_id
+    # 会话已存在但属于他人时 WHERE 不命中，必须先拦住再动轮次
+    if not rows:
+        logger.warning(
+            "会话不存在或不属于当前用户，已跳过保存 | id=%s", conversation_id
+        )
+        return None
+
+    _db().execute(
+        "DELETE FROM history_turns WHERE conversation_id = :cid",
+        {"cid": conversation_id},
+        commit=True,
+    )
+
+    cleaned = [t for t in turns if isinstance(t, dict)]
+    for t in cleaned:
+        reasoning = str(t.get("reasoning") or "")
+        _db().execute(
+            "INSERT INTO history_turns "
+            "(turn_id, conversation_id, query, reasoning, content, "
+            " query_at, first_token_at, reasoning_done_at, answered_at) "
+            "VALUES (:turn_id, :conversation_id, :query, :reasoning, :content, "
+            " :now, NULL, :reasoning_done_at, :now)",
+            {
+                "turn_id": f"turn_{uuid.uuid4().hex[:12]}",
+                "conversation_id": conversation_id,
+                "query": str(t.get("query", "")),
+                "reasoning": reasoning or None,
+                "content": str(t.get("content", "")),
+                "now": current,
+                "reasoning_done_at": current if reasoning else None,
+            },
+            commit=True,
+        )
+
+    logger.info(
+        "会话已保存 | id=%s | title=%s | turns=%d",
+        conversation_id,
+        title,
+        len(cleaned),
+    )
+    return get_history(conversation_id, token)
 
 
 # ---------------------------------------------------------------------------
@@ -266,13 +295,26 @@ def append_messages(
 
 
 def delete_history(conversation_id: str, token: str) -> bool:
-    """删除单条历史记录。返回是否实际删除（False = 不存在或无权限）。"""
-    rowcount = _db().execute(
+    """删除会话及其全部轮次。返回是否实际删除（False = 不存在或无权限）。"""
+    rows = _db().execute(
+        "SELECT id FROM history_conversations WHERE id = :id AND token = :token",
+        {"id": conversation_id, "token": token},
+        commit=False,
+        fetch=True,
+    )
+    if not rows:
+        return False
+
+    # turns 与 conversations 之间是逻辑外键，需显式级联
+    _db().execute(
+        "DELETE FROM history_turns WHERE conversation_id = :cid",
+        {"cid": conversation_id},
+        commit=True,
+    )
+    _db().execute(
         "DELETE FROM history_conversations WHERE id = :id AND token = :token",
         {"id": conversation_id, "token": token},
         commit=True,
     )
-    deleted = rowcount > 0
-    if deleted:
-        logger.info("历史记录已删除 | id=%s", conversation_id)
-    return deleted
+    logger.info("历史会话已删除 | id=%s", conversation_id)
+    return True

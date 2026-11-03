@@ -1,3 +1,8 @@
-import type { HistoryMessage } from "./response"
+import type { HistoryTurn } from "./response";
 
-export interface SaveHistoryRequest { title: string; messages: HistoryMessage[] }
+/** 保存会话请求：conversation_id 缺省则新建；turns 整体替换 */
+export interface SaveHistoryRequest {
+  conversation_id?: string;
+  title: string;
+  turns?: HistoryTurn[];
+}

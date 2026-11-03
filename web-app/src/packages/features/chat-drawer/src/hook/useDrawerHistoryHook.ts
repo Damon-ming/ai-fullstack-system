@@ -1,5 +1,5 @@
 // web-app/src/packages/features/chat-drawer/src/hook/useDrawerHistoryHook.ts
-import { useHistory } from "@ming/feature-history-api";
+import { useHistory, turnsToChatMessages } from "@ming/feature-history-api";
 import {
   useChatMessageStore,
   useChatUiStore,
@@ -13,10 +13,11 @@ export function useDrawerHistoryHook() {
   const loading = useHistoryStore((s) => s.loading);
   const setMessages = useChatMessageStore((s) => s.setMessages);
   const resetSession = useChatUiStore((s) => s.resetSession);
-  const { list, groups, getMessages, remove } = useHistory();
+  const { list, groups, getTurns, remove } = useHistory();
 
   const selectChat = async (id: string) => {
-    const saved = await getMessages(id);
+    const turns = await getTurns(id);
+    const saved = turnsToChatMessages(turns);
     if (saved.length) {
       beginLoad();
       setMessages(saved);

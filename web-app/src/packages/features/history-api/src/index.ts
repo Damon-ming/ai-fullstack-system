@@ -1,2 +1,10 @@
-export { useHistory, historyActions } from "./api/history-api.api"
-export type { HistoryMessage, HistoryItem } from "./api/history-api.api"
+export {
+  useHistory,
+  historyActions,
+  turnsToChatMessages,
+} from "./api/history-api.api";
+export type {
+  HistoryTurn,
+  HistoryItem,
+  HistoryChatMessage,
+} from "./api/history-api.api";

@@ -11,7 +11,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Column, String, Table, Text
+from sqlalchemy import Column, DateTime, String, Table, Text
 from src.com.damon.ming.router.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
@@ -25,12 +25,17 @@ users = Table(
     Column("phone", String(32), nullable=False, unique=True),
     Column("password", String(128), nullable=False, server_default=""),
     Column("name", String(64), nullable=False, server_default=""),
-    Column("created_at", nullable=False, server_default=_NOW),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=_NOW,
+    ),
     # SECURITY: token TTL（P1-7 修复）
     # expires_at — 滚动过期：30 天不活跃则失效
     # hard_expires_at — 绝对过期：90 天强制重新登录
-    Column("expires_at", nullable=False),
-    Column("hard_expires_at", nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("hard_expires_at", DateTime(timezone=True), nullable=False),
 )
 
 
@@ -59,7 +64,12 @@ devices = Table(
     Column("screen", String(16), nullable=False, server_default=""),
     Column("lang", String(16), nullable=False, server_default=""),
     Column("tz", String(32), nullable=False, server_default=""),
-    Column("created_at", nullable=False, server_default=_NOW),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=_NOW,
+    ),
 )
 
 
@@ -86,8 +96,13 @@ sessions = Table(
     Column("token", String(64), nullable=False),
     Column("device_id", String(64), nullable=False),
     Column("issued_ua_hash", String(64), nullable=False, server_default=""),
-    Column("created_at", nullable=False, server_default=_NOW),
-    Column("expires_at", nullable=False),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=_NOW,
+    ),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
 )
 
 

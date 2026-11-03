@@ -1,9 +1,9 @@
 // web-app/src/packages/features/history/src/hook/HistoryHook.ts
 import { useCallback, useMemo } from "react";
-import type { HistoryItem, HistoryMessage } from "../api/types";
+import type { HistoryItem, HistoryTurn } from "../api/types";
 import {
   fetchList,
-  fetchMessages,
+  fetchTurns,
   saveToServer,
   addConversation,
   removeFromServer,
@@ -12,6 +12,14 @@ import {
   useRemoveHistoryMutation,
 } from "../api";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
+
+/** 与 @ming/store 的 ChatMessage 结构兼容（纯类型，避免 feature → store 反向依赖） */
+export interface HistoryChatMessage {
+  id: string;
+  text: string;
+  role: "user" | "assistant";
+  reasoning?: string;
+}
 
 // 内部类型 —— 用于数据解包函数参数
 interface DataEnvelope {
@@ -24,7 +32,22 @@ interface HistoryApiRecord {
   updated_at?: string;
   createdAt?: unknown;
   created_at?: unknown;
-  messages?: unknown;
+  turns?: unknown;
+}
+interface HistoryTurnRecord {
+  turn_id?: unknown;
+  turnId?: unknown;
+  query?: unknown;
+  reasoning?: unknown;
+  content?: unknown;
+  query_at?: unknown;
+  queryAt?: unknown;
+  first_token_at?: unknown;
+  firstTokenAt?: unknown;
+  reasoning_done_at?: unknown;
+  reasoningDoneAt?: unknown;
+  answered_at?: unknown;
+  answeredAt?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,17 +72,27 @@ function parseListRecord(item: unknown): HistoryItem {
     title: String(obj.title ?? ""),
     meta: String(obj.updatedAt || obj.updated_at || ""),
     createdAt: parseTimestamp(obj.createdAt || obj.created_at),
-    messages: [],
+    turns: [],
   };
 }
 
-function parseMessages(raw: unknown): HistoryMessage[] {
+function parseTurn(raw: unknown): HistoryTurn {
+  const t = raw as HistoryTurnRecord;
+  return {
+    turnId: String(t.turn_id ?? t.turnId ?? ""),
+    query: String(t.query ?? ""),
+    reasoning: String(t.reasoning ?? ""),
+    content: String(t.content ?? ""),
+    queryAt: String(t.query_at ?? t.queryAt ?? ""),
+    firstTokenAt: String(t.first_token_at ?? t.firstTokenAt ?? ""),
+    reasoningDoneAt: String(t.reasoning_done_at ?? t.reasoningDoneAt ?? ""),
+    answeredAt: String(t.answered_at ?? t.answeredAt ?? ""),
+  };
+}
+
+function parseTurns(raw: unknown): HistoryTurn[] {
   if (!Array.isArray(raw)) return [];
-  return raw.map((m: { id: unknown; text?: unknown; role: unknown }) => ({
-    id: String(m.id),
-    text: String(m.text ?? ""),
-    role: m.role === "assistant" ? "assistant" : "user",
-  }));
+  return raw.map(parseTurn);
 }
 
 function unpackList(res: DataEnvelope | undefined): HistoryItem[] {
@@ -67,10 +100,30 @@ function unpackList(res: DataEnvelope | undefined): HistoryItem[] {
   return items.map(parseListRecord);
 }
 
-async function fetchAndUnpackMessages(id: string): Promise<HistoryMessage[]> {
-  const res = await fetchMessages(id);
-  const detail = unpackDetail(res) as { messages?: unknown } | undefined;
-  return parseMessages(detail?.messages);
+async function fetchAndUnpackTurns(id: string): Promise<HistoryTurn[]> {
+  const res = await fetchTurns(id);
+  const detail = unpackDetail(res) as { turns?: unknown } | undefined;
+  return parseTurns(detail?.turns);
+}
+
+/**
+ * 轮次 → 聊天消息：一个轮次展开成「用户提问 + 助手回答」两条消息，
+ * 推理文本挂到助手消息上，保证历史重载后推理过程不丢。
+ */
+export function turnsToChatMessages(
+  turns: HistoryTurn[],
+): HistoryChatMessage[] {
+  const messages: HistoryChatMessage[] = [];
+  for (const turn of turns) {
+    messages.push({ id: `${turn.turnId}_q`, text: turn.query, role: "user" });
+    messages.push({
+      id: `${turn.turnId}_a`,
+      text: turn.content,
+      role: "assistant",
+      reasoning: turn.reasoning || undefined,
+    });
+  }
+  return messages;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,9 +151,9 @@ export function useHistory() {
   const saveMutation = useSaveHistoryMutation();
   const removeMutation = useRemoveHistoryMutation();
 
-  const saveMessages = useCallback(
-    (title: string, messages: HistoryMessage[]) => {
-      saveMutation.mutate({ title, messages });
+  const saveTurns = useCallback(
+    (title: string, turns: HistoryTurn[]) => {
+      saveMutation.mutate({ title, turns });
     },
     [saveMutation],
   );
@@ -121,17 +174,14 @@ export function useHistory() {
     return [...grouped.entries()].map(([label, items]) => ({ label, items }));
   }, [list]);
 
-  const refresh = useCallback(
-    () => listQuery.refetch(),
-    [listQuery.refetch],
-  );
+  const refresh = useCallback(() => listQuery.refetch(), [listQuery.refetch]);
 
   return {
     list,
     groups,
     loading: listQuery.isLoading,
-    getMessages: fetchAndUnpackMessages,
-    saveMessages,
+    getTurns: fetchAndUnpackTurns,
+    saveTurns,
     remove,
     add: addConversation,
     /** 重新拉取历史列表（服务端新建会话后刷新抽屉用） */
@@ -142,8 +192,8 @@ export function useHistory() {
 /** 非 React 上下文的同步调用（返回 Promise，供事件回调等场景使用）。 */
 export const historyActions = {
   list: fetchList,
-  messages: fetchAndUnpackMessages,
-  saveMessages: saveToServer,
+  turns: fetchAndUnpackTurns,
+  saveTurns: saveToServer,
   add: addConversation,
   remove: removeFromServer,
 };

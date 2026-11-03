@@ -10,7 +10,7 @@ import {
   useSearchStore,
   useKnowledgeStore,
 } from "@ming/store";
-import { useHistory } from "@ming/feature-history-api";
+import { useHistory, turnsToChatMessages } from "@ming/feature-history-api";
 import { useAccount } from "@ming/feature-account-api";
 import { useDrawerUploadHook } from "@ming/feature-chat-drawer-api";
 
@@ -26,7 +26,7 @@ export function useChatPageHook() {
   const savedTurn = useHistoryStore((state) => state.savedTurn);
   const finishHistoryLoad = useHistoryStore((state) => state.finishLoad);
   const beginHistoryLoad = useHistoryStore((state) => state.beginLoad);
-  const { getMessages, refresh } = useHistory();
+  const { getTurns, refresh } = useHistory();
   const setMessages = useChatMessageStore((state) => state.setMessages);
   const accountOpen = useAccountStore((state) => state.dialogOpen);
   const draftName = useAccountStore((state) => state.draftName);
@@ -51,7 +51,8 @@ export function useChatPageHook() {
   }, [savedTurn, refresh]);
 
   const loadHistory = async (id: string) => {
-    const saved = await getMessages(id);
+    const turns = await getTurns(id);
+    const saved = turnsToChatMessages(turns);
     if (saved.length) {
       beginHistoryLoad();
       setMessages(saved);

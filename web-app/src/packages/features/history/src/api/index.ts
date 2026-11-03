@@ -1,7 +1,7 @@
 export {
   historyStore,
   fetchList,
-  fetchMessages,
+  fetchTurns,
   saveToServer,
   addConversation,
   removeFromServer,
@@ -12,4 +12,4 @@ export {
   useRemoveHistoryMutation,
   HISTORY_LIST_KEY,
 } from "./history-query";
-export type { HistoryMessage, HistoryItem, SaveHistoryRequest } from "./types";
+export type { HistoryTurn, HistoryItem, SaveHistoryRequest } from "./types";

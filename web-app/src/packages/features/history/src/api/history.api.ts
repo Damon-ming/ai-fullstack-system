@@ -14,7 +14,7 @@
 import { dataApi } from "@ming/data-layer";
 import type { DataApiResponse } from "@ming/data-layer";
 import { createLogger } from "@ming/core-log";
-import type { HistoryMessage, SaveHistoryRequest } from "./types";
+import type { HistoryTurn, SaveHistoryRequest } from "./types";
 
 const log = createLogger("history/api");
 
@@ -29,10 +29,10 @@ export async function fetchList(): Promise<DataApiResponse<unknown[]>> {
   });
 }
 
-export async function fetchMessages(
+export async function fetchTurns(
   id: string,
 ): Promise<DataApiResponse<unknown>> {
-  log.debug("fetch history messages", { id });
+  log.debug("fetch history turns", { id });
   return dataApi.get<unknown>(`/api/history/v1/${id}`);
 }
 
@@ -47,7 +47,7 @@ export async function addConversation(
   title: string,
 ): Promise<DataApiResponse<unknown>> {
   log.debug("add conversation", { title });
-  return dataApi.post<unknown>("/api/history/save/v1", { title, messages: [] });
+  return dataApi.post<unknown>("/api/history/save/v1", { title, turns: [] });
 }
 
 export async function removeFromServer(
@@ -63,9 +63,9 @@ export async function removeFromServer(
 
 export const historyStore = {
   list: fetchList,
-  messages: fetchMessages,
-  saveMessages: (title: string, messages: HistoryMessage[]) =>
-    saveToServer({ title, messages }),
+  turns: fetchTurns,
+  saveTurns: (title: string, turns: HistoryTurn[]) =>
+    saveToServer({ title, turns }),
   add: addConversation,
   remove: removeFromServer,
 };

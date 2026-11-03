@@ -11,7 +11,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Column, String, Table, Text
+from sqlalchemy import Column, DateTime, String, Table, Text
 from src.com.damon.ming.router.tables.base import metadata
 
 # ---------------------------------------------------------------------------
@@ -24,8 +24,8 @@ encryption_sessions = Table(
     Column("key_id", String(64), primary_key=True),
     Column("aes_key_enc", Text, nullable=False),
     Column("session_id", String(128), nullable=False, server_default=""),
-    Column("created_at", nullable=False),
-    Column("expires_at", nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
 )
 
 
