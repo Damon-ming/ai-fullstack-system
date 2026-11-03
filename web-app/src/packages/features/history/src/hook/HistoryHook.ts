@@ -121,6 +121,11 @@ export function useHistory() {
     return [...grouped.entries()].map(([label, items]) => ({ label, items }));
   }, [list]);
 
+  const refresh = useCallback(
+    () => listQuery.refetch(),
+    [listQuery.refetch],
+  );
+
   return {
     list,
     groups,
@@ -129,6 +134,8 @@ export function useHistory() {
     saveMessages,
     remove,
     add: addConversation,
+    /** 重新拉取历史列表（服务端新建会话后刷新抽屉用） */
+    refresh,
   };
 }
 

@@ -1,6 +1,7 @@
 # app-server/src/com/damon/ming/chat/router/chat_router.py
 import asyncio
 import json
+import uuid
 
 from fastapi import APIRouter, Request
 from src.com.damon.ming.ai.schemas.inference_params import get_chat_schema
@@ -24,6 +25,7 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
 from src.com.damon.ming.router.chat.sse import SseEmitter, SseMessageFactory
+from src.com.damon.ming.router.history.service.history_service import HistoryService
 from sse_starlette.sse import EventSourceResponse
 
 logger = pin("chat.router")
@@ -35,7 +37,7 @@ _input_validator = InputValidator()
 
 # RAG 检索上下文 token 上限（与 vLLM max-model-len 对齐）
 # 约束：system(~200) + context_budget + query(~50) + max_tokens(1024) ≤ 2048
-# 跑通模式：budget=512 → 总占用 ~1826 ≤ 2048 ✅
+# 跑通模式：budget=512 → 总占用 ~1826 ≤ 2048
 # 完整模式：换大模型后同步调高（max-model-len 4096 → budget 可设 2048）
 MAX_CONTEXT_TOKEN_BUDGET = 512
 
@@ -103,6 +105,40 @@ async def _guardrail_check_with_timeout(
     except TimeoutError:
         logger.warning("护栏检测超时，fail-open 放行 | timeout=%ds", guardrail_timeout)
         return None
+
+
+# ── 历史持久化（服务端是会话数据的唯一写入方） ──────────────────────
+
+
+def _request_token(req: Request) -> str:
+    """从请求上下文获取当前用户 token（与 history 模块口径一致）。"""
+    return getattr(req.state, "ctx", None) and req.state.ctx.token or ""
+
+
+def _build_turn_messages(query: str, answer: str) -> list[dict]:
+    """构造一轮对话的标准消息结构（与历史记录读取格式一致）。"""
+    return [
+        {"id": f"msg_{uuid.uuid4().hex[:12]}", "text": query, "role": "user"},
+        {"id": f"msg_{uuid.uuid4().hex[:12]}", "text": answer, "role": "assistant"},
+    ]
+
+
+def _persist_turn(
+    token: str,
+    conversation_id: str,
+    query: str,
+    answer: str,
+) -> None:
+    """把本轮对话写入历史（成功路径，不含失败兜底）。
+
+    title 取用户问题前 40 字符，与历史列表展示口径一致。
+    """
+    HistoryService.save_turn(
+        token=token,
+        conversation_id=conversation_id,
+        title=query[:40],
+        messages=_build_turn_messages(query, answer),
+    )
 
 
 @router.post("/send/v1")
@@ -182,6 +218,25 @@ async def chat(req: Request, body: ChatRequest):
                     data=BaseLLMFailedData(error_msg=t(I18nKey.CHAT_MODEL_ERROR)),
                 )
             logger.info("同步聊天请求完成")
+
+            # 成功路径：本轮对话落库（服务端写入，不依赖客户端回传）
+            conversation_id = (
+                body.conversation_id or SseMessageFactory.new_conversation_id()
+            )
+            answer = (
+                resp_inner.get("answer_content", "")
+                if isinstance(resp_inner, dict)
+                else str(resp_inner)
+            )
+            await asyncio.get_running_loop().run_in_executor(
+                None,
+                _persist_turn,
+                _request_token(req),
+                conversation_id,
+                body.query,
+                answer,
+            )
+
             # 外层统一返回
             return BaseLLMSuccessResponse[BaseLLMSuccessData](
                 code=ErrorCode.OK, data=BaseLLMSuccessData(data=resp_inner)
@@ -235,12 +290,17 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
     """
     emitter = SseEmitter(retry_ms=req.app.state.retry_ms)
 
+    # 会话 id：前端未指定则新建；经 start 事件下发，后续轮次回传追加
+    conversation_id = body.conversation_id or SseMessageFactory.new_conversation_id()
+
     try:
         # ── start 事件在信号量外立即发送，客户端无需排队等待即可感知连接建立 ──
         yield emitter.emit(
             "start",
             SseMessageFactory.start(
-                SseMessageFactory.get_start_data(req.app.state.llm_model_name)
+                SseMessageFactory.get_start_data(
+                    req.app.state.llm_model_name, conversation_id
+                )
             ),
             retry=True,
         )
@@ -311,6 +371,8 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             # 复用同步接口的 schema 构造，约束 LLM 流式输出为结构化 JSON
             schema = get_chat_schema(body.reason)
 
+            content_parts: list[str] = []
+
             # 仅推理段进入信号量，释放 RAG 等待期间的并发槽
             # CancelledError 不加内层捕获，直接穿透到外层统一处理，
             # 避免重复日志并确保 infer_service 内部 finally 能正确关闭 vLLM 流。
@@ -325,11 +387,23 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
                     # 根据 token 类型发射不同事件：
                     #   reasoning → event: "reasoning"（推理过程）
                     #   content   → event: "delta"（正文回答）
+                    if token.type != "reasoning":
+                        content_parts.append(token.content)
                     event_name = "reasoning" if token.type == "reasoning" else "delta"
                     yield emitter.emit(
                         event_name,
                         SseMessageFactory.delta(ChatDeltaData(content=token.content)),
                     )
+
+            # 成功路径：本轮对话落库（服务端写入，不依赖客户端回传）
+            await asyncio.get_running_loop().run_in_executor(
+                None,
+                _persist_turn,
+                _request_token(req),
+                conversation_id,
+                body.query,
+                "".join(content_parts),
+            )
 
         # ── done 事件（结束包） ──
         yield emitter.emit("done", SseMessageFactory.done())

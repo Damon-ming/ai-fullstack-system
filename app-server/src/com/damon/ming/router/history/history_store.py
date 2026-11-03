@@ -179,6 +179,88 @@ def save_history(
 
 
 # ---------------------------------------------------------------------------
+# 追加（服务端 chat 链路写入）
+# ---------------------------------------------------------------------------
+
+
+def _parse_messages(raw) -> list:
+    """把 messages 列的原始值统一成 list。"""
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str) and raw:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, list) else []
+    return []
+
+
+def append_messages(
+    token: str,
+    conversation_id: str,
+    title: str,
+    messages: list[dict],
+) -> str:
+    """追加一轮对话到指定会话，返回实际会话 id。
+
+    服务端是会话数据的唯一写入方：
+      - conversation_id 为空 → 新建会话，返回新生成的 id
+      - conversation_id 非空 → 读取现有消息后追加，返回原 id
+
+    成功路径：不含并发控制与写库失败兜底。
+    """
+    current = now()
+    cleaned = [m for m in messages if isinstance(m, dict)]
+
+    if not conversation_id:
+        conversation_id = f"conv_{uuid.uuid4().hex[:8]}"
+        _db().execute(
+            "INSERT INTO history_conversations "
+            "(id, token, title, messages, msg_count, created_at, updated_at) "
+            "VALUES (:id, :token, :title, :messages, :msg_count, :now, :now)",
+            {
+                "id": conversation_id,
+                "token": token,
+                "title": title,
+                "messages": json.dumps(cleaned, ensure_ascii=False),
+                "msg_count": len(cleaned),
+                "now": current,
+            },
+            commit=True,
+        )
+        logger.info(
+            "历史会话已创建 | id=%s | title=%s | msg_count=%d",
+            conversation_id,
+            title,
+            len(cleaned),
+        )
+        return conversation_id
+
+    rows = _db().execute(
+        "SELECT messages FROM history_conversations WHERE id = :id AND token = :token",
+        {"id": conversation_id, "token": token},
+        commit=False,
+        fetch=True,
+    )
+    existing = _parse_messages(rows[0][0]) if rows else []
+    merged = existing + cleaned
+
+    _db().execute(
+        "UPDATE history_conversations "
+        "SET messages = :messages, msg_count = :msg_count, updated_at = :now "
+        "WHERE id = :id AND token = :token",
+        {
+            "id": conversation_id,
+            "token": token,
+            "messages": json.dumps(merged, ensure_ascii=False),
+            "msg_count": len(merged),
+            "now": current,
+        },
+        commit=True,
+    )
+    logger.info("历史会话已追加 | id=%s | msg_count=%d", conversation_id, len(merged))
+    return conversation_id
+
+
+# ---------------------------------------------------------------------------
 # 删除
 # ---------------------------------------------------------------------------
 

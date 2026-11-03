@@ -114,3 +114,22 @@ class HistoryService:
     ) -> bool:
         """删除单条历史记录。"""
         return history_store.delete_history(conversation_id, token)
+
+    @staticmethod
+    def save_turn(
+        token: str,
+        conversation_id: str,
+        title: str,
+        messages: list[dict],
+    ) -> str:
+        """追加一轮对话（服务端 chat 链路调用）。
+
+        服务端是会话数据的唯一写入方，不再依赖客户端回传整段对话。
+        返回实际会话 id：新建会话时为服务端生成，已有会话时为传入值。
+        """
+        return history_store.append_messages(
+            token=token,
+            conversation_id=conversation_id,
+            title=title.strip(),
+            messages=messages,
+        )

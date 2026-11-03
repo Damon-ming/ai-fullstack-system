@@ -26,11 +26,27 @@ class SseMessageFactory:
     """统一构造 StreamMessage 并序列化为 JSON 字符串"""
 
     @staticmethod
-    def get_start_data(llm_model_name: str) -> ChatStartData:
-        """构造 start 事件的元数据"""
+    def new_conversation_id() -> str:
+        """生成新的会话 id。
+
+        该 id 同时作为 history_conversations 表主键，跨轮次稳定，
+        由 start 事件下发，客户端后续轮次原样回传。
+        """
+        return f"conv_{uuid.uuid4().hex[:8]}"
+
+    @staticmethod
+    def get_start_data(
+        llm_model_name: str,
+        conversation_id: str | None = None,
+    ) -> ChatStartData:
+        """构造 start 事件的元数据。
+
+        conversation_id 由调用方解析：新建会话时由 new_conversation_id() 生成，
+        已有会话时沿用客户端回传的 id，保证一个会话内多轮共享同一 id。
+        """
         return ChatStartData(
             msgId=f"msg_{uuid.uuid4().hex[:12]}",
-            conversationId=f"conv_{uuid.uuid4().hex[:8]}",
+            conversationId=conversation_id or SseMessageFactory.new_conversation_id(),
             model=llm_model_name,
             createdAt=unix_timestamp(),
             traceId=f"trace_{uuid.uuid4().hex[:16]}",

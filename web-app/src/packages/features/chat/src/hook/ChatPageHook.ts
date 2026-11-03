@@ -23,12 +23,10 @@ export function useChatPageHook() {
   const resetSession = useChatUiStore((state) => state.resetSession);
   const setActiveHistoryId = useHistoryStore((state) => state.setActiveId);
   const historyLoading = useHistoryStore((state) => state.loading);
-  const skipHistorySave = useHistoryStore((state) => state.skipSave);
+  const savedTurn = useHistoryStore((state) => state.savedTurn);
   const finishHistoryLoad = useHistoryStore((state) => state.finishLoad);
-  const clearSkipHistorySave = useHistoryStore((state) => state.clearSkipSave);
   const beginHistoryLoad = useHistoryStore((state) => state.beginLoad);
-  const { list: historyList, getMessages, saveMessages } = useHistory();
-  const messages = useChatMessageStore((state) => state.messages);
+  const { getMessages, refresh } = useHistory();
   const setMessages = useChatMessageStore((state) => state.setMessages);
   const accountOpen = useAccountStore((state) => state.dialogOpen);
   const draftName = useAccountStore((state) => state.draftName);
@@ -43,32 +41,14 @@ export function useChatPageHook() {
   const knowledgeOpen = useKnowledgeStore((state) => state.open);
   const closeKnowledge = useKnowledgeStore((state) => state.closeKnowledge);
 
+  // 会话内容由服务端落库，前端不再写入，只负责刷新列表与复位加载标记
   useEffect(() => {
-    if (historyLoading) {
-      finishHistoryLoad();
-      return;
-    }
-    if (skipHistorySave) {
-      clearSkipHistorySave();
-      return;
-    }
-    const firstUserMessage = messages.find(
-      (message) => message.role === "user",
-    );
-    if (firstUserMessage) {
-      saveMessages(firstUserMessage.text.slice(0, 40), messages);
-      const currentHistory = historyList.find(
-        (item) => item.title === firstUserMessage.text.slice(0, 40),
-      );
-      if (currentHistory) setActiveHistoryId(currentHistory.id);
-    }
-  }, [
-    messages,
-    historyLoading,
-    skipHistorySave,
-    finishHistoryLoad,
-    clearSkipHistorySave,
-  ]);
+    if (historyLoading) finishHistoryLoad();
+  }, [historyLoading, finishHistoryLoad]);
+
+  useEffect(() => {
+    if (savedTurn > 0) void refresh();
+  }, [savedTurn, refresh]);
 
   const loadHistory = async (id: string) => {
     const saved = await getMessages(id);

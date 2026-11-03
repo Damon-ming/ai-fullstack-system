@@ -1,5 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
+import { useHistoryStore } from "@ming/store/biz/history-state";
 import { streamChatRoomMessage } from "../api";
 import type { ChatRoomRequest, ChatStartData } from "../api/types";
 import { useTranslation } from "@ming/i18n";
@@ -27,6 +28,10 @@ export function useChatSendStreamHook() {
   const setSending = useChatMessageStore((s) => s.setSending);
   const reason = useChatMessageStore((s) => s.reason);
   const setReason = useChatMessageStore((s) => s.setReason);
+  // 当前会话 id：空表示新会话，服务端在 start 事件下发后回填
+  const activeHistoryId = useHistoryStore((s) => s.activeId);
+  const setActiveHistoryId = useHistoryStore((s) => s.setActiveId);
+  const markTurnSaved = useHistoryStore((s) => s.markTurnSaved);
 
   /** 当前进行中的 SSE 请求控制器，用于主动取消 */
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -65,9 +70,16 @@ export function useChatSendStreamHook() {
 
     let firstChunk = true;
     let streamFinished = false;
+    // 服务端在 done 事件之前落库，只有收到 done 才需要刷新历史列表
+    let turnPersisted = false;
 
     try {
-      const req: ChatRoomRequest = { query, reason };
+      const req: ChatRoomRequest = {
+        query,
+        reason,
+        // 已有会话则回传，服务端据此追加；新会话为空，由服务端生成
+        conversation_id: activeHistoryId,
+      };
 
       await streamChatRoomMessage(
         req,
@@ -84,6 +96,10 @@ export function useChatSendStreamHook() {
                 msgId: startData.msgId,
                 model: startData.model,
               });
+              // 新会话：服务端生成的 conversationId 作为后续轮次的追加目标
+              if (!activeHistoryId && startData.conversationId) {
+                setActiveHistoryId(startData.conversationId);
+              }
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === assistantMsgId
@@ -149,6 +165,7 @@ export function useChatSendStreamHook() {
               }
             } else if (eventType === "done") {
               streamFinished = true;
+              turnPersisted = true;
             } else if (eventType === "error") {
               streamFinished = true;
               const errData = payload.data as { error_msg: string };
@@ -192,6 +209,8 @@ export function useChatSendStreamHook() {
       log.debug("sendStream finished", { streamFinished });
       // 无论正常完成、服务端 error 还是网络异常，都释放输入框和发送按钮状态。
       setSending(false);
+      // 服务端已落库 → 通知历史列表刷新
+      if (turnPersisted) markTurnSaved();
     }
   };
 
