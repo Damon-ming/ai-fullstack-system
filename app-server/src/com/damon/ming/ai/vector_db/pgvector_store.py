@@ -206,9 +206,12 @@ class PGVectorStore(BaseVectorStore):
             )
 
         table = self._table_name
+        # ON CONFLICT DO NOTHING：chunk_id 确定性生成，重复入库时幂等跳过，
+        # 避免主键冲突导致整批插入回滚（启动重建 / 去重击穿场景）
         insert_sql = (
             f"INSERT INTO {table} (id, document, metadata, embedding) "  # nosec B608 — table 经 _sanitize_identifier 校验
-            "VALUES (:id, :document, :metadata::jsonb, :embedding::vector)"
+            "VALUES (:id, :document, :metadata::jsonb, :embedding::vector) "
+            "ON CONFLICT (id) DO NOTHING"
         )
 
         try:
@@ -412,6 +415,31 @@ class PGVectorStore(BaseVectorStore):
                 str(e)[:200],
             )
             return []
+
+    def get_all_file_shas(self) -> set[str] | None:
+        """返回向量库中所有 file_sha256（启动对账用）。
+
+        单条聚合查询，走 metadata 上的 GIN 索引。
+        刻意不复用 get_by_metadata：后者异常时返回 []，对账场景会把
+        "查询失败"误判成"文件不存在"，导致每次启动全量重算。
+        查询失败返回 None，由调用方跳过对账（退化为不对账，不会误补）。
+        """
+        table = self._table_name
+        try:
+            sql = text(
+                f"SELECT DISTINCT metadata->>'file_sha256' FROM {table} "  # nosec B608 — table 经 _sanitize_identifier 校验
+                "WHERE metadata ? 'file_sha256'"
+            )
+            with self._engine.connect() as conn:
+                rows = conn.execute(sql).fetchall()
+        except Exception as e:
+            self.logger.error(
+                "[PGVectorStore] 查询 file_sha256 集合失败: %s (%s)",
+                type(e).__name__,
+                str(e)[:200],
+            )
+            return None
+        return {row[0] for row in rows if row[0]}
 
     def get_by_metadata_batch(
         self,
