@@ -1,10 +1,8 @@
 # app-server/src/com/damon/ming/chat/router/chat_router.py
 import asyncio
-import json
 import uuid
 
 from fastapi import APIRouter, Request
-from src.com.damon.ming.ai.schemas.inference_params import get_chat_schema
 from src.com.damon.ming.ai.schemas.response import (
     BaseLLMFailedData,
     BaseLLMFailedResponse,
@@ -184,8 +182,6 @@ async def chat(req: Request, body: ChatRequest):
                     cancellation_token=ctx.cancellation_token,
                 )
 
-            schema = get_chat_schema(body.reason)
-
             # 2. 构造标准messages数组：system prompt 保持纯净（只含指令），
             #    用户数据（参考资料 + 问题）全部放在 user message 中，
             #    避免 ref_content 中的模板占位符或恶意内容污染 system prompt。
@@ -199,34 +195,21 @@ async def chat(req: Request, body: ChatRequest):
             ]
 
             # 3. 仅推理段进入信号量，释放 RAG 等待期间的并发槽
+            #    正文为纯文本（无 JSON 约束），推理走模型原生通道
             async with infer_sem:
                 llm_raw = await req.app.state.infer_service.text_generation(
                     model_name=req.app.state.llm_model_name,
                     messages=prompt_messages,
                     reason=body.reason,
-                    response_schema=schema,
                     options=dict(req.app.state.llm_options),
                 )
 
-            # 4. 组装返回结构体，think控制是否携带思考过程（当前固定空）
-            try:
-                resp_inner = json.loads(llm_raw)
-            except json.JSONDecodeError:
-                logger.exception("LLM 返回非法 JSON | raw=%.200s", llm_raw)
-                return BaseLLMFailedResponse[BaseLLMFailedData](
-                    code=ErrorCode.CHAT.UNKNOWN,
-                    data=BaseLLMFailedData(error_msg=t(I18nKey.CHAT_MODEL_ERROR)),
-                )
+            answer = llm_raw.strip()
             logger.info("同步聊天请求完成")
 
             # 成功路径：本轮对话落库（服务端写入，不依赖客户端回传）
             conversation_id = (
                 body.conversation_id or SseMessageFactory.new_conversation_id()
-            )
-            answer = (
-                resp_inner.get("answer_content", "")
-                if isinstance(resp_inner, dict)
-                else str(resp_inner)
             )
             await asyncio.get_running_loop().run_in_executor(
                 None,
@@ -239,7 +222,8 @@ async def chat(req: Request, body: ChatRequest):
 
             # 外层统一返回
             return BaseLLMSuccessResponse[BaseLLMSuccessData](
-                code=ErrorCode.OK, data=BaseLLMSuccessData(data=resp_inner)
+                code=ErrorCode.OK,
+                data=BaseLLMSuccessData(data={"answer_content": answer}),
             )
     except TimeoutError:
         logger.warning("同步聊天请求超时")
@@ -368,20 +352,17 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
             ]
             logger.debug("prompt_messages:\n%s", prompt_messages)
 
-            # 复用同步接口的 schema 构造，约束 LLM 流式输出为结构化 JSON
-            schema = get_chat_schema(body.reason)
-
             content_parts: list[str] = []
 
             # 仅推理段进入信号量，释放 RAG 等待期间的并发槽
             # CancelledError 不加内层捕获，直接穿透到外层统一处理，
             # 避免重复日志并确保 infer_service 内部 finally 能正确关闭 vLLM 流。
+            # 正文为纯文本（无 JSON 约束），推理走模型原生通道。
             async with infer_sem:
                 async for token in req.app.state.infer_service.stream_generate(
                     model_name=req.app.state.llm_model_name,
                     messages=prompt_messages,
                     reason=body.reason,
-                    response_schema=schema,
                     options=dict(req.app.state.llm_options),
                 ):
                     # 根据 token 类型发射不同事件：

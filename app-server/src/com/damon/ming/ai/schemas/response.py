@@ -55,7 +55,7 @@ class StreamMessage(BaseModel, Generic[StreamDataT]):
 
 # 增量分片数据模型 —— 统一用 content 承载文本，事件类型区分语义
 #   event: delta   → data: {"content":"你"}      回答内容
-#   event: thinking → data: {"content":"让我想想..."}  思考过程
+#   event: reasoning → data: {"content":"让我想想..."}  思考过程
 class ChatDeltaData(BaseModel):
     content: str = ""
 

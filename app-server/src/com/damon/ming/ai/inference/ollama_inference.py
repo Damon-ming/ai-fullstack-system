@@ -1,7 +1,6 @@
 # app-server/src/com/damon/ming/ai/inference/ollama_inference.py
 
 import asyncio
-import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -60,27 +59,14 @@ class OllamaInference(BaseInferenceService):
         # 无重试：异常直接抛给上层，由前端自行重试请求
         stream = await self.client.chat(**ollama_kwargs)
         try:
-            thinking_parts: list[str] = []
+            # 正文为纯文本；推理只在流式通道返回（text_generation 不携带推理）
             content_parts: list[str] = []
             async for chunk in stream:
                 msg = chunk.get("message", {})
-                thinking = msg.get("thinking", "")
-                if thinking:
-                    thinking_parts.append(thinking)
                 content = msg.get("content", "")
                 if content:
                     content_parts.append(content)
             await stream.close()
-            if reason and thinking_parts:
-                thinking_text = "".join(thinking_parts)
-                answer_text = "".join(content_parts)
-                return json.dumps(
-                    {
-                        "reasoning_process": thinking_text,
-                        "answer_content": answer_text,
-                    },
-                    ensure_ascii=False,
-                )
             return "".join(content_parts)
         except asyncio.CancelledError:
             logger.warning("text_generation 任务被取消，关闭ollama流")
@@ -95,7 +81,6 @@ class OllamaInference(BaseInferenceService):
         self,
         messages: list[dict[str, str]],
         reason: bool = False,
-        response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
         model_name: str = "",
     ) -> AsyncGenerator[StreamToken, None]:
@@ -108,7 +93,6 @@ class OllamaInference(BaseInferenceService):
             options=run_opts,
             stream=True,
             keep_alive="30m",
-            format=response_schema,  # Ollama: format 字段传 None 等价于不约束
         )
         try:
             async for chunk in stream:

@@ -44,7 +44,6 @@ class VLLMInference(BaseInferenceService):
     async def text_generation(
         self,
         messages: list[dict[str, str]],
-        # todo: 为什么没用到
         reason: bool = False,
         response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
@@ -62,6 +61,12 @@ class VLLMInference(BaseInferenceService):
                 "type": "json_object",
                 "schema": response_schema,
             }
+
+        # 推理开关：透传给 chat template（Qwen3 的 enable_thinking）。
+        # 非思考型模型（如 Qwen2.5）的模板不引用该变量，自动忽略。
+        create_kwargs["extra_body"] = {
+            "chat_template_kwargs": {"enable_thinking": reason}
+        }
 
         # 无重试：异常直接抛给上层，由前端自行重试请求
         resp = await self.client.chat.completions.create(**create_kwargs)
@@ -83,7 +88,6 @@ class VLLMInference(BaseInferenceService):
         self,
         messages: list[dict[str, str]],
         reason: bool = False,
-        response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
         model_name: str = "",
     ) -> AsyncGenerator[StreamToken, None]:
@@ -96,11 +100,11 @@ class VLLMInference(BaseInferenceService):
         if model_name:
             create_kwargs["model"] = model_name
 
-        if response_schema:
-            create_kwargs["response_format"] = {
-                "type": "json_object",
-                "schema": response_schema,
-            }
+        # 推理开关：透传给 chat template（Qwen3 的 enable_thinking）。
+        # 非思考型模型（如 Qwen2.5）的模板不引用该变量，自动忽略。
+        create_kwargs["extra_body"] = {
+            "chat_template_kwargs": {"enable_thinking": reason}
+        }
         try:
             async with self._managed_stream(**create_kwargs) as stream:
                 async for chunk in stream:

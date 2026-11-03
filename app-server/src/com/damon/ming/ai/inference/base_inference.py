@@ -71,6 +71,8 @@ class BaseInferenceService(ABC):
     ) -> str:
         """一次性返回完整文本/结构化JSON。
 
+        response_schema 用于需要结构化输出的场景（如护栏判定）；
+        聊天正文不传，返回纯文本。
         model_name 可空：API Gateway 模式下由 gateway 自动注入。
         """
 
@@ -79,14 +81,13 @@ class BaseInferenceService(ABC):
         self,
         messages: list[dict[str, str]],
         reason: bool = False,
-        response_schema: dict[str, Any] | None = None,
         options: dict[str, Any] | None = None,
         model_name: str = "",
     ) -> AsyncGenerator[StreamToken, None]:
         """流式SSE输出 —— 产出 StreamToken 区分 reasoning / content。
 
-        response_schema 不为 None 时，LLM 输出结构化 JSON（前端在 done 事件后解析）。
-        model_name 可空：API Gateway 模式下由 gateway 自动注入。
+        推理走模型原生通道（reasoning_content / thinking），正文为纯文本，
+        不做 JSON 约束。model_name 可空：API Gateway 模式下由 gateway 自动注入。
         """
 
     @abstractmethod
