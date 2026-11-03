@@ -29,6 +29,8 @@ class RerankerParams:
     # 滑动窗口：长节点切窗打分后按 max 聚合
     window_overlap: int
     max_windows_per_node: int
+    # 打分时是否附加章节标题链（heading_path），必须由 YAML 显式声明
+    include_heading: bool
     device: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 

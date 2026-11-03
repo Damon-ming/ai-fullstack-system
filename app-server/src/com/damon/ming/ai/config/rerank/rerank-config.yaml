@@ -23,6 +23,8 @@ rerankers:
       # 滑动窗口：长 section 切窗打分后取 max，替代 rerank 前的 LLM 有损压缩
       window_overlap: 128
       max_windows_per_node: 5
+      # 打分时附加章节标题链（heading_path），无该元数据的文档自动跳过
+      include_heading: true
 
   # ── 轻量模型（降级 / 高并发场景）────────────────────
   zh_light:
@@ -34,6 +36,8 @@ rerankers:
       device: null
       window_overlap: 64
       max_windows_per_node: 5
+      # 打分时附加章节标题链（heading_path），无该元数据的文档自动跳过
+      include_heading: true
 
   # ── CPU fallback（GPU 不可用）─────────────────────
   cpu_fallback:
@@ -45,6 +49,8 @@ rerankers:
       device: cpu
       window_overlap: 64
       max_windows_per_node: 5
+      # 打分时附加章节标题链（heading_path），无该元数据的文档自动跳过
+      include_heading: true
 
   # ── 英文模型（多语言场景示例）──────────────────────
   # en_primary:

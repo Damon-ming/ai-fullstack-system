@@ -116,10 +116,12 @@ class CrossEncoderReranker(BaseReranker):
             return []
 
         # 长节点滑动窗口展开：每个 node → 1+ 个窗口文本
+        # include_heading 开启时打分文本附带章节标题链，让 reranker 感知上下文层级
         all_texts: list[str] = []
         node_window_counts: list[int] = []
         for node in nodes:
-            windows = self._split_into_windows(query, node.text)
+            prefix = self._heading_prefix(node)
+            windows = self._split_into_windows(query, node.text, prefix)
             node_window_counts.append(len(windows))
             all_texts.extend(windows)
 
@@ -162,25 +164,48 @@ class CrossEncoderReranker(BaseReranker):
 
     # ── 滑动窗口 ────────────────────────────────────────────────────────
 
-    def _split_into_windows(self, query: str, text: str) -> list[str]:
+    def _heading_prefix(self, node: TextNode) -> str:
+        """构造章节标题链前缀。
+
+        include_heading 由 YAML 显式控制；无 heading_path 的文档（如 PDF）
+        返回空串，打分输入与原来完全一致。
+        """
+        if not self.params.include_heading:
+            return ""
+        heading = node.metadata.get("heading_path", "")
+        if not heading:
+            return ""
+        clean = heading.strip("/").replace("/", " > ")
+        return f"【{clean}】\n"
+
+    def _split_into_windows(self, query: str, text: str, prefix: str) -> list[str]:
         """将长文本切分为滑动窗口，短文本直接返回原文。
 
+        prefix（章节标题链）附加到每个窗口，保证各窗口打分语境一致；
+        从窗口预算中扣除 prefix 的 token，避免超出 max_seq_len 被截断。
         window_overlap=0 时退化为整段返回（由 score_pairs 内部 truncate 兜底）。
         """
         if self.params.window_overlap <= 0:
-            return [text]
+            return [f"{prefix}{text}"] if prefix else [text]
 
-        window_size = self._compute_window_size(query)
+        prefix_tokens = (
+            len(self.model.tokenizer.encode(prefix, add_special_tokens=False))
+            if prefix
+            else 0
+        )
+        window_size = max(self._compute_window_size(query) - prefix_tokens, 1)
         token_ids = self.model.tokenizer.encode(text, add_special_tokens=False)
 
         if len(token_ids) <= window_size:
-            return [text]
+            return [f"{prefix}{text}"] if prefix else [text]
 
         step = max(window_size - self.params.window_overlap, 1)
         windows: list[str] = []
         for start in range(0, len(token_ids), step):
             end = min(start + window_size, len(token_ids))
-            windows.append(self.model.tokenizer.decode(token_ids[start:end]))
+            windows.append(
+                f"{prefix}{self.model.tokenizer.decode(token_ids[start:end])}"
+            )
             if end >= len(token_ids):
                 break
 
