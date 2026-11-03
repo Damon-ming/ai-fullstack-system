@@ -367,7 +367,114 @@ SLA 99.99%，全年故障时间不超过 52 分钟。
 
 ---
 
+## 2026-11-03 — rerank 打分输入附加章节标题链（heading_path）
+
+### 问题
+
+承接"章节标题链注入 LLM 上下文"（2026-11-02）：`heading_path` 此前只用于 `merge_nodes_to_text()` 拼 LLM prompt，**reranker 打分时看不到**。
+
+reranker 输入只有 section 正文。当多个 section 正文结构相似、只有标题能区分主题时（典型：正文写"该参数默认 30 秒"，指代信息全在标题里），reranker 无法判断哪个 section 与 query 主题匹配，可能把正确 section 挤出 top-5。
+
+信息不对称：LLM 能看到章节层级，reranker 看不到。
+
+### 方案
+
+在 `CrossEncoderReranker` 打分前，把 `heading_path` 作为前缀附加到文本，让 reranker 感知上下文层级：
+
+- 新增 `_heading_prefix(node)`：读 `heading_path`，格式化为 `【父 > 子】\n`；无该字段（PDF/Word/PPT 等）返回空串
+- `_split_into_windows()` 增加 `prefix` 参数，**每个滑动窗口都带前缀**——而非只给第一个窗口：`rerank` 取各窗口 max 分，只给第一个会让后续窗口丢失标题语境
+- 从 `window_size` 中扣除 prefix 的 token 数，避免超出 `max_seq_len` 被截断
+- 由 YAML 开关 `include_heading` 控制，**必填、无默认值**；关闭时 `prefix` 为空串，打分输入与改动前逐字节一致
+
+### 改动文件
+
+| 文件 | 改动 |
+|---|---|
+| `rerank/base_reranker.py` | `RerankerParams` 新增必填参数 `include_heading: bool`（无默认值） |
+| `config/rerank/rerank-config.yaml` | `zh_primary` / `zh_light` / `cpu_fallback` 三个 profile 各加 `include_heading: true` |
+| `rerank/cross_encoder_reranker.py` | 新增 `_heading_prefix()`；`_split_into_windows()` 加 `prefix` 参数；`rerank()` 调用处拼接 |
+
+### 改动量
+
+- 新增 ~20 行
+- 修改 1 个方法签名 + 1 处调用
+- 配置加载器 **零改动**（`known_fields` 逻辑自动归类必填字段）
+- 向量库 / embedding / 分块 / 检索 **零改动**，无需重新索引
+
+### 预期效果
+
+**例**：知识库有两个章节，正文结构相同、只有数字不同：
+
+```
+## 网络设置 > 超时时间
+该参数默认 30 秒，最大可设 300 秒。...
+## 数据库设置 > 超时时间
+该参数默认 10 秒，最大可设 60 秒。...
+```
+
+query："数据库连接超时时间默认是多少？"
+
+| | 改前 | 改后 |
+|---|---|---|
+| reranker 输入 | `该参数默认 30 秒…` / `该参数默认 10 秒…` | `【网络设置 > 超时时间】\n该参数默认 30 秒…` / `【数据库设置 > 超时时间】\n该参数默认 10 秒…` |
+| 排序依据 | 正文几乎无区分度，随机 | query 的"数据库"命中标题，正确 section 排前 |
+| 最终答案 | 可能答"30 秒"（错） | 答"10 秒"（对） |
+
+### 收益
+
+| 维度 | 说明 |
+|---|---|
+| ✅ 信息对齐 | reranker 与 LLM 看到同样的章节层级，消除不对称 |
+| ✅ 消歧 | 正文指代不明时，靠标题链区分同名词/同结构章节 |
+| ✅ 低成本 | 复用已入库的 metadata，零存储/索引开销 |
+| ✅ 可开关 | YAML 一键开关，便于 A/B 与回滚 |
+| ⚠️ 覆盖范围 | 仅对 Markdown（及正文含 `#` 标题的文档）有效；纯 PDF/Word 无 heading_path，不受影响 |
+| ⚠️ 收益有条件 | 正文本身已能区分主题的 section，标题是冗余的 |
+
+### 验证建议
+
+1. `include_heading: true` 下用多层级 Markdown 发查询，对比开关关闭时的 rerank 排序（日志 `[Rerank] 候选数量:N | 窗口总数:M → 输出:K`）
+2. 重点验证正文指代不明、只有标题能区分的 query
+3. 确认 `include_heading: false` 时打分输入与改动前完全一致（回归验证）
+4. **效果需 eval 集定论**：开关只控制行为，不证明收益；需对比同一批 query 在 true/false 下的 top-5 命中
+
+---
+
 ## 已分析但未实施
+
+### MMR 多样性重排（Maximal Marginal Relevance）— 状态：已分析，未实施
+
+**思路**：当前 section 去重按 `(file_sha256, section_id)` 精确去重，只能去掉完全相同的 section；近似重复（同义措辞、跨文件重复、模板套话）会同时进入 top-5。可在 rerank 阶段加 MMR，在相关性和多样性间权衡。
+
+**收益评估**：
+
+| 维度 | 说明 |
+|---|---|
+| ✅ 缺口真实 | 精确去重不保证语义多样性，近似重复会占用有限的 5 个槽位 |
+| ⚠️ 收益有限 | 5 个槽位 + 强 cross-encoder，reranker 选出的高相关 section 即使近似也确实相关；QA 场景相关性通常压倒多样性 |
+| ⚠️ 成本被低估 | 需 section 级 embedding（当前只存 chunk 级）+ λ 调参 + 分数归一化，非"几行代码" |
+| ⚠️ 下游稀释 | 512 预算 + 摘要步骤 + 0.5B 模型是主要瓶颈，rerank 多样性收益会被稀释 |
+| ⚠️ 更便宜的替代 | 相似度阈值去重（cosine > 0.95 丢弃）可覆盖大部分场景，无需 λ |
+
+**结论**：方向对但收益不确定、成本被低估。若要做，先用"相似度阈值去重"替代完整 MMR；进入"完整模式"（预算 2048+）后再评估。
+
+**优先级**：低
+
+### Embedding 模型升级（384 维 → bge-m3）— 状态：已确认无需实施
+
+**思路**：升级为 bge-m3（1024 维，中英文双语）提升 dense recall。
+
+**结论**：**前提不成立，已完成**。当前 `embedding-config.yaml` 已是 `BAAI/bge-m3`（1024 维），并正确配置了 `query_prefix` / `passage_prefix` / `normalize_embeddings`；pgvector `embedding_dimension: 1024` 一致。全库仅此一个 embedding 引擎在用。
+
+**剩余可挖掘方向**（非"换模型"）：
+
+| 方向 | 说明 |
+|---|---|
+| bge-m3 完整能力 | 当前只用 dense，未用其 sparse lexical weights / multi-vector；sparse 由 BM25 承担，两者信号不等价，可互补但需 eval |
+| device | 当前 `cpu`，影响延迟不影响召回；如延迟成为瓶颈可改 `cuda` |
+| 真正的召回瓶颈 | chunk 切分（768+60）、RRF 权重（0.7/0.3）、`retrieve_top_k=20`、section 重构、reranker 滑动窗口 |
+
+**优先级**：无需实施（已达标）
 
 ### 语义分块（Semantic Chunking）— 状态：已分析，未实施
 
