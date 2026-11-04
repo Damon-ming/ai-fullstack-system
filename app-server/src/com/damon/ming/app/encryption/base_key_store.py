@@ -37,9 +37,9 @@ class StoredSession:
 
     key_id: str
     aes_key_enc: str  # base64(KEK_encrypted_aes_key)
-    session_id: str = ""  # 业务 session_id（可选，默认空串向后兼容）
     created_at: datetime
     expires_at: datetime
+    session_id: str = ""  # 业务 session_id（可选，默认空串向后兼容）
 
     @property
     def is_expired(self) -> bool:

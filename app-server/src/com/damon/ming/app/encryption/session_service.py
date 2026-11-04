@@ -30,6 +30,15 @@ from src.com.damon.ming.log import pin
 logger = pin("app.encryption.session_service")
 
 
+def _stored_ttl_seconds(stored: StoredSession) -> int:
+    """从持久化记录还原会话有效期（秒）。
+
+    写入时 expires_at - created_at 就是当轮的 ttl_seconds，
+    因此读回时可直接反算，无需额外字段。
+    """
+    return int((stored.expires_at - stored.created_at).total_seconds())
+
+
 class SessionService:
     """加密会话生命周期管理。
 
@@ -178,9 +187,7 @@ class SessionService:
         """
         # SECURITY: 拒绝空 session_id，防止绕过归属校验（P1-1 修复）
         if not session_id:
-            logger.warning(
-                "加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12]
-            )
+            logger.warning("加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12])
             return None
 
         # 1. 内存查找
@@ -220,6 +227,7 @@ class SessionService:
         session = SessionKey(
             key_id=stored.key_id,
             aes_key=aes_key,
+            ttl_seconds=_stored_ttl_seconds(stored),
             created_at=stored.created_at.timestamp(),
         )
         with self._lock:
@@ -244,9 +252,7 @@ class SessionService:
         """
         # SECURITY: 拒绝空 session_id，防止绕过归属校验（P1-1 修复）
         if not session_id:
-            logger.warning(
-                "加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12]
-            )
+            logger.warning("加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12])
             return None
 
         # 1. 内存查找（同步，极快，锁内仅 dict 操作）
@@ -291,6 +297,7 @@ class SessionService:
         session = SessionKey(
             key_id=stored.key_id,
             aes_key=aes_key,
+            ttl_seconds=_stored_ttl_seconds(stored),
             created_at=stored.created_at.timestamp(),
         )
         with self._lock:

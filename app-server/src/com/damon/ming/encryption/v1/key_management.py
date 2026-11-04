@@ -34,9 +34,9 @@ class SessionKey:
 
     key_id: str
     aes_key: bytes  # 原始 AES-256 密钥（32 字节）
+    ttl_seconds: int  # 会话有效期（秒），由业务配置注入
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
-    ttl_seconds: int  # 会话有效期（秒），由业务配置注入
 
     @property
     def is_expired(self) -> bool:
