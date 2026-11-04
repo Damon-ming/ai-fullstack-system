@@ -58,7 +58,7 @@ def _check_input(query: str) -> BaseLLMFailedResponse | None:
             "输入校验拦截 | i18n_key=%s | reason=%s", result.i18n_key, result.reason
         )
         return BaseLLMFailedResponse[BaseLLMFailedData](
-            code=ErrorCode.CHAT.GUARDRAIL_BLOCKED,
+            code=ErrorCode.CHAT.INPUT_BLOCKED,
             data=BaseLLMFailedData(
                 error_msg=t(result.i18n_key, **result.i18n_params),
             ),
@@ -124,7 +124,7 @@ def _persist_turn(
     first_token_at: datetime | None,
     reasoning_done_at: datetime | None,
     answered_at: datetime,
-) -> None:
+) -> bool:
     """把本轮对话写入历史（成功路径，不含失败兜底）。
 
     title 取用户问题前 40 字符，与历史列表展示口径一致。
@@ -133,19 +133,56 @@ def _persist_turn(
       first_token_at    首个 token 时刻（TTFT 基准，非流式为空）
       reasoning_done_at 最后一个推理 token 时刻（未开启推理为空）
       answered_at       回答完成时刻
+
+    返回是否写入成功：会话不属于当前 token 时 save_turn 返回空串，
+    此时返回 False，由调用方决定如何告知客户端。
     """
-    HistoryService.save_turn(
-        token=token,
-        conversation_id=conversation_id,
-        title=query[:40],
-        query=query,
-        reasoning=reasoning,
-        content=content,
-        query_at=query_at,
-        first_token_at=first_token_at,
-        reasoning_done_at=reasoning_done_at,
-        answered_at=answered_at,
+    return bool(
+        HistoryService.save_turn(
+            token=token,
+            conversation_id=conversation_id,
+            title=query[:40],
+            query=query,
+            reasoning=reasoning,
+            content=content,
+            query_at=query_at,
+            first_token_at=first_token_at,
+            reasoning_done_at=reasoning_done_at,
+            answered_at=answered_at,
+        )
     )
+
+
+async def _persist_blocked_turn(
+    req: Request,
+    conversation_id: str,
+    query: str,
+    error_msg: str,
+    query_at: datetime,
+) -> None:
+    """把被拦截的一轮写入历史（拦截文案作为 content，推理时间点留空）。
+
+    拦截文案会作为错误提示展示在聊天室，属于用户实际看到的一轮对话，
+    因此必须落库，保证刷新后历史与聊天室内容一致。
+
+    落库失败只记日志：拦截是既定结果，不能因为写库失败而改变给客户端的响应。
+    """
+    try:
+        await asyncio.get_running_loop().run_in_executor(
+            None,
+            _persist_turn,
+            _request_token(req),
+            conversation_id,
+            query,
+            "",
+            error_msg,
+            query_at,
+            None,
+            None,
+            now(),
+        )
+    except Exception:
+        logger.exception("拦截轮次落库异常 | conversation_id=%s", conversation_id)
 
 
 @router.post("/send/v1")
@@ -164,14 +201,33 @@ async def chat(req: Request, body: ChatRequest):
         # 提问时刻：请求到达即采集，作为全部时延指标的起点
         query_at = now()
 
+        # 会话 id 提前确定：拦截轮次也要落库，需要会话归属
+        conversation_id = (
+            body.conversation_id or SseMessageFactory.new_conversation_id()
+        )
+
         # ── Phase 0: 前置输入校验（纯本地规则，零 IO，拦截无效/攻击输入） ──
         input_blocked = _check_input(body.query)
         if input_blocked is not None:
+            await _persist_blocked_turn(
+                req,
+                conversation_id,
+                body.query,
+                input_blocked.data.error_msg if input_blocked.data else "",
+                query_at,
+            )
             return input_blocked
 
         # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
         blocked = await _guardrail_check_with_timeout(req.app.state, body.query)
         if blocked is not None:
+            await _persist_blocked_turn(
+                req,
+                conversation_id,
+                body.query,
+                blocked.data.error_msg if blocked.data else "",
+                query_at,
+            )
             return blocked
 
         infer_sem = req.app.state.infer_sem
@@ -222,27 +278,37 @@ async def chat(req: Request, body: ChatRequest):
 
             # 成功路径：本轮对话落库（服务端写入，不依赖客户端回传）
             # 非流式调用观测不到 token 级时刻，first_token_at / reasoning_done_at 留空
-            conversation_id = (
-                body.conversation_id or SseMessageFactory.new_conversation_id()
-            )
-            await asyncio.get_running_loop().run_in_executor(
-                None,
-                _persist_turn,
-                _request_token(req),
-                conversation_id,
-                body.query,
-                "",
-                answer,
-                query_at,
-                None,
-                None,
-                answered_at,
-            )
+            try:
+                persist_ok = await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    _persist_turn,
+                    _request_token(req),
+                    conversation_id,
+                    body.query,
+                    "",
+                    answer,
+                    query_at,
+                    None,
+                    None,
+                    answered_at,
+                )
+            except Exception:
+                logger.exception("轮次落库异常 | conversation_id=%s", conversation_id)
+                persist_ok = False
 
-            # 外层统一返回
+            # 同步链路没有流式缓冲可展示，落库失败只能整体报错
+            if not persist_ok:
+                return BaseLLMFailedResponse[BaseLLMFailedData](
+                    code=ErrorCode.CHAT.PERSIST_FAILED,
+                    data=BaseLLMFailedData(error_msg=t(I18nKey.CHAT_PERSIST_FAILED)),
+                )
+
+            # 外层统一返回：conversation_id 必须回传，客户端才能把后续轮次追加到同一会话
             return BaseLLMSuccessResponse[BaseLLMSuccessData](
                 code=ErrorCode.OK,
-                data=BaseLLMSuccessData(data={"answer_content": answer}),
+                data=BaseLLMSuccessData(
+                    data={"answer_content": answer, "conversation_id": conversation_id}
+                ),
             )
     except TimeoutError:
         logger.warning("同步聊天请求超时")
@@ -314,15 +380,20 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
         # ── Phase 0: 前置输入校验（纯本地规则，零 IO，拦截无效/攻击输入） ──
         input_blocked = _check_input(body.query)
         if input_blocked is not None:
+            input_error_msg = (
+                input_blocked.data.error_msg
+                if input_blocked.data
+                else t(I18nKey.VALIDATOR_EMPTY_INPUT)
+            )
+            # 拦截文案展示在聊天室，属于用户看到的一轮，需落库
+            await _persist_blocked_turn(
+                req, conversation_id, body.query, input_error_msg, query_at
+            )
             yield emitter.emit(
                 "error",
                 SseMessageFactory.error(
-                    ErrorCode.CHAT.GUARDRAIL_BLOCKED,
-                    BaseLLMFailedData(
-                        error_msg=input_blocked.data.error_msg
-                        if input_blocked.data
-                        else t(I18nKey.VALIDATOR_EMPTY_INPUT)
-                    ),
+                    ErrorCode.CHAT.INPUT_BLOCKED,
+                    BaseLLMFailedData(error_msg=input_error_msg),
                 ),
             )
             return
@@ -330,15 +401,20 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
         # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
         blocked_resp = await _guardrail_check_with_timeout(req.app.state, body.query)
         if blocked_resp is not None:
+            guardrail_error_msg = (
+                blocked_resp.data.error_msg
+                if blocked_resp.data
+                else t(I18nKey.GUARDRAIL_BLOCKED)
+            )
+            # 护栏拦截文案由模型生成并展示在聊天室，属于用户看到的一轮，需落库
+            await _persist_blocked_turn(
+                req, conversation_id, body.query, guardrail_error_msg, query_at
+            )
             yield emitter.emit(
                 "error",
                 SseMessageFactory.error(
                     ErrorCode.CHAT.GUARDRAIL_BLOCKED,
-                    BaseLLMFailedData(
-                        error_msg=blocked_resp.data.error_msg
-                        if blocked_resp.data
-                        else t(I18nKey.GUARDRAIL_BLOCKED)
-                    ),
+                    BaseLLMFailedData(error_msg=guardrail_error_msg),
                 ),
             )
             return
@@ -414,19 +490,35 @@ async def stream_chat_generator(req: Request, body: ChatRequest, ctx):
 
             # 成功路径：本轮对话落库（服务端写入，不依赖客户端回传）
             # 推理文本随轮次一并持久化，不再只存正文
-            await asyncio.get_running_loop().run_in_executor(
-                None,
-                _persist_turn,
-                _request_token(req),
-                conversation_id,
-                body.query,
-                "".join(reasoning_parts),
-                "".join(content_parts),
-                query_at,
-                first_token_at,
-                reasoning_done_at,
-                answered_at,
-            )
+            try:
+                persist_ok = await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    _persist_turn,
+                    _request_token(req),
+                    conversation_id,
+                    body.query,
+                    "".join(reasoning_parts),
+                    "".join(content_parts),
+                    query_at,
+                    first_token_at,
+                    reasoning_done_at,
+                    answered_at,
+                )
+            except Exception:
+                logger.exception("轮次落库异常 | conversation_id=%s", conversation_id)
+                persist_ok = False
+
+            # 回答已完整交付，但历史没写进去：用专属错误码区分「模型失败」
+            # 与「存不下」，避免客户端把已显示的回答当成模型没答上
+            if not persist_ok:
+                yield emitter.emit(
+                    "error",
+                    SseMessageFactory.error(
+                        ErrorCode.CHAT.PERSIST_FAILED,
+                        BaseLLMFailedData(error_msg=t(I18nKey.CHAT_PERSIST_FAILED)),
+                    ),
+                )
+                return
 
         # ── done 事件（结束包） ──
         yield emitter.emit("done", SseMessageFactory.done())

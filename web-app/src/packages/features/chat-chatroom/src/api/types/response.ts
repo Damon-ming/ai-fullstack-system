@@ -2,6 +2,8 @@ import type { DataApiResponse } from "@ming/data-layer";
 /** 后端 LLM 实际返回内容（正文为纯文本，推理走 SSE reasoning 事件） */
 export interface ChatRoomResult {
   answer_content: string;
+  /** 会话 id；新会话由服务端生成，客户端回填后用于后续轮次追加 */
+  conversation_id?: string;
 }
 /** 后端 data 层：data 字段包裹 LLM 返回值（与 BaseLLMSuccessData 结构对齐） */
 export interface ChatRoomSyncData {

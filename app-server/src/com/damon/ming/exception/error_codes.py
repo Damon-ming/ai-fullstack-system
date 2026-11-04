@@ -140,7 +140,13 @@ class _Chat:
 
     TIMEOUT = _build(detail=1, business=Business.CHAT)  # 200005001
     UNKNOWN = _build(detail=2, business=Business.CHAT)  # 200005002
+    # 护栏模型（LLM）判定输入违规：拦截文案由模型生成，会展示在聊天室
     GUARDRAIL_BLOCKED = _build(detail=3, business=Business.CHAT)  # 200005003
+    # 回答已交付但历史未落库：与 UNKNOWN 区分开，客户端据此提示「未保存」
+    PERSIST_FAILED = _build(detail=4, business=Business.CHAT)  # 200005004
+    # 本地输入规则拦截（长度/字符集/注入模式）：拦截文案是静态 i18n 词条，
+    # 与 GUARDRAIL_BLOCKED 区分开，客户端据此分辨拦截来源
+    INPUT_BLOCKED = _build(detail=5, business=Business.CHAT)  # 200005005
 
 
 class _Upload:

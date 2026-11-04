@@ -96,6 +96,9 @@ const _Auth = {
 const _Chat = {
   TIMEOUT: _build(1, Business.CHAT),                       // 200005001 请求超时
   UNKNOWN: _build(2, Business.CHAT),                       // 200005002 未知异常
+  GUARDRAIL_BLOCKED: _build(3, Business.CHAT),             // 200005003 护栏模型拦截（文案由 LLM 生成）
+  PERSIST_FAILED: _build(4, Business.CHAT),                // 200005004 回答已交付但历史未落库
+  INPUT_BLOCKED: _build(5, Business.CHAT),                 // 200005005 本地输入规则拦截（静态文案）
 } as const;
 
 const _Upload = {

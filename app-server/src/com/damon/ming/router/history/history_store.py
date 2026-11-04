@@ -11,9 +11,11 @@
 存储：通过共享连接池持久化。
 """
 
+import time
 import uuid
 from datetime import datetime
 
+from sqlalchemy import text
 from src.com.damon.ming.db.db_connection import get_default_db
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.tables.history import (
@@ -157,55 +159,93 @@ def append_turn(
 
     轮次为纯 INSERT，不像旧的「读出 messages → 拼接 → 写回」那样存在
     并发覆盖竞态。
-    """
-    rows = _db().execute(
-        "INSERT INTO history_conversations (id, token, title, created_at, updated_at) "
-        "VALUES (:id, :token, :title, :answered_at, :answered_at) "
-        "ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at "
-        "WHERE history_conversations.token = EXCLUDED.token "
-        "RETURNING id",
-        {
-            "id": conversation_id,
-            "token": token,
-            "title": title,
-            "answered_at": answered_at,
-        },
-        commit=True,
-        fetch=True,
-    )
-    if not rows:
-        logger.warning(
-            "会话不存在或不属于当前用户，已跳过轮次写入 | id=%s", conversation_id
-        )
-        return ""
 
+    会话 upsert 与轮次插入在同一事务内提交：任一步失败则整体回滚，
+    避免留下「有会话、无轮次」的空壳行。
+
+    事务体重试 retry_count 次（与 execute() 同口径）：瞬时连接故障不应
+    让一轮已完成的回答丢失。turn_id 在重试外生成、轮次插入带
+    ON CONFLICT DO NOTHING，保证重试幂等 —— 即使上一次提交实际已生效
+    只是应答丢了，重试也不会插进重复轮次。
+    """
+    db = _db()
     turn_id = f"turn_{uuid.uuid4().hex[:12]}"
-    _db().execute(
-        "INSERT INTO history_turns "
-        "(turn_id, conversation_id, query, reasoning, content, "
-        " query_at, first_token_at, reasoning_done_at, answered_at) "
-        "VALUES (:turn_id, :conversation_id, :query, :reasoning, :content, "
-        " :query_at, :first_token_at, :reasoning_done_at, :answered_at)",
-        {
-            "turn_id": turn_id,
-            "conversation_id": conversation_id,
-            "query": query,
-            "reasoning": reasoning or None,
-            "content": content,
-            "query_at": query_at,
-            "first_token_at": first_token_at,
-            "reasoning_done_at": reasoning_done_at,
-            "answered_at": answered_at,
-        },
-        commit=True,
-    )
-    logger.info(
-        "轮次已写入 | conversation_id=%s | turn_id=%s | reasoning=%s",
+    retry = db.retry_count
+    backoff = db.backoff_seconds
+    last_error: Exception | None = None
+
+    for attempt in range(max(retry, 1)):
+        try:
+            with db.transaction() as conn:
+                rows = conn.execute(
+                    text(
+                        "INSERT INTO history_conversations (id, token, title, created_at, updated_at) "
+                        "VALUES (:id, :token, :title, :answered_at, :answered_at) "
+                        "ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at "
+                        "WHERE history_conversations.token = EXCLUDED.token "
+                        "RETURNING id"
+                    ),
+                    {
+                        "id": conversation_id,
+                        "token": token,
+                        "title": title,
+                        "answered_at": answered_at,
+                    },
+                ).fetchall()
+                if not rows:
+                    logger.warning(
+                        "会话不存在或不属于当前用户，已跳过轮次写入 | id=%s",
+                        conversation_id,
+                    )
+                    return ""
+
+                conn.execute(
+                    text(
+                        "INSERT INTO history_turns "
+                        "(turn_id, conversation_id, query, reasoning, content, "
+                        " query_at, first_token_at, reasoning_done_at, answered_at) "
+                        "VALUES (:turn_id, :conversation_id, :query, :reasoning, :content, "
+                        " :query_at, :first_token_at, :reasoning_done_at, :answered_at) "
+                        "ON CONFLICT (turn_id) DO NOTHING"
+                    ),
+                    {
+                        "turn_id": turn_id,
+                        "conversation_id": conversation_id,
+                        "query": query,
+                        "reasoning": reasoning or None,
+                        "content": content,
+                        "query_at": query_at,
+                        "first_token_at": first_token_at,
+                        "reasoning_done_at": reasoning_done_at,
+                        "answered_at": answered_at,
+                    },
+                )
+            logger.info(
+                "轮次已写入 | conversation_id=%s | turn_id=%s | reasoning=%s",
+                conversation_id,
+                turn_id,
+                "yes" if reasoning else "no",
+            )
+            return conversation_id
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "轮次写入失败（尝试 %d/%d）| id=%s | error=%s",
+                attempt + 1,
+                retry,
+                conversation_id,
+                e,
+            )
+            if attempt + 1 < retry:
+                time.sleep(backoff * (attempt + 1))
+
+    logger.error(
+        "轮次写入最终失败（已重试 %d 次）| id=%s | error=%s",
+        retry,
         conversation_id,
-        turn_id,
-        "yes" if reasoning else "no",
+        last_error,
     )
-    return conversation_id
+    raise last_error
 
 
 # ---------------------------------------------------------------------------

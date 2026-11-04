@@ -1,5 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
+import { useHistoryStore } from "@ming/store/biz/history-state";
 import { sendChatRoomMessageFn } from "../api";
 import type { ChatRoomRequest } from "../api/types";
 import { useTranslation } from "@ming/i18n";
@@ -15,6 +16,10 @@ export function useChatSendNormalHook() {
   const setMessages = useChatMessageStore((s) => s.setMessages);
   const sending = useChatMessageStore((s) => s.sending);
   const setSending = useChatMessageStore((s) => s.setSending);
+  // 当前会话 id：空表示新会话，服务端在响应里下发后回填
+  const activeHistoryId = useHistoryStore((s) => s.activeId);
+  const setActiveHistoryId = useHistoryStore((s) => s.setActiveId);
+  const markTurnSaved = useHistoryStore((s) => s.markTurnSaved);
 
   /** 当前进行中的请求控制器，用于主动取消 */
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -54,11 +59,20 @@ export function useChatSendNormalHook() {
     setSending(true);
 
     try {
-      const req: ChatRoomRequest = { query, reason: false };
+      const req: ChatRoomRequest = {
+        query,
+        reason: false,
+        // 已有会话则回传，服务端据此追加；新会话为空，由服务端生成
+        conversation_id: activeHistoryId,
+      };
       const res = await sendChatRoomMessageFn(req, controller.signal);
       log.debug("sendNormal succeeded");
       const result = res.data?.data;
       if (result) {
+        // 新会话：服务端生成的 conversationId 作为后续轮次的追加目标
+        if (!activeHistoryId && result.conversation_id) {
+          setActiveHistoryId(result.conversation_id);
+        }
         setMessages((items) =>
           items.map((msg) =>
             msg.id === assistantMsgId
@@ -66,6 +80,8 @@ export function useChatSendNormalHook() {
               : msg,
           ),
         );
+        // 服务端已落库 → 通知历史列表刷新
+        markTurnSaved();
       }
     } catch (e) {
       // 被主动取消时不显示错误
@@ -77,9 +93,10 @@ export function useChatSendNormalHook() {
         (e instanceof Error
           ? e.message
           : (e as { data?: { error_msg?: string } })?.data?.error_msg) ?? "";
+      // 与流式链路保持一致：text 只承载正文，错误单独标记
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, text: errMsg } : msg,
+          msg.id === assistantMsgId ? { ...msg, error: errMsg } : msg,
         ),
       );
     } finally {

@@ -28,6 +28,7 @@ class I18nKey(StrEnum):
     # ── 聊天 / 推理 ──
     CHAT_TIMEOUT = "chat.timeout"
     CHAT_MODEL_ERROR = "chat.model_error"
+    CHAT_PERSIST_FAILED = "chat.persist_failed"
 
     # ── 上传 ──
     UPLOAD_NO_EXTENSION = "upload.no_extension"

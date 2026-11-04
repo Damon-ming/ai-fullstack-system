@@ -18,6 +18,8 @@ export interface ChatMessage {
   isReasoning?: boolean;
   /** reasoning 区域是否折叠 */
   reasoningCollapsed?: boolean;
+  /** 本轮异常提示（SSE error / 传输中断 / 落库失败），与正文分离，不参与历史记录 */
+  error?: string;
   /** SSE start 事件携带的元信息 */
   msgId?: string;
   conversationId?: string;

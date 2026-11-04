@@ -206,6 +206,16 @@ class DbConnection:
         """暴露 SQLAlchemy 原生引擎，供需要直接操作的场景（如 pgvector_store）。"""
         return self._engine
 
+    @property
+    def retry_count(self) -> int:
+        """连接失败重试次数（来自 DbConfig，与 execute() 口径一致）。"""
+        return self._config.retry_count
+
+    @property
+    def backoff_seconds(self) -> float:
+        """重试退避基础秒数（来自 DbConfig，与 execute() 口径一致）。"""
+        return self._config.backoff_seconds
+
 
 class _TransactionContext:
     """事务上下文管理器。"""

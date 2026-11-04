@@ -32,8 +32,8 @@ function MessageBody({
 }>) {
   const { t } = useTranslation("chat-chatroom");
 
-  // 分支 1：流式占位 —— 服务端尚未返回正文
-  if (message.text === t("reasoning")) {
+  // 分支 1：流式占位 —— 服务端尚未返回正文，且未出错
+  if (message.text === t("reasoning") && !message.error) {
     return (
       <span aria-label={t("reasoningAria")}>
         {t("reasoning")}
@@ -84,9 +84,16 @@ function MessageBody({
             )}
           </div>
         )}
-        <div className="text-gray-800">
-          <ReactMarkdown>{message.text}</ReactMarkdown>
-        </div>
+        {message.text !== t("reasoning") && (
+          <div className="text-gray-800">
+            <ReactMarkdown>{message.text}</ReactMarkdown>
+          </div>
+        )}
+        {message.error && (
+          <div className="mt-1.5 text-xs leading-relaxed text-red-500">
+            {message.error}
+          </div>
+        )}
       </>
     );
   }
@@ -209,9 +216,9 @@ export const ChatChatroom: React.FC = () => {
                 >
                   <MessageBody message={message} setMessages={setMessages} />
                 </div>
-                {/* 助手消息元信息 */}
+                {/* 助手消息元信息：出错时也要显示，便于排查 trace */}
                 {message.role === "assistant" &&
-                  message.text !== t("reasoning") &&
+                  (message.text !== t("reasoning") || message.error) &&
                   message.msgId && (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-400">
                       {message.createdAt && (

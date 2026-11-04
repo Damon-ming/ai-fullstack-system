@@ -11,6 +11,7 @@
 
   "chat.timeout": "Request timed out, please try again later",
   "chat.model_error": "Model returned malformed content",
+  "chat.persist_failed": "Answer generated, but failed to save to history",
 
   "upload.no_extension": "No extension",
   "upload.type_rejected": "Unsupported file type: {suffix}, allowed: {allowed}",

@@ -28,6 +28,8 @@ export function useDrawerHistoryHook() {
 
   const deleteHistory = (id: string) => {
     remove(id);
+    // 删除的是当前会话时必须清空 activeId，否则下一轮发送会按该 id 重新建会话
+    if (activeId === id) setActiveId(null);
   };
 
   return { list, groups, activeId, loading, selectChat, deleteHistory };

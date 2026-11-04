@@ -70,8 +70,6 @@ export function useChatSendStreamHook() {
 
     let firstChunk = true;
     let streamFinished = false;
-    // 服务端在 done 事件之前落库，只有收到 done 才需要刷新历史列表
-    let turnPersisted = false;
 
     try {
       const req: ChatRoomRequest = {
@@ -165,14 +163,14 @@ export function useChatSendStreamHook() {
               }
             } else if (eventType === "done") {
               streamFinished = true;
-              turnPersisted = true;
             } else if (eventType === "error") {
+              // 兜底：正常不会走到这里（SSE error 事件由 onError 接管）
               streamFinished = true;
               const errData = payload.data as { error_msg: string };
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === assistantMsgId
-                    ? { ...msg, text: `请求异常：${errData.error_msg}` }
+                    ? { ...msg, error: errData.error_msg }
                     : msg,
                 ),
               );
@@ -182,9 +180,11 @@ export function useChatSendStreamHook() {
             streamFinished = true;
             const message = error.data?.error_msg || t("error.streamFailed");
             log.error("sendStream response failed", error);
+            // 只标记错误，不覆盖 text —— 已流式显示的内容要原样保留，
+            // 让「用户看到的」等于服务端实际交付的内容
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.id === assistantMsgId ? { ...msg, text: message } : msg,
+                msg.id === assistantMsgId ? { ...msg, error: message } : msg,
               ),
             );
           },
@@ -192,16 +192,13 @@ export function useChatSendStreamHook() {
         { signal: controller.signal },
       );
     } catch (e) {
-      // 被主动取消时不显示错误
-      if (controller.signal.aborted) {
-        log.debug("sendStream aborted by user");
-        return;
-      }
+      // streamChatRoomMessage 内部已吞掉异常（返回 SseFinalState），
+      // 这里是兜底：真抛出来时同样只标记错误，保留已显示内容
       log.error("sendStream failed", e);
       const errMsg = e instanceof Error ? e.message : t("error.sendFailed");
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, text: errMsg } : msg,
+          msg.id === assistantMsgId ? { ...msg, error: errMsg } : msg,
         ),
       );
     } finally {
@@ -209,8 +206,9 @@ export function useChatSendStreamHook() {
       log.debug("sendStream finished", { streamFinished });
       // 无论正常完成、服务端 error 还是网络异常，都释放输入框和发送按钮状态。
       setSending(false);
-      // 服务端已落库 → 通知历史列表刷新
-      if (turnPersisted) markTurnSaved();
+      // 无条件刷新历史列表：落库可能发生在 done 之前（done 丢失时），
+      // 只有向服务端对齐才能保证抽屉内容与 DB 一致
+      markTurnSaved();
     }
   };
 

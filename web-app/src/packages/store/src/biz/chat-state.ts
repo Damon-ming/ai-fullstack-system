@@ -31,6 +31,8 @@ export interface ChatMessage {
   isReasoning?: boolean;
   /** reasoning 区域是否折叠（正文开始时自动折叠，用户可手动展开） */
   reasoningCollapsed?: boolean;
+  /** 本轮异常提示（SSE error / 传输中断 / 落库失败），与正文分离，不参与历史记录 */
+  error?: string;
   /** SSE start 事件携带的元信息，由 hook 在流式开始时写入 */
   msgId?: string;
   conversationId?: string;
