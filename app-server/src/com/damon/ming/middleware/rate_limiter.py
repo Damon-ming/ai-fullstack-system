@@ -7,7 +7,7 @@
 
     @router.post("/send/v1")
     @limiter.limit("10/minute")
-    async def chat(req: Request, body: ChatRequest): ...
+    async def chat(request: Request, body: ChatRequest): ...
 
 注册到 app（在 main.py 中）：
     app.state.limiter = limiter

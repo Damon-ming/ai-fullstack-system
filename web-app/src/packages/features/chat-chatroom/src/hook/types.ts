@@ -9,21 +9,22 @@
 
 /** 单条聊天消息（feature 层视图模型，独立于 store 实现） */
 export interface ChatMessage {
+  /** 客户端消息 key（React key + 更新定位），与服务端轮次 id 是两个概念 */
   id: string;
-  text: string;
+  /** 消息正文（用户提问 / 助手回答） */
+  content: string;
   role: "user" | "assistant";
-  /** 推理过程文本（SSE reasoning 事件累加），正文回答在 text */
+  /** 推理过程文本（SSE reasoning 事件累加），正文回答在 content */
   reasoning?: string;
   /** 是否正在输出 reasoning */
   isReasoning?: boolean;
   /** reasoning 区域是否折叠 */
   reasoningCollapsed?: boolean;
-  /** 本轮异常提示（SSE error / 传输中断 / 落库失败），与正文分离，不参与历史记录 */
-  error?: string;
-  /** SSE start 事件携带的元信息 */
-  msgId?: string;
+  /** 本轮异常提示（SSE error / 传输中断 / 落库失败），与正文分离，随历史落库 */
+  errorMsg?: string;
+  /** 服务端轮次元信息：turnId 与历史记录一致，conversationId 用于后续轮次追加 */
+  turnId?: string;
   conversationId?: string;
-  model?: string;
-  createdAt?: number;
-  traceId?: string;
+  /** 提问时刻（Unix 秒），与历史记录 queryAt 同一时刻 */
+  queryAt?: number;
 }

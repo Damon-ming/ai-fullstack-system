@@ -36,20 +36,19 @@ class SseMessageFactory:
 
     @staticmethod
     def get_start_data(
-        llm_model_name: str,
+        turn_id: str,
         conversation_id: str | None = None,
     ) -> ChatStartData:
         """构造 start 事件的元数据。
 
+        turn_id 由调用方生成，与落库后的 history_turns.turn_id 保持一致；
         conversation_id 由调用方解析：新建会话时由 new_conversation_id() 生成，
         已有会话时沿用客户端回传的 id，保证一个会话内多轮共享同一 id。
         """
         return ChatStartData(
-            msgId=f"msg_{uuid.uuid4().hex[:12]}",
+            turnId=turn_id,
             conversationId=conversation_id or SseMessageFactory.new_conversation_id(),
-            model=llm_model_name,
-            createdAt=unix_timestamp(),
-            traceId=f"trace_{uuid.uuid4().hex[:16]}",
+            queryAt=unix_timestamp(),
         )
 
     @staticmethod

@@ -4,6 +4,8 @@ export interface HistoryTurn {
   query: string;
   reasoning: string;
   content: string;
+  /** 本轮异常提示（用户可见文案，成功时为空） */
+  errorMsg: string;
   queryAt: string;
   firstTokenAt: string;
   reasoningDoneAt: string;
@@ -11,9 +13,12 @@ export interface HistoryTurn {
 }
 
 export interface HistoryItem {
-  id: string;
+  /** 会话唯一标识 */
+  conversationId: string;
   title: string;
-  meta: string;
-  createdAt: number;
+  /** 创建时间 ISO8601 */
+  createdAt: string;
+  /** 更新时间 ISO8601（列表按此倒序分组） */
+  updatedAt: string;
   turns?: HistoryTurn[];
 }

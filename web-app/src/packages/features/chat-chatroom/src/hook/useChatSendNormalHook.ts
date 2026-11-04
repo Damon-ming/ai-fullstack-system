@@ -17,8 +17,10 @@ export function useChatSendNormalHook() {
   const sending = useChatMessageStore((s) => s.sending);
   const setSending = useChatMessageStore((s) => s.setSending);
   // 当前会话 id：空表示新会话，服务端在响应里下发后回填
-  const activeHistoryId = useHistoryStore((s) => s.activeId);
-  const setActiveHistoryId = useHistoryStore((s) => s.setActiveId);
+  const activeConversationId = useHistoryStore((s) => s.activeConversationId);
+  const setActiveConversationId = useHistoryStore(
+    (s) => s.setActiveConversationId,
+  );
   const markTurnSaved = useHistoryStore((s) => s.markTurnSaved);
 
   /** 当前进行中的请求控制器，用于主动取消 */
@@ -48,12 +50,14 @@ export function useChatSendNormalHook() {
 
     const userMsgId = `user-${Date.now()}`;
     const assistantMsgId = `assistant-${Date.now()}`;
+    // 占位文案：服务端尚未交付正文时展示，结束后按实际交付情况清理
+    const placeholder = t("reasoning");
 
     // 预先插入消息，补充role
     setMessages((items) => [
       ...items,
-      { id: userMsgId, text: query, role: "user" },
-      { id: assistantMsgId, text: t("reasoning"), role: "assistant" },
+      { id: userMsgId, content: query, role: "user" },
+      { id: assistantMsgId, content: placeholder, role: "assistant" },
     ]);
     setInput("");
     setSending(true);
@@ -63,20 +67,20 @@ export function useChatSendNormalHook() {
         query,
         reason: false,
         // 已有会话则回传，服务端据此追加；新会话为空，由服务端生成
-        conversation_id: activeHistoryId,
+        conversationId: activeConversationId,
       };
       const res = await sendChatRoomMessageFn(req, controller.signal);
       log.debug("sendNormal succeeded");
       const result = res.data?.data;
       if (result) {
         // 新会话：服务端生成的 conversationId 作为后续轮次的追加目标
-        if (!activeHistoryId && result.conversation_id) {
-          setActiveHistoryId(result.conversation_id);
+        if (!activeConversationId && result.conversationId) {
+          setActiveConversationId(result.conversationId);
         }
         setMessages((items) =>
           items.map((msg) =>
             msg.id === assistantMsgId
-              ? { ...msg, text: result.answer_content }
+              ? { ...msg, content: result.content }
               : msg,
           ),
         );
@@ -93,15 +97,24 @@ export function useChatSendNormalHook() {
         (e instanceof Error
           ? e.message
           : (e as { data?: { error_msg?: string } })?.data?.error_msg) ?? "";
-      // 与流式链路保持一致：text 只承载正文，错误单独标记
+      // 与流式链路保持一致：content 只承载正文，错误单独标记
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, error: errMsg } : msg,
+          msg.id === assistantMsgId ? { ...msg, errorMsg: errMsg } : msg,
         ),
       );
     } finally {
       abortControllerRef.current = null;
       setSending(false);
+      // 空气泡清理：服务端未交付任何内容（无正文 / 推理 / 异常提示）时移除占位消息
+      setMessages((prev) =>
+        prev.filter((msg) => {
+          if (msg.id !== assistantMsgId) return true;
+          const hasContent =
+            Boolean(msg.content) && msg.content !== placeholder;
+          return hasContent || Boolean(msg.reasoning) || Boolean(msg.errorMsg);
+        }),
+      );
     }
   };
 

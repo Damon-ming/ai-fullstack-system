@@ -107,7 +107,7 @@ def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
     )
 
     turn_rows = _db().execute(
-        "SELECT turn_id, conversation_id, query, reasoning, content, "
+        "SELECT turn_id, conversation_id, query, reasoning, content, error_msg, "
         "query_at, first_token_at, reasoning_done_at, answered_at "
         "FROM history_turns "
         "WHERE conversation_id = :cid "
@@ -123,10 +123,11 @@ def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
             query=r[2],
             reasoning=r[3],
             content=r[4],
-            query_at=r[5],
-            first_token_at=r[6],
-            reasoning_done_at=r[7],
-            answered_at=r[8],
+            error_msg=r[5],
+            query_at=r[6],
+            first_token_at=r[7],
+            reasoning_done_at=r[8],
+            answered_at=r[9],
         )
         for r in (turn_rows or [])
     ]
@@ -140,6 +141,7 @@ def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
 
 def append_turn(
     token: str,
+    turn_id: str,
     conversation_id: str,
     title: str,
     query: str,
@@ -149,6 +151,7 @@ def append_turn(
     first_token_at: datetime | None,
     reasoning_done_at: datetime | None,
     answered_at: datetime,
+    error_msg: str | None = None,
 ) -> str:
     """写入一轮问答，返回会话 id（写入被拒绝时返回空串）。
 
@@ -156,6 +159,9 @@ def append_turn(
       - 会话不存在 → 按 conversation_id 新建
       - 会话已存在 → 仅刷新 updated_at
     会话必须属于当前 token，否则整轮写入被拒绝。
+
+    turn_id 由调用方（chat 链路）生成，与 SSE start 事件下发的 turnId 一致，
+    保证「客户端看到的」与「DB 存的是」同一轮。
 
     轮次为纯 INSERT，不像旧的「读出 messages → 拼接 → 写回」那样存在
     并发覆盖竞态。
@@ -169,7 +175,6 @@ def append_turn(
     只是应答丢了，重试也不会插进重复轮次。
     """
     db = _db()
-    turn_id = f"turn_{uuid.uuid4().hex[:12]}"
     retry = db.retry_count
     backoff = db.backoff_seconds
     last_error: Exception | None = None
@@ -202,10 +207,11 @@ def append_turn(
                 conn.execute(
                     text(
                         "INSERT INTO history_turns "
-                        "(turn_id, conversation_id, query, reasoning, content, "
+                        "(turn_id, conversation_id, query, reasoning, content, error_msg, "
                         " query_at, first_token_at, reasoning_done_at, answered_at) "
                         "VALUES (:turn_id, :conversation_id, :query, :reasoning, :content, "
-                        " :query_at, :first_token_at, :reasoning_done_at, :answered_at) "
+                        " :error_msg, :query_at, :first_token_at, :reasoning_done_at, "
+                        " :answered_at) "
                         "ON CONFLICT (turn_id) DO NOTHING"
                     ),
                     {
@@ -214,6 +220,7 @@ def append_turn(
                         "query": query,
                         "reasoning": reasoning or None,
                         "content": content,
+                        "error_msg": error_msg or None,
                         "query_at": query_at,
                         "first_token_at": first_token_at,
                         "reasoning_done_at": reasoning_done_at,
@@ -302,18 +309,20 @@ def save_history(
     cleaned = [t for t in turns if isinstance(t, dict)]
     for t in cleaned:
         reasoning = str(t.get("reasoning") or "")
+        error_msg = str(t.get("errorMsg") or "")
         _db().execute(
             "INSERT INTO history_turns "
-            "(turn_id, conversation_id, query, reasoning, content, "
+            "(turn_id, conversation_id, query, reasoning, content, error_msg, "
             " query_at, first_token_at, reasoning_done_at, answered_at) "
             "VALUES (:turn_id, :conversation_id, :query, :reasoning, :content, "
-            " :now, NULL, :reasoning_done_at, :now)",
+            " :error_msg, :now, NULL, :reasoning_done_at, :now)",
             {
                 "turn_id": f"turn_{uuid.uuid4().hex[:12]}",
                 "conversation_id": conversation_id,
                 "query": str(t.get("query", "")),
                 "reasoning": reasoning or None,
                 "content": str(t.get("content", "")),
+                "error_msg": error_msg or None,
                 "now": current,
                 "reasoning_done_at": current if reasoning else None,
             },

@@ -2,43 +2,41 @@
 import { createAppStore } from "../app-store";
 
 // Chat 页面交互状态：只负责抽屉和会话生命周期。
+// 当前选中会话 id 统一放在 useHistoryStore.activeConversationId。
 export interface ChatUiState {
   drawerOpen: boolean;
   sessionId: number;
-  activeHistoryId: string | null;
   toggleDrawer: () => void;
   resetSession: () => void;
-  setActiveHistoryId: (id: string) => void;
 }
 
 export const useChatUiStore = createAppStore<ChatUiState>((set) => ({
   drawerOpen: true,
   sessionId: 0,
-  activeHistoryId: null,
   toggleDrawer: () => set((state) => ({ drawerOpen: !state.drawerOpen })),
   resetSession: () => set((state) => ({ sessionId: state.sessionId + 1 })),
-  setActiveHistoryId: (activeHistoryId) => set({ activeHistoryId }),
 }));
 
 // Chat 消息交互状态：只负责输入、消息和发送过程。
 export interface ChatMessage {
+  /** 客户端消息 key（React key + 更新定位），与服务端轮次 id 是两个概念 */
   id: string;
-  text: string;
+  /** 消息正文（用户提问 / 助手回答） */
+  content: string;
   role: "user" | "assistant";
-  /** 推理过程文本（SSE reasoning 事件累加），正文回答在 text */
+  /** 推理过程文本（SSE reasoning 事件累加），正文回答在 content */
   reasoning?: string;
   /** 是否正在输出 reasoning（收到正文后翻为 false，reasoning 折叠） */
   isReasoning?: boolean;
   /** reasoning 区域是否折叠（正文开始时自动折叠，用户可手动展开） */
   reasoningCollapsed?: boolean;
-  /** 本轮异常提示（SSE error / 传输中断 / 落库失败），与正文分离，不参与历史记录 */
-  error?: string;
-  /** SSE start 事件携带的元信息，由 hook 在流式开始时写入 */
-  msgId?: string;
+  /** 本轮异常提示（SSE error / 传输中断 / 落库失败），与正文分离，随历史落库 */
+  errorMsg?: string;
+  /** 服务端轮次元信息：turnId 与历史记录一致，conversationId 用于后续轮次追加 */
+  turnId?: string;
   conversationId?: string;
-  model?: string;
-  createdAt?: number;
-  traceId?: string;
+  /** 提问时刻（Unix 秒），与历史记录 queryAt 同一时刻 */
+  queryAt?: number;
 }
 
 export interface ChatMessageState {

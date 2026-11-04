@@ -10,7 +10,6 @@ import { useChatMessageStateHook } from "../hook/useChatMessageStateHook";
 import {
   useChatSendStreamHook,
   formatMessageTime,
-  formatTraceId,
 } from "../hook/useChatSendStreamHook";
 import { useTranslation } from "@ming/i18n";
 import type { ChatMessage } from "../hook/types";
@@ -32,8 +31,12 @@ function MessageBody({
 }>) {
   const { t } = useTranslation("chat-chatroom");
 
-  // 分支 1：流式占位 —— 服务端尚未返回正文，且未出错
-  if (message.text === t("reasoning") && !message.error) {
+  // 分支 1：流式占位 —— 服务端尚未返回正文 / 推理，且未出错
+  if (
+    message.content === t("reasoning") &&
+    !message.reasoning &&
+    !message.errorMsg
+  ) {
     return (
       <span aria-label={t("reasoningAria")}>
         {t("reasoning")}
@@ -84,14 +87,14 @@ function MessageBody({
             )}
           </div>
         )}
-        {message.text !== t("reasoning") && (
+        {message.content && message.content !== t("reasoning") && (
           <div className="text-gray-800">
-            <ReactMarkdown>{message.text}</ReactMarkdown>
+            <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
         )}
-        {message.error && (
+        {message.errorMsg && (
           <div className="mt-1.5 text-xs leading-relaxed text-red-500">
-            {message.error}
+            {message.errorMsg}
           </div>
         )}
       </>
@@ -99,7 +102,7 @@ function MessageBody({
   }
 
   // 分支 3：用户消息 —— 纯文本
-  return <span className="whitespace-pre-wrap">{message.text}</span>;
+  return <span className="whitespace-pre-wrap">{message.content}</span>;
 }
 
 export const ChatChatroom: React.FC = () => {
@@ -216,24 +219,14 @@ export const ChatChatroom: React.FC = () => {
                 >
                   <MessageBody message={message} setMessages={setMessages} />
                 </div>
-                {/* 助手消息元信息：出错时也要显示，便于排查 trace */}
+                {/* 助手消息元信息：提问时刻（与历史记录 queryAt 同一时刻） */}
                 {message.role === "assistant" &&
-                  (message.text !== t("reasoning") || message.error) &&
-                  message.msgId && (
+                  message.queryAt &&
+                  (message.content !== t("reasoning") || message.errorMsg) && (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-400">
-                      {message.createdAt && (
-                        <span className="rounded-md bg-gray-50 px-2 py-1">
-                          {formatMessageTime(message.createdAt)}
-                        </span>
-                      )}
-                      {message.traceId && (
-                        <span
-                          className="cursor-help rounded-md bg-gray-50 px-2 py-1 font-mono"
-                          title={message.traceId}
-                        >
-                          trace: {formatTraceId(message.traceId)}
-                        </span>
-                      )}
+                      <span className="rounded-md bg-gray-50 px-2 py-1">
+                        {formatMessageTime(message.queryAt)}
+                      </span>
                     </div>
                   )}
                 {/* 复制按钮：AI右下，User左下 */}
@@ -243,7 +236,7 @@ export const ChatChatroom: React.FC = () => {
                   title={
                     copiedMessageId === message.id ? t("copied") : t("copy")
                   }
-                  onClick={() => void copyMessage(message.text, message.id)}
+                  onClick={() => void copyMessage(message.content, message.id)}
                   className={`absolute bottom-1 flex h-7 w-7 items-center justify-center rounded-md text-gray-400 opacity-0 transition-all duration-150 hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100 focus-visible:opacity-100 ${
                     message.role === "user" ? "-left-9" : "-right-9"
                   }`}

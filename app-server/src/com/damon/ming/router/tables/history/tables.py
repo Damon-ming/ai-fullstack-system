@@ -56,6 +56,9 @@ history_turns = Table(
     # 推理走模型原生通道，未开启推理时为 NULL
     Column("reasoning", Text, nullable=True),
     Column("content", Text, nullable=False),
+    # 本轮异常提示（用户可见文案，不含堆栈/错误码/日志）：
+    # 失败 / 中断轮次存放统一提示，成功轮次为 NULL
+    Column("error_msg", Text, nullable=True),
     # 四个时间点存「时刻」而非「时长」，时长由查询方派生：
     #   TTFT       = first_token_at - query_at
     #   推理耗时   = reasoning_done_at - first_token_at
@@ -77,6 +80,7 @@ class HistoryTurnRow:
     query: str
     content: str
     reasoning: str | None = None
+    error_msg: str | None = None
     query_at: datetime | None = None
     first_token_at: datetime | None = None
     reasoning_done_at: datetime | None = None
@@ -95,16 +99,18 @@ class HistoryDetailRow:
 # 索引 DDL
 # ---------------------------------------------------------------------------
 
-_HISTORY_INDEX_DDL = [
+_HISTORY_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_history_token ON history_conversations (token)",
     "CREATE INDEX IF NOT EXISTS idx_history_updated ON history_conversations (updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_history_turns_conversation ON history_turns (conversation_id)",
     "CREATE INDEX IF NOT EXISTS idx_history_turns_query_at ON history_turns (query_at)",
+    # 增量列：已存在的库表补 error_msg（幂等）
+    "ALTER TABLE history_turns ADD COLUMN IF NOT EXISTS error_msg TEXT",
 ]
 
 
 def create_history_tables(db_conn) -> None:
     """创建对话历史表 + 索引（幂等）。"""
     metadata.create_all(db_conn.engine)
-    for ddl in _HISTORY_INDEX_DDL:
+    for ddl in _HISTORY_DDL:
         db_conn.execute(ddl, commit=True)

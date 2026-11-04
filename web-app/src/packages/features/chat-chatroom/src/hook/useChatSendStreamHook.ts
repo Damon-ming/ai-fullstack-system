@@ -13,11 +13,6 @@ export function formatMessageTime(unixSeconds: number | undefined): string {
   return unixSeconds ? new Date(unixSeconds * 1000).toLocaleTimeString() : "";
 }
 
-/** 截断 traceId 供 UI 直接渲染 */
-export function formatTraceId(traceId: string | undefined): string {
-  return traceId ? `${traceId.slice(0, 8)}…` : "";
-}
-
 /** SSE 流式请求（默认使用） */
 export function useChatSendStreamHook() {
   const { t } = useTranslation("chat-chatroom");
@@ -29,8 +24,10 @@ export function useChatSendStreamHook() {
   const reason = useChatMessageStore((s) => s.reason);
   const setReason = useChatMessageStore((s) => s.setReason);
   // 当前会话 id：空表示新会话，服务端在 start 事件下发后回填
-  const activeHistoryId = useHistoryStore((s) => s.activeId);
-  const setActiveHistoryId = useHistoryStore((s) => s.setActiveId);
+  const activeConversationId = useHistoryStore((s) => s.activeConversationId);
+  const setActiveConversationId = useHistoryStore(
+    (s) => s.setActiveConversationId,
+  );
   const markTurnSaved = useHistoryStore((s) => s.markTurnSaved);
 
   /** 当前进行中的 SSE 请求控制器，用于主动取消 */
@@ -54,11 +51,13 @@ export function useChatSendStreamHook() {
     log.debug("sendStream started", { queryLength: query.length });
     const userMsgId = `user-${Date.now()}`;
     const assistantMsgId = `assistant-${Date.now()}`;
+    // 占位文案：服务端尚未交付正文时展示，流结束后按实际交付情况清理
+    const placeholder = t("reasoning");
 
     setMessages((items) => [
       ...items,
-      { id: userMsgId, text: query, role: "user" },
-      { id: assistantMsgId, text: t("reasoning"), role: "assistant" },
+      { id: userMsgId, content: query, role: "user" },
+      { id: assistantMsgId, content: placeholder, role: "assistant" },
     ]);
     setInput("");
     setSending(true);
@@ -76,7 +75,7 @@ export function useChatSendStreamHook() {
         query,
         reason,
         // 已有会话则回传，服务端据此追加；新会话为空，由服务端生成
-        conversation_id: activeHistoryId,
+        conversationId: activeConversationId,
       };
 
       await streamChatRoomMessage(
@@ -88,26 +87,23 @@ export function useChatSendStreamHook() {
             log.debug("sendStream received event", { event: eventType });
 
             if (eventType === "start") {
-              // 记录本次会话的元信息，挂到 assistant 消息上供 UI 展示
+              // 记录本次轮次元信息，挂到 assistant 消息上供 UI 展示
               const startData = payload.data as ChatStartData;
               log.debug("sendStream start metadata", {
-                msgId: startData.msgId,
-                model: startData.model,
+                turnId: startData.turnId,
               });
               // 新会话：服务端生成的 conversationId 作为后续轮次的追加目标
-              if (!activeHistoryId && startData.conversationId) {
-                setActiveHistoryId(startData.conversationId);
+              if (!activeConversationId && startData.conversationId) {
+                setActiveConversationId(startData.conversationId);
               }
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === assistantMsgId
                     ? {
                         ...msg,
-                        msgId: startData.msgId,
+                        turnId: startData.turnId,
                         conversationId: startData.conversationId,
-                        model: startData.model,
-                        createdAt: startData.createdAt,
-                        traceId: startData.traceId,
+                        queryAt: startData.queryAt,
                       }
                     : msg,
                 ),
@@ -142,7 +138,7 @@ export function useChatSendStreamHook() {
                       msg.id === assistantMsgId
                         ? {
                             ...msg,
-                            text: delta,
+                            content: delta,
                             isReasoning: false,
                             reasoningCollapsed: true,
                           }
@@ -156,7 +152,7 @@ export function useChatSendStreamHook() {
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMsgId
-                      ? { ...msg, text: msg.text + delta }
+                      ? { ...msg, content: msg.content + delta }
                       : msg,
                   ),
                 );
@@ -170,7 +166,7 @@ export function useChatSendStreamHook() {
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === assistantMsgId
-                    ? { ...msg, error: errData.error_msg }
+                    ? { ...msg, errorMsg: errData.error_msg }
                     : msg,
                 ),
               );
@@ -178,13 +174,18 @@ export function useChatSendStreamHook() {
           },
           onError: (error) => {
             streamFinished = true;
+            // 主动取消：不展示客户端文案（服务端已交付内容仍会落库）
+            if (controller.signal.aborted) {
+              log.debug("sendStream aborted by user");
+              return;
+            }
             const message = error.data?.error_msg || t("error.streamFailed");
             log.error("sendStream response failed", error);
-            // 只标记错误，不覆盖 text —— 已流式显示的内容要原样保留，
+            // 只标记错误，不覆盖 content —— 已流式显示的内容要原样保留，
             // 让「用户看到的」等于服务端实际交付的内容
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.id === assistantMsgId ? { ...msg, error: message } : msg,
+                msg.id === assistantMsgId ? { ...msg, errorMsg: message } : msg,
               ),
             );
           },
@@ -195,12 +196,16 @@ export function useChatSendStreamHook() {
       // streamChatRoomMessage 内部已吞掉异常（返回 SseFinalState），
       // 这里是兜底：真抛出来时同样只标记错误，保留已显示内容
       log.error("sendStream failed", e);
-      const errMsg = e instanceof Error ? e.message : t("error.sendFailed");
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, error: errMsg } : msg,
-        ),
-      );
+      if (controller.signal.aborted) {
+        log.debug("sendStream aborted by user");
+      } else {
+        const errMsg = e instanceof Error ? e.message : t("error.sendFailed");
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId ? { ...msg, errorMsg: errMsg } : msg,
+          ),
+        );
+      }
     } finally {
       abortControllerRef.current = null;
       log.debug("sendStream finished", { streamFinished });
@@ -209,6 +214,15 @@ export function useChatSendStreamHook() {
       // 无条件刷新历史列表：落库可能发生在 done 之前（done 丢失时），
       // 只有向服务端对齐才能保证抽屉内容与 DB 一致
       markTurnSaved();
+      // 空气泡清理：服务端未交付任何内容（无正文 / 推理 / 异常提示）时移除占位消息
+      setMessages((prev) =>
+        prev.filter((msg) => {
+          if (msg.id !== assistantMsgId) return true;
+          const hasContent =
+            Boolean(msg.content) && msg.content !== placeholder;
+          return hasContent || Boolean(msg.reasoning) || Boolean(msg.errorMsg);
+        }),
+      );
     }
   };
 

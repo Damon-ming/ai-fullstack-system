@@ -25,7 +25,7 @@ const log = createLogger("history/api");
 export async function fetchList(): Promise<DataApiResponse<unknown[]>> {
   log.debug("fetch history list");
   return dataApi.get<unknown[]>("/api/history/list/v1", {
-    params: { page: 1, page_size: 100 },
+    params: { page: 1, pageSize: 100 },
   });
 }
 

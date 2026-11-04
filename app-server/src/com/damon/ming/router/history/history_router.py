@@ -45,12 +45,12 @@ def _token(request: Request) -> str:
 def list_history(
     request: Request,
     page: int = Query(1, ge=1, description="页码（从1开始）"),
-    page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+    pageSize: int = Query(20, ge=1, le=100, description="每页条数"),
 ):
     """分页获取当前用户的会话列表（按 updated_at 倒序，不含轮次正文）。"""
     token = _token(request)
     try:
-        items = HistoryService.list_history(token=token, page=page, page_size=page_size)
+        items = HistoryService.list_history(token=token, page=page, page_size=pageSize)
         return BaseSuccessResponse(code=ErrorCode.OK, data=items)
     except Exception as e:
         logger.exception("历史记录列表查询失败")
@@ -104,14 +104,14 @@ def save_history(
 ):
     """保存会话。
 
-    conversation_id 为空则新建会话；非空则更新标题并整体替换轮次。
+    conversationId 为空则新建会话；非空则更新标题并整体替换轮次。
     """
     token = _token(request)
     try:
         detail = HistoryService.save_history(
             token=token,
             title=body.title,
-            conversation_id=body.conversation_id,
+            conversation_id=body.conversationId,
             turns=body.turns,
         )
         if detail is None:

@@ -25,24 +25,25 @@ logger = pin("history.service")
 def _turn_to_item(row) -> HistoryTurnItem:
     """DB 行 → 轮次 schema。"""
     return HistoryTurnItem(
-        turn_id=row.turn_id,
+        turnId=row.turn_id,
         query=row.query,
         reasoning=row.reasoning or "",
         content=row.content,
-        query_at=iso_format(row.query_at),
-        first_token_at=iso_format(row.first_token_at),
-        reasoning_done_at=iso_format(row.reasoning_done_at),
-        answered_at=iso_format(row.answered_at),
+        errorMsg=row.error_msg or "",
+        queryAt=iso_format(row.query_at),
+        firstTokenAt=iso_format(row.first_token_at),
+        reasoningDoneAt=iso_format(row.reasoning_done_at),
+        answeredAt=iso_format(row.answered_at),
     )
 
 
 def _conv_to_list_item(row) -> HistoryListItem:
     """DB 行 → 会话列表项 schema。"""
     return HistoryListItem(
-        id=row.id,
+        conversationId=row.id,
         title=row.title,
-        created_at=iso_format(row.created_at),
-        updated_at=iso_format(row.updated_at),
+        createdAt=iso_format(row.created_at),
+        updatedAt=iso_format(row.updated_at),
     )
 
 
@@ -50,10 +51,10 @@ def _detail_to_data(row) -> HistoryDetailData:
     """详情行（会话 + 轮次）→ 详情 schema。"""
     conv = row.conversation
     return HistoryDetailData(
-        id=conv.id,
+        conversationId=conv.id,
         title=conv.title,
-        created_at=iso_format(conv.created_at),
-        updated_at=iso_format(conv.updated_at),
+        createdAt=iso_format(conv.created_at),
+        updatedAt=iso_format(conv.updated_at),
         turns=[_turn_to_item(t) for t in row.turns],
     )
 
@@ -107,6 +108,7 @@ class HistoryService:
     @staticmethod
     def save_turn(
         token: str,
+        turn_id: str,
         conversation_id: str,
         title: str,
         query: str,
@@ -116,14 +118,17 @@ class HistoryService:
         first_token_at: datetime | None,
         reasoning_done_at: datetime | None,
         answered_at: datetime,
+        error_msg: str | None = None,
     ) -> str:
         """写入一轮对话（服务端 chat 链路调用）。
 
         服务端是会话数据的唯一写入方，不依赖客户端回传整段对话。
+        turn_id 由调用方生成，与 SSE start 事件下发的 turnId 一致。
         返回实际会话 id；会话不属于当前 token 时为空串。
         """
         return history_store.append_turn(
             token=token,
+            turn_id=turn_id,
             conversation_id=conversation_id,
             title=title.strip(),
             query=query,
@@ -133,4 +138,5 @@ class HistoryService:
             first_token_at=first_token_at,
             reasoning_done_at=reasoning_done_at,
             answered_at=answered_at,
+            error_msg=error_msg,
         )

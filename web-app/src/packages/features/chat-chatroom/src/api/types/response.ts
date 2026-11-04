@@ -1,9 +1,10 @@
 import type { DataApiResponse } from "@ming/data-layer";
 /** 后端 LLM 实际返回内容（正文为纯文本，推理走 SSE reasoning 事件） */
 export interface ChatRoomResult {
-  answer_content: string;
+  /** 回答正文（纯文本，推理走 SSE reasoning 事件） */
+  content: string;
   /** 会话 id；新会话由服务端生成，客户端回填后用于后续轮次追加 */
-  conversation_id?: string;
+  conversationId?: string;
 }
 /** 后端 data 层：data 字段包裹 LLM 返回值（与 BaseLLMSuccessData 结构对齐） */
 export interface ChatRoomSyncData {
@@ -19,13 +20,13 @@ export type ChatRoomApiResponse = DataApiResponse<ChatRoomSyncData>;
  */
 export type SseEvent = "start" | "delta" | "reasoning" | "done" | "error";
 
-/** SSE start 事件携带的元信息（对应后端 ChatStartData / StartMetadata） */
+/** SSE start 事件携带的元信息（对应后端 ChatStartData） */
 export interface ChatStartData {
-  msgId: string;
+  /** 本轮唯一标识，与历史记录 turnId 一致 */
+  turnId: string;
   conversationId: string;
-  model: string;
-  createdAt: number;
-  traceId: string;
+  /** 提问时刻（Unix 秒） */
+  queryAt: number;
 }
 
 /**

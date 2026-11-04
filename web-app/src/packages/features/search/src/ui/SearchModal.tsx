@@ -39,13 +39,13 @@ export function SearchModal({ onSelect }: { onSelect: (id: string) => void }) {
           )}
           {results.map((item) => (
             <button
-              key={item.id}
+              key={item.conversationId}
               type="button"
-              onClick={() => onSelect(item.id)}
+              onClick={() => onSelect(item.conversationId)}
               className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-gray-700 transition hover:bg-blue-50"
             >
               <strong className="min-w-0 flex-1 truncate">{item.title}</strong>
-              <small className="text-gray-400">{item.meta}</small>
+              <small className="text-gray-400">{item.updatedAt}</small>
             </button>
           ))}
         </div>

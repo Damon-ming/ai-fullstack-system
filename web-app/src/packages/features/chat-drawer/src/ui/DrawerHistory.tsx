@@ -4,7 +4,7 @@ import { useTranslation } from "@ming/i18n";
 
 export const DrawerHistory: React.FC = () => {
   const { t } = useTranslation("chat-drawer");
-  const { list, groups, activeId, loading, selectChat } =
+  const { list, groups, activeConversationId, loading, selectChat } =
     useDrawerHistoryHook();
 
   if (loading) {
@@ -39,11 +39,11 @@ export const DrawerHistory: React.FC = () => {
             </div>
             {group.items.map((item) => (
               <button
-                key={item.id}
+                key={item.conversationId}
                 type="button"
-                onClick={() => selectChat(item.id)}
+                onClick={() => selectChat(item.conversationId)}
                 className={`flex h-9 w-full items-center rounded-lg px-3 text-sm text-left transition ${
-                  activeId === item.id
+                  activeConversationId === item.conversationId
                     ? "bg-blue-50 font-medium text-blue-700"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}

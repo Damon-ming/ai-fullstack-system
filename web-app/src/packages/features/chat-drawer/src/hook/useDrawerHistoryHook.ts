@@ -7,8 +7,10 @@ import {
 import { useHistoryStore } from "@ming/store/biz/history-state";
 
 export function useDrawerHistoryHook() {
-  const activeId = useHistoryStore((s) => s.activeId);
-  const setActiveId = useHistoryStore((s) => s.setActiveId);
+  const activeConversationId = useHistoryStore((s) => s.activeConversationId);
+  const setActiveConversationId = useHistoryStore(
+    (s) => s.setActiveConversationId,
+  );
   const beginLoad = useHistoryStore((s) => s.beginLoad);
   const loading = useHistoryStore((s) => s.loading);
   const setMessages = useChatMessageStore((s) => s.setMessages);
@@ -21,16 +23,23 @@ export function useDrawerHistoryHook() {
     if (saved.length) {
       beginLoad();
       setMessages(saved);
-      setActiveId(id);
+      setActiveConversationId(id);
       resetSession();
     }
   };
 
   const deleteHistory = (id: string) => {
     remove(id);
-    // 删除的是当前会话时必须清空 activeId，否则下一轮发送会按该 id 重新建会话
-    if (activeId === id) setActiveId(null);
+    // 删除的是当前会话时必须清空 activeConversationId，否则下一轮发送会按该 id 重新建会话
+    if (activeConversationId === id) setActiveConversationId(null);
   };
 
-  return { list, groups, activeId, loading, selectChat, deleteHistory };
+  return {
+    list,
+    groups,
+    activeConversationId,
+    loading,
+    selectChat,
+    deleteHistory,
+  };
 }

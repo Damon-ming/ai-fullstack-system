@@ -21,7 +21,9 @@ export function useChatPageHook() {
   const chatSessionId = useChatUiStore((state) => state.sessionId);
   const toggleDrawer = useChatUiStore((state) => state.toggleDrawer);
   const resetSession = useChatUiStore((state) => state.resetSession);
-  const setActiveHistoryId = useHistoryStore((state) => state.setActiveId);
+  const setActiveConversationId = useHistoryStore(
+    (state) => state.setActiveConversationId,
+  );
   const historyLoading = useHistoryStore((state) => state.loading);
   const savedTurn = useHistoryStore((state) => state.savedTurn);
   const finishHistoryLoad = useHistoryStore((state) => state.finishLoad);
@@ -56,7 +58,7 @@ export function useChatPageHook() {
     if (saved.length) {
       beginHistoryLoad();
       setMessages(saved);
-      setActiveHistoryId(id);
+      setActiveConversationId(id);
       resetSession();
     }
   };

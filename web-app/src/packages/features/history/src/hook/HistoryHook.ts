@@ -16,37 +16,33 @@ import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
 /** 与 @ming/store 的 ChatMessage 结构兼容（纯类型，避免 feature → store 反向依赖） */
 export interface HistoryChatMessage {
   id: string;
-  text: string;
+  content: string;
   role: "user" | "assistant";
   reasoning?: string;
+  errorMsg?: string;
+  turnId?: string;
 }
 
-// 内部类型 —— 用于数据解包函数参数
+// 内部类型 —— 用于数据解包函数参数（后端统一 camelCase，无需双口径兼容）
 interface DataEnvelope {
   data?: unknown;
 }
 interface HistoryApiRecord {
-  id: unknown;
+  conversationId?: unknown;
   title?: unknown;
-  updatedAt?: string;
-  updated_at?: string;
   createdAt?: unknown;
-  created_at?: unknown;
+  updatedAt?: unknown;
   turns?: unknown;
 }
 interface HistoryTurnRecord {
-  turn_id?: unknown;
   turnId?: unknown;
   query?: unknown;
   reasoning?: unknown;
   content?: unknown;
-  query_at?: unknown;
+  errorMsg?: unknown;
   queryAt?: unknown;
-  first_token_at?: unknown;
   firstTokenAt?: unknown;
-  reasoning_done_at?: unknown;
   reasoningDoneAt?: unknown;
-  answered_at?: unknown;
   answeredAt?: unknown;
 }
 
@@ -68,10 +64,10 @@ function unpackDetail(res: DataEnvelope | undefined): unknown {
 function parseListRecord(item: unknown): HistoryItem {
   const obj = item as HistoryApiRecord;
   return {
-    id: String(obj.id),
+    conversationId: String(obj.conversationId ?? ""),
     title: String(obj.title ?? ""),
-    meta: String(obj.updatedAt || obj.updated_at || ""),
-    createdAt: parseTimestamp(obj.createdAt || obj.created_at),
+    createdAt: String(obj.createdAt ?? ""),
+    updatedAt: String(obj.updatedAt ?? ""),
     turns: [],
   };
 }
@@ -79,14 +75,15 @@ function parseListRecord(item: unknown): HistoryItem {
 function parseTurn(raw: unknown): HistoryTurn {
   const t = raw as HistoryTurnRecord;
   return {
-    turnId: String(t.turn_id ?? t.turnId ?? ""),
+    turnId: String(t.turnId ?? ""),
     query: String(t.query ?? ""),
     reasoning: String(t.reasoning ?? ""),
     content: String(t.content ?? ""),
-    queryAt: String(t.query_at ?? t.queryAt ?? ""),
-    firstTokenAt: String(t.first_token_at ?? t.firstTokenAt ?? ""),
-    reasoningDoneAt: String(t.reasoning_done_at ?? t.reasoningDoneAt ?? ""),
-    answeredAt: String(t.answered_at ?? t.answeredAt ?? ""),
+    errorMsg: String(t.errorMsg ?? ""),
+    queryAt: String(t.queryAt ?? ""),
+    firstTokenAt: String(t.firstTokenAt ?? ""),
+    reasoningDoneAt: String(t.reasoningDoneAt ?? ""),
+    answeredAt: String(t.answeredAt ?? ""),
   };
 }
 
@@ -115,13 +112,22 @@ export function turnsToChatMessages(
 ): HistoryChatMessage[] {
   const messages: HistoryChatMessage[] = [];
   for (const turn of turns) {
-    messages.push({ id: `${turn.turnId}_q`, text: turn.query, role: "user" });
     messages.push({
-      id: `${turn.turnId}_a`,
-      text: turn.content,
-      role: "assistant",
-      reasoning: turn.reasoning || undefined,
+      id: `${turn.turnId}_q`,
+      content: turn.query,
+      role: "user",
     });
+    // 空气泡清理：服务端未交付任何内容（无正文 / 推理 / 异常提示）时不展示助手消息
+    if (turn.content || turn.reasoning || turn.errorMsg) {
+      messages.push({
+        id: `${turn.turnId}_a`,
+        content: turn.content,
+        role: "assistant",
+        reasoning: turn.reasoning || undefined,
+        errorMsg: turn.errorMsg || undefined,
+        turnId: turn.turnId,
+      });
+    }
   }
   return messages;
 }
@@ -167,8 +173,12 @@ export function useHistory() {
 
   const groups = useMemo(() => {
     const grouped = new Map<string, typeof list>();
-    for (const item of [...list].sort((a, b) => b.createdAt - a.createdAt)) {
-      const label = getHistoryGroupLabel(item.createdAt);
+    // 与服务端列表口径一致：按 updatedAt 倒序分组
+    const sorted = [...list].sort(
+      (a, b) => parseTimestamp(b.updatedAt) - parseTimestamp(a.updatedAt),
+    );
+    for (const item of sorted) {
+      const label = getHistoryGroupLabel(parseTimestamp(item.updatedAt));
       grouped.set(label, [...(grouped.get(label) || []), item]);
     }
     return [...grouped.entries()].map(([label, items]) => ({ label, items }));

@@ -70,8 +70,9 @@ class ChatDoneData(BaseModel):
 
 # SSE start 事件携带的元信息
 class ChatStartData(BaseModel):
-    msgId: str = Field(..., description="本次回答的消息 id")
+    # 字段命名与历史记录（history_turns）保持同一套词汇：
+    #   turnId        本轮唯一标识，与落库后的 turn_id 一致
+    #   queryAt       提问时刻（Unix 秒），与落库后的 query_at 同一时刻
+    turnId: str = Field(..., description="本轮对话唯一标识（与历史记录 turn_id 一致）")
     conversationId: str = Field(..., description="会话 id")
-    model: str = Field(..., description="本次使用的模型")
-    createdAt: int = Field(..., description="开始时间戳 (Unix 秒)")
-    traceId: str = Field(..., description="链路追踪 id")
+    queryAt: int = Field(..., description="提问时间戳 (Unix 秒)")

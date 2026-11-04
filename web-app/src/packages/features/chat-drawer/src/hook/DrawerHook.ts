@@ -21,7 +21,7 @@ export function useDrawerHook() {
     toggle: header.toggle,
     list: history.list,
     groups: history.groups,
-    activeId: history.activeId,
+    activeConversationId: history.activeConversationId,
     account: account.account,
     openSearch: search.openSearch,
     openAccount: account.openAccount,
