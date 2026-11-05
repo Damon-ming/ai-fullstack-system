@@ -14,6 +14,12 @@ export interface ChatMessage {
   /** 消息正文（用户提问 / 助手回答） */
   content: string;
   role: "user" | "assistant";
+  /**
+   * 是否仍在等待服务端交付（占位态）。
+   * 用显式标记而不是「content === 占位文案」判断：模型真实输出
+   * 可能与占位文案相同，字符串比较会误判。
+   */
+  pending?: boolean;
   /** 推理过程文本（SSE reasoning 事件累加），正文回答在 content */
   reasoning?: string;
   /** 是否正在输出 reasoning */

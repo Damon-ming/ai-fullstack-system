@@ -9,6 +9,9 @@ import {
   useRemoveHistoryMutation,
 } from "../api";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
+import { createLogger } from "@ming/core-log";
+
+const log = createLogger("feature-history/hook");
 
 /** 与 @ming/store 的 ChatMessage 结构兼容（纯类型，避免 feature → store 反向依赖） */
 export interface HistoryChatMessage {
@@ -18,6 +21,12 @@ export interface HistoryChatMessage {
   reasoning?: string;
   errorMsg?: string;
   turnId?: string;
+  /** 提问时刻（Unix 秒），与流式 start 事件口径一致，供 UI 渲染时间戳 */
+  queryAt?: number;
+  /** 历史轮次已结束推理，标题显示「推理过程」 */
+  isReasoning?: boolean;
+  /** 与流式收尾状态一致：推理区域默认折叠 */
+  reasoningCollapsed?: boolean;
 }
 
 // 内部类型 —— 用于数据解包函数参数（后端统一 camelCase，无需双口径兼容）
@@ -51,6 +60,13 @@ function parseTimestamp(raw: unknown): number {
   if (!raw) return Date.now();
   const ms = new Date(raw as string).getTime();
   return Number.isNaN(ms) ? Date.now() : ms;
+}
+
+/** ISO 时间字符串 → Unix 秒；空值/非法值返回 undefined（不展示时间戳，而不是显示当前时间） */
+function parseQueryAt(raw: unknown): number | undefined {
+  if (!raw) return undefined;
+  const ms = new Date(raw as string).getTime();
+  return Number.isNaN(ms) ? undefined : Math.floor(ms / 1000);
 }
 
 function unpackDetail(res: DataEnvelope | undefined): unknown {
@@ -90,9 +106,15 @@ function parseTurns(raw: unknown): HistoryTurn[] {
 }
 
 async function fetchAndUnpackTurns(id: string): Promise<HistoryTurn[]> {
-  const res = await fetchTurns(id);
-  const detail = unpackDetail(res) as { turns?: unknown } | undefined;
-  return parseTurns(detail?.turns);
+  try {
+    const res = await fetchTurns(id);
+    const detail = unpackDetail(res) as { turns?: unknown } | undefined;
+    return parseTurns(detail?.turns);
+  } catch (e) {
+    // 拉取失败按空会话处理：调用方仍需切换视图，不能静默保留旧会话内容
+    log.error("fetch turns failed", e);
+    return [];
+  }
 }
 
 /**
@@ -118,6 +140,10 @@ export function turnsToChatMessages(
         reasoning: turn.reasoning || undefined,
         errorMsg: turn.errorMsg || undefined,
         turnId: turn.turnId,
+        queryAt: parseQueryAt(turn.queryAt),
+        // 历史轮次已是终态：标题用「推理过程」，折叠口径与流式正文开始时一致
+        isReasoning: false,
+        reasoningCollapsed: true,
       });
     }
   }

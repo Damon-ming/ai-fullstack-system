@@ -41,6 +41,10 @@ class BaseLLMFailedData(BaseModel):
     """全局失败业务数据基类：可放全局通用的错误附加信息"""
 
     error_msg: str = Field(..., description="全局错误描述")
+    # 会话 id：拦截 / 失败轮次也可能已落库，回传后客户端才能把后续轮次追加到同一会话
+    conversationId: str | None = Field(
+        None, description="会话 id（失败轮次已落库时下发）"
+    )
 
 
 StreamDataT = TypeVar("StreamDataT")

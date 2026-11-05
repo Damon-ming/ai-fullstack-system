@@ -4,6 +4,8 @@ import { sendChatRoomMessageFn } from "../api";
 import type { ChatRoomRequest } from "../api/types";
 import { useTranslation } from "@ming/i18n";
 import { createLogger } from "@ming/core-log";
+import { ErrorCode } from "@ming/biz-common-net-api";
+import { resolveChatErrorMessage } from "./useChatSendStreamHook";
 
 const log = createLogger("chat-chatroom/hook/sendNormal");
 
@@ -49,7 +51,13 @@ export function useChatSendNormalHook() {
     setMessages((items) => [
       ...items,
       { id: userMsgId, content: query, role: "user" },
-      { id: assistantMsgId, content: placeholder, role: "assistant" },
+      // pending 标记占位态，避免依赖「content === 占位文案」的字符串比较
+      {
+        id: assistantMsgId,
+        content: placeholder,
+        role: "assistant",
+        pending: true,
+      },
     ]);
     setInput("");
     setSending(true);
@@ -77,12 +85,11 @@ export function useChatSendNormalHook() {
                   content: result.content,
                   // 推理文本随正文一并下发；为空则不写，避免空气泡清理误判
                   reasoning: result.reasoning || undefined,
+                  pending: false,
                 }
               : msg,
           ),
         );
-        // 服务端已落库 → 通知历史列表刷新
-        markTurnSaved();
       }
     } catch (e) {
       // 被主动取消时不显示错误
@@ -90,26 +97,48 @@ export function useChatSendNormalHook() {
         log.debug("sendNormal aborted by user");
         return;
       }
-      const errMsg =
-        (e instanceof Error
-          ? e.message
-          : (e as { data?: { error_msg?: string } })?.data?.error_msg) ?? "";
-      // 与流式链路保持一致：content 只承载正文，错误单独标记
+      const err = e as {
+        code?: number;
+        data?: { error_msg?: string; conversationId?: string };
+      };
+      const errMsg = resolveChatErrorMessage(err ?? {}, {
+        network: t("error.network"),
+        server: t("error.sendFailed"),
+      });
+      // 拦截轮次：服务端把拦截文案作为正文落库（不是 error_msg），
+      // 客户端按正文展示，与流式拦截、历史重载保持同一形态
+      const isBlocked =
+        err?.code === ErrorCode.CHAT.INPUT_BLOCKED ||
+        err?.code === ErrorCode.CHAT.GUARDRAIL_BLOCKED;
+      // 失败轮次服务端已落库（finally 兜底）：回填会话 id，后续轮次追加到同一会话
+      const conversationId = err?.data?.conversationId;
+      if (conversationId && !activeConversationId) {
+        setActiveConversationId(conversationId);
+      }
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMsgId ? { ...msg, errorMsg: errMsg } : msg,
+          msg.id === assistantMsgId
+            ? // 拦截文案有值才按正文展示；为空回退 errorMsg，避免占位消息被清理后丢失这轮
+              isBlocked && errMsg
+              ? { ...msg, content: errMsg, pending: false }
+              : { ...msg, errorMsg: errMsg, pending: false }
+            : msg,
         ),
       );
     } finally {
       setAbortController(null);
       setSending(false);
-      // 空气泡清理：服务端未交付任何内容（无正文 / 推理 / 异常提示）时移除占位消息
+      // 无条件刷新历史列表：落库可能发生在成功 / 失败 / 取消任一路径，
+      // 只有向服务端对齐才能保证抽屉内容与 DB 一致
+      markTurnSaved();
+      // 空气泡清理：与 DB 落库口径一致（content || reasoning || error_msg），
+      // 未交付任何内容时移除占位消息；pending 标记代替占位文案字符串比较
       setMessages((prev) =>
         prev.filter((msg) => {
           if (msg.id !== assistantMsgId) return true;
-          const hasContent =
-            Boolean(msg.content) && msg.content !== placeholder;
-          return hasContent || Boolean(msg.reasoning) || Boolean(msg.errorMsg);
+          return (
+            !msg.pending || Boolean(msg.reasoning) || Boolean(msg.errorMsg)
+          );
         }),
       );
     }

@@ -11,25 +11,29 @@ export function useDrawerHistoryHook() {
   const setActiveConversationId = useHistoryStore(
     (s) => s.setActiveConversationId,
   );
-  const beginLoad = useHistoryStore((s) => s.beginLoad);
-  const loading = useHistoryStore((s) => s.loading);
   const setMessages = useChatMessageStore((s) => s.setMessages);
   const abortStream = useChatMessageStore((s) => s.abortStream);
   const resetSession = useChatUiStore((s) => s.resetSession);
-  const { list, groups, getTurns, remove, hasMore, loadMore, isLoadingMore } =
-    useHistory();
+  const {
+    list,
+    groups,
+    getTurns,
+    remove,
+    hasMore,
+    loadMore,
+    isLoadingMore,
+    loading,
+  } = useHistory();
 
   const selectChat = async (id: string) => {
     // 切换会话前取消进行中的流，避免旧流的 sending 状态锁住新会话
     abortStream();
+    // 无论有无轮次都切换视图：空会话 / 拉取失败是合法状态，
+    // 静默保留旧会话内容会让用户误以为在看新会话
     const turns = await getTurns(id);
-    const saved = turnsToChatMessages(turns);
-    if (saved.length) {
-      beginLoad();
-      setMessages(saved);
-      setActiveConversationId(id);
-      resetSession();
-    }
+    setMessages(turnsToChatMessages(turns));
+    setActiveConversationId(id);
+    resetSession();
   };
 
   const deleteHistory = (id: string) => {

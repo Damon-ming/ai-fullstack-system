@@ -34,8 +34,7 @@ class ChatTurnRecorder:
         recorder.add_content(text)                    # 拦截文案 / 同步正文
         recorder.set_error(msg)                       # 失败轮次
         ok = await recorder.persist()
-        if not recorder.attempted:                    # finally 兜底
-            await recorder.persist()
+        await recorder.ensure_persisted()             # finally 兜底（未成功才重试）
     """
 
     def __init__(
@@ -60,6 +59,8 @@ class ChatTurnRecorder:
         self._error_msg: str | None = None
 
         self.attempted = False
+        self.succeeded = False
+        self._retried = False
 
     # ---- 内容累积 -------------------------------------------------------
 
@@ -115,13 +116,18 @@ class ChatTurnRecorder:
         """所属会话 id（拦截轮次也要落库，需要会话归属）。"""
         return self._conversation_id
 
+    @property
+    def query_at(self) -> datetime:
+        """提问时刻（请求到达即采集），与落库字段、start 事件下发的是同一时刻。"""
+        return self._query_at
+
     # ---- 落库 -----------------------------------------------------------
 
     async def persist(self) -> bool:
         """把本轮已交付内容落库，返回是否写入成功。
 
-        只尝试一次：重复调用直接返回 False，由调用方用 attempted
-        判断是否需要 finally 兜底。
+        只尝试一次：重复调用直接返回上一次结果，由调用方用 succeeded
+        判断是否需要 finally 兜底重试。
 
         DB 存的就是服务端实际交付给客户端的内容：正文 + 推理 + 异常提示，
         不含堆栈 / 错误码 / 日志。
@@ -129,15 +135,34 @@ class ChatTurnRecorder:
         保证「客户端看到的」与「DB 里的」是同一轮。
         """
         if self.attempted:
-            return False
+            return self.succeeded
         self.attempted = True
         try:
-            return await asyncio.get_running_loop().run_in_executor(
-                None, self._persist_sync
+            ok = bool(
+                await asyncio.get_running_loop().run_in_executor(
+                    None, self._persist_sync
+                )
             )
         except Exception:
             logger.exception("轮次落库异常 | conversation_id=%s", self._conversation_id)
             return False
+        self.succeeded = ok
+        return ok
+
+    async def ensure_persisted(self) -> bool:
+        """确保本轮已落库：未成功时重试一次（兜底）。
+
+        成功路径已落库 → 直接返回 True；未尝试或上次失败 → 重试一次。
+        瞬时 DB 故障不应让一轮已交付的回答丢失（append_turn 内部已有
+        重试，这里是第二道兜底）。重试只发生一次，避免失败路径无限重试。
+        """
+        if self.succeeded:
+            return True
+        if self._retried:
+            return False
+        self._retried = True
+        self.attempted = False
+        return await self.persist()
 
     def _persist_sync(self) -> bool:
         """同步落库（在线程池中执行）。"""

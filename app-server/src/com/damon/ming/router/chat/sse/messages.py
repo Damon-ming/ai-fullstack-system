@@ -10,6 +10,7 @@ SSE 业务消息工厂 —— 统一构造 StreamMessage 并序列化。
 
 import json
 import uuid
+from datetime import datetime
 
 from src.com.damon.ming.ai.schemas.response import (
     BaseLLMFailedData,
@@ -19,7 +20,7 @@ from src.com.damon.ming.ai.schemas.response import (
     StreamMessage,
 )
 from src.com.damon.ming.exception.error_codes import ErrorCode
-from src.com.damon.ming.utils.time import unix_timestamp
+from src.com.damon.ming.utils.time import to_unix_timestamp, unix_timestamp
 
 
 class SseMessageFactory:
@@ -38,17 +39,20 @@ class SseMessageFactory:
     def get_start_data(
         turn_id: str,
         conversation_id: str | None = None,
+        query_at: datetime | None = None,
     ) -> ChatStartData:
         """构造 start 事件的元数据。
 
         turn_id 由调用方生成，与落库后的 history_turns.turn_id 保持一致；
         conversation_id 由调用方解析：新建会话时由 new_conversation_id() 生成，
-        已有会话时沿用客户端回传的 id，保证一个会话内多轮共享同一 id。
+        已有会话时沿用客户端回传的 id，保证一个会话内多轮共享同一 id；
+        query_at 由调用方传入落库用的同一时刻，保证 start 事件与 DB 的
+        query_at 完全一致（而不是在发事件时重新取当前时间）。
         """
         return ChatStartData(
             turnId=turn_id,
             conversationId=conversation_id or SseMessageFactory.new_conversation_id(),
-            queryAt=unix_timestamp(),
+            queryAt=to_unix_timestamp(query_at) if query_at else unix_timestamp(),
         )
 
     @staticmethod

@@ -20,6 +20,15 @@ def unix_timestamp() -> int:
     return int(datetime.now(UTC).timestamp())
 
 
+def to_unix_timestamp(dt: datetime) -> int:
+    """datetime → Unix 时间戳（秒）。
+
+    把已采集的时刻（如落库用的 query_at）原样下发给客户端，
+    保证「客户端看到的」与「DB 里的」是同一时刻。
+    """
+    return int(dt.timestamp())
+
+
 def iso_format(dt: datetime | None) -> str:
     """datetime → ISO8601 字符串，None 返回空串。
 

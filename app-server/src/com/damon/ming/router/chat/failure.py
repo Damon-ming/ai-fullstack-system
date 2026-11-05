@@ -13,11 +13,17 @@ from src.com.damon.ming.ai.schemas.response import (
 from src.com.damon.ming.router.chat.sse import SseMessageFactory
 
 
-def chat_failure(code: int, msg: str) -> BaseLLMFailedResponse[BaseLLMFailedData]:
-    """构造 chat 链路的统一失败响应（同步返回体）。"""
+def chat_failure(
+    code: int, msg: str, conversation_id: str | None = None
+) -> BaseLLMFailedResponse[BaseLLMFailedData]:
+    """构造 chat 链路的统一失败响应（同步返回体）。
+
+    conversation_id 在轮次已落库时回传（拦截 / 超时 / 未知异常），
+    客户端据此回填会话并把后续轮次追加到同一会话。
+    """
     return BaseLLMFailedResponse[BaseLLMFailedData](
         code=code,
-        data=BaseLLMFailedData(error_msg=msg),
+        data=BaseLLMFailedData(error_msg=msg, conversationId=conversation_id),
     )
 
 

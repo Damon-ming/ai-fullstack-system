@@ -26,7 +26,7 @@ export function chatUploadHook() {
       const failedFiles = res?.failed_files ?? [];
       finishUpload("success", successFiles, duplicateFiles, failedFiles);
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : "CLIENT:Upload failed";
+      const errMsg = e instanceof Error ? e.message : "Upload failed";
       setError(errMsg);
       finishUpload("error");
     } finally {

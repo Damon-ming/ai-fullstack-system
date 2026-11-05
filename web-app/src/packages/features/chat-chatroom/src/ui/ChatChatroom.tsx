@@ -32,11 +32,7 @@ function MessageBody({
   const { t } = useTranslation("chat-chatroom");
 
   // 分支 1：流式占位 —— 服务端尚未返回正文 / 推理，且未出错
-  if (
-    message.content === t("reasoning") &&
-    !message.reasoning &&
-    !message.errorMsg
-  ) {
+  if (message.pending && !message.reasoning && !message.errorMsg) {
     return (
       <span aria-label={t("reasoningAria")}>
         {t("reasoning")}
@@ -87,7 +83,7 @@ function MessageBody({
             )}
           </div>
         )}
-        {message.content && message.content !== t("reasoning") && (
+        {message.content && !message.pending && (
           <div className="text-gray-800">
             <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
@@ -222,7 +218,7 @@ export const ChatChatroom: React.FC = () => {
                 {/* 助手消息元信息：提问时刻（与历史记录 queryAt 同一时刻） */}
                 {message.role === "assistant" &&
                   message.queryAt &&
-                  (message.content !== t("reasoning") || message.errorMsg) && (
+                  !message.pending && (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-400">
                       <span className="rounded-md bg-gray-50 px-2 py-1">
                         {formatMessageTime(message.queryAt)}

@@ -24,10 +24,7 @@ export function useChatPageHook() {
   const setActiveConversationId = useHistoryStore(
     (state) => state.setActiveConversationId,
   );
-  const historyLoading = useHistoryStore((state) => state.loading);
   const savedTurn = useHistoryStore((state) => state.savedTurn);
-  const finishHistoryLoad = useHistoryStore((state) => state.finishLoad);
-  const beginHistoryLoad = useHistoryStore((state) => state.beginLoad);
   const { getTurns, refresh } = useHistory();
   const setMessages = useChatMessageStore((state) => state.setMessages);
   const abortStream = useChatMessageStore((state) => state.abortStream);
@@ -44,11 +41,7 @@ export function useChatPageHook() {
   const knowledgeOpen = useKnowledgeStore((state) => state.open);
   const closeKnowledge = useKnowledgeStore((state) => state.closeKnowledge);
 
-  // 会话内容由服务端落库，前端不再写入，只负责刷新列表与复位加载标记
-  useEffect(() => {
-    if (historyLoading) finishHistoryLoad();
-  }, [historyLoading, finishHistoryLoad]);
-
+  // 会话内容由服务端落库，前端不再写入，只负责刷新列表
   useEffect(() => {
     if (savedTurn > 0) void refresh();
   }, [savedTurn, refresh]);
@@ -57,14 +50,12 @@ export function useChatPageHook() {
     // 切换会话前取消进行中的流：旧流消息按 id 隔离不会污染新会话，
     // 但全局 sending 会被旧流结束时的 setSending(false) 之外的状态锁住
     abortStream();
+    // 无论有无轮次都切换视图：空会话 / 拉取失败是合法状态，
+    // 静默保留旧会话内容会让用户误以为在看新会话
     const turns = await getTurns(id);
-    const saved = turnsToChatMessages(turns);
-    if (saved.length) {
-      beginHistoryLoad();
-      setMessages(saved);
-      setActiveConversationId(id);
-      resetSession();
-    }
+    setMessages(turnsToChatMessages(turns));
+    setActiveConversationId(id);
+    resetSession();
   };
   const saveAccount = () => {
     updateAccount(draftName);

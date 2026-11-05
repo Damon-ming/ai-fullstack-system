@@ -98,14 +98,23 @@ async def chat(request: Request, body: ChatRequest):
             # 拦截文案是用户实际看到的一轮回答，入库为正文（不是 error_msg）
             recorder.add_content(_blocked_message(input_blocked, ""))
             await recorder.persist()
-            return input_blocked
+            # 回传会话 id：拦截轮次已落库，客户端后续轮次应追加到同一会话
+            return chat_failure(
+                input_blocked.code,
+                _blocked_message(input_blocked, ""),
+                recorder.conversation_id,
+            )
 
         # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
         blocked = await check_guardrail_with_timeout(request.app.state, body.query)
         if blocked is not None:
             recorder.add_content(_blocked_message(blocked, ""))
             await recorder.persist()
-            return blocked
+            return chat_failure(
+                blocked.code,
+                _blocked_message(blocked, ""),
+                recorder.conversation_id,
+            )
 
         # ── Phase 2: RAG + 推理（超时预算覆盖整段，见 generate_answer） ──
         async for token in generate_answer(
@@ -116,11 +125,16 @@ async def chat(request: Request, body: ChatRequest):
         # ── 成功收尾：标记回答完成并落库（服务端写入，不依赖客户端回传） ──
         recorder.mark_answered(now())
         persist_ok = await recorder.persist()
+        # 报「保存失败」之前先兜底重试一次，避免瞬时故障误报
+        if not persist_ok:
+            persist_ok = await recorder.ensure_persisted()
 
         # 同步链路没有流式缓冲可展示，落库失败只能整体报错
         if not persist_ok:
             return chat_failure(
-                ErrorCode.CHAT.PERSIST_FAILED, t(I18nKey.CHAT_PERSIST_FAILED)
+                ErrorCode.CHAT.PERSIST_FAILED,
+                t(I18nKey.CHAT_PERSIST_FAILED),
+                recorder.conversation_id,
             )
 
         logger.info("同步聊天请求完成")
@@ -141,7 +155,9 @@ async def chat(request: Request, body: ChatRequest):
         timeout_msg = t(I18nKey.CHAT_TIMEOUT)
         recorder.set_error(timeout_msg)
         logger.warning("同步聊天请求超时")
-        return chat_failure(ErrorCode.CHAT.TIMEOUT, timeout_msg)
+        return chat_failure(
+            ErrorCode.CHAT.TIMEOUT, timeout_msg, recorder.conversation_id
+        )
     except asyncio.CancelledError:
         # 主动取消：不展示客户端文案，但已交付内容仍要落库
         logger.warning("【统计】同步聊天请求被客户端主动取消")
@@ -150,14 +166,13 @@ async def chat(request: Request, body: ChatRequest):
         err_msg = get_safe_error_message(e)
         recorder.set_error(err_msg)
         logger.exception("同步聊天请求未知异常")
-        return chat_failure(ErrorCode.CHAT.UNKNOWN, err_msg)
+        return chat_failure(ErrorCode.CHAT.UNKNOWN, err_msg, recorder.conversation_id)
     finally:
         # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
         ctx.cleanup()
-        # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」，
-        # 成功路径已在上面落库，这里不重复写
-        if not recorder.attempted:
-            await recorder.persist()
+        # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」。
+        # 成功路径已落库则跳过；未尝试或上次失败则再给一次机会
+        await recorder.ensure_persisted()
 
 
 @router.post("/chat/v1")
@@ -199,7 +214,9 @@ async def stream_chat_generator(
         yield emitter.emit(
             "start",
             SseMessageFactory.start(
-                SseMessageFactory.get_start_data(turn_id, conversation_id)
+                SseMessageFactory.get_start_data(
+                    turn_id, conversation_id, recorder.query_at
+                )
             ),
             retry=True,
         )
@@ -248,6 +265,9 @@ async def stream_chat_generator(
         # ── 成功收尾：标记回答完成并落库（服务端写入，不依赖客户端回传） ──
         recorder.mark_answered(now())
         persist_ok = await recorder.persist()
+        # 发「保存失败」事件之前先兜底重试一次，避免瞬时故障误报
+        if not persist_ok:
+            persist_ok = await recorder.ensure_persisted()
 
         # 回答已完整交付，但历史没写进去：用专属错误码区分「模型失败」
         # 与「存不下」，避免客户端把已显示的回答当成模型没答上
@@ -286,7 +306,6 @@ async def stream_chat_generator(
     finally:
         # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
         ctx.cleanup()
-        # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」，
-        # 成功路径已在上面落库，这里不重复写
-        if not recorder.attempted:
-            await recorder.persist()
+        # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」。
+        # 成功路径已落库则跳过；未尝试或上次失败则再给一次机会
+        await recorder.ensure_persisted()

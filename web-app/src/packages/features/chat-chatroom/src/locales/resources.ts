@@ -19,5 +19,6 @@ export interface ChatChatroomResources {
   error: {
     streamFailed: string;
     sendFailed: string;
+    network: string;
   };
 }

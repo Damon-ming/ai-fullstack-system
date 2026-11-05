@@ -8,6 +8,7 @@
   - 详情查询（会话 + 轮次列表，按 query_at 升序）
   - 写入（append_turn：轮次纯 INSERT，无读改写竞态）
 
+详情读取与删除均在事务内提交：会话头与轮次同生共死，不出现撕裂视图。
 存储：通过共享连接池持久化。
 """
 
@@ -28,6 +29,40 @@ logger = pin("history.store")
 
 def _db():
     return get_default_db()
+
+
+def _run_transaction(operation, *, description: str):
+    """在事务内执行 operation(conn)，失败按 retry_count 重试。
+
+    transaction() 本身不带重试（与 execute() 不同），这里补齐，
+    避免瞬时连接故障让一次读 / 写直接失败。
+    operation 正常返回即提交，抛异常则回滚。
+    """
+    db = _db()
+    attempts = max(db.retry_count, 1)
+    backoff = db.backoff_seconds
+    last_error: Exception | None = None
+
+    for attempt in range(attempts):
+        try:
+            with db.transaction() as conn:
+                return operation(conn)
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "%s 失败（尝试 %d/%d）| error=%s",
+                description,
+                attempt + 1,
+                attempts,
+                e,
+            )
+            if attempt + 1 < attempts:
+                time.sleep(backoff * (attempt + 1))
+
+    logger.error(
+        "%s 最终失败（已重试 %d 次）| error=%s", description, attempts, last_error
+    )
+    raise last_error
 
 
 # ---------------------------------------------------------------------------
@@ -84,52 +119,59 @@ def list_history(
 
 
 def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
-    """查询单个会话详情（含全部轮次，按提问时间升序）。"""
-    conv_rows = _db().execute(
-        "SELECT id, token, title, created_at, updated_at "
-        "FROM history_conversations "
-        "WHERE id = :id AND token = :token",
-        {"id": conversation_id, "token": token},
-        commit=False,
-        fetch=True,
-    )
-    if not conv_rows:
-        return None
-    c = conv_rows[0]
-    conversation = HistoryConversationRow(
-        id=c[0],
-        token=c[1],
-        title=c[2],
-        created_at=c[3],
-        updated_at=c[4],
-    )
+    """查询单个会话详情（含全部轮次，按提问时间升序）。
 
-    turn_rows = _db().execute(
-        "SELECT turn_id, conversation_id, query, reasoning, content, error_msg, "
-        "query_at, first_token_at, reasoning_done_at, answered_at "
-        "FROM history_turns "
-        "WHERE conversation_id = :cid "
-        "ORDER BY query_at ASC, turn_id ASC",
-        {"cid": conversation_id},
-        commit=False,
-        fetch=True,
-    )
-    turns = [
-        HistoryTurnRow(
-            turn_id=r[0],
-            conversation_id=r[1],
-            query=r[2],
-            reasoning=r[3],
-            content=r[4],
-            error_msg=r[5],
-            query_at=r[6],
-            first_token_at=r[7],
-            reasoning_done_at=r[8],
-            answered_at=r[9],
+    会话头与轮次在同一事务内读取：中途不会被并发删除 / 写入插队，
+    避免出现「会话已删、轮次还在」或反之的撕裂视图。
+    """
+
+    def _read(conn) -> HistoryDetailRow | None:
+        c = conn.execute(
+            text(
+                "SELECT id, token, title, created_at, updated_at "
+                "FROM history_conversations "
+                "WHERE id = :id AND token = :token"
+            ),
+            {"id": conversation_id, "token": token},
+        ).fetchone()
+        if c is None:
+            return None
+        conversation = HistoryConversationRow(
+            id=c[0],
+            token=c[1],
+            title=c[2],
+            created_at=c[3],
+            updated_at=c[4],
         )
-        for r in (turn_rows or [])
-    ]
-    return HistoryDetailRow(conversation=conversation, turns=turns)
+
+        turn_rows = conn.execute(
+            text(
+                "SELECT turn_id, conversation_id, query, reasoning, content, error_msg, "
+                "query_at, first_token_at, reasoning_done_at, answered_at "
+                "FROM history_turns "
+                "WHERE conversation_id = :cid "
+                "ORDER BY query_at ASC, turn_id ASC"
+            ),
+            {"cid": conversation_id},
+        ).fetchall()
+        turns = [
+            HistoryTurnRow(
+                turn_id=r[0],
+                conversation_id=r[1],
+                query=r[2],
+                reasoning=r[3],
+                content=r[4],
+                error_msg=r[5],
+                query_at=r[6],
+                first_token_at=r[7],
+                reasoning_done_at=r[8],
+                answered_at=r[9],
+            )
+            for r in (turn_rows or [])
+        ]
+        return HistoryDetailRow(conversation=conversation, turns=turns)
+
+    return _run_transaction(_read, description=f"历史详情读取 | id={conversation_id}")
 
 
 # ---------------------------------------------------------------------------
@@ -258,26 +300,36 @@ def append_turn(
 
 
 def delete_history(conversation_id: str, token: str) -> bool:
-    """删除会话及其全部轮次。返回是否实际删除（False = 不存在或无权限）。"""
-    rows = _db().execute(
-        "SELECT id FROM history_conversations WHERE id = :id AND token = :token",
-        {"id": conversation_id, "token": token},
-        commit=False,
-        fetch=True,
-    )
-    if not rows:
-        return False
+    """删除会话及其全部轮次。返回是否实际删除（False = 不存在或无权限）。
 
-    # turns 与 conversations 之间是逻辑外键，需显式级联
-    _db().execute(
-        "DELETE FROM history_turns WHERE conversation_id = :cid",
-        {"cid": conversation_id},
-        commit=True,
+    存在性校验与两条 DELETE 在同一事务内提交：要么全删，要么全不删，
+    不会出现「轮次已删、会话还在」的中间态。
+    """
+
+    def _delete(conn) -> bool:
+        rows = conn.execute(
+            text(
+                "SELECT id FROM history_conversations WHERE id = :id AND token = :token"
+            ),
+            {"id": conversation_id, "token": token},
+        ).fetchall()
+        if not rows:
+            return False
+
+        # turns 与 conversations 之间是逻辑外键，需显式级联
+        conn.execute(
+            text("DELETE FROM history_turns WHERE conversation_id = :cid"),
+            {"cid": conversation_id},
+        )
+        conn.execute(
+            text("DELETE FROM history_conversations WHERE id = :id AND token = :token"),
+            {"id": conversation_id, "token": token},
+        )
+        return True
+
+    deleted = _run_transaction(
+        _delete, description=f"历史会话删除 | id={conversation_id}"
     )
-    _db().execute(
-        "DELETE FROM history_conversations WHERE id = :id AND token = :token",
-        {"id": conversation_id, "token": token},
-        commit=True,
-    )
-    logger.info("历史会话已删除 | id=%s", conversation_id)
-    return True
+    if deleted:
+        logger.info("历史会话已删除 | id=%s", conversation_id)
+    return deleted
