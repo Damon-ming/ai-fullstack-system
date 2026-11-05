@@ -10,7 +10,7 @@
 
 不负责：
   - 解析头部（由 ContextMiddleware 统一处理）
-  - token/session 管理（由 router/account/token_store.py 负责）
+  - token/session 管理（由 router/account/service/account_service.py 负责）
 """
 
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -19,11 +19,7 @@ from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.request_context import get_ua_profile
 from src.com.damon.ming.middleware.ua_fingerprint import has_ua_changed_significantly
-from src.com.damon.ming.router.account.token_store import (
-    get_phone_by_token,
-    get_session,
-    is_token_valid,
-)
+from src.com.damon.ming.router.account.service.account_service import AccountService
 from src.com.damon.ming.schemas.response import BaseBizFailedData, BaseFailedResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -64,7 +60,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 ).model_dump(),
             )
 
-        if not is_token_valid(ctx.token):
+        if not AccountService.is_token_valid(ctx.token):
             logger.warning(
                 "认证失败: 无效 Token | path=%s token_prefix=%s",
                 request.url.path,
@@ -78,7 +74,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 ).model_dump(),
             )
 
-        phone = get_phone_by_token(ctx.token)
+        phone = AccountService.get_phone_by_token(ctx.token)
 
         # 3. 校验 session_id（SECURITY: 受保护路由强制要求非空 session_id，
         #    防止空 session_id 绕过加密归属校验 —— P1-1 修复）
@@ -92,13 +88,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
                 content=BaseFailedResponse(
                     code=ErrorCode.AUTH.MISSING_SESSION,
-                    data=BaseBizFailedData(
-                        error_msg=t(I18nKey.AUTH_INVALID_SESSION)
-                    ),
+                    data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_SESSION)),
                 ).model_dump(),
             )
         if ctx.session_id:
-            session = get_session(ctx.session_id)
+            session = AccountService.get_session_info(ctx.session_id)
             if session is None:
                 logger.warning(
                     "认证失败: 无效会话 | path=%s phone_prefix=%s session_id=%s",
@@ -120,7 +114,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     "认证失败: 会话归属不匹配 | path=%s token_phone=%s session_token_phone=%s",
                     request.url.path,
                     phone[:3] + "***" if phone else "unknown",
-                    get_phone_by_token(session.token)[:3] + "***"
+                    AccountService.get_phone_by_token(session.token)[:3] + "***"
                     if session.token
                     else "unknown",
                 )

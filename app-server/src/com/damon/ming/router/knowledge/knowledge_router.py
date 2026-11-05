@@ -17,7 +17,7 @@ from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
-from src.com.damon.ming.router.account.token_store import get_file_uploader_map
+from src.com.damon.ming.router.account.service.account_service import AccountService
 from src.com.damon.ming.router.knowledge.schemas.bean import KnowledgeNode
 from src.com.damon.ming.schemas.response import (
     BaseBizFailedData,
@@ -107,8 +107,8 @@ def get_knowledge_tree(request: Request):
     文件展示名已自动剥除 UUID_ 前缀，前端直接渲染即可。
     """
     try:
-        # 通过 account 模块获取上传者映射（不直接碰 account 的表）
-        uploader_map = get_file_uploader_map()
+        # 通过 account 服务层获取上传者映射（不直接碰 account 的表）
+        uploader_map = AccountService.get_file_uploader_map()
 
         knowledge_dir = Path(request.app.state.system_config.knowledge_dir)
         if not knowledge_dir.exists():

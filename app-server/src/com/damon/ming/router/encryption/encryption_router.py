@@ -21,7 +21,7 @@ from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
-from src.com.damon.ming.router.account.token_store import get_session, is_token_valid
+from src.com.damon.ming.router.account.service.account_service import AccountService
 from src.com.damon.ming.schemas.response import (
     BaseBizFailedData,
     BaseFailedResponse,
@@ -76,7 +76,7 @@ async def register_session(
     sm = request.state.session_service
 
     # 1. 校验 token
-    if not ctx.token or not is_token_valid(ctx.token):
+    if not ctx.token or not AccountService.is_token_valid(ctx.token):
         return BaseFailedResponse(
             code=ErrorCode.AUTH.INVALID_TOKEN,
             data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_TOKEN)),
@@ -89,7 +89,7 @@ async def register_session(
             data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_MISSING_SESSION)),
         )
 
-    session = get_session(ctx.session_id)
+    session = AccountService.get_session_info(ctx.session_id)
     if session is None:
         return BaseFailedResponse(
             code=ErrorCode.AUTH.INVALID_SESSION,
