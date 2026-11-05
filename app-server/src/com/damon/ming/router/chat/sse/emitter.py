@@ -12,7 +12,7 @@ SSE 发射器 —— 管理事件 id 递增，返回 dict 供 EventSourceRespons
     yield emitter.emit("start", SseMessageFactory.start(data), retry=True)
 
     async for token in stream:
-        event = "reasoning" if token.type == "reasoning" else "delta"
+        event = "reasoning" if token.type == STREAM_TYPE_REASONING else "delta"
         yield emitter.emit(event, SseMessageFactory.delta(ChatDeltaData(content=token.content)))
 
     yield emitter.emit("done", SseMessageFactory.done())

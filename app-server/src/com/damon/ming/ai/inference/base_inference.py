@@ -19,13 +19,17 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
 
+# StreamToken.type 取值 —— 流式 token 类型标识
+STREAM_TYPE_REASONING = "reasoning"
+STREAM_TYPE_CONTENT = "content"
+
 
 @dataclass
 class StreamToken:
     """流式输出的带标签 token —— 区分 reasoning 与 content。"""
 
     content: str
-    type: str = "content"  # "reasoning" | "content"
+    type: str = STREAM_TYPE_CONTENT  # STREAM_TYPE_REASONING | STREAM_TYPE_CONTENT
 
 
 @dataclass(frozen=True)

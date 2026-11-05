@@ -6,6 +6,8 @@ from typing import Any
 
 import ollama
 from src.com.damon.ming.ai.inference.base_inference import (
+    STREAM_TYPE_CONTENT,
+    STREAM_TYPE_REASONING,
     BaseInferenceService,
     InferenceParams,
     StreamToken,
@@ -99,10 +101,10 @@ class OllamaInference(BaseInferenceService):
                 msg = chunk.get("message", {})
                 thinking = msg.get("thinking", "")
                 if thinking:
-                    yield StreamToken(content=thinking, type="reasoning")
+                    yield StreamToken(content=thinking, type=STREAM_TYPE_REASONING)
                 content = msg.get("content", "")
                 if content:
-                    yield StreamToken(content=content, type="content")
+                    yield StreamToken(content=content, type=STREAM_TYPE_CONTENT)
         except asyncio.CancelledError:
             logger.warning("Ollama stream 收到取消信号，关闭ollama流")
             raise

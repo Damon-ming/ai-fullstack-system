@@ -7,6 +7,8 @@ from typing import Any
 
 from openai import AsyncOpenAI
 from src.com.damon.ming.ai.inference.base_inference import (
+    STREAM_TYPE_CONTENT,
+    STREAM_TYPE_REASONING,
     BaseInferenceService,
     InferenceParams,
     StreamToken,
@@ -111,10 +113,10 @@ class VLLMInference(BaseInferenceService):
                     delta = chunk.choices[0].delta
                     reasoning = getattr(delta, "reasoning_content", None)
                     if reasoning:
-                        yield StreamToken(content=reasoning, type="reasoning")
+                        yield StreamToken(content=reasoning, type=STREAM_TYPE_REASONING)
                     content = delta.content
                     if content:
-                        yield StreamToken(content=content, type="content")
+                        yield StreamToken(content=content, type=STREAM_TYPE_CONTENT)
         except asyncio.CancelledError:
             logger.warning("VLLM stream 收到取消信号，关闭流")
             raise
