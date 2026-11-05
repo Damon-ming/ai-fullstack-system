@@ -323,9 +323,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
           JSONResponse — 空 nonce 或重放命中（已构建好的错误响应，调用方应直接返回）
         """
         key_id = body_json.get("keyId", "")
-        session = await sm.get_session_async(
-            key_id, session_id=request.state.ctx.session_id
-        )
+        session = await sm.get_session(key_id, session_id=request.state.ctx.session_id)
         if session is None:
             return None
 
@@ -398,9 +396,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         key_id = meta_encrypted.get("keyId", "")
-        session = await sm.get_session_async(
-            key_id, session_id=request.state.ctx.session_id
-        )
+        session = await sm.get_session(key_id, session_id=request.state.ctx.session_id)
         if session is None:
             return None
 

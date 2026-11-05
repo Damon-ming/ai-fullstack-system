@@ -6,10 +6,10 @@
 因为存储实现属于业务层，不属于路由层。
 
 关联：
-  devices 表由 account_schema.py 管理，本模块不再重复建表。
+  devices 表由 router/tables/account/ 管理，本模块不再重复建表。
   encryption_sessions 通过 session_id 与 sessions 表关联。
 
-表定义统一在 app/tables.py，本文件只负责业务逻辑和调用。
+表定义统一在 router/tables/（本模块用裸 SQL 访问，不导入其 Table 对象）。
 """
 
 from sqlalchemy import text
@@ -19,9 +19,6 @@ from src.com.damon.ming.app.encryption.base_key_store import (
 )
 from src.com.damon.ming.db.db_config import DbConfig
 from src.com.damon.ming.db.db_connection import DbConnection
-from src.com.damon.ming.router.tables.encryption import (
-    encryption_sessions,
-)
 
 
 class PgKeyStore(BaseKeyStore):
@@ -62,7 +59,7 @@ class PgKeyStore(BaseKeyStore):
     def initialize(self) -> None:
         """建表 + 建索引（幂等）。
 
-        DDL 在 tables.py 的 create_all_tables() 中统一管理，
+        DDL 在 router/tables/ 的 create_all_tables() 中统一管理，
         此处无需重复执行。
         """
 
@@ -132,16 +129,19 @@ class PgKeyStore(BaseKeyStore):
     def get_session(
         self, key_id: str, session_id: str | None = None
     ) -> StoredSession | None:
-        query = encryption_sessions.select().where(
-            encryption_sessions.c.key_id == key_id,
-            encryption_sessions.c.expires_at > text("NOW()"),
-        )
         # SECURITY: 拒绝空 session_id，始终执行归属过滤（P1-1 修复）
         if not session_id:
             return None
-        query = query.where(encryption_sessions.c.session_id == session_id)
         with self._db.engine.connect() as conn:
-            result = conn.execute(query)
+            result = conn.execute(
+                text(
+                    "SELECT key_id, aes_key_enc, session_id, created_at, expires_at "
+                    "FROM encryption_sessions "
+                    "WHERE key_id = :kid AND expires_at > NOW() "
+                    "AND session_id = :sid"
+                ),
+                {"kid": key_id, "sid": session_id},
+            )
             row = result.fetchone()
         if row is None:
             return None

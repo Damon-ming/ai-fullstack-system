@@ -55,9 +55,6 @@ class SessionService:
 
         # 查找会话
         session = ss.get_session(key_id)
-
-        # 清理会话
-        ss.clear_session(session_id)
     """
 
     def __init__(self, rsa_key_pair: RSAKeyPair, kek: bytes, ttl_seconds: int) -> None:
@@ -76,10 +73,9 @@ class SessionService:
         self._key_to_session: dict[str, str] = {}
         self._lock = threading.RLock()
 
-    @property
-    def rsa_key_pair(self) -> RSAKeyPair:
-        """底层 RSA 密钥对（公钥分发仍直接操作）。"""
-        return self._rsa
+    def get_public_key_pem(self) -> bytes:
+        """RSA 公钥 PEM（分发给客户端）。"""
+        return self._rsa.get_public_key_pem()
 
     def set_key_store(self, store) -> None:
         """设置持久化存储后端（有 DB 时调用）。"""
@@ -175,75 +171,10 @@ class SessionService:
 
         return session
 
-    def get_session(
+    async def get_session(
         self, key_id: str, session_id: str | None = None
     ) -> SessionKey | None:
-        """查找会话。内存优先，miss 时从 DB 加载并回填。
-
-        Args:
-            key_id:     加密会话标识
-            session_id: 业务 session_id。非空时执行归属校验，
-                        仅返回属于该 session_id 的密钥（防跨用户密钥泄露）。
-        """
-        # SECURITY: 拒绝空 session_id，防止绕过归属校验（P1-1 修复）
-        if not session_id:
-            logger.warning("加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12])
-            return None
-
-        # 1. 内存查找
-        with self._lock:
-            session = self._sessions.get(key_id)
-            if session is not None:
-                if session.is_expired:
-                    del self._sessions[key_id]
-                    self._key_to_session.pop(key_id, None)
-                    return None
-                # 归属校验：检查内存映射
-                owner = self._key_to_session.get(key_id)
-                if owner and owner != session_id:
-                    logger.warning(
-                        "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
-                        key_id[:12],
-                        owner[:8],
-                        session_id[:8],
-                    )
-                    return None
-                session.touch()
-                return session
-
-        # 2. DB 查找（session_id 透传给 store 层执行过滤）
-        if self._key_store is None:
-            return None
-
-        stored = self._key_store.get_session(key_id, session_id=session_id)
-        if stored is None:
-            return None
-
-        try:
-            aes_key = unwrap_key(stored.aes_key_enc, self._kek)
-        except Exception:
-            return None
-
-        session = SessionKey(
-            key_id=stored.key_id,
-            aes_key=aes_key,
-            ttl_seconds=_stored_ttl_seconds(stored),
-            created_at=stored.created_at.timestamp(),
-        )
-        with self._lock:
-            self._sessions[key_id] = session
-            # 回填 DB 中的归属关系到内存映射
-            if stored.session_id:
-                self._key_to_session[key_id] = stored.session_id
-
-        return session
-
-    async def get_session_async(
-        self, key_id: str, session_id: str | None = None
-    ) -> SessionKey | None:
-        """异步查找会话（缓存 miss 时通过线程池查 DB，不阻塞事件循环）。
-
-        供 async 中间件/路由调用，替代同步 get_session()。
+        """查找会话（缓存 miss 时通过线程池查 DB，不阻塞事件循环）。
 
         Args:
             key_id:     加密会话标识
@@ -305,24 +236,6 @@ class SessionService:
             if stored.session_id:
                 self._key_to_session[key_id] = stored.session_id
         return session
-
-    def clear_session(self, session_id: str) -> None:
-        """清除某 session_id 关联的所有加密记录（内存 + DB）。"""
-        with self._lock:
-            keys = [k for k, s in self._key_to_session.items() if s == session_id]
-            for k in keys:
-                self._sessions.pop(k, None)
-                self._key_to_session.pop(k, None)
-        if self._key_store is not None:
-            self._key_store.replace_session(session_id, None)
-
-    def remove_session(self, key_id: str) -> None:
-        """删除指定会话（内存 + DB）。"""
-        with self._lock:
-            self._sessions.pop(key_id, None)
-            self._key_to_session.pop(key_id, None)
-        if self._key_store is not None:
-            self._key_store.remove_session(key_id)
 
     # ---- 内部清理 -------------------------------------------------------
 

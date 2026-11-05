@@ -272,20 +272,18 @@ class AppInitializer:
         self.db_conn = DbConnection(db_config)
         self.db_conn.initialize()  # pool 参数从 DbConfig 读取
         set_default_db(self.db_conn)
-        self._create_account_tables()
+        self._create_tables()
         logger.info("数据库引擎初始化完成（YAML 配置）")
 
-    def _create_account_tables(self) -> None:
-        """创建账号体系表（users / devices / sessions）。"""
+    def _create_tables(self) -> None:
+        """创建全部业务表（account / encryption / history / upload）。"""
         try:
-            from src.com.damon.ming.router.account.account_schema import (
-                create_account_tables,
-            )
+            from src.com.damon.ming.router.tables import create_all_tables
 
-            create_account_tables(self.db_conn)
-            logger.info("账号体系表创建完成")
+            create_all_tables(self.db_conn)
+            logger.info("业务表创建完成")
         except Exception as e:
-            logger.warning("账号体系表创建失败: %s", e)
+            logger.warning("业务表创建失败: %s", e)
 
     def _init_rate_limiter(self) -> None:
         """速率限制器：slowapi 封装，per-IP 限流。"""

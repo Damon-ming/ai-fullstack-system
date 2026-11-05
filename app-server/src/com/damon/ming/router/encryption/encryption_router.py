@@ -16,6 +16,7 @@
 import base64
 
 from fastapi import APIRouter, Body, Request
+from src.com.damon.ming.exception import EncryptionError
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
@@ -43,7 +44,7 @@ async def get_public_key(request: Request):
     再通过 POST /session/v1 注册会话。
     """
     sm = request.state.session_service
-    pem = sm.rsa_key_pair.get_public_key_pem()
+    pem = sm.get_public_key_pem()
     return BaseSuccessResponse(
         code=ErrorCode.OK,
         data={
@@ -114,6 +115,12 @@ async def register_session(
         enc_session = sm.register_and_replace(encrypted_aes_key_bytes, ctx.session_id)
     except ValueError as e:
         logger.warning("会话注册失败（密钥格式错误）: %s", e)
+        return BaseFailedResponse(
+            code=ErrorCode.ENCRYPT.INVALID_KEY_FORMAT,
+            data=BaseBizFailedData(error_msg=t(I18nKey.ENCRYPT_INVALID_KEY_FORMAT)),
+        )
+    except EncryptionError:
+        logger.warning("会话注册失败（密钥格式错误）")
         return BaseFailedResponse(
             code=ErrorCode.ENCRYPT.INVALID_KEY_FORMAT,
             data=BaseBizFailedData(error_msg=t(I18nKey.ENCRYPT_INVALID_KEY_FORMAT)),
