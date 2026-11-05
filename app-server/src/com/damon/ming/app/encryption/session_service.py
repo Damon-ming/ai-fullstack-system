@@ -194,13 +194,13 @@ class SessionService:
                     del self._sessions[key_id]
                     self._key_to_session.pop(key_id, None)
                     return None
-                # 归属校验：检查内存映射
+                # 归属校验：检查内存映射（无 owner 记录视为归属未知，一并拒绝）
                 owner = self._key_to_session.get(key_id)
-                if owner and owner != session_id:
+                if owner != session_id:
                     logger.warning(
                         "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
                         key_id[:12],
-                        owner[:8],
+                        (owner or "<none>")[:8],
                         session_id[:8],
                     )
                     return None
@@ -219,6 +219,9 @@ class SessionService:
         stored = await loop.run_in_executor(None, _db_lookup)
         if stored is None:
             return None
+        if not stored.session_id:
+            logger.warning("加密会话归属信息缺失，拒绝回填 | key_id=%s", key_id[:12])
+            return None
 
         try:
             aes_key = unwrap_key(stored.aes_key_enc, self._kek)
@@ -233,8 +236,7 @@ class SessionService:
         )
         with self._lock:
             self._sessions[key_id] = session
-            if stored.session_id:
-                self._key_to_session[key_id] = stored.session_id
+            self._key_to_session[key_id] = stored.session_id
         return session
 
     # ---- 内部清理 -------------------------------------------------------

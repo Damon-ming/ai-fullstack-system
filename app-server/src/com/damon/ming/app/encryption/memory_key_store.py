@@ -45,7 +45,7 @@ class MemoryKeyStore(BaseKeyStore):
             # SECURITY: 拒绝空 session_id，始终执行归属校验（P1-1 修复）
             if not session_id:
                 return None
-            if session.session_id and session.session_id != session_id:
+            if session.session_id != session_id:
                 return None
             return session
 
