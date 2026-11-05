@@ -1,11 +1,16 @@
 # app-server/src/com/damon/ming/router/chat/service/chat_core.py
 """
-RAG 检索 + prompt 组装 —— 同步 / 流式共用的推理前核心。
+推理核心 —— 同步 / 流式共用的 Phase 2 全流程。
 
-从 chat_router 抽出：两个端点原本各自重复这段「检索参考资料 → 拼 messages」，
-连同 system prompt 纯净性（防模板注入）的约束一起收敛到一处。
+从 chat_router 抽出：两个端点原本各自重复「RAG 检索 → 拼 messages →
+进推理信号量 → 逐 token 拉取」整段，连同 system prompt 纯净性（防模板注入）
+与超时预算口径的约束一起收敛到一处。
 """
 
+import asyncio
+from collections.abc import AsyncGenerator
+
+from src.com.damon.ming.ai.inference.base_inference import StreamToken
 from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
     ChatConfigLoader,
 )
@@ -22,7 +27,7 @@ logger = pin("chat.core")
 MAX_CONTEXT_TOKEN_BUDGET = 512
 
 
-async def build_prompt_messages(
+async def _build_prompt_messages(
     app_state, query: str, cancellation_token: CancellationToken | None = None
 ) -> list[dict[str, str]]:
     """RAG 检索参考资料并构造标准 messages 数组。
@@ -53,3 +58,30 @@ async def build_prompt_messages(
     ]
     logger.debug("prompt_messages:\n%s", prompt_messages)
     return prompt_messages
+
+
+async def generate_answer(
+    app_state,
+    query: str,
+    reason: bool,
+    cancellation_token: CancellationToken | None = None,
+) -> AsyncGenerator[StreamToken, None]:
+    """Phase 2 全流程：RAG 检索 → prompt 组装 → 推理，逐 token 产出。
+
+    超时预算覆盖 RAG + 推理整段（两端点共享同一口径）；
+    仅推理段进入 infer_sem，释放 RAG 等待期间的并发槽。
+    CancelledError 不加内层捕获，直接穿透到外层统一处理，
+    确保 infer_service 内部 finally 能正确关闭推理流。
+    """
+    async with asyncio.timeout(app_state.infer_timeout):
+        prompt_messages = await _build_prompt_messages(
+            app_state, query, cancellation_token
+        )
+        async with app_state.infer_sem:
+            async for token in app_state.infer_service.stream_generate(
+                model_name=app_state.llm_model_name,
+                messages=prompt_messages,
+                reason=reason,
+                options=dict(app_state.llm_options),
+            ):
+                yield token

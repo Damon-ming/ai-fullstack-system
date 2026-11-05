@@ -15,15 +15,13 @@
 
 import asyncio
 
-from src.com.damon.ming.ai.schemas.response import (
-    BaseLLMFailedData,
-    BaseLLMFailedResponse,
-)
+from src.com.damon.ming.ai.schemas.response import BaseLLMFailedResponse
 from src.com.damon.ming.ai.security import InputValidator
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.router.chat.failure import chat_failure
 
 logger = pin("chat.preflight")
 
@@ -42,11 +40,9 @@ def check_input(query: str) -> BaseLLMFailedResponse | None:
         logger.warning(
             "输入校验拦截 | i18n_key=%s | reason=%s", result.i18n_key, result.reason
         )
-        return BaseLLMFailedResponse[BaseLLMFailedData](
-            code=ErrorCode.CHAT.INPUT_BLOCKED,
-            data=BaseLLMFailedData(
-                error_msg=t(result.i18n_key, **result.i18n_params),
-            ),
+        return chat_failure(
+            ErrorCode.CHAT.INPUT_BLOCKED,
+            t(result.i18n_key, **result.i18n_params),
         )
     return None
 
@@ -60,11 +56,9 @@ async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | Non
     result = await guardrail.check(query)
     if not result.passed:
         logger.warning("护栏拦截用户输入 | reason=%s", result.reason)
-        return BaseLLMFailedResponse[BaseLLMFailedData](
-            code=ErrorCode.CHAT.GUARDRAIL_BLOCKED,
-            data=BaseLLMFailedData(
-                error_msg=result.reason or t(I18nKey.GUARDRAIL_BLOCKED),
-            ),
+        return chat_failure(
+            ErrorCode.CHAT.GUARDRAIL_BLOCKED,
+            result.reason or t(I18nKey.GUARDRAIL_BLOCKED),
         )
     return None
 

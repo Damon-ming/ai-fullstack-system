@@ -30,7 +30,7 @@ class ChatTurnRecorder:
     """记录一轮对话的交付内容，结束时一次性落库。
 
     用法：
-        recorder = ChatTurnRecorder(token, turn_id, conversation_id, query, query_at)
+        recorder = _create_recorder(request, body)    # turn_id 自动生成
         recorder.record_token(token_type, text, at)   # 流式逐 token
         recorder.add_content(text)                    # 拦截文案 / 同步正文
         recorder.set_error(msg)                       # 失败轮次
@@ -104,6 +104,18 @@ class ChatTurnRecorder:
         """已累积的推理文本（与流式链路同口径）。"""
         return "".join(self._reasoning_parts)
 
+    # ---- 标识读取 -------------------------------------------------------
+
+    @property
+    def turn_id(self) -> str:
+        """本轮 id（工厂自动生成，与 SSE start 事件下发的是同一个）。"""
+        return self._turn_id
+
+    @property
+    def conversation_id(self) -> str:
+        """所属会话 id（拦截轮次也要落库，需要会话归属）。"""
+        return self._conversation_id
+
     # ---- 落库 -----------------------------------------------------------
 
     async def persist(self) -> bool:
@@ -114,7 +126,7 @@ class ChatTurnRecorder:
 
         DB 存的就是服务端实际交付给客户端的内容：正文 + 推理 + 异常提示，
         不含堆栈 / 错误码 / 日志。
-        turn_id 由调用方生成，与 SSE start 事件下发的 turnId 一致，
+        turn_id 由工厂自动生成，与 SSE start 事件下发的 turnId 一致，
         保证「客户端看到的」与「DB 里的」是同一轮。
         """
         if self.attempted:
