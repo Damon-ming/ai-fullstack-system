@@ -5,7 +5,7 @@ import {
   fetchList,
   fetchTurns,
   removeFromServer,
-  useHistoryListQuery,
+  useHistoryListInfiniteQuery,
   useRemoveHistoryMutation,
 } from "../api";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
@@ -89,11 +89,6 @@ function parseTurns(raw: unknown): HistoryTurn[] {
   return raw.map(parseTurn);
 }
 
-function unpackList(res: DataEnvelope | undefined): HistoryItem[] {
-  const items = (res?.data ?? []) as unknown[];
-  return items.map(parseListRecord);
-}
-
 async function fetchAndUnpackTurns(id: string): Promise<HistoryTurn[]> {
   const res = await fetchTurns(id);
   const detail = unpackDetail(res) as { turns?: unknown } | undefined;
@@ -148,8 +143,17 @@ function getHistoryGroupLabel(createdAt: number): string {
 // ---------------------------------------------------------------------------
 
 export function useHistory() {
-  const listQuery = useHistoryListQuery();
-  const list = useMemo(() => unpackList(listQuery.data), [listQuery.data]);
+  const infiniteQuery = useHistoryListInfiniteQuery();
+  const pages = infiniteQuery.data?.pages;
+
+  // 累积所有已加载页（后端按 updated_at 倒序分页）
+  const list = useMemo(
+    () =>
+      (pages ?? [])
+        .flatMap((page) => (page.data ?? []) as unknown[])
+        .map(parseListRecord),
+    [pages],
+  );
 
   const removeMutation = useRemoveHistoryMutation();
 
@@ -173,12 +177,51 @@ export function useHistory() {
     return [...grouped.entries()].map(([label, items]) => ({ label, items }));
   }, [list]);
 
-  const refresh = useCallback(() => listQuery.refetch(), [listQuery.refetch]);
+  const refresh = useCallback(
+    () => infiniteQuery.refetch(),
+    [infiniteQuery.refetch],
+  );
+
+  /** 是否还有未加载的会话 */
+  const hasMore = infiniteQuery.hasNextPage ?? false;
+  const isLoadingMore = infiniteQuery.isFetchingNextPage;
+
+  /** 加载下一页（抽屉滚动到底部时调用） */
+  const loadMore = useCallback(() => {
+    if (infiniteQuery.hasNextPage && !infiniteQuery.isFetchingNextPage) {
+      void infiniteQuery.fetchNextPage();
+    }
+  }, [
+    infiniteQuery.hasNextPage,
+    infiniteQuery.isFetchingNextPage,
+    infiniteQuery.fetchNextPage,
+  ]);
+
+  /**
+   * 拉取全部会话（搜索等需要全量数据的场景）。
+   * 抽屉列表只加载最近几页，搜索必须覆盖全部历史，否则早期会话搜不到。
+   */
+  const loadAll = useCallback(async (): Promise<HistoryItem[]> => {
+    const all: HistoryItem[] = [];
+    const pageSize = 100;
+    // 上限 100 页（10000 条）防御异常情况下无限循环
+    for (let page = 1; page <= 100; page += 1) {
+      const res = await fetchList(page, pageSize);
+      const items = ((res.data ?? []) as unknown[]).map(parseListRecord);
+      all.push(...items);
+      if (items.length < pageSize) break;
+    }
+    return all;
+  }, []);
 
   return {
     list,
     groups,
-    loading: listQuery.isLoading,
+    loading: infiniteQuery.isLoading,
+    hasMore,
+    isLoadingMore,
+    loadMore,
+    loadAll,
     getTurns: fetchAndUnpackTurns,
     remove,
     /** 重新拉取历史列表（服务端新建会话后刷新抽屉用） */

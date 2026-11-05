@@ -1,11 +1,28 @@
+// web-app/src/packages/features/chat-drawer/src/ui/DrawerHistory.tsx
 import React from "react";
 import { useDrawerHistoryHook } from "../hook/useDrawerHistoryHook";
 import { useTranslation } from "@ming/i18n";
 
 export const DrawerHistory: React.FC = () => {
   const { t } = useTranslation("chat-drawer");
-  const { list, groups, activeConversationId, loading, selectChat } =
-    useDrawerHistoryHook();
+  const {
+    list,
+    groups,
+    activeConversationId,
+    loading,
+    selectChat,
+    hasMore,
+    loadMore,
+    isLoadingMore,
+  } = useDrawerHistoryHook();
+
+  // 滚动接近底部时加载下一页：历史会话可能远超首屏加载的 20 条
+  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (hasMore && scrollHeight - scrollTop - clientHeight < 40) {
+      loadMore();
+    }
+  };
 
   if (loading) {
     return (
@@ -26,7 +43,7 @@ export const DrawerHistory: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
       <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
         {t("history.title")}{" "}
         <span className="ml-1 text-gray-300">{list.length}</span>
@@ -54,6 +71,11 @@ export const DrawerHistory: React.FC = () => {
           </React.Fragment>
         ))}
       </nav>
+      {isLoadingMore && (
+        <div className="py-2 text-center text-xs text-gray-400">
+          {t("history.loading")}
+        </div>
+      )}
     </div>
   );
 };

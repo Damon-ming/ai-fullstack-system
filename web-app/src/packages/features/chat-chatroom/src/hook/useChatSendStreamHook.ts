@@ -1,4 +1,3 @@
-import { useRef, useCallback } from "react";
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { useHistoryStore } from "@ming/store/biz/history-state";
 import { streamChatRoomMessage } from "../api";
@@ -29,18 +28,9 @@ export function useChatSendStreamHook() {
     (s) => s.setActiveConversationId,
   );
   const markTurnSaved = useHistoryStore((s) => s.markTurnSaved);
-
-  /** 当前进行中的 SSE 请求控制器，用于主动取消 */
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  /** 取消当前进行中的 SSE 请求 */
-  const abortStream = useCallback(() => {
-    if (abortControllerRef.current) {
-      log.debug("abortStream triggered");
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-  }, []);
+  // 取消能力放在全局：切换会话时旧 hook 实例已丢失，只有全局能取消旧流
+  const abortStream = useChatMessageStore((s) => s.abortStream);
+  const setAbortController = useChatMessageStore((s) => s.setAbortController);
 
   const sendStream = async () => {
     const query = input.trim();
@@ -63,9 +53,9 @@ export function useChatSendStreamHook() {
     setSending(true);
 
     // 为本次请求创建独立的控制器（先取消上一次，防止并发）
-    abortControllerRef.current?.abort();
+    abortStream();
     const controller = new AbortController();
-    abortControllerRef.current = controller;
+    setAbortController(controller);
 
     let firstChunk = true;
     let streamFinished = false;
@@ -207,7 +197,7 @@ export function useChatSendStreamHook() {
         );
       }
     } finally {
-      abortControllerRef.current = null;
+      setAbortController(null);
       log.debug("sendStream finished", { streamFinished });
       // 无论正常完成、服务端 error 还是网络异常，都释放输入框和发送按钮状态。
       setSending(false);

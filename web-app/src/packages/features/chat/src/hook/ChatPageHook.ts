@@ -30,6 +30,7 @@ export function useChatPageHook() {
   const beginHistoryLoad = useHistoryStore((state) => state.beginLoad);
   const { getTurns, refresh } = useHistory();
   const setMessages = useChatMessageStore((state) => state.setMessages);
+  const abortStream = useChatMessageStore((state) => state.abortStream);
   const accountOpen = useAccountStore((state) => state.dialogOpen);
   const draftName = useAccountStore((state) => state.draftName);
   const setDraftName = useAccountStore((state) => state.setDraftName);
@@ -53,6 +54,9 @@ export function useChatPageHook() {
   }, [savedTurn, refresh]);
 
   const loadHistory = async (id: string) => {
+    // 切换会话前取消进行中的流：旧流消息按 id 隔离不会污染新会话，
+    // 但全局 sending 会被旧流结束时的 setSending(false) 之外的状态锁住
+    abortStream();
     const turns = await getTurns(id);
     const saved = turnsToChatMessages(turns);
     if (saved.length) {

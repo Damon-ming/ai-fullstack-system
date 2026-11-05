@@ -14,10 +14,14 @@ export function useDrawerHistoryHook() {
   const beginLoad = useHistoryStore((s) => s.beginLoad);
   const loading = useHistoryStore((s) => s.loading);
   const setMessages = useChatMessageStore((s) => s.setMessages);
+  const abortStream = useChatMessageStore((s) => s.abortStream);
   const resetSession = useChatUiStore((s) => s.resetSession);
-  const { list, groups, getTurns, remove } = useHistory();
+  const { list, groups, getTurns, remove, hasMore, loadMore, isLoadingMore } =
+    useHistory();
 
   const selectChat = async (id: string) => {
+    // 切换会话前取消进行中的流，避免旧流的 sending 状态锁住新会话
+    abortStream();
     const turns = await getTurns(id);
     const saved = turnsToChatMessages(turns);
     if (saved.length) {
@@ -41,5 +45,8 @@ export function useDrawerHistoryHook() {
     loading,
     selectChat,
     deleteHistory,
+    hasMore,
+    loadMore,
+    isLoadingMore,
   };
 }

@@ -1,4 +1,3 @@
-import { useRef, useCallback } from "react";
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { useHistoryStore } from "@ming/store/biz/history-state";
 import { sendChatRoomMessageFn } from "../api";
@@ -24,18 +23,9 @@ export function useChatSendNormalHook() {
   const markTurnSaved = useHistoryStore((s) => s.markTurnSaved);
   // 是否启用深度推理模式：与流式链路同口径，从全局开关读取
   const reason = useChatMessageStore((s) => s.reason);
-
-  /** 当前进行中的请求控制器，用于主动取消 */
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  /** 取消当前进行中的同步请求 */
-  const abortNormal = useCallback(() => {
-    if (abortControllerRef.current) {
-      log.debug("abortNormal triggered");
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-  }, []);
+  // 取消能力放在全局：切换会话时旧 hook 实例已丢失，只有全局能取消旧流
+  const abortNormal = useChatMessageStore((s) => s.abortStream);
+  const setAbortController = useChatMessageStore((s) => s.setAbortController);
 
   const sendNormal = async () => {
     const query = input.trim();
@@ -46,9 +36,9 @@ export function useChatSendNormalHook() {
     log.debug("sendNormal started", { queryLength: query.length });
 
     // 为本次请求创建独立的控制器（先取消上一次，防止并发）
-    abortControllerRef.current?.abort();
+    abortNormal();
     const controller = new AbortController();
-    abortControllerRef.current = controller;
+    setAbortController(controller);
 
     const userMsgId = `user-${Date.now()}`;
     const assistantMsgId = `assistant-${Date.now()}`;
@@ -111,7 +101,7 @@ export function useChatSendNormalHook() {
         ),
       );
     } finally {
-      abortControllerRef.current = null;
+      setAbortController(null);
       setSending(false);
       // 空气泡清理：服务端未交付任何内容（无正文 / 推理 / 异常提示）时移除占位消息
       setMessages((prev) =>

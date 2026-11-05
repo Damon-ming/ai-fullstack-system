@@ -45,6 +45,12 @@ export interface ChatMessageState {
   sending: boolean;
   /** 是否启用深度推理模式（全局开关，影响下次发送） */
   reason: boolean;
+  /**
+   * 当前进行中的请求控制器（流式 / 同步共用）。
+   * 放在全局而不是 hook 内：切换会话 / 新建会话时，
+   * 旧 hook 实例已随组件重挂载丢失，只有全局才能取消旧流。
+   */
+  abortController: AbortController | null;
   setInput: (input: string) => void;
   setSending: (sending: boolean) => void;
   setMessages: (
@@ -52,20 +58,34 @@ export interface ChatMessageState {
   ) => void;
   resetMessages: () => void;
   setReason: (reason: boolean) => void;
+  setAbortController: (controller: AbortController | null) => void;
+  /** 取消当前进行中的请求（流式中切换会话前调用） */
+  abortStream: () => void;
 }
 
-export const useChatMessageStore = createAppStore<ChatMessageState>((set) => ({
-  input: "",
-  messages: [],
-  sending: false,
-  reason: false,
-  setInput: (input) => set({ input }),
-  setSending: (sending) => set({ sending }),
-  setMessages: (updater) =>
-    set((state) => ({
-      messages:
-        typeof updater === "function" ? updater(state.messages) : updater,
-    })),
-  resetMessages: () => set({ input: "", messages: [], sending: false }),
-  setReason: (reason) => set({ reason }),
-}));
+export const useChatMessageStore = createAppStore<ChatMessageState>(
+  (set, get) => ({
+    input: "",
+    messages: [],
+    sending: false,
+    reason: false,
+    abortController: null,
+    setInput: (input) => set({ input }),
+    setSending: (sending) => set({ sending }),
+    setMessages: (updater) =>
+      set((state) => ({
+        messages:
+          typeof updater === "function" ? updater(state.messages) : updater,
+      })),
+    resetMessages: () => set({ input: "", messages: [], sending: false }),
+    setReason: (reason) => set({ reason }),
+    setAbortController: (controller) => set({ abortController: controller }),
+    abortStream: () => {
+      const controller = get().abortController;
+      if (controller) {
+        controller.abort();
+        set({ abortController: null });
+      }
+    },
+  }),
+);

@@ -21,10 +21,13 @@ const log = createLogger("history/api");
 // 纯 fetcher —— 只发请求 + 日志，返回完整 DataApiResponse 透传给 hook 层
 // ---------------------------------------------------------------------------
 
-export async function fetchList(): Promise<DataApiResponse<unknown[]>> {
-  log.debug("fetch history list");
+export async function fetchList(
+  page: number = 1,
+  pageSize: number = 20,
+): Promise<DataApiResponse<unknown[]>> {
+  log.debug("fetch history list", { page, pageSize });
   return dataApi.get<unknown[]>("/api/history/list/v1", {
-    params: { page: 1, pageSize: 100 },
+    params: { page, pageSize },
   });
 }
 

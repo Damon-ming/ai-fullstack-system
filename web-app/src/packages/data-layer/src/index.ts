@@ -10,6 +10,7 @@ export {
   useQuery,
   useMutation,
   useQueryClient,
+  useInfiniteQuery,
 } from "@tanstack/react-query";
 
 export type {
@@ -26,3 +27,6 @@ export type {
   BaseQueryOptions,
   BaseMutationOptions,
 } from "./types";
+
+// 分页数据类型 —— 与 useInfiniteQuery 配套，保持 data-layer 作为唯一网络抽象边界
+export type { InfiniteData } from "@tanstack/react-query";
