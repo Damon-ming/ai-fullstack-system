@@ -235,6 +235,24 @@ class SessionService:
             created_at=stored.created_at.timestamp(),
         )
         with self._lock:
+            # 竞态防护：回填前确认该 session 当前没有别的密钥。
+            # 若期间发生过重新注册，旧 key 已被 DB 删除，这里必须丢弃，
+            # 否则已吊销的 key 会在内存复活（内存与 DB 不再一致）。
+            newer = next(
+                (
+                    k
+                    for k, s in self._key_to_session.items()
+                    if s == session_id and k != key_id
+                ),
+                None,
+            )
+            if newer is not None:
+                logger.warning(
+                    "会话已重新注册，丢弃过期回填 | key_id=%s newer=%s",
+                    key_id[:12],
+                    newer[:12],
+                )
+                return None
             self._sessions[key_id] = session
             self._key_to_session[key_id] = stored.session_id
         return session
