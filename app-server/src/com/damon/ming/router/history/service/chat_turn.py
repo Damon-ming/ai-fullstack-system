@@ -92,6 +92,18 @@ class ChatTurnRecorder:
         """设置用户可见的异常提示（成功 / 主动取消为 None）。"""
         self._error_msg = msg
 
+    # ---- 内容读取 -------------------------------------------------------
+
+    @property
+    def content(self) -> str:
+        """已累积的正文（同步链路缓冲拼接后回传客户端）。"""
+        return "".join(self._content_parts)
+
+    @property
+    def reasoning(self) -> str:
+        """已累积的推理文本（与流式链路同口径）。"""
+        return "".join(self._reasoning_parts)
+
     # ---- 落库 -----------------------------------------------------------
 
     async def persist(self) -> bool:

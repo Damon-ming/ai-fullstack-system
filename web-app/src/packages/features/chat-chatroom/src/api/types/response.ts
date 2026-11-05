@@ -1,8 +1,10 @@
 import type { DataApiResponse } from "@ming/data-layer";
-/** 后端 LLM 实际返回内容（正文为纯文本，推理走 SSE reasoning 事件） */
+/** 后端 LLM 实际返回内容（正文为纯文本，推理文本随正文一并下发） */
 export interface ChatRoomResult {
-  /** 回答正文（纯文本，推理走 SSE reasoning 事件） */
+  /** 回答正文（纯文本） */
   content: string;
+  /** 推理过程文本；模型未进思考模式时为空串 */
+  reasoning?: string;
   /** 会话 id；新会话由服务端生成，客户端回填后用于后续轮次追加 */
   conversationId?: string;
 }

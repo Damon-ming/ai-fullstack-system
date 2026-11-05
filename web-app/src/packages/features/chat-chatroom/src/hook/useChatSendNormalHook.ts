@@ -22,6 +22,8 @@ export function useChatSendNormalHook() {
     (s) => s.setActiveConversationId,
   );
   const markTurnSaved = useHistoryStore((s) => s.markTurnSaved);
+  // 是否启用深度推理模式：与流式链路同口径，从全局开关读取
+  const reason = useChatMessageStore((s) => s.reason);
 
   /** 当前进行中的请求控制器，用于主动取消 */
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -65,7 +67,7 @@ export function useChatSendNormalHook() {
     try {
       const req: ChatRoomRequest = {
         query,
-        reason: false,
+        reason,
         // 已有会话则回传，服务端据此追加；新会话为空，由服务端生成
         conversationId: activeConversationId,
       };
@@ -80,7 +82,12 @@ export function useChatSendNormalHook() {
         setMessages((items) =>
           items.map((msg) =>
             msg.id === assistantMsgId
-              ? { ...msg, content: result.content }
+              ? {
+                  ...msg,
+                  content: result.content,
+                  // 推理文本随正文一并下发；为空则不写，避免空气泡清理误判
+                  reasoning: result.reasoning || undefined,
+                }
               : msg,
           ),
         );
