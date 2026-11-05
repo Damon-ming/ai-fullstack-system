@@ -160,7 +160,6 @@ class _Upload:
 class _History:
     """对话历史错误 (2 00 008 xxx)"""
 
-    SAVE_FAILED = _build(detail=1, business=Business.HISTORY)  # 200008001
     NOT_FOUND = _build(detail=2, business=Business.HISTORY)  # 200008002
     DELETE_FAILED = _build(detail=3, business=Business.HISTORY)  # 200008003
 

@@ -14,7 +14,6 @@ from src.com.damon.ming.router.history import history_store
 from src.com.damon.ming.router.history.schemas.bean import (
     HistoryDetailData,
     HistoryListItem,
-    HistoryTurnInput,
     HistoryTurnItem,
 )
 from src.com.damon.ming.utils.time import iso_format
@@ -82,22 +81,6 @@ class HistoryService:
         return _detail_to_data(row) if row else None
 
     @staticmethod
-    def save_history(
-        token: str,
-        title: str,
-        conversation_id: str | None,
-        turns: list[HistoryTurnInput],
-    ) -> HistoryDetailData | None:
-        """保存会话（客户端口径）：按 conversation_id 幂等 upsert，整体替换轮次。"""
-        row = history_store.save_history(
-            token=token,
-            conversation_id=conversation_id or "",
-            title=title.strip(),
-            turns=[t.model_dump() for t in turns],
-        )
-        return _detail_to_data(row) if row else None
-
-    @staticmethod
     def delete_history(
         conversation_id: str,
         token: str,
@@ -120,10 +103,10 @@ class HistoryService:
         answered_at: datetime,
         error_msg: str | None = None,
     ) -> str:
-        """写入一轮对话（服务端 chat 链路调用）。
+        """写入一轮对话。
 
-        服务端是会话数据的唯一写入方，不依赖客户端回传整段对话。
-        turn_id 由调用方生成，与 SSE start 事件下发的 turnId 一致。
+        本服务是会话数据的唯一写入方，不依赖客户端回传整段对话。
+        turn_id 由调用方生成，需全局唯一。
         返回实际会话 id；会话不属于当前 token 时为空串。
         """
         return history_store.append_turn(

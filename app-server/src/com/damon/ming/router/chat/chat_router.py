@@ -12,7 +12,7 @@ finally：清理请求上下文 + 未落库则兜底落库
   - preflight.py:   Phase 0/1 的检查能力（各 2 个调用点）
   - chat_core.py:   Phase 2 的 RAG+推理流程（2 个调用点，原先两份重复实现）
   - failure.py:     失败响应 / SSE error 事件构造（preflight 也要用）
-  - history/chat_turn.py: 本轮内容的累积与落库（history 服务自己的业务）
+  - service/chat_turn.py: 本轮内容的累积与落库（chat 自己的业务，字段对应 history_turns 表）
 """
 
 import asyncio
@@ -38,8 +38,8 @@ from src.com.damon.ming.router.chat.preflight import (
 )
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
 from src.com.damon.ming.router.chat.service.chat_core import generate_answer
+from src.com.damon.ming.router.chat.service.chat_turn import ChatTurnRecorder
 from src.com.damon.ming.router.chat.sse import SseEmitter, SseMessageFactory
-from src.com.damon.ming.router.history.service.chat_turn import ChatTurnRecorder
 from src.com.damon.ming.thread.pool_manager import RequestContext
 from src.com.damon.ming.utils.time import now
 from sse_starlette.sse import EventSourceResponse

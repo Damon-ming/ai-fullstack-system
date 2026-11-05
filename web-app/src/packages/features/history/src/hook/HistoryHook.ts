@@ -4,11 +4,8 @@ import type { HistoryItem, HistoryTurn } from "../api/types";
 import {
   fetchList,
   fetchTurns,
-  saveToServer,
-  addConversation,
   removeFromServer,
   useHistoryListQuery,
-  useSaveHistoryMutation,
   useRemoveHistoryMutation,
 } from "../api";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
@@ -154,15 +151,7 @@ export function useHistory() {
   const listQuery = useHistoryListQuery();
   const list = useMemo(() => unpackList(listQuery.data), [listQuery.data]);
 
-  const saveMutation = useSaveHistoryMutation();
   const removeMutation = useRemoveHistoryMutation();
-
-  const saveTurns = useCallback(
-    (title: string, turns: HistoryTurn[]) => {
-      saveMutation.mutate({ title, turns });
-    },
-    [saveMutation],
-  );
 
   const remove = useCallback(
     (id: string) => {
@@ -191,9 +180,7 @@ export function useHistory() {
     groups,
     loading: listQuery.isLoading,
     getTurns: fetchAndUnpackTurns,
-    saveTurns,
     remove,
-    add: addConversation,
     /** 重新拉取历史列表（服务端新建会话后刷新抽屉用） */
     refresh,
   };
@@ -203,7 +190,5 @@ export function useHistory() {
 export const historyActions = {
   list: fetchList,
   turns: fetchAndUnpackTurns,
-  saveTurns: saveToServer,
-  add: addConversation,
   remove: removeFromServer,
 };

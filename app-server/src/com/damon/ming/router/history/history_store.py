@@ -6,13 +6,12 @@
   - 按 token 隔离，不同用户互不干扰
   - 分页列表查询（不含轮次正文，按 updated_at 倒序）
   - 详情查询（会话 + 轮次列表，按 query_at 升序）
-  - 服务端 chat 链路写入（append_turn：轮次纯 INSERT，无读改写竞态）
+  - 写入（append_turn：轮次纯 INSERT，无读改写竞态）
 
 存储：通过共享连接池持久化。
 """
 
 import time
-import uuid
 from datetime import datetime
 
 from sqlalchemy import text
@@ -23,7 +22,6 @@ from src.com.damon.ming.router.tables.history import (
     HistoryDetailRow,
     HistoryTurnRow,
 )
-from src.com.damon.ming.utils.time import now
 
 logger = pin("history.store")
 
@@ -135,7 +133,7 @@ def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
 
 
 # ---------------------------------------------------------------------------
-# 写入：服务端 chat 链路（append_turn）
+# 写入：append_turn
 # ---------------------------------------------------------------------------
 
 
@@ -155,13 +153,12 @@ def append_turn(
 ) -> str:
     """写入一轮问答，返回会话 id（写入被拒绝时返回空串）。
 
-    服务端是会话数据的唯一写入方：
+    本模块是会话数据的唯一写入方：
       - 会话不存在 → 按 conversation_id 新建
       - 会话已存在 → 仅刷新 updated_at
     会话必须属于当前 token，否则整轮写入被拒绝。
 
-    turn_id 由调用方（chat 链路）生成，与 SSE start 事件下发的 turnId 一致，
-    保证「客户端看到的」与「DB 存的是」同一轮。
+    turn_id 由调用方生成，需全局唯一。
 
     轮次为纯 INSERT，不像旧的「读出 messages → 拼接 → 写回」那样存在
     并发覆盖竞态。
@@ -253,89 +250,6 @@ def append_turn(
         last_error,
     )
     raise last_error
-
-
-# ---------------------------------------------------------------------------
-# 写入：客户端保存口径（save_history）
-# ---------------------------------------------------------------------------
-
-
-def save_history(
-    token: str,
-    conversation_id: str,
-    title: str,
-    turns: list[dict],
-) -> HistoryDetailRow | None:
-    """保存会话（客户端口径）：按 conversation_id 幂等 upsert，整体替换轮次。
-
-    conversation_id 为空时新建会话。
-    token 级时刻（first_token_at 等）客户端无法观测：query_at/answered_at
-    由服务端盖章，first_token_at 留空，reasoning_done_at 仅在存在推理文本时
-    以保存时刻占位。
-    """
-    if not conversation_id:
-        conversation_id = f"conv_{uuid.uuid4().hex[:8]}"
-
-    current = now()
-    rows = _db().execute(
-        "INSERT INTO history_conversations (id, token, title, created_at, updated_at) "
-        "VALUES (:id, :token, :title, :now, :now) "
-        "ON CONFLICT (id) DO UPDATE SET "
-        "title = EXCLUDED.title, updated_at = EXCLUDED.updated_at "
-        "WHERE history_conversations.token = EXCLUDED.token "
-        "RETURNING id",
-        {
-            "id": conversation_id,
-            "token": token,
-            "title": title,
-            "now": current,
-        },
-        commit=True,
-        fetch=True,
-    )
-    # 会话已存在但属于他人时 WHERE 不命中，必须先拦住再动轮次
-    if not rows:
-        logger.warning(
-            "会话不存在或不属于当前用户，已跳过保存 | id=%s", conversation_id
-        )
-        return None
-
-    _db().execute(
-        "DELETE FROM history_turns WHERE conversation_id = :cid",
-        {"cid": conversation_id},
-        commit=True,
-    )
-
-    cleaned = [t for t in turns if isinstance(t, dict)]
-    for t in cleaned:
-        reasoning = str(t.get("reasoning") or "")
-        error_msg = str(t.get("errorMsg") or "")
-        _db().execute(
-            "INSERT INTO history_turns "
-            "(turn_id, conversation_id, query, reasoning, content, error_msg, "
-            " query_at, first_token_at, reasoning_done_at, answered_at) "
-            "VALUES (:turn_id, :conversation_id, :query, :reasoning, :content, "
-            " :error_msg, :now, NULL, :reasoning_done_at, :now)",
-            {
-                "turn_id": f"turn_{uuid.uuid4().hex[:12]}",
-                "conversation_id": conversation_id,
-                "query": str(t.get("query", "")),
-                "reasoning": reasoning or None,
-                "content": str(t.get("content", "")),
-                "error_msg": error_msg or None,
-                "now": current,
-                "reasoning_done_at": current if reasoning else None,
-            },
-            commit=True,
-        )
-
-    logger.info(
-        "会话已保存 | id=%s | title=%s | turns=%d",
-        conversation_id,
-        title,
-        len(cleaned),
-    )
-    return get_history(conversation_id, token)
 
 
 # ---------------------------------------------------------------------------

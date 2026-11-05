@@ -1,15 +1,14 @@
-# app-server/src/com/damon/ming/router/history/service/chat_turn.py
+# app-server/src/com/damon/ming/router/chat/service/chat_turn.py
 """
-一轮对话的落库记录器 —— 服务端 chat 链路专用。
+一轮对话的落库记录器 —— chat 链路专用。
 
-把原先内嵌在 chat_router 的「累积本轮交付内容 → 一次性落库」模板逻辑
-收拢到 history 服务层：
+chat_router 把本轮交付内容喂进来，结束时一次性落库：
   - 标题口径：用户问题前 40 字符（与历史列表展示一致）
   - 落库走 run_in_executor，同步 DB I/O 不阻塞事件循环
   - 异常吞掉返回 bool（落库失败不阻断主流程）
   - attempted 标记：调用方 finally 兜底只写一次
 
-chat_router 只负责往记录器里喂内容，不再关心落库细节。
+落库字段直接对应 history_turns 表，写入能力由 history 服务提供。
 """
 
 import asyncio
@@ -20,7 +19,7 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.history.service.history_service import HistoryService
 from src.com.damon.ming.utils.time import now
 
-logger = pin("history.chat_turn")
+logger = pin("chat.turn")
 
 # 会话标题取用户问题前 N 字符（与历史列表展示口径一致）
 TITLE_MAX_LEN = 40

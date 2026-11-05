@@ -4,7 +4,6 @@
 接口：
   GET    /api/history/list/v1          分页获取会话列表
   GET    /api/history/v1/{conversation_id}  获取单个会话详情（含全部轮次）
-  POST   /api/history/save/v1          保存会话（按 conversation_id 幂等，整体替换轮次）
   DELETE /api/history/v1/{conversation_id}  删除会话及其轮次
 
 所有接口从 request.state.ctx.token 获取用户身份，数据按 token 隔离。
@@ -18,10 +17,7 @@ from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
-from src.com.damon.ming.router.history.schemas.bean import (
-    HistoryFailedData,
-    HistorySaveRequest,
-)
+from src.com.damon.ming.router.history.schemas.bean import HistoryFailedData
 from src.com.damon.ming.router.history.service.history_service import HistoryService
 from src.com.damon.ming.schemas.response import BaseFailedResponse, BaseSuccessResponse
 
@@ -89,41 +85,6 @@ def get_history(
         return BaseFailedResponse(
             code=ErrorCode.SYSTEM.DATABASE_FAILURE, data=fail_data
         )
-
-
-# ---------------------------------------------------------------------------
-# 保存
-# ---------------------------------------------------------------------------
-
-
-@router.post("/save/v1", response_model=None)
-@limiter.limit("10/minute")
-def save_history(
-    request: Request,
-    body: HistorySaveRequest,
-):
-    """保存会话。
-
-    conversationId 为空则新建会话；非空则更新标题并整体替换轮次。
-    """
-    token = _token(request)
-    try:
-        detail = HistoryService.save_history(
-            token=token,
-            title=body.title,
-            conversation_id=body.conversationId,
-            turns=body.turns,
-        )
-        if detail is None:
-            return BaseFailedResponse(
-                code=ErrorCode.HISTORY.NOT_FOUND,
-                data=HistoryFailedData(error_msg=t(I18nKey.HISTORY_NO_PERMISSION)),
-            )
-        return BaseSuccessResponse(code=ErrorCode.OK, data=detail)
-    except Exception as e:
-        logger.exception("历史记录保存失败")
-        fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
-        return BaseFailedResponse(code=ErrorCode.HISTORY.SAVE_FAILED, data=fail_data)
 
 
 # ---------------------------------------------------------------------------

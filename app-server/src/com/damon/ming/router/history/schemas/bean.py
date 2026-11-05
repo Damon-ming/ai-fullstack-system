@@ -1,35 +1,9 @@
 from pydantic import BaseModel, Field
-from src.com.damon.ming.schemas.request import BaseBizRequest
 from src.com.damon.ming.schemas.response import BaseBizFailedData
 
 
-# ================= 1. 请求 =================
-class HistoryListRequest(BaseBizRequest):
-    """历史记录列表请求：分页参数"""
-
-    page: int = Field(1, ge=1, description="页码（从1开始）")
-    pageSize: int = Field(20, ge=1, le=100, description="每页条数")
-
-
-class HistoryTurnInput(BaseModel):
-    """客户端保存的一轮问答（token 级时刻无法观测，由服务端盖章）"""
-
-    query: str = Field(..., description="用户提问")
-    content: str = Field(..., description="助手回答正文")
-    reasoning: str = Field("", description="推理过程（未开启推理时为空）")
-    errorMsg: str = Field("", description="本轮异常提示（用户可见文案，成功时为空）")
-
-
-class HistorySaveRequest(BaseBizRequest):
-    """保存会话请求"""
-
-    conversationId: str | None = Field(None, description="会话 ID（缺省则新建）")
-    title: str = Field(..., max_length=200, description="对话标题（首条用户消息截取）")
-    turns: list[HistoryTurnInput] = Field(default_factory=list, description="轮次列表")
-
-
-# ================= 2. 成功数据 =================
-# 字段命名与 SSE start 事件（ChatStartData）、前端 ChatMessage/HistoryTurn 保持同一套词汇
+# ================= 1. 成功数据 =================
+# 字段命名与前端 ChatMessage/HistoryTurn 保持同一套词汇
 class HistoryTurnItem(BaseModel):
     """一轮问答（含四个时间点，时长由查询方派生）"""
 
@@ -63,6 +37,6 @@ class HistoryDetailData(HistoryListItem):
     turns: list[HistoryTurnItem] = Field(default_factory=list, description="轮次列表")
 
 
-# ================= 3. 失败数据 =================
+# ================= 2. 失败数据 =================
 class HistoryFailedData(BaseBizFailedData):
     """历史记录通用失败数据"""

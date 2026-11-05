@@ -7,8 +7,7 @@
  */
 
 import { queryFactory } from "@ming/data-layer";
-import type { SaveHistoryRequest } from "./types";
-import { fetchList, saveToServer, removeFromServer } from "./history.api";
+import { fetchList, removeFromServer } from "./history.api";
 
 // ---------------------------------------------------------------------------
 // 缓存 key
@@ -26,12 +25,6 @@ export const useHistoryListQuery = queryFactory.createQueryHook<unknown[]>(
   fetchList,
   { staleTime: 30 * 1000 },
 );
-
-/** 保存 mutation —— 成功后自动刷新列表 */
-export const useSaveHistoryMutation = queryFactory.createMutationHook<
-  unknown,
-  SaveHistoryRequest
->(saveToServer, { invalidateKeys: [HISTORY_LIST_KEY] });
 
 /** 删除 mutation —— 成功后自动刷新列表 */
 export const useRemoveHistoryMutation = queryFactory.createMutationHook<
