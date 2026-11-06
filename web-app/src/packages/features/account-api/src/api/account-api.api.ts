@@ -5,6 +5,7 @@
 
 export {
   useAccount,
+  useAccountDialogHook,
   useLoginPageHook,
   login,
   refreshDeviceToken,
@@ -12,7 +13,7 @@ export {
   validatePassword,
   validateLoginForm,
 } from "@ming/feature-account";
-export { LoginPage } from "@ming/feature-account";
+export { LoginPage, AccountDialog } from "@ming/feature-account";
 export type {
   AccountProfile,
   ValidationResult,

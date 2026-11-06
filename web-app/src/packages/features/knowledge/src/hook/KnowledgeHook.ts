@@ -2,27 +2,16 @@
 import { useCallback, useMemo } from "react";
 import { useKnowledgeStore } from "@ming/store";
 import { useKnowledgeQuery } from "../api";
-import type { KnowledgeNode } from "../api/types/knowledge";
+import type { KnowledgeNode } from "../api";
+import type { KnowledgeGroup } from "./types";
+
+export type { KnowledgeGroup, KnowledgeGroupFile } from "./types";
 
 /** 格式化文件大小 —— 共享工具函数，hook/UI 均可使用 */
 export function formatFileSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes >= 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} KB`;
   return `${bytes} B`;
-}
-
-/** 按日期分组的文件列表 —— UI 直接渲染，不做额外处理 */
-export interface KnowledgeGroup {
-  date: string;
-  dateLabel: string;
-  files: KnowledgeGroupFile[];
-}
-
-export interface KnowledgeGroupFile {
-  name: string;
-  path: string;
-  sizeMB: string;
-  uploader: string;
 }
 
 /** 扁平化收集所有文件节点 */

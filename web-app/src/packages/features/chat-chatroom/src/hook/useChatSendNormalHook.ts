@@ -1,10 +1,9 @@
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { useHistoryStore } from "@ming/store/biz/history-state";
-import { sendChatRoomMessageFn } from "../api";
-import type { ChatRoomRequest } from "../api/types";
+import { sendChatRoomMessageFn, ErrorCode } from "../api";
+import type { ChatRoomRequest } from "../api";
 import { useTranslation } from "@ming/i18n";
 import { createLogger } from "@ming/core-log";
-import { ErrorCode } from "@ming/biz-common-net-api";
 import { resolveChatErrorMessage } from "./useChatSendStreamHook";
 
 const log = createLogger("chat-chatroom/hook/sendNormal");

@@ -1,10 +1,9 @@
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { useHistoryStore } from "@ming/store/biz/history-state";
-import { streamChatRoomMessage } from "../api";
-import type { ChatRoomRequest, ChatStartData } from "../api/types";
+import { streamChatRoomMessage, ClientErrorCode } from "../api";
+import type { ChatRoomRequest, ChatStartData } from "../api";
 import { useTranslation } from "@ming/i18n";
 import { createLogger } from "@ming/core-log";
-import { ClientErrorCode } from "@ming/biz-common-net-api";
 
 const log = createLogger("chat-chatroom/hook/sendStream");
 

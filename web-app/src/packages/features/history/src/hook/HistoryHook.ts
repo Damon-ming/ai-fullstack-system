@@ -1,6 +1,6 @@
 // web-app/src/packages/features/history/src/hook/HistoryHook.ts
 import { useCallback, useMemo } from "react";
-import type { HistoryItem, HistoryTurn } from "../api/types";
+import type { HistoryItem, HistoryTurn } from "../api";
 import {
   fetchList,
   fetchTurns,
@@ -10,24 +10,11 @@ import {
 } from "../api";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
 import { createLogger } from "@ming/core-log";
+import type { HistoryChatMessage } from "./types";
+
+export type { HistoryChatMessage } from "./types";
 
 const log = createLogger("feature-history/hook");
-
-/** 与 @ming/store 的 ChatMessage 结构兼容（纯类型，避免 feature → store 反向依赖） */
-export interface HistoryChatMessage {
-  id: string;
-  content: string;
-  role: "user" | "assistant";
-  reasoning?: string;
-  errorMsg?: string;
-  turnId?: string;
-  /** 提问时刻（Unix 秒），与流式 start 事件口径一致，供 UI 渲染时间戳 */
-  queryAt?: number;
-  /** 历史轮次已结束推理，标题显示「推理过程」 */
-  isReasoning?: boolean;
-  /** 与流式收尾状态一致：推理区域默认折叠 */
-  reasoningCollapsed?: boolean;
-}
 
 // 内部类型 —— 用于数据解包函数参数（后端统一 camelCase，无需双口径兼容）
 interface DataEnvelope {

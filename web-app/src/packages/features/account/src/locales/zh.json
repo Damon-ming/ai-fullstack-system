@@ -9,5 +9,12 @@
     "passwordHint": "密码至少 8 位，需同时包含大写字母、小写字母、数字，以及 . 或 _ 中至少一个",
     "submit": "登录 / 注册",
     "submitting": "登录中..."
+  },
+  "dialog": {
+    "title": "账户信息",
+    "hint": "信息仅保存在当前浏览器。",
+    "displayName": "显示名称",
+    "cancel": "取消",
+    "save": "保存"
   }
 }

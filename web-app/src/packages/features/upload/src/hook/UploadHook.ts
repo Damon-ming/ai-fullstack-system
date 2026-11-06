@@ -1,6 +1,6 @@
 // web-app/src/packages/features/upload/src/hook/UploadHook.ts
 import { uploadFile as requestUploadFile, isFailure } from "../api";
-import type { UploadRequest, UploadResponse } from "../api/types";
+import type { UploadRequest, UploadResponse } from "../api";
 import { createLogger } from "@ming/core-log";
 
 const log = createLogger("upload/hook");

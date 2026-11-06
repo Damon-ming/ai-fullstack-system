@@ -8,7 +8,6 @@
   "dependencies": {
     "@ming/store": "workspace:*",
     "@ming/core-log": "workspace:*",
-    "@ming/data-layer": "workspace:*",
     "@ming/feature-history-api": "workspace:*",
     "@ming/i18n": "workspace:*"
   },

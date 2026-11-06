@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createLogger } from "@ming/core-log";
 import {
+  login as loginApi,
   fetchProfile,
   updateProfile,
   getSessionContext,
@@ -18,8 +19,7 @@ import {
   clearSessionContext,
   setDeviceId,
 } from "../api";
-import { login as loginApi } from "../api/account.api";
-import type { LoginRequest } from "../api/types";
+import type { LoginRequest } from "../api";
 
 const log = createLogger("account/hook");
 

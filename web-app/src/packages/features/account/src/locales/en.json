@@ -9,5 +9,12 @@
     "passwordHint": "At least 8 characters with uppercase, lowercase, digit, and . or _",
     "submit": "Sign In / Up",
     "submitting": "Signing in..."
+  },
+  "dialog": {
+    "title": "Account Info",
+    "hint": "Info is saved in this browser only.",
+    "displayName": "Display name",
+    "cancel": "Cancel",
+    "save": "Save"
   }
 }

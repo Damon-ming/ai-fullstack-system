@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import type { SearchOptions } from "../api/types/request";
-import type { SearchResultItem } from "../api/types/response";
+import type { SearchOptions, SearchResultItem } from "../api";
 
 export const searchItems = <T extends SearchResultItem>(
   items: T[],

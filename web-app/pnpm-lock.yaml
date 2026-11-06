@@ -191,6 +191,9 @@ importers:
       '@ming/i18n':
         specifier: workspace:*
         version: link:../../i18n
+      '@ming/store':
+        specifier: workspace:*
+        version: link:../../store
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -380,9 +383,6 @@ importers:
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
-      '@ming/data-layer':
-        specifier: workspace:*
-        version: link:../../data-layer
       '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api

@@ -5,13 +5,11 @@ import {
   useChatUiStore,
   useChatUploadStore,
   useChatMessageStore,
-  useAccountStore,
   useHistoryStore,
   useSearchStore,
   useKnowledgeStore,
 } from "@ming/store";
 import { useHistory, turnsToChatMessages } from "@ming/feature-history-api";
-import { useAccount } from "@ming/feature-account-api";
 import { useDrawerUploadHook } from "@ming/feature-chat-drawer-api";
 
 const log = createLogger("chat/page");
@@ -28,11 +26,6 @@ export function useChatPageHook() {
   const { getTurns, refresh } = useHistory();
   const setMessages = useChatMessageStore((state) => state.setMessages);
   const abortStream = useChatMessageStore((state) => state.abortStream);
-  const accountOpen = useAccountStore((state) => state.dialogOpen);
-  const draftName = useAccountStore((state) => state.draftName);
-  const setDraftName = useAccountStore((state) => state.setDraftName);
-  const closeAccount = useAccountStore((state) => state.closeDialog);
-  const { update: updateAccount } = useAccount();
   const searchOpen = useSearchStore((state) => state.open);
   const closeSearch = useSearchStore((state) => state.closeSearch);
   const upload = useChatUploadStore((state) => state.upload);
@@ -57,21 +50,12 @@ export function useChatPageHook() {
     setActiveConversationId(id);
     resetSession();
   };
-  const saveAccount = () => {
-    updateAccount(draftName);
-    closeAccount();
-  };
   return {
     drawerOpen,
     chatSessionId,
     toggleDrawer,
     searchOpen,
     closeSearch,
-    accountOpen,
-    draftName,
-    closeAccount,
-    setDraftName,
-    saveAccount,
     loadHistory,
     upload,
     uploadMessage,

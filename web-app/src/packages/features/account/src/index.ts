@@ -8,3 +8,5 @@ registerNS("account", en, zh);
 export * from "./api";
 export * from "./hook";
 export * from "./ui";
+// api/ 的 login 是原始 fetcher，hook/ 的 login 是业务编排；包入口显式暴露后者
+export { login } from "./hook";

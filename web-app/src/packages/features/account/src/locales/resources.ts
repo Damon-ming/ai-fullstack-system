@@ -10,4 +10,11 @@ export interface AccountResources {
     submit: string;
     submitting: string;
   };
+  dialog: {
+    title: string;
+    hint: string;
+    displayName: string;
+    cancel: string;
+    save: string;
+  };
 }

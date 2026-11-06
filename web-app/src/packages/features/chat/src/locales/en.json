@@ -1,11 +1,4 @@
 {
-  "account": {
-    "title": "Account Info",
-    "hint": "Info is saved in this browser only.",
-    "displayName": "Display name",
-    "cancel": "Cancel",
-    "save": "Save"
-  },
   "upload": {
     "uploading": "Uploading",
     "success": "Upload complete",

@@ -557,7 +557,7 @@ app → features → data-layer(可选) → biz-common / store / i18n → core
 ```
 
 - **biz-common** 是项目所有公共业务逻辑的封装模块
-- **data-layer** 是可选中间层：提供 TanStack Query 的 queryFactory 和 DataApiResponse 统一解包。需要 Query 缓存/解包的模块走 data-layer，不需要的（如 encryption、account）直接走 biz-common-net-api
+- **data-layer** 是可选中间层：提供 TanStack Query 的 queryFactory 和 DataApiResponse 统一解包。需要 Query 缓存/解包的模块走 data-layer，不需要的（如 encryption）直接走 biz-common-net-api
 - **features 之间通过 api/ 层互相依赖**，不能直接 import 其他 feature 的具体实现
 - **biz-common、i18n、store 同级的模块之间不能互相依赖**
 - **data-layer → biz-common/net-api** 是唯一的跨组例外：data-layer 的职责是对 netClient 进行 Query 解包封装，因此依赖 `@ming/biz-common-net-api` 获取 `netClient` 和 `BizResult` 类型。这是组合关系，非业务耦合
@@ -663,12 +663,13 @@ features/{module}-api/      # 跨模块通信中间件
 
 纯技术能力，与业务无关，可被任意层直接调用，无需通过中间层。核心原则是只跟技术有关，不包含任何业务逻辑：
 
-- `@ming/core` — 核心基础设施
-  - `@ming/core-log` — 日志
-  - `@ming/core-encryption` — 加密原语
-  - `@ming/core-util` — 通用工具
-  - `@ming/core-network` — 网络基础
-  - `@ming/core-storage` — 存储基础能力
+core 层没有聚合包，按子包直接引用：
+
+- `@ming/core-log` — 日志
+- `@ming/core-encryption` — 加密原语
+- `@ming/core-util` — 通用工具
+- `@ming/core-network` — 网络基础
+- `@ming/core-storage` — 存储基础能力
 
 #### 公共业务模块
 

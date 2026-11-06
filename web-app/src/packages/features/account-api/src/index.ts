@@ -1,6 +1,7 @@
 // account-api/src/index.ts
 export {
   useAccount,
+  useAccountDialogHook,
   useLoginPageHook,
   login,
   refreshDeviceToken,
@@ -8,6 +9,7 @@ export {
   validatePassword,
   validateLoginForm,
   LoginPage,
+  AccountDialog,
 } from "./api/account-api.api";
 export type {
   AccountProfile,

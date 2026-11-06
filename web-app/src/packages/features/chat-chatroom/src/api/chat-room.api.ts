@@ -13,8 +13,6 @@ import type {
   SseFinalState,
 } from "@ming/biz-common-net-api";
 
-// 注：TanStack Mutation Hook 已移至 hook/useChatRoomMutation.ts
-
 const log = createLogger("chat-chatroom/api");
 
 // 同步接口 /api/llm/send/v1

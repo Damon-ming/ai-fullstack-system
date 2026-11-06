@@ -12,7 +12,8 @@
     "@ming/biz-common-storage": "workspace:*",
     "@ming/core-log": "workspace:*",
     "@ming/data-layer": "workspace:*",
-    "@ming/i18n": "workspace:*"
+    "@ming/i18n": "workspace:*",
+    "@ming/store": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.2.0"

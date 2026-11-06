@@ -1,11 +1,4 @@
 export interface ChatPageResources {
-  account: {
-    title: string;
-    hint: string;
-    displayName: string;
-    cancel: string;
-    save: string;
-  };
   upload: {
     uploading: string;
     success: string;

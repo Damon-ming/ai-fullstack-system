@@ -1,9 +1,9 @@
 // knowledge/src/ui/KnowledgeModal.tsx
 import React, { useState } from "react";
-import { useKnowledgeModalHook, formatFileSize } from "../hook/KnowledgeHook";
+import { useKnowledgeModalHook, formatFileSize } from "../hook";
 import { useTranslation } from "@ming/i18n";
-import type { KnowledgeNode } from "../api/types/knowledge";
-import type { KnowledgeGroup } from "../hook/KnowledgeHook";
+import type { KnowledgeNode } from "../api";
+import type { KnowledgeGroup } from "../hook";
 
 /** 递归渲染目录树节点 */
 function TreeItem({

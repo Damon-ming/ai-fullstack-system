@@ -7,6 +7,7 @@ export {
   validatePassword,
   validateLoginForm,
 } from "./AccountHook";
+export { useAccountDialogHook } from "./useAccountDialogHook";
 export type {
   ValidationResult,
   LoginStatus,
