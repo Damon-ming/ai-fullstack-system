@@ -100,8 +100,14 @@ class HistoryDetailRow:
 # ---------------------------------------------------------------------------
 
 _HISTORY_DDL = [
-    "CREATE INDEX IF NOT EXISTS idx_history_token ON history_conversations (token)",
-    "CREATE INDEX IF NOT EXISTS idx_history_updated ON history_conversations (updated_at)",
+    # 复合索引：同时服务 WHERE token = ? 的过滤与 ORDER BY updated_at DESC 的排序，
+    # 取代原两个单列索引 idx_history_token / idx_history_updated
+    # （项目内没有单独按 updated_at 过滤/排序的查询，单列索引在此场景用不上）
+    "CREATE INDEX IF NOT EXISTS idx_history_token_updated "
+    "ON history_conversations (token, updated_at DESC)",
+    # 清理被复合索引取代的单列索引（幂等：新库上不存在则跳过）
+    "DROP INDEX IF EXISTS idx_history_token",
+    "DROP INDEX IF EXISTS idx_history_updated",
     "CREATE INDEX IF NOT EXISTS idx_history_turns_conversation ON history_turns (conversation_id)",
     "CREATE INDEX IF NOT EXISTS idx_history_turns_query_at ON history_turns (query_at)",
     # 增量列：已存在的库表补 error_msg（幂等）
