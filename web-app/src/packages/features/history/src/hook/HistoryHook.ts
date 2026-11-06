@@ -10,6 +10,8 @@ import {
 } from "../api";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
 import { createLogger } from "@ming/core-log";
+import { useChatMessageStore, useChatUiStore } from "@ming/store/biz/chat-state";
+import { useHistoryStore } from "@ming/store/biz/history-state";
 import type { HistoryChatMessage } from "./types";
 
 export type { HistoryChatMessage } from "./types";
@@ -235,11 +237,36 @@ export function useHistory() {
     isLoadingMore,
     loadMore,
     loadAll,
-    getTurns: fetchAndUnpackTurns,
     remove,
     /** 重新拉取历史列表（服务端新建会话后刷新抽屉用） */
     refresh,
   };
+}
+
+/**
+ * 切换会话：取消进行中的流 → 拉取目标会话轮次 → 转消息 → 更新 activeId → 重置 sessionId。
+ *
+ * 抽屉会话列表点击与搜索结果选中共用同一条恢复链路，统一收敛在此，避免两处逻辑漂移。
+ * 无论有无轮次都切换视图：空会话 / 拉取失败是合法状态，
+ * 静默保留旧会话内容会让用户误以为在看新会话。
+ */
+export function useSelectConversation() {
+  const abortStream = useChatMessageStore((s) => s.abortStream);
+  const setMessages = useChatMessageStore((s) => s.setMessages);
+  const resetSession = useChatUiStore((s) => s.resetSession);
+  const setActiveConversationId = useHistoryStore((s) => s.setActiveConversationId);
+
+  return useCallback(
+    async (conversationId: string) => {
+      // 切换会话前取消进行中的流，避免旧流的 sending 状态锁住新会话
+      abortStream();
+      const turns = await fetchAndUnpackTurns(conversationId);
+      setMessages(turnsToChatMessages(turns));
+      setActiveConversationId(conversationId);
+      resetSession();
+    },
+    [abortStream, setMessages, resetSession, setActiveConversationId],
+  );
 }
 
 /** 非 React 上下文的同步调用（返回 Promise，供事件回调等场景使用）。 */

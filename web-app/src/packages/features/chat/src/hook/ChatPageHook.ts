@@ -4,12 +4,11 @@ import { createLogger } from "@ming/core-log";
 import {
   useChatUiStore,
   useChatUploadStore,
-  useChatMessageStore,
   useHistoryStore,
   useSearchStore,
   useKnowledgeStore,
 } from "@ming/store";
-import { useHistory, turnsToChatMessages } from "@ming/feature-history-api";
+import { useHistory, useSelectConversation } from "@ming/feature-history-api";
 import { useDrawerUploadHook } from "@ming/feature-chat-drawer-api";
 
 const log = createLogger("chat/page");
@@ -18,14 +17,8 @@ export function useChatPageHook() {
   const drawerOpen = useChatUiStore((state) => state.drawerOpen);
   const chatSessionId = useChatUiStore((state) => state.sessionId);
   const toggleDrawer = useChatUiStore((state) => state.toggleDrawer);
-  const resetSession = useChatUiStore((state) => state.resetSession);
-  const setActiveConversationId = useHistoryStore(
-    (state) => state.setActiveConversationId,
-  );
   const savedTurn = useHistoryStore((state) => state.savedTurn);
-  const { getTurns, refresh } = useHistory();
-  const setMessages = useChatMessageStore((state) => state.setMessages);
-  const abortStream = useChatMessageStore((state) => state.abortStream);
+  const { refresh } = useHistory();
   const searchOpen = useSearchStore((state) => state.open);
   const closeSearch = useSearchStore((state) => state.closeSearch);
   const upload = useChatUploadStore((state) => state.upload);
@@ -39,17 +32,7 @@ export function useChatPageHook() {
     if (savedTurn > 0) void refresh();
   }, [savedTurn, refresh]);
 
-  const loadHistory = async (id: string) => {
-    // 切换会话前取消进行中的流：旧流消息按 id 隔离不会污染新会话，
-    // 但全局 sending 会被旧流结束时的 setSending(false) 之外的状态锁住
-    abortStream();
-    // 无论有无轮次都切换视图：空会话 / 拉取失败是合法状态，
-    // 静默保留旧会话内容会让用户误以为在看新会话
-    const turns = await getTurns(id);
-    setMessages(turnsToChatMessages(turns));
-    setActiveConversationId(id);
-    resetSession();
-  };
+  const loadHistory = useSelectConversation();
   return {
     drawerOpen,
     chatSessionId,

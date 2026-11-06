@@ -1,5 +1,6 @@
 export {
   useHistory,
+  useSelectConversation,
   historyActions,
   turnsToChatMessages,
 } from "./api/history-api.api";

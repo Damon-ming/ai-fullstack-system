@@ -347,6 +347,9 @@ importers:
       '@ming/data-layer':
         specifier: workspace:*
         version: link:../../data-layer
+      '@ming/store':
+        specifier: workspace:*
+        version: link:../../store
       react:
         specifier: ^18.2.0
         version: 18.3.1

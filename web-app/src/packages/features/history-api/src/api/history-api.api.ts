@@ -1,5 +1,6 @@
 export {
   useHistory,
+  useSelectConversation,
   historyActions,
   turnsToChatMessages,
 } from "@ming/feature-history";

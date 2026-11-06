@@ -8,7 +8,8 @@
   "dependencies": {
     "@ming/core-log": "workspace:*",
     "@ming/core-util": "workspace:*",
-    "@ming/data-layer": "workspace:*"
+    "@ming/data-layer": "workspace:*",
+    "@ming/store": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.2.0"
