@@ -39,7 +39,13 @@ export const DrawerHistory: React.FC = () => {
   }
 
   if (list.length === 0) {
-    return null;
+    return (
+      <div className="flex-1 overflow-y-auto px-4 py-8">
+        <p className="text-center text-sm text-gray-400">
+          {t("history.empty")}
+        </p>
+      </div>
+    );
   }
 
   return (

@@ -282,7 +282,6 @@ docker compose down
 | POST | `/api/chat/chat/v1` | 流式聊天（SSE） |
 | GET | `/api/history/list/v1` | 历史记录列表 |
 | GET | `/api/history/v1/{id}` | 历史记录详情 |
-| POST | `/api/history/save/v1` | 保存对话历史 |
 | DELETE | `/api/history/v1/{id}` | 删除历史记录 |
 | GET | `/api/knowledge/tree/v1` | 知识库目录树 |
 | POST | `/api/files/upload/v1` | 文件上传 |
