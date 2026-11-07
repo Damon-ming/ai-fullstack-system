@@ -4,7 +4,8 @@
 
 后续中间件和路由通过 request.state.ctx 读取头部数据，不再直接访问 request.headers。
 
-注册顺序：必须是第一个中间件（在 encryption / auth 之前）。
+执行顺序：必须是第一个执行的中间件（最外层，先于 i18n / encryption / auth）。
+Starlette 的 add_middleware 是 insert(0)，所以注册时反而要最后添加。
 """
 
 from src.com.damon.ming.middleware.request_context import build_request_context

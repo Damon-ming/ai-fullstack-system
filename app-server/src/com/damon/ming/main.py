@@ -126,13 +126,14 @@ else:
 # ---- 速率限制（per-IP，slowapi）--------------------------------------
 app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
-# ---- 请求上下文（必须在 auth / encryption 之前执行，因此先添加）------
-# ContextMiddleware 一次性解析所有头部 → request.state.ctx
-# 后续所有中间件和路由通过 ctx 读取，不再直接访问 request.headers
-app.add_middleware(ContextMiddleware)
+# ---- 中间件注册顺序说明 -----------------------------------------------
+# Starlette 的 add_middleware 是 insert(0)：后添加的排最外层、最先执行。
+# 因此本段按执行顺序倒序书写，实际执行顺序为：
+#   Context → I18n → Auth → Encryption → CORS
+# 新增中间件时按同一规则倒序添加。
 
-# ---- i18n 语言协商（必须在 auth / encryption 之前）--------------
-app.add_middleware(I18nMiddleware)
+# ---- 加密中间件 ---------------------------------------------------------
+app.add_middleware(EncryptionMiddleware)
 
 # ---- 认证中间件 ---------------------------------------------------------
 if not IS_DEBUG:
@@ -141,8 +142,14 @@ if not IS_DEBUG:
 else:
     logger.info("认证中间件已禁用（debug 模式）")
 
-# ---- 加密中间件 ---------------------------------------------------------
-app.add_middleware(EncryptionMiddleware)
+# ---- i18n 语言协商 ------------------------------------------------------
+app.add_middleware(I18nMiddleware)
+
+# ---- 请求上下文（最外层，必须先于 i18n / auth / encryption 执行）------
+# ContextMiddleware 一次性解析所有头部 → request.state.ctx
+# 后续所有中间件和路由通过 ctx 读取，不再直接访问 request.headers
+# 必须最后添加：它是 i18n / auth / encryption 的数据来源
+app.add_middleware(ContextMiddleware)
 
 # ---- 路由 --------------------------------------------------------------
 app.include_router(account_router.router)

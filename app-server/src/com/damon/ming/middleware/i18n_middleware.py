@@ -2,7 +2,7 @@
 """
 i18n 中间件 —— 解析 X-Language 请求头，设置当前请求的 locale。
 
-注册顺序：在 ContextMiddleware 之后、AuthMiddleware 之前。
+执行顺序：在 ContextMiddleware 之后、AuthMiddleware 之前（Context 是最外层）。
 """
 
 from src.com.damon.ming.i18n.locale_negotiator import apply_locale
