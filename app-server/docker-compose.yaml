@@ -11,7 +11,7 @@ services:
   # ── PostgreSQL ─────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: app-postgres
+    container_name: server-postgres
     restart: always
     # SECURITY: 仅暴露给 Docker 内部网络，不映射到宿主机端口（P1-6 修复）
     # 容器名 postgres 在 ai-network 内可正常解析，app-server 不受影响
@@ -27,7 +27,7 @@ services:
     volumes:
       - /root/damon/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d damon"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 3s
       retries: 10

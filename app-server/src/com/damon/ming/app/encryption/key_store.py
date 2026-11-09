@@ -27,27 +27,15 @@ class PgKeyStore(BaseKeyStore):
     在 BaseKeyStore 纯 key_id 接口之上，扩展了会话维度索引（业务需求）。
 
     用法：
-        # 方式一：传入 DbConnection（与项目其他模块共享连接池）
+        # 传入 DbConnection（与项目其他模块共享连接池）
         db_conn = DbConnection(db_config)
         db_conn.initialize()
         store = PgKeyStore(db_conn)
-        store.initialize()
-
-        # 方式二：传入 SQLAlchemy URL（独立连接，测试用）
-        store = PgKeyStore.from_url("postgresql://...")
         store.initialize()
     """
 
     def __init__(self, db_connection: DbConnection) -> None:
         self._db = db_connection
-
-    @staticmethod
-    def from_url(url: str) -> "PgKeyStore":
-        """从 SQLAlchemy URL 创建 PgKeyStore（使用独立连接，测试用）。"""
-        config = DbConfig(url=url)
-        db_conn = DbConnection(config)
-        db_conn.initialize()
-        return PgKeyStore(db_conn)
 
     @staticmethod
     def from_config(config: DbConfig) -> "PgKeyStore":

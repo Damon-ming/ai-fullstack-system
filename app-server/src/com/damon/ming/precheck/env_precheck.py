@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/precheck/env_precheck.py
 """环境变量启动校验 —— 缺失关键配置时返回错误列表。"""
 
 import os
@@ -83,9 +84,7 @@ def _check_database() -> list[str]:
         from src.com.damon.ming.app.config.db.db_config_loader import DbConfigLoader
 
         loader = DbConfigLoader()
-        db_config = loader.load()
-        if not db_config.url and not db_config.host:
-            return ["数据库配置缺少连接信息（url 或 host），请检查 db-config.yaml"]
+        loader.load()
     except FileNotFoundError as e:
         return [f"数据库配置文件不存在：{e}"]
     except Exception as e:

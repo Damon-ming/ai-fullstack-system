@@ -83,6 +83,7 @@ class ThreadPoolManager:
                     cls._instance = instance
         return cls._instance
 
+    # todo 为什么不用__init__
     def startup(self, pool_configs: dict[str, int]) -> None:
         """初始化所有命名线程池。
 
@@ -101,7 +102,7 @@ class ThreadPoolManager:
             for name, max_workers in self._pool_configs.items():
                 self._pools[name] = ThreadPoolExecutor(
                     max_workers=max_workers,
-                    thread_name_prefix=f"AI-{name}",
+                    thread_name_prefix=name,
                 )
                 logger.info(
                     "线程池已创建 | name=%s | max_workers=%d", name, max_workers
@@ -187,6 +188,7 @@ class ThreadPoolManager:
             }
         return stats
 
+    # 这里触发时机是什么
     @contextmanager
     def request_scope(self, request_id: str | None = None) -> Iterator[RequestContext]:
         """上下文管理器：自动创建 + cleanup 请求上下文。

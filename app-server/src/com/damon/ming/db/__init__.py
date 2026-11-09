@@ -11,7 +11,7 @@
 上层通过 app 里的 YAML 配置（db-config.yaml）进行配置，本模块不感知配置来源。
 
 提供：
-  - DbConfig:       数据库连接配置（纯数据类，支持多后端 URL 格式）
+  - DbConfig:       数据库连接配置（纯数据类，所有字段必填）
   - DbConnection:   连接管理（SQLAlchemy 引擎 + 连接池 + 自动重连）
   - query / execute: 底层 SQL 执行工具
 
@@ -22,18 +22,16 @@
 用法：
   from src.com.damon.ming.db import DbConfig, DbConnection, query, execute
 
-  # PostgreSQL
-  db = DbConnection(DbConfig(url="postgresql://user:pass@localhost/mydb"))
+  cfg = DbConfig(
+      host="localhost", port=5432, dbname="mydb", user="pg", password="secret",
+      dialect="postgresql", driver="psycopg2",
+      retry_count=3, backoff_seconds=0.1,
+      pool_size=5, max_overflow=10, pool_timeout=30, pool_recycle=3600,
+      echo=False, engine_kwargs={},
+  )
+  db = DbConnection(cfg)
   db.initialize()
   rows = query("SELECT * FROM users WHERE id = %s", (user_id,))
-
-  # MySQL
-  db = DbConnection(DbConfig(url="mysql+pymysql://user:pass@localhost/mydb"))
-  db.initialize()
-
-  # SQLite
-  db = DbConnection(DbConfig(url="sqlite:///path/to/db.sqlite"))
-  db.initialize()
 """
 
 from src.com.damon.ming.db.db_config import DbConfig

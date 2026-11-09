@@ -10,14 +10,16 @@
 # 连接信息无默认值，缺失任意必填字段直接终止启动：
 #   - 必填：host / port / dbname / user / password / dialect
 #   - 可选：driver（留空则 SQLAlchemy 按 dialect 自动选）
-#   - 必填：pool_size / max_overflow / retry / backoff（基础设施参数）
+#   - 必填：pool_size / max_overflow / pool_timeout / pool_recycle / retry / backoff
+#   - 可选：echo（SQL 调试日志，默认 false）
 #
 # 环境变量覆盖（优先级高于 YAML，DB_ 前缀 + 字段名大写）：
 #   DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / DB_DIALECT / DB_DRIVER
-#   DB_POOL_SIZE / DB_MAX_OVERFLOW / DB_RETRY / DB_BACKOFF
+#   DB_POOL_SIZE / DB_MAX_OVERFLOW / DB_POOL_TIMEOUT / DB_POOL_RECYCLE
+#   DB_RETRY / DB_BACKOFF / DB_ECHO
 
 # 通用环境：Docker 内 PostgreSQL（容器名 app-postgres）
-# dbname / user 无默认值，必须通过环境变量注入（DB_DBNAME / DB_USER）
+# dbname / user 无默认值，必须通过环境变量注入（DB_NAME / DB_USER）
 dialect: postgresql
 driver: psycopg2
 host: app-postgres
@@ -25,6 +27,9 @@ host: app-postgres
 port: 5432
 pool_size: 5
 max_overflow: 10
+pool_timeout: 30
+pool_recycle: 3600
+echo: false
 connect_timeout: 10
 retry: 3
 backoff: 0.1

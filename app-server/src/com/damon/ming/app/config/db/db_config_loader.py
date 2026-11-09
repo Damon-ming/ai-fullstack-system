@@ -6,12 +6,12 @@
 db 模块通过 DbConfig 数据类接收参数，不感知配置来源。
 
 配置来源（优先级从高到低）：
-  1. 环境变量（YAML 字段名大写，如 host → HOST）
+  1. 环境变量（DB_ 前缀 + YAML 字段名大写，如 name → DB_NAME）
   2. YAML 文件
   3. 无默认值 —— 缺失任何必填字段直接报错
 
 设计原则：
-  - 所有 KEYS 无默认值，缺失或为空立即终止启动
+  - 所有必填字段无默认值，缺失或为空立即终止启动
   - 不做静默降级 —— 错误的默认值比启动失败更危险
 """
 
@@ -38,9 +38,14 @@ class DbConfigLoader:
         "dialect",
         "pool_size",
         "max_overflow",
+        "pool_timeout",
+        "pool_recycle",
         "retry",
         "backoff",
     )
+
+    # 布尔可选字段（YAML 缺失或 DB_ECHO 未设置时取 False）
+    BOOL_KEYS = ("echo",)
 
     def __init__(self, config_path: str | None = None):
         if config_path is None:
@@ -63,9 +68,13 @@ class DbConfigLoader:
             env_value = os.environ.get(f"DB_{key.upper()}")
             if env_value is not None:
                 merged[key] = env_value
+        for key in self.BOOL_KEYS:
+            env_value = os.environ.get(f"DB_{key.upper()}")
+            if env_value is not None:
+                merged[key] = env_value
 
-        # 校验必填字段
-        missing = [f for f in self.KEYS if not merged.get(f)]
+        # 校验必填字段（用 is None 判断，避免 0 被真值检查误判为缺失）
+        missing = [f for f in self.KEYS if merged.get(f) is None or merged.get(f) == ""]
         if missing:
             raise ValueError(
                 f"数据库配置缺少必填字段，请检查环境变量或 YAML：{', '.join(missing)}"
@@ -83,6 +92,9 @@ class DbConfigLoader:
             backoff_seconds=float(merged["backoff"]),
             pool_size=int(merged["pool_size"]),
             max_overflow=int(merged["max_overflow"]),
+            pool_timeout=int(merged["pool_timeout"]),
+            pool_recycle=int(merged["pool_recycle"]),
+            echo=self._as_bool(merged.get("echo")),
             engine_kwargs=self._build_engine_kwargs(merged),
         )
 
@@ -96,6 +108,13 @@ class DbConfigLoader:
         if not raw_cfg or not isinstance(raw_cfg, dict):
             raise ValueError("DB 配置文件格式错误：需要顶层键值对")
         return raw_cfg
+
+    @staticmethod
+    def _as_bool(value: object) -> bool:
+        """把 YAML 布尔值或环境变量字符串解析为 bool。"""
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ("1", "true", "yes", "on")
 
     @staticmethod
     def _build_engine_kwargs(raw: dict) -> dict:

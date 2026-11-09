@@ -10,9 +10,9 @@
 
 from __future__ import annotations
 
-import logging
+from src.com.damon.ming.log import pin
 
-logger = logging.getLogger(__name__)
+logger = pin("thread.cancellation")
 
 
 class CancellationToken:
