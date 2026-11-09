@@ -268,7 +268,7 @@ class AppInitializer:
         )
 
         loader = DbConfigLoader()
-        db_config = loader.load(profile=self._profile)
+        db_config = loader.load()
         self.db_conn = DbConnection(db_config)
         self.db_conn.initialize()  # pool 参数从 DbConfig 读取
         set_default_db(self.db_conn)

@@ -7,7 +7,7 @@ from src.com.damon.ming.log import pin
 logger = pin("app.precheck")
 
 
-def _check_master_key(is_debug: bool) -> list[str]:
+def _check_master_key() -> list[str]:
     """检查 MASTER_KEY 是否设置。
 
     所有环境都必须通过 .env 设置 MASTER_KEY，不允许自动生成。
@@ -18,7 +18,7 @@ def _check_master_key(is_debug: bool) -> list[str]:
 
     if not master_key:
         errors.append("MASTER_KEY 未设置（所有环境必须通过 .env 注入）")
-    elif not is_debug and len(master_key) < 32:
+    elif len(master_key) < 32:
         errors.append(
             f"MASTER_KEY 长度不足（当前 {len(master_key)} 字符，生产环境要求 ≥32）"
         )
@@ -26,7 +26,7 @@ def _check_master_key(is_debug: bool) -> list[str]:
     return errors
 
 
-def _check_encryption_config(is_debug: bool) -> None:
+def _check_encryption_config() -> None:
     """检查加密配置（YAML）中的必要字段是否填写。
 
     这些字段属于业务协议标识，encryption 模块不包含，必须由业务层配置。
@@ -64,7 +64,7 @@ def _check_encryption_config(is_debug: bool) -> None:
         )
 
 
-def _check_database(is_debug: bool) -> list[str]:
+def _check_database() -> list[str]:
     """检查数据库配置是否可用。
 
     先检查环境变量（直接给出变量名提示），再加载完整配置。
@@ -83,11 +83,9 @@ def _check_database(is_debug: bool) -> list[str]:
         from src.com.damon.ming.app.config.db.db_config_loader import DbConfigLoader
 
         loader = DbConfigLoader()
-        db_config = loader.load(profile="common")
+        db_config = loader.load()
         if not db_config.url and not db_config.host:
-            return [
-                "数据库配置缺少连接信息（url 或 host），请检查 db-config.yaml 的 common 剖面"
-            ]
+            return ["数据库配置缺少连接信息（url 或 host），请检查 db-config.yaml"]
     except FileNotFoundError as e:
         return [f"数据库配置文件不存在：{e}"]
     except Exception as e:
@@ -105,11 +103,11 @@ def run_precheck(is_debug: bool) -> list[str]:
     logger.info("执行启动前环境校验 | debug=%s", is_debug)
 
     # 加密配置：缺失直接终止，不返回错误列表（默认值会导致加密静默失败）
-    _check_encryption_config(is_debug)
+    _check_encryption_config()
 
     errors = []
-    errors.extend(_check_master_key(is_debug))
-    errors.extend(_check_database(is_debug))
+    errors.extend(_check_master_key())
+    errors.extend(_check_database())
 
     if errors:
         logger.error("环境校验失败：")

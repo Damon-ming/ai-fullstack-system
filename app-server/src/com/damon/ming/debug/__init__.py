@@ -12,7 +12,7 @@
   - 值在模块首次加载时冻结，整个进程生命周期不变
 
 用法：
-  from src.com.damon.ming.debug import is_debug, is_trust_client_env, get_runtime_config
+  from src.com.damon.ming.debug import is_debug, get_runtime_config
 
   if is_debug():
       logger.info("当前为 debug 模式")
@@ -51,7 +51,9 @@ def _resolve_is_debug() -> bool:
 
             if str(build_env) == "0":
                 # 生产构建：锁定 release，完全忽略 APP_ENV
-                logger.info("使用环境标志（来源: SERVER_BUILD_ENV=0 → 锁定 release，运行时不可变）")
+                logger.info(
+                    "使用环境标志（来源: SERVER_BUILD_ENV=0 → 锁定 release，运行时不可变）"
+                )
                 return False
 
             # SERVER_BUILD_ENV = 1 → 可切换模式，读取 APP_ENV（默认 debug）
@@ -127,41 +129,7 @@ def get_runtime_config() -> RuntimeConfig:
     return _runtime_config
 
 
-# ---------------------------------------------------------------------------
-# 便捷函数（业务层常用）
-# ---------------------------------------------------------------------------
-
-
-def is_trust_client_env() -> bool:
-    """
-    是否信任客户端 X-Client-Env 头（0 = debug, 1 = release）。
-    debug 默认 True（方便联调），release 始终 False。
-    """
-    if not _IS_DEBUG:
-        return False
-    return _runtime_config.get("trust_client_env", True)
-
-
-def is_skip_encryption() -> bool:
-    """是否跳过加密（debug 专用，release 始终 False）。"""
-    if not _IS_DEBUG:
-        return False
-    return _runtime_config.get("skip_encryption", False)
-
-
-def is_skip_auth() -> bool:
-    """是否跳过认证（debug 专用，release 始终 False）。"""
-    if not _IS_DEBUG:
-        return False
-    return _runtime_config.get("skip_auth", False)
-
-
-# ---------------------------------------------------------------------------
-# 启动日志
-# ---------------------------------------------------------------------------
-
 logger.info(
-    "Debug 模块初始化完成 | env=%s | trust_client_env=%s",
+    "Debug 模块初始化完成 | env=%s",
     get_env(),
-    is_trust_client_env(),
 )

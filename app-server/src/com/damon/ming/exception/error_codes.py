@@ -298,13 +298,14 @@ def get_business_name(code: int) -> str:
 
 def format_code(code: int) -> str:
     """格式化错误码为可读字符串, 如 '200002001 -> FAILURE:current-service:encryption:001'"""
-    category = (
-        "SUCCESS"
-        if is_success(code)
-        else "FAILURE"
-        if is_failure(code)
-        else f"CAT{get_category(code)}"
-    )
+
+    if is_success(code):
+        category = "SUCCESS"
+    elif is_failure(code):
+        category = "FAILURE"
+    else:
+        category = f"CAT{get_category(code)}"
+
     system = get_system_name(code)
     business = get_business_name(code)
     detail = get_detail(code)

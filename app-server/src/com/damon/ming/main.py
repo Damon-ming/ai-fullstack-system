@@ -22,7 +22,7 @@
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 
 【配置文件（YAML）】
-  app/config/db-config.yaml  数据库连接池配置（多剖面：default / production，由 app 层注入 db 模块）
+  app/config/db-config.yaml  数据库连接池配置（由 app 层注入 db 模块）
   app/config/encryption-config.yaml  加密业务配置（RSA 密钥大小、会话 TTL、sign_context 等，由 app 层注入 encryption 模块）
 
 【构建时注入（生产环境）】

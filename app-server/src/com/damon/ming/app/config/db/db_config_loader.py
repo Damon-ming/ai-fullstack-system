@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/app/config/db_config_loader.py
+# app-server/src/com/damon/ming/app/config/db/db_config_loader.py
 """
 数据库配置加载器 —— 从 YAML 文件读取连接参数，环境变量优先覆盖。
 
@@ -7,7 +7,7 @@ db 模块通过 DbConfig 数据类接收参数，不感知配置来源。
 
 配置来源（优先级从高到低）：
   1. 环境变量（YAML 字段名大写，如 host → HOST）
-  2. YAML 文件（默认剖面）
+  2. YAML 文件
   3. 无默认值 —— 缺失任何必填字段直接报错
 
 设计原则：
@@ -24,8 +24,7 @@ class DbConfigLoader:
     """从 YAML 文件加载数据库配置，环境变量优先覆盖。
 
     用法：
-        cfg = DbConfigLoader().load()                    # 默认剖面
-        cfg = DbConfigLoader().load(profile="production") # 生产剖面
+        cfg = DbConfigLoader().load()
         cfg = DbConfigLoader("path/to/config.yaml").load()
     """
 
@@ -49,14 +48,14 @@ class DbConfigLoader:
             config_path = os.path.join(base_dir, "db-config.yaml")
         self._config_path = config_path
 
-    def load(self, profile: str = "common"):
-        """加载指定剖面的配置，环境变量优先覆盖，返回 DbConfig。
+    def load(self):
+        """加载配置，环境变量优先覆盖，返回 DbConfig。
 
         必填字段缺失或为空直接抛出异常，不做静默降级。
         """
         from src.com.damon.ming.db.db_config import DbConfig
 
-        raw = self._read_yaml(profile)
+        raw = self._read_yaml()
 
         # 合并：环境变量 > YAML（环境变量名 = DB_ + 字段名大写）
         merged = dict(raw)
@@ -89,17 +88,14 @@ class DbConfigLoader:
 
     # ---- 私有 -------------------------------------------------------------
 
-    def _read_yaml(self, profile: str) -> dict:
+    def _read_yaml(self) -> dict:
         if not os.path.exists(self._config_path):
             raise FileNotFoundError(f"DB 配置文件不存在: {self._config_path}")
         with open(self._config_path, "r", encoding="utf-8") as f:
             raw_cfg = yaml.safe_load(f)
-        if raw_cfg is None or "db" not in raw_cfg:
-            raise ValueError("DB 配置文件格式错误：缺少 'db' 根节点")
-        section = raw_cfg["db"].get(profile, {})
-        if not section:
-            raise ValueError(f"DB 配置文件中未找到剖面: {profile}")
-        return section
+        if not raw_cfg or not isinstance(raw_cfg, dict):
+            raise ValueError("DB 配置文件格式错误：需要顶层键值对")
+        return raw_cfg
 
     @staticmethod
     def _build_engine_kwargs(raw: dict) -> dict:

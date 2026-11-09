@@ -41,12 +41,18 @@ def init_logging(is_debug: bool) -> None:
         _root_configured = True
         return
 
-    level = _LOG_LEVELS.get(os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    log_fmt = (
+        "%(asctime)s | %(levelname)-8s | %(process)d | %(threadName)-15s "
+        "| %(name)s | %(filename)s:%(lineno)d | %(message)s"
+    )
+
+    formatter = logging.Formatter(log_fmt, datefmt="%Y-%m-%d %H:%M:%S.%f")
 
     if is_debug:
         logging.basicConfig(
-            level=level,
-            format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+            level=logging.INFO,
+            format=log_fmt,
+            datefmt="%Y-%m-%d %H:%M:%S.%f",
             stream=sys.stdout,
         )
     else:
@@ -57,10 +63,8 @@ def init_logging(is_debug: bool) -> None:
         os.makedirs(_log_dir, exist_ok=True)
         _log_file = os.path.join(_log_dir, "app.log")
         file_handler = logging.FileHandler(_log_file, encoding="utf-8")
-        file_handler.setLevel(level)
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-        )
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
 
     _root_configured = True
@@ -78,12 +82,3 @@ def pin(tag: str) -> logging.Logger:
     建议在服务端启动时尽早调用 init_logging()。
     """
     return get_logger(tag)
-
-
-def security_warn(message: str) -> None:
-    """发出安全配置警告（弱密钥、不安全配置等）。
-
-    统一通过日志模块输出，WARNING 级别，命名空间为 security。
-    替代直接使用标准库 warnings.warn，便于统一管理和过滤。
-    """
-    get_logger("security").warning(message)
