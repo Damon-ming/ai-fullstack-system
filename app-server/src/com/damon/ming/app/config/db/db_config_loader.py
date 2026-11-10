@@ -17,7 +17,7 @@ db 模块通过 DbConfig 数据类接收参数，不感知配置来源。
 
 import os
 
-import yaml
+from src.com.damon.ming.app.config._yaml import load_yaml
 
 
 class DbConfigLoader:
@@ -25,7 +25,6 @@ class DbConfigLoader:
 
     用法：
         cfg = DbConfigLoader().load()
-        cfg = DbConfigLoader("path/to/config.yaml").load()
     """
 
     # 必填字段（字段名大写即为环境变量名）
@@ -47,11 +46,8 @@ class DbConfigLoader:
     # 布尔可选字段（YAML 缺失或 DB_ECHO 未设置时取 False）
     BOOL_KEYS = ("echo",)
 
-    def __init__(self, config_path: str | None = None):
-        if config_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "db-config.yaml")
-        self._config_path = config_path
+    def __init__(self):
+        self._config_dir = os.path.dirname(os.path.abspath(__file__))
 
     def load(self):
         """加载配置，环境变量优先覆盖，返回 DbConfig。
@@ -101,13 +97,7 @@ class DbConfigLoader:
     # ---- 私有 -------------------------------------------------------------
 
     def _read_yaml(self) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"DB 配置文件不存在: {self._config_path}")
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
-        if not raw_cfg or not isinstance(raw_cfg, dict):
-            raise ValueError("DB 配置文件格式错误：需要顶层键值对")
-        return raw_cfg
+        return load_yaml(self._config_dir)
 
     @staticmethod
     def _as_bool(value: object) -> bool:

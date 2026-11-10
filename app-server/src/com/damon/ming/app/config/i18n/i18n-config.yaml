@@ -6,8 +6,7 @@
 #   2. 在 i18n/locales/ 下添加对应的 JSON 文件
 #   无需修改代码。
 
-i18n:
-  default_locale: zh_CN          # 默认 / 回退 locale
-  supported_locales:             # 支持的 locale 列表
-    - zh_CN
-    - en_US
+default_locale: zh_CN          # 默认 / 回退 locale
+supported_locales:             # 支持的 locale 列表
+  - zh_CN
+  - en_US

@@ -11,7 +11,7 @@
 #   INFERENCE_API_KEY_CHAT=ak_pool_001
 #   INFERENCE_API_KEY_INTENT=ak_pool_002
 #
-# 动态运行时配置（inference-runtime.yaml）：
+# 动态运行时配置（本目录下唯一的 YAML 文件）：
 #   → roles 段：模型参数（temperature/top_p/max_tokens），与后端无关
 #   → chat 段：并发控制（信号量、超时）和多 locale 系统 prompt
 #
@@ -29,12 +29,12 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-import yaml
 from src.com.damon.ming.ai.inference import resolve_engine
 from src.com.damon.ming.ai.inference.base_inference import (
     BaseInferenceService,
     InferenceParams,
 )
+from src.com.damon.ming.app.config._yaml import load_yaml
 
 # ── 连接参数来源：环境变量（由 docker-compose 注入）────────────────────
 # INFERENCE_GATEWAY_URL: 推理网关地址，如 http://inference-gateway:8080/v1
@@ -42,11 +42,6 @@ from src.com.damon.ming.ai.inference.base_inference import (
 # INFERENCE_TIMEOUT:     超时秒数（可选，默认 180）
 # INFERENCE_API_KEYS:    JSON 字典 {role: api_key}（必须覆盖所有角色，否则启动报错）
 # INFERANCE_API_KEY_{ROLE}: 单个角色的 api_key（优先级高于 JSON）
-
-# ── 动态运行时配置（与本加载器同级，可按业务动态调整）────────────────
-_RUNTIME_CONFIG_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "inference-runtime.yaml")
-)
 
 # api_key 完全由环境变量注入，不设默认值。
 # 未配置的角色在 load_all() 中明确报错。
@@ -188,6 +183,7 @@ class InferenceConfigLoader:
         self._engine_type: str = ""
         self._engines: dict[str, BaseInferenceService] = {}
         self._models: dict[str, ModelEntry] = {}
+        self._config_dir: str = os.path.dirname(os.path.abspath(__file__))
 
     def load_all(self) -> dict:
         """一次性加载引擎和模型配置，合并环境变量 + YAML 两个源。"""
@@ -199,15 +195,10 @@ class InferenceConfigLoader:
         timeout = float(os.environ.get("INFERENCE_TIMEOUT", "180"))
         api_keys = _resolve_api_keys()
 
-        # ── 模型参数：inference-runtime.yaml 的 roles 段 ──
-        if not os.path.exists(_RUNTIME_CONFIG_PATH):
-            raise FileNotFoundError(f"运行时配置不存在: {_RUNTIME_CONFIG_PATH}")
-
-        with open(_RUNTIME_CONFIG_PATH, "r", encoding="utf-8") as f:
-            runtime_cfg = yaml.safe_load(f)
-
-        if not runtime_cfg or "roles" not in runtime_cfg:
-            raise ValueError(f"运行时配置格式错误，缺少 roles: {_RUNTIME_CONFIG_PATH}")
+        # ── 模型参数：本目录下 YAML 的 roles 段 ──
+        runtime_cfg = load_yaml(self._config_dir)
+        if "roles" not in runtime_cfg:
+            raise ValueError(f"运行时配置格式错误，缺少 roles: {self._config_dir}")
 
         params_roles = runtime_cfg["roles"]
 
@@ -279,13 +270,11 @@ class ChatConfigLoader:
         configs["en_US"].infer_sem       # 从 common 继承的并发参数
     """
 
-    def __init__(self, config_path: str | None = None):
+    def __init__(self):
         self._cache: dict[str, ChatConfig] = {}
         self._cache_loaded_at: float = 0.0
         self._cache_ttl_seconds: float = 0.0
-        if config_path is None:
-            config_path = _RUNTIME_CONFIG_PATH
-        self._config_path = config_path
+        self._config_dir = os.path.dirname(os.path.abspath(__file__))
 
     def load_all(self) -> dict[str, ChatConfig]:
         """加载所有 locale 配置，每个配置已合并 common 并发参数。"""
@@ -387,10 +376,4 @@ class ChatConfigLoader:
             raise ValueError(f"locale '{locale}' 缺少必填字段: {e}") from e
 
     def _read_yaml(self) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"配置文件不存在: {self._config_path}")
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
-        if raw_cfg is None:
-            raise ValueError("配置文件为空")
-        return raw_cfg
+        return load_yaml(self._config_dir)

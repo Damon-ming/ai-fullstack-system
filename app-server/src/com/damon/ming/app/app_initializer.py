@@ -31,7 +31,6 @@ class AppInitializer:
 
     def __init__(self, is_debug: bool = True) -> None:
         self._is_debug = is_debug
-        self._profile = "common"  # 仅 common 剖面，无 production
 
         # 子系统状态（startup 后填充）
         self.system_config = None
@@ -56,9 +55,7 @@ class AppInitializer:
 
     def startup(self) -> None:
         """启动所有子系统。"""
-        logger.info(
-            "应用启动开始 | debug=%s | profile=%s", self._is_debug, self._profile
-        )
+        logger.info("应用启动开始 | debug=%s", self._is_debug)
 
         self._register_exception_types()
         self._init_system_config()  # 必须在其他子系统之前：提供 knowledge_dir
@@ -304,8 +301,8 @@ class AppInitializer:
 
         self._enc_config = self._load_encryption_config()
         key_store, kek = self._create_key_store()
-        rsa_size = self._enc_config.rsa_key_size if self._enc_config else 2048
-        data_key_id = self._enc_config.data_key_id if self._enc_config else ""
+        rsa_size = self._enc_config.rsa_key_size
+        data_key_id = self._enc_config.data_key_id
 
         # 1. RSA 密钥对（纯技术）
         self.rsa_key_pair = RSAKeyPair(rsa_key_size=rsa_size)
@@ -318,9 +315,7 @@ class AppInitializer:
         set_key_material(self.key_material)
 
         # 3. 会话服务（业务协调：RSA + 内存 + 可选 DB）
-        ttl_seconds = (
-            self._enc_config.session_ttl_seconds if self._enc_config else 60 * 60 * 24
-        )
+        ttl_seconds = self._enc_config.session_ttl_seconds
         self.session_service = SessionService(
             rsa_key_pair=self.rsa_key_pair,
             kek=kek or b"",
@@ -338,24 +333,20 @@ class AppInitializer:
         )
 
     def _load_encryption_config(self):
-        """加载加密配置（可选，失败用默认值）。"""
-        try:
-            from src.com.damon.ming.app.config.encryption.encryption_config_loader import (
-                EncryptionConfigLoader,
-            )
+        """加载加密配置（必填，失败直接抛异常，不做静默降级）。"""
+        from src.com.damon.ming.app.config.encryption.encryption_config_loader import (
+            EncryptionConfigLoader,
+        )
 
-            config = EncryptionConfigLoader().load(profile=self._profile)
-            logger.info(
-                "加密配置加载完成 | rsa=%d | ttl=%dh",
-                config.rsa_key_size,
-                config.session_ttl_hours,
-            )
-            return config
-        except FileNotFoundError:
-            logger.info("加密配置文件不存在，使用默认参数")
-        except Exception as e:
-            logger.warning("加密配置加载失败，使用默认参数: %s", e)
-        return None
+        profile = "debug" if self._is_debug else "release"
+        config = EncryptionConfigLoader().load(profile=profile)
+        logger.info(
+            "加密配置加载完成 | profile=%s | rsa=%d | ttl=%dh",
+            profile,
+            config.rsa_key_size,
+            config.session_ttl_hours,
+        )
+        return config
 
     def _create_key_store(self):
         """创建密钥存储后端（有数据库用 PgKeyStore，否则纯内存）。
@@ -371,19 +362,8 @@ class AppInitializer:
             from src.com.damon.ming.encryption.key_store import derive_kek
 
             # KEK 派生参数从业务配置读取（encryption 模块不包含这些协议常量）
-            kek_salt = b""
-            kek_info = b""
-            if self._enc_config:
-                kek_salt = (
-                    self._enc_config.kek_salt.encode("utf-8")
-                    if self._enc_config.kek_salt
-                    else b""
-                )
-                kek_info = (
-                    self._enc_config.kek_info.encode("utf-8")
-                    if self._enc_config.kek_info
-                    else b""
-                )
+            kek_salt = self._enc_config.kek_salt.encode("utf-8")
+            kek_info = self._enc_config.kek_info.encode("utf-8")
 
             store = PgKeyStore(self.db_conn)
             store.initialize()
@@ -406,7 +386,7 @@ class AppInitializer:
         """
         from src.com.damon.ming.encryption.globals import set_sign_context
 
-        if self._enc_config and self._enc_config.sign_context:
+        if self._enc_config.sign_context:
             set_sign_context(self._enc_config.sign_context.encode("utf-8"))
             logger.info("HKDF sign_context 已从配置注入")
         else:

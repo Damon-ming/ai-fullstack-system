@@ -27,19 +27,24 @@ def _check_master_key() -> list[str]:
     return errors
 
 
-def _check_encryption_config() -> None:
+def _check_encryption_config(is_debug: bool) -> None:
     """检查加密配置（YAML）中的必要字段是否填写。
 
     这些字段属于业务协议标识，encryption 模块不包含，必须由业务层配置。
     缺失任何一个字段都直接抛异常，不使用默认值降级——
     空的 salt/info/context 会导致加密/签名静默失败，比不启动更危险。
+
+    Args:
+        is_debug: 运行时环境标志，决定读取 debug 还是 release 剖面。
     """
     from src.com.damon.ming.app.config.encryption.encryption_config_loader import (
         EncryptionConfigLoader,
     )
 
+    profile = "debug" if is_debug else "release"
+
     try:
-        config = EncryptionConfigLoader().load(profile="common")
+        config = EncryptionConfigLoader().load(profile=profile)
     except FileNotFoundError:
         raise RuntimeError(
             "加密配置文件不存在，启动终止。"
@@ -61,7 +66,7 @@ def _check_encryption_config() -> None:
     if missing:
         raise RuntimeError(
             f"加密配置缺失必要字段，启动终止：{', '.join(missing)}。"
-            f"请检查 app/config/encryption/encryption-config.yaml 的 common 剖面。"
+            f"请检查 app/config/encryption/encryption-config.yaml 的 {profile} 剖面。"
         )
 
 
@@ -102,7 +107,7 @@ def run_precheck(is_debug: bool) -> list[str]:
     logger.info("执行启动前环境校验 | debug=%s", is_debug)
 
     # 加密配置：缺失直接终止，不返回错误列表（默认值会导致加密静默失败）
-    _check_encryption_config()
+    _check_encryption_config(is_debug)
 
     errors = []
     errors.extend(_check_master_key())

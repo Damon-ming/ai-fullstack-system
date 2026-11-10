@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
+from src.com.damon.ming.app.config._yaml import load_yaml
 
 
 @dataclass(frozen=True)
@@ -26,26 +26,16 @@ class SystemConfigLoader:
         SystemConfig: knowledge_dir 已解析为绝对路径。
     """
 
-    def __init__(self, config_path: str | None = None):
-        if config_path is None:
-            config_path = os.environ.get("SYSTEM_CONFIG_PATH", "")
-        if not config_path:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "system-config.yaml")
-        self._config_path = config_path
+    def __init__(self):
+        self._config_dir = os.path.dirname(os.path.abspath(__file__))
 
     def load(self) -> SystemConfig:
         raw = self._read_yaml()
-        section = raw.get("system", {})
-        if not section:
-            raise ValueError(
-                f"系统配置格式错误：缺少 'system' 根节点 | path={self._config_path}"
-            )
 
-        knowledge_dir = section.get("knowledge_dir")
+        knowledge_dir = raw.get("knowledge_dir")
         if not knowledge_dir:
             raise ValueError(
-                f"系统配置中 knowledge_dir 不能为空 | path={self._config_path}"
+                f"系统配置中 knowledge_dir 不能为空 | dir={self._config_dir}"
             )
 
         # 支持绝对路径（直接使用）或相对路径（基于 app-server/ 根目录解析）
@@ -58,10 +48,4 @@ class SystemConfigLoader:
         return SystemConfig(knowledge_dir=knowledge_dir)
 
     def _read_yaml(self) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"系统配置文件不存在: {self._config_path}")
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
-        if not raw_cfg or not isinstance(raw_cfg, dict):
-            raise ValueError("系统配置文件格式错误：需要顶层键值对")
-        return raw_cfg
+        return load_yaml(self._config_dir)

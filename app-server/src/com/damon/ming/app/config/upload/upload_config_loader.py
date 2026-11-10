@@ -5,18 +5,14 @@
 本模块属于 app/config/upload/ 配置子模块。
 UploadService 通过 UploadConfig 数据类接收参数，不感知配置来源。
 
-加载优先级：
-  1. 显式传入的 config_path
-  2. UPLOAD_CONFIG_PATH 环境变量
-  3. 默认路径：本目录下的 upload-config.yaml
-
+配置来源：本目录下唯一的 YAML 文件。
 加载失败时抛出异常（上传配置是核心安全策略，不做静默降级）。
 """
 
 import os
 from dataclasses import dataclass, field
 
-import yaml
+from src.com.damon.ming.app.config._yaml import load_yaml
 
 
 @dataclass(frozen=True)
@@ -68,16 +64,10 @@ class UploadConfigLoader:
 
     用法：
         cfg = UploadConfigLoader().load()
-        cfg = UploadConfigLoader("path/to/config.yaml").load()
     """
 
-    def __init__(self, config_path: str | None = None):
-        if config_path is None:
-            config_path = os.environ.get("UPLOAD_CONFIG_PATH", "")
-        if not config_path:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "upload-config.yaml")
-        self._config_path = config_path
+    def __init__(self):
+        self._config_dir = os.path.dirname(os.path.abspath(__file__))
 
     def load(self) -> UploadConfig:
         """加载上传配置。
@@ -86,35 +76,29 @@ class UploadConfigLoader:
         加载失败时抛出异常（上传配置是安全策略，不做静默降级）。
         """
         raw = self._read_yaml()
-        upload_section = raw.get("upload", {})
 
-        if not upload_section:
-            raise ValueError(
-                f"上传配置文件格式错误：缺少 'upload' 根节点 | path={self._config_path}"
-            )
-
-        sha_cache_max = upload_section.get("sha_cache_max")
+        sha_cache_max = raw.get("sha_cache_max")
         if not sha_cache_max or not isinstance(sha_cache_max, int) or sha_cache_max < 1:
             raise ValueError(
-                f"上传配置中 sha_cache_max 必须为正整数 | path={self._config_path}"
+                f"上传配置中 sha_cache_max 必须为正整数 | dir={self._config_dir}"
             )
 
-        max_files = upload_section.get("max_files_per_request")
+        max_files = raw.get("max_files_per_request")
         if not max_files or not isinstance(max_files, int) or max_files < 1:
             raise ValueError(
-                f"上传配置中 max_files_per_request 必须为正整数 | path={self._config_path}"
+                f"上传配置中 max_files_per_request 必须为正整数 | dir={self._config_dir}"
             )
 
-        allowed_types = upload_section.get("allowed_types", {})
+        allowed_types = raw.get("allowed_types", {})
         if not allowed_types:
             raise ValueError(
-                f"上传配置中 allowed_types 不能为空 | path={self._config_path}"
+                f"上传配置中 allowed_types 不能为空 | dir={self._config_dir}"
             )
 
-        max_total = upload_section.get("max_total_upload_size")
+        max_total = raw.get("max_total_upload_size")
         if not max_total or not isinstance(max_total, int) or max_total < 1:
             raise ValueError(
-                f"上传配置中 max_total_upload_size 必须为正整数 | path={self._config_path}"
+                f"上传配置中 max_total_upload_size 必须为正整数 | dir={self._config_dir}"
             )
 
         return UploadConfig(
@@ -125,10 +109,4 @@ class UploadConfigLoader:
         )
 
     def _read_yaml(self) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"上传配置文件不存在: {self._config_path}")
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
-        if not raw_cfg or not isinstance(raw_cfg, dict):
-            raise ValueError("上传配置文件格式错误：需要顶层键值对")
-        return raw_cfg
+        return load_yaml(self._config_dir)

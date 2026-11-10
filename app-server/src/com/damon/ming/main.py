@@ -17,13 +17,11 @@
   INFERENCE_TIMEOUT       推理超时秒数（默认 180）
   INFERENCE_API_KEYS      各角色 api_key 映射 JSON（可选，默认见 inference_runtime_config_loader.py）
   CHAT_TEMPERATURE        聊天采样温度（环境变量覆盖 inference-runtime.yaml，格式 ROLE_PARAM）
-  DB_CONFIG_PATH          DB YAML 配置文件路径（默认 app/config/db-config.yaml，可选）
-  ENCRYPTION_CONFIG_PATH  加密 YAML 配置文件路径（默认 encryption/encryption-config.yaml）
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 
 【配置文件（YAML）】
-  app/config/db-config.yaml  数据库连接池配置（由 app 层注入 db 模块）
-  app/config/encryption-config.yaml  加密业务配置（RSA 密钥大小、会话 TTL、sign_context 等，由 app 层注入 encryption 模块）
+  app/config/db/db-config.yaml  数据库连接池配置（由 app 层注入 db 模块）
+  app/config/encryption/encryption-config.yaml  加密业务配置（RSA 密钥大小、会话 TTL、sign_context 等，由 app 层注入 encryption 模块）
 
 【构建时注入（生产环境）】
   src/com/damon/ming/debug/build_info.py  由 Dockerfile/CI 在镜像构建时生成

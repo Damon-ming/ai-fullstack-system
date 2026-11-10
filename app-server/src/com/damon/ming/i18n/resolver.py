@@ -1,4 +1,4 @@
-# i18n/resolver.py
+# app-server/src/com/damon/ming/i18n/resolver.py
 """
 本地翻译解析器 —— 从 JSON 文件加载文案，支持参数插值。
 

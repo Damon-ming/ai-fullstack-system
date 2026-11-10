@@ -1,4 +1,4 @@
-# i18n/constants.py
+# app-server/src/com/damon/ming/i18n/constants.py
 """
 前端词条 key 注册表 —— 所有下发给前端的词条 key 集中管理。
 

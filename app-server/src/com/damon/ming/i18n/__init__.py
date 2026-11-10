@@ -1,4 +1,4 @@
-# i18n/__init__.py
+# app-server/src/com/damon/ming/i18n/__init__.py
 """
 服务端 i18n 模块 —— 最小入侵的国际化方案。
 
