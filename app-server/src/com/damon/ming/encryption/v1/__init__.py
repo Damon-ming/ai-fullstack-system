@@ -4,7 +4,7 @@
 
 包含：
   - CipherSuite 加密套件枚举
-  - AesGcmEngine / RsaEngine / CryptoEngine 加解密引擎
+  - AesGcmEngine / CryptoEngine 加解密引擎
   - RSAKeyPair RSA 密钥对管理（纯技术）
   - SessionKey 会话密钥数据模型（纯数据）
   - KeyMaterial 数据密钥 + 盲索引密钥管理（纯技术）
@@ -20,7 +20,6 @@ from src.com.damon.ming.encryption.v1.crypto_engine import (
     AesGcmEngine,
     CryptoEngine,
     EncryptedPayload,
-    RsaEngine,
 )
 from src.com.damon.ming.encryption.v1.field_encryptor import FieldEncryptor
 from src.com.damon.ming.encryption.v1.key_management import KeyMaterial, SessionKey
@@ -36,7 +35,6 @@ __all__ = [
     "FieldEncryptor",
     "KeyMaterial",
     "RSAKeyPair",
-    "RsaEngine",
     "SessionKey",
     "verify_signature",
 ]

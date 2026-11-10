@@ -3,7 +3,7 @@
 密钥存储工具 —— KEK 派生与密钥加解密原语（纯技术，可移植）。
 
 提供：
-  - derive_kek: 从业务配置注入的 salt/info 派生 Key Encryption Key
+  - derive_kek: 从注入的 salt/info/master_key 派生 Key Encryption Key
   - wrap_key:   用 KEK 加密 AES 密钥（存储前调用）
   - unwrap_key: 用 KEK 解密 AES 密钥（加载时调用）
 

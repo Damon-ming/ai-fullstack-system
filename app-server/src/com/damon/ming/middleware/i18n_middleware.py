@@ -14,5 +14,5 @@ class I18nMiddleware(BaseHTTPMiddleware):
     """请求级 locale 设置中间件。"""
 
     async def dispatch(self, request: Request, call_next):
-        apply_locale(request)
+        apply_locale(request.state.ctx.language)
         return await call_next(request)

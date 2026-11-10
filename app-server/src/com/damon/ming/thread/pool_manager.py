@@ -39,9 +39,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from typing import Any, Self
 
 from src.com.damon.ming.log import pin
@@ -83,7 +81,6 @@ class ThreadPoolManager:
                     cls._instance = instance
         return cls._instance
 
-    # todo 为什么不用__init__
     def startup(self, pool_configs: dict[str, int]) -> None:
         """初始化所有命名线程池。
 
@@ -187,18 +184,3 @@ class ThreadPoolManager:
                 else "n/a",
             }
         return stats
-
-    # 这里触发时机是什么
-    @contextmanager
-    def request_scope(self, request_id: str | None = None) -> Iterator[RequestContext]:
-        """上下文管理器：自动创建 + cleanup 请求上下文。
-
-        用法：
-            async with pool_mgr.request_scope() as ctx:
-                result = await ai_work(ctx.cancellation_token, ...)
-        """
-        ctx = self.create_request_context(request_id)
-        try:
-            yield ctx
-        finally:
-            ctx.cleanup()

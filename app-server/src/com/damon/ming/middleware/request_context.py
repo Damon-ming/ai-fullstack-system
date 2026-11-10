@@ -22,6 +22,7 @@ from src.com.damon.ming.middleware.header_constants import (
     DEVICE_ID,
     ENCRYPT_ENABLED,
     ENCRYPT_VERSION,
+    LANGUAGE,
     SESSION_ID,
     SIGNATURE_VERSION,
 )
@@ -58,6 +59,9 @@ class RequestContext:
     app_version: str = ""
     client_env: int = 1  # 客户端环境：0 = debug，1 = release（默认 release）
     client_type: int = 0  # 客户端类型：0 = 浏览器，1 = 移动端
+
+    # ---- 本地化 ----
+    language: str = ""  # X-Language 原始值（如 "zh-CN,en;q=0.9"），协商由 i18n 模块负责
 
     # ---- 标准头 ----
     content_type: str = ""
@@ -98,6 +102,9 @@ def build_request_context(request: "Request") -> RequestContext:
     except ValueError:
         client_type = 0  # 解析失败默认浏览器
 
+    # 本地化
+    language = headers.get(LANGUAGE, "")
+
     # 标准头
     content_type = headers.get("content-type", "")
 
@@ -116,6 +123,7 @@ def build_request_context(request: "Request") -> RequestContext:
         app_version=app_version,
         client_env=client_env,
         client_type=client_type,
+        language=language,
         content_type=content_type,
     )
 

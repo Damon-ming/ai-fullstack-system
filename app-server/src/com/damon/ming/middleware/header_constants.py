@@ -29,3 +29,6 @@ SESSION_ID = "x-session-id"
 
 # 客户端 UA 头（浏览器环境摘要）
 CLIENT_UA = "x-client-ua"
+
+# 语言偏好头（客户端声明的 locale，如 zh-CN,en;q=0.9）
+LANGUAGE = "x-language"

@@ -23,8 +23,6 @@ import json
 import os
 from dataclasses import dataclass
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from src.com.damon.ming.encryption.v1.cipher_suite import CipherSuite
 
@@ -35,22 +33,11 @@ from src.com.damon.ming.encryption.v1.cipher_suite import CipherSuite
 AES_NONCE_SIZE = 12  # GCM 推荐 96 bit
 AES_KEY_SIZE = 32  # AES-256
 
-
-# ---------------------------------------------------------------------------
-# 数据结构
-# ---------------------------------------------------------------------------
-
-
 # ---------------------------------------------------------------------------
 # 加密协议版本
 # ---------------------------------------------------------------------------
 
 ENCRYPTION_VERSION = "v1"  # 当前加密协议版本
-
-
-# ---------------------------------------------------------------------------
-# 数据结构
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -150,34 +137,6 @@ class AesGcmEngine:
         ciphertext = base64.b64decode(payload.encrypted)
         plaintext = cls.decrypt(nonce, ciphertext, aes_key)
         return plaintext.decode("utf-8")
-
-
-# ---------------------------------------------------------------------------
-# RSA 引擎（仅用于密钥交换阶段）
-# ---------------------------------------------------------------------------
-
-
-class RsaEngine:
-    """RSA-OAEP 加解密，仅用于加密传输 AES 会话密钥。"""
-
-    @staticmethod
-    def encrypt_with_public_key(plaintext: bytes, public_key_pem: bytes) -> bytes:
-        """使用 PEM 格式公钥加密（客户端侧模拟，服务端实际用私钥解密）。"""
-        from cryptography.hazmat.primitives.serialization import load_pem_public_key
-
-        # 最优非对称加密填充**，RSA 加密时用的填充算法。
-        # RSA 原始裸加密（无填充）非常不安全，有很多攻击。
-        # OAEP 是现代标准填充方案，用来解决裸 RSA 的安全缺陷。
-        # 你代码里：`padding.OAEP(...)`，就是 RSA-OAEP。
-        pub_key = load_pem_public_key(public_key_pem)
-        return pub_key.encrypt(
-            plaintext,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None,
-            ),
-        )
 
 
 # ---------------------------------------------------------------------------

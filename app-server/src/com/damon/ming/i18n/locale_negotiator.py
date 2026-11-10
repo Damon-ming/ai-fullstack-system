@@ -1,7 +1,8 @@
-# i18n/locale_negotiator.py
+# app-server/src/com/damon/ming/i18n/locale_negotiator.py
 """
-Locale 协商 —— 解析 X-Language 请求头，匹配最佳 locale。
+Locale 协商 —— 解析 X-Language 头值，匹配最佳 locale。
 
+X-Language 头由上层（中间件）解析后以字符串传入，本模块不感知 HTTP 请求对象。
 配置由 app_initializer 从 YAML 注入（configure()），全部走配置，无硬编码默认值。
 
 支持格式：
@@ -41,7 +42,7 @@ def negotiate_locale(header_value: str) -> str:
     # 解析 Accept-Language 风格的权重列表
     tags = _parse_language_header(header_value)
 
-    for locale_str, _quality in tags:
+    for locale_str, _ in tags:
         normalized = locale_str.replace("-", "_")
 
         # 精确匹配
@@ -54,7 +55,7 @@ def negotiate_locale(header_value: str) -> str:
                 return supported
 
     # 第二轮：语言前缀匹配
-    for locale_str, _quality in tags:
+    for locale_str, _ in tags:
         lang_prefix = locale_str.replace("-", "_").split("_")[0].lower()
         for supported in SUPPORTED_LOCALES:
             if supported.lower().startswith(lang_prefix):
@@ -63,9 +64,12 @@ def negotiate_locale(header_value: str) -> str:
     return DEFAULT_LOCALE
 
 
-def apply_locale(request) -> str:
-    """从请求头解析 locale 并设置到当前上下文。返回解析结果。"""
-    header_value = request.headers.get("X-Language", "")
+def apply_locale(header_value: str) -> str:
+    """解析 X-Language 头值 → 最佳 locale，并设置到当前上下文。返回解析结果。
+
+    参数：
+      header_value: X-Language 头的原始值，由上层 HTTP 层解析后传入。
+    """
     locale = negotiate_locale(header_value)
     set_locale(locale)
     return locale

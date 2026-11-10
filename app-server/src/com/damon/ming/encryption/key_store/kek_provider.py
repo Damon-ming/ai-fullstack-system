@@ -1,9 +1,9 @@
 # app-server/src/com/damon/ming/encryption/key_store/kek_provider.py
 """
-KEK (Key Encryption Key) 提供者 —— 从环境变量派生加密密钥。
+KEK (Key Encryption Key) 提供者 —— 从注入的主密钥派生加密密钥。
 
 职责：
-  - 从环境变量 MASTER_KEY 派生 KEK
+  - 从调用方注入的 master_key 派生 KEK
   - 用 HKDF-SHA256 从主密钥 + salt 派生出固定长度的 AES-256 密钥
   - 用于加密存储到 DB 的 AES 会话密钥（加密后落盘）
 
@@ -14,7 +14,7 @@ KEK (Key Encryption Key) 提供者 —— 从环境变量派生加密密钥。
 
 为什么不直接用 RSA 私钥加密？
   - RSA 私钥重启后会重新生成（当前实现），无法解密旧数据
-  - KEK 从环境变量派生，只要 MASTER_KEY 不变，重启后仍能解密历史会话
+  - KEK 从注入的 master_key 派生，只要 MASTER_KEY 不变，重启后仍能解密历史会话
 
 **HKDF = HMAC-based Key Derivation Function，基于 HMAC 的密钥派生函数**
 它的作用：**把一个原始密钥材料（输入），安全地 “衍生” 出一个或多个符合密码学规范、固定长度的密钥**。
@@ -43,31 +43,29 @@ _KEK_LENGTH = 32  # AES-256
 def derive_kek(
     kek_salt: bytes,
     kek_info: bytes,
-    master_key: str | None = None,
+    master_key: str,
 ) -> bytes:
-    """从 MASTER_KEY 环境变量派生 KEK。
+    """从注入的 master_key 派生 KEK。
 
     参数：
       kek_salt:    HKDF salt（业务层配置，确保同一 MASTER_KEY 始终派生同一 KEK）
       kek_info:    HKDF info（业务层配置，标记密钥用途）
-      master_key:  主密钥。为 None 时从 MASTER_KEY 环境变量读取。
+      master_key:  主密钥，由调用方从 MASTER_KEY 环境变量读取后注入。
 
     返回：
       32 字节 AES-256 密钥
 
     说明：
-      kek_salt / kek_info 属于业务协议标识，由外部配置注入。
-      encryption 模块不包含这些常量。
+      kek_salt / kek_info / master_key 均由外部注入。
+      encryption 模块是纯技术模块，不感知配置来源、不读取环境变量。
     """
-    if master_key is None:
-        master_key = os.environ.get("MASTER_KEY", "")
-
     if not master_key:
         from src.com.damon.ming.exception import EncryptionError
         from src.com.damon.ming.exception.error_codes import ErrorCode
 
         raise EncryptionError(
-            "MASTER_KEY 环境变量未设置。请设置一个至少 32 字符的随机密钥。",
+            "未提供 master_key，无法派生 KEK。"
+            "请由调用方从 MASTER_KEY 环境变量读取后注入。",
             biz_code=ErrorCode.SYSTEM.ENCRYPTION_FAILURE,
         )
 

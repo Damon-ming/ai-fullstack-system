@@ -387,7 +387,11 @@ class AppInitializer:
 
             store = PgKeyStore(self.db_conn)
             store.initialize()
-            kek = derive_kek(kek_salt=kek_salt, kek_info=kek_info)
+            # MASTER_KEY 由业务层读取并注入，encryption 模块不感知配置来源
+            master_key = os.environ.get("MASTER_KEY", "")
+            kek = derive_kek(
+                kek_salt=kek_salt, kek_info=kek_info, master_key=master_key
+            )
             store.cleanup_expired()
             logger.info("密钥持久化存储已启用（PostgreSQL）")
             return store, kek

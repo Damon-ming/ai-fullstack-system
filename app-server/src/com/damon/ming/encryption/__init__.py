@@ -4,7 +4,6 @@
 
 提供：
   - AES-256-GCM 对称加密（crypto_engine.AesGcmEngine）
-  - RSA-OAEP 非对称加密（crypto_engine.RsaEngine）
   - 统一加密入口（crypto_engine.CryptoEngine，按 CipherSuite 分发）
   - 密钥材料管理（key_management.KeyMaterial，含数据密钥 + 盲索引密钥）
   - RSA 密钥对生成（rsa_key_pair.RSAKeyPair）
@@ -30,7 +29,6 @@ from src.com.damon.ming.encryption.v1 import (
     EncryptedPayload,
     FieldEncryptor,
     KeyMaterial,
-    RsaEngine,
     RSAKeyPair,
     SessionKey,
     verify_signature,
@@ -46,7 +44,6 @@ __all__ = [
     "FieldEncryptor",
     "KeyMaterial",
     "RSAKeyPair",
-    "RsaEngine",
     "SessionKey",
     "verify_signature",
 ]
