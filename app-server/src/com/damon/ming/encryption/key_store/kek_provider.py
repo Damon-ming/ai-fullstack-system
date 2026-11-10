@@ -23,7 +23,7 @@ KEK (Key Encryption Key) 提供者 —— 从注入的主密钥派生加密密�
 HKDF 分为两步：
 
 1. **Extract（提取）**：`master_key + salt` → 得到伪随机密钥
-2. **Expand（扩展）**：把上面的结果 + `info` → 输出指定长度的密钥（这里输出 32 字节，AES256）
+2. **Expand（扩展）**：把上面的结果 + `info` → 输出指定长度的密钥（AES-256，长度取 constants.AES_KEY_SIZE）
 
 1. MASTER_KEY 丢失：**所有历史密文无法解密，数据永久丢失**
 2. MASTER_KEY 泄露：**全部历史密文可以被攻击者解密，数据泄露**
@@ -35,9 +35,11 @@ import os
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
-# KEK 派生密钥长度（纯技术参数，非业务常量）
-_KEK_LENGTH = 32  # AES-256
+from src.com.damon.ming.encryption.constants import (
+    AES_KEY_SIZE,
+    AES_NONCE_SIZE,
+    MASTER_KEY_MIN_LENGTH,
+)
 
 
 def derive_kek(
@@ -53,7 +55,7 @@ def derive_kek(
       master_key:  主密钥，由调用方从 MASTER_KEY 环境变量读取后注入。
 
     返回：
-      32 字节 AES-256 密钥
+      AES-256 密钥（constants.AES_KEY_SIZE 字节）
 
     说明：
       kek_salt / kek_info / master_key 均由外部注入。
@@ -69,16 +71,17 @@ def derive_kek(
             biz_code=ErrorCode.SYSTEM.ENCRYPTION_FAILURE,
         )
 
-    if len(master_key) < 16:
+    if len(master_key) < MASTER_KEY_MIN_LENGTH:
         from src.com.damon.ming.log import pin
 
         pin("encryption.kek").warning(
-            "MASTER_KEY 长度不足 32 字符，生产环境请使用更强的密钥"
+            "MASTER_KEY 长度不足 %d 字符，生产环境请使用更强的密钥",
+            MASTER_KEY_MIN_LENGTH,
         )
 
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
-        length=_KEK_LENGTH,
+        length=AES_KEY_SIZE,
         salt=kek_salt,
         info=kek_info,
     )
@@ -95,7 +98,7 @@ def wrap_key(aes_key: bytes, kek: bytes) -> str:
     """
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-    nonce = os.urandom(12)
+    nonce = os.urandom(AES_NONCE_SIZE)
     ciphertext = AESGCM(kek).encrypt(nonce, aes_key, None)
 
     # `nonce + ciphertext` 是**原始二进制 bytes**，数据库、JSON 不适合直接存二进制；
@@ -111,7 +114,7 @@ def unwrap_key(wrapped_b64: str, kek: bytes) -> bytes:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
     raw = base64.b64decode(wrapped_b64)
-    nonce = raw[:12]
-    ciphertext = raw[12:]
+    nonce = raw[:AES_NONCE_SIZE]
+    ciphertext = raw[AES_NONCE_SIZE:]
 
     return AESGCM(kek).decrypt(nonce, ciphertext, None)

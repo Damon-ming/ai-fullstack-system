@@ -14,9 +14,9 @@
 v2 协议实现见 encryption/v2/，接口签名以此为准。
 """
 
+from src.com.damon.ming.encryption.constants import ENCRYPTION_VERSION
 from src.com.damon.ming.encryption.v1.cipher_suite import CipherSuite
 from src.com.damon.ming.encryption.v1.crypto_engine import (
-    ENCRYPTION_VERSION,
     AesGcmEngine,
     CryptoEngine,
     EncryptedPayload,

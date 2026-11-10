@@ -33,17 +33,15 @@
 import base64
 import struct
 
+from src.com.damon.ming.encryption.constants import (
+    AES_NONCE_SIZE,
+    CIPHERTEXT_FORMAT_VERSION,
+)
 from src.com.damon.ming.encryption.v1.cipher_suite import CipherSuite
 from src.com.damon.ming.encryption.v1.crypto_engine import (
     CryptoEngine,
     EncryptedPayload,
 )
-
-# ---------------------------------------------------------------------------
-# 版本与格式
-# ---------------------------------------------------------------------------
-
-FORMAT_VERSION = 0x01  # 密文格式版本，预留给未来升级
 
 
 def _pack_ciphertext(key_id: str, nonce: bytes, ciphertext: bytes) -> str:
@@ -63,7 +61,7 @@ def _pack_ciphertext(key_id: str, nonce: bytes, ciphertext: bytes) -> str:
         # 把 Python 的数字，打包成固定格式的二进制字节；或者把二进制字节解析回数字。
         # - `!`：**大端序（网络字节序）**，跨平台解析不会乱（Windows/Linux 解析一致）
         # - `B`：unsigned char，**1 字节无符号整数，范围 0~255**
-        struct.pack("!B", FORMAT_VERSION)
+        struct.pack("!B", CIPHERTEXT_FORMAT_VERSION)
         + struct.pack("!B", len(key_id_bytes))
         + key_id_bytes
         + nonce
@@ -81,7 +79,7 @@ def _unpack_ciphertext(packed_b64: str) -> tuple[str, bytes, bytes]:
 
     version = raw[offset]
     offset += 1
-    if version != FORMAT_VERSION:
+    if version != CIPHERTEXT_FORMAT_VERSION:
         raise ValueError(f"Unsupported ciphertext format version: {version}")
 
     key_id_len = raw[offset]
@@ -89,9 +87,6 @@ def _unpack_ciphertext(packed_b64: str) -> tuple[str, bytes, bytes]:
 
     key_id = raw[offset : offset + key_id_len].decode("utf-8")
     offset += key_id_len
-
-    # nonce 固定 12 字节（AES-GCM）
-    from src.com.damon.ming.encryption.v1.crypto_engine import AES_NONCE_SIZE
 
     nonce = raw[offset : offset + AES_NONCE_SIZE]
     offset += AES_NONCE_SIZE

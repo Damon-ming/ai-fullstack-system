@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 from src.com.damon.ming.app.encryption.base_key_store import StoredSession
 from src.com.damon.ming.encryption.key_store import unwrap_key, wrap_key
+from src.com.damon.ming.encryption.constants import AES_KEY_SIZES
 from src.com.damon.ming.encryption.v1.key_management import SessionKey
 from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
 from src.com.damon.ming.log import pin
@@ -109,7 +110,7 @@ class SessionService:
         """
         # 1. RSA 解密
         aes_key = self._rsa.decrypt(encrypted_aes_key)
-        if len(aes_key) not in (16, 24, 32):
+        if len(aes_key) not in AES_KEY_SIZES:
             from src.com.damon.ming.exception import EncryptionError
             from src.com.damon.ming.exception.error_codes import ErrorCode
 

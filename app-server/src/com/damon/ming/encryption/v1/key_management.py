@@ -16,6 +16,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from src.com.damon.ming.encryption.constants import INDEX_KEY_SIZE
 from src.com.damon.ming.encryption.v1.crypto_engine import AesGcmEngine
 from src.com.damon.ming.exception import EncryptionError
 from src.com.damon.ming.log import pin
@@ -77,7 +78,7 @@ class KeyMaterial:
         """生成初始数据密钥和盲索引密钥。"""
         self._data_keys[self._default_data_key_id] = AesGcmEngine.generate_key()
         self._current_data_key_id = self._default_data_key_id
-        self._index_key = secrets.token_bytes(32)
+        self._index_key = secrets.token_bytes(INDEX_KEY_SIZE)
 
     def get_data_key(self, key_id: str = "") -> bytes:
         """获取数据加密密钥。

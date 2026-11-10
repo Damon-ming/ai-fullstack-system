@@ -24,20 +24,13 @@ import os
 from dataclasses import dataclass
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from src.com.damon.ming.encryption.constants import (
+    AES_KEY_SIZE,
+    AES_NONCE_SIZE,
+    BLIND_INDEX_DIGEST_SIZE,
+    ENCRYPTION_VERSION,
+)
 from src.com.damon.ming.encryption.v1.cipher_suite import CipherSuite
-
-# ---------------------------------------------------------------------------
-# 常量
-# ---------------------------------------------------------------------------
-
-AES_NONCE_SIZE = 12  # GCM 推荐 96 bit
-AES_KEY_SIZE = 32  # AES-256
-
-# ---------------------------------------------------------------------------
-# 加密协议版本
-# ---------------------------------------------------------------------------
-
-ENCRYPTION_VERSION = "v1"  # 当前加密协议版本
 
 
 @dataclass(frozen=True)
@@ -77,7 +70,7 @@ class AesGcmEngine:
     @staticmethod
     def generate_key() -> bytes:
         """生成新的 AES-256 随机密钥。"""
-        return AESGCM.generate_key(bit_length=256)
+        return AESGCM.generate_key(bit_length=AES_KEY_SIZE * 8)
 
     # AAD：**不加密，明文传输 / 存储**，但是会参与 GCM 的 tag 计算
     @staticmethod
@@ -226,7 +219,11 @@ class CryptoEngine:
         raise ValueError(f"CryptoEngine.decrypt 不支持套件: {suite}（{suite.value}）")
 
     @staticmethod
-    def blind_index(value: str, index_key: bytes, digest_size: int = 16) -> str:
+    def blind_index(
+        value: str,
+        index_key: bytes,
+        digest_size: int = BLIND_INDEX_DIGEST_SIZE,
+    ) -> str:
         """
         生成盲索引 token。
 

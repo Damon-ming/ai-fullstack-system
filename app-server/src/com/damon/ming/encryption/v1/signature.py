@@ -22,6 +22,7 @@ from typing import Any
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from src.com.damon.ming.encryption.constants import SIGNING_KEY_SIZE
 
 
 def derive_signing_key(aes_key: bytes, sign_context: bytes) -> bytes:
@@ -38,7 +39,7 @@ def derive_signing_key(aes_key: bytes, sign_context: bytes) -> bytes:
     """
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
-        length=32,
+        length=SIGNING_KEY_SIZE,
         salt=None,
         info=sign_context,
     )

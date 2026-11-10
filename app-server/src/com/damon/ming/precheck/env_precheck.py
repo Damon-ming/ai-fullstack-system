@@ -3,6 +3,7 @@
 
 import os
 
+from src.com.damon.ming.encryption.constants import MASTER_KEY_MIN_LENGTH
 from src.com.damon.ming.log import pin
 
 logger = pin("app.precheck")
@@ -12,16 +13,17 @@ def _check_master_key() -> list[str]:
     """检查 MASTER_KEY 是否设置。
 
     所有环境都必须通过 .env 设置 MASTER_KEY，不允许自动生成。
-    生产环境（非 debug）：密钥长度必须 ≥32 字符。
+    所有环境：密钥长度必须 ≥ MASTER_KEY_MIN_LENGTH 字符。
     """
     errors = []
     master_key = os.environ.get("MASTER_KEY", "")
 
     if not master_key:
         errors.append("MASTER_KEY 未设置（所有环境必须通过 .env 注入）")
-    elif len(master_key) < 32:
+    elif len(master_key) < MASTER_KEY_MIN_LENGTH:
         errors.append(
-            f"MASTER_KEY 长度不足（当前 {len(master_key)} 字符，生产环境要求 ≥32）"
+            f"MASTER_KEY 长度不足（当前 {len(master_key)} 字符，"
+            f"要求 ≥{MASTER_KEY_MIN_LENGTH}）"
         )
 
     return errors
