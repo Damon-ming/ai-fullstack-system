@@ -19,9 +19,6 @@ _rsa_key_pair: RSAKeyPair | None = None
 _key_material: KeyMaterial | None = None
 _sign_context: bytes = b""  # HKDF 派生签名密钥的 context，由业务层注入
 
-# SUPPORTED_ENCRYPTION_VERSIONS / SUPPORTED_SIGNATURE_VERSIONS 定义在 constants.py，
-# 此处 re-export 供中间件读取（校验 X-Encrypt-Version / X-Signature-Version header）
-
 
 def get_rsa_key_pair() -> RSAKeyPair:
     """获取全局 RSAKeyPair 实例。"""

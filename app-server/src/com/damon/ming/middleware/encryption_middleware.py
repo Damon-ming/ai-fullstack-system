@@ -46,11 +46,12 @@ from collections.abc import Callable
 from typing import ClassVar
 
 from fastapi import Request
-from src.com.damon.ming.encryption.globals import (
+from src.com.damon.ming.encryption.constants import (
+    SIGNATURE_TIMESTAMP_TOLERANCE_MS,
     SUPPORTED_ENCRYPTION_VERSIONS,
     SUPPORTED_SIGNATURE_VERSIONS,
-    get_sign_context,
 )
+from src.com.damon.ming.encryption.globals import get_sign_context
 from src.com.damon.ming.encryption.v1.crypto_engine import (
     AesGcmEngine,
     EncryptedPayload,
@@ -347,6 +348,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             timestamp=decrypted_json.get("timestamp", 0),
             nonce=decrypted_json.get("nonce", ""),
             exclude_keys={"signature", "timestamp", "nonce"},
+            timestamp_tolerance_ms=SIGNATURE_TIMESTAMP_TOLERANCE_MS,
         )
         if not sig_ok:
             logger.warning("JSON 签名验证失败: %s", sig_reason)
@@ -420,6 +422,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             timestamp=timestamp,
             nonce=nonce,
             exclude_keys={"signature", "timestamp", "nonce"},
+            timestamp_tolerance_ms=SIGNATURE_TIMESTAMP_TOLERANCE_MS,
         )
         if not sig_ok:
             logger.warning("FormData 签名验证失败: %s", sig_reason)

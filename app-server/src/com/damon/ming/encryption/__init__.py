@@ -21,10 +21,11 @@
   - 路由 → 见 router/encryption/encryption_router.py
 """
 
-from src.com.damon.ming.encryption.globals import SUPPORTED_ENCRYPTION_VERSIONS
+from src.com.damon.ming.encryption.constants import SUPPORTED_ENCRYPTION_VERSIONS
 from src.com.damon.ming.encryption.v1 import (
     ENCRYPTION_VERSION,
     AesGcmEngine,
+    CipherSuite,
     CryptoEngine,
     EncryptedPayload,
     FieldEncryptor,

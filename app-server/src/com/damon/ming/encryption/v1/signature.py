@@ -54,7 +54,7 @@ def verify_signature(
     nonce: str,
     *,
     exclude_keys: set[str] | None = None,
-    timestamp_tolerance_ms: int = 5 * 60 * 1000,
+    timestamp_tolerance_ms: int,
 ) -> tuple[bool, str]:
     """
     验证请求签名。
@@ -66,7 +66,8 @@ def verify_signature(
       timestamp:            签名时间戳（毫秒）
       nonce:                签名随机数
       exclude_keys:         不参与签名的字段集合（由调用方约定）
-      timestamp_tolerance_ms: 时间戳容差（毫秒），默认 ±5 分钟
+      timestamp_tolerance_ms: 时间戳容差（毫秒），必传，取值见
+                             constants.SIGNATURE_TIMESTAMP_TOLERANCE_MS
 
     返回: (是否通过, 失败原因)
     """

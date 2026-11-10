@@ -37,6 +37,11 @@ INDEX_KEY_SIZE = 32  # 字节
 # 盲索引 token 的字节长度 —— 决定 DB 索引列的长度
 BLIND_INDEX_DIGEST_SIZE = 16
 
+# ── 请求签名（防重放）────────────────────────────────────────────────────
+# 签名时间戳的允许偏差窗口，超出即视为重放并拒绝。
+# 安全策略阈值：由中间件在调用处显式传入，本模块不给默认值。
+SIGNATURE_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000  # ±5 分钟
+
 # ── 协议版本 ──────────────────────────────────────────────────────────────
 ENCRYPTION_VERSION = "v1"  # 当前加密协议版本（EncryptedPayload.version）
 CIPHERTEXT_FORMAT_VERSION = 0x01  # 字段密文的二进制格式版本（field_encryptor 首字节）
