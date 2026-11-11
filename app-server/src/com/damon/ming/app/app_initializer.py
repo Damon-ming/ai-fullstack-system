@@ -452,14 +452,25 @@ class AppInitializer:
 # ---------------------------------------------------------------------------
 
 
-@asynccontextmanager
-async def create_lifespan(initializer: AppInitializer):
+def create_lifespan(initializer: AppInitializer):
     """生成 FastAPI 可用的 lifespan 回调。
 
     用法：
         initializer = AppInitializer(is_debug=IS_DEBUG)
         app = FastAPI(lifespan=create_lifespan(initializer))
+
+    注意：lifespan 参数要求传入**可调用对象**（(app) -> 异步上下文管理器），
+    由框架在启动时调用。直接传 @asynccontextmanager 生成的上下文管理器实例
+    会被框架二次调用，导致 "Application startup failed"。
     """
-    initializer.startup()
-    yield
-    initializer.shutdown()
+
+    @asynccontextmanager
+    async def lifespan(app):
+        initializer.startup()
+        # startup 之后才挂载：app.state 必须拿到已初始化的子系统，
+        # 在 import 期挂载会全部拿到 __init__ 里的默认值（None / 空）
+        initializer.attach_to_app(app)
+        yield
+        initializer.shutdown()
+
+    return lifespan

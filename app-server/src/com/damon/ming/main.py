@@ -98,36 +98,13 @@ app = FastAPI(
 )
 
 
-# ---- CORS ---------------------------------------------------------------
-if IS_DEBUG:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    logger.info("CORS: debug 模式，放行所有来源")
-else:
-    release_origins = os.environ.get(
-        "CORS_ORIGINS", "https://your-production-domain.com"
-    ).split(",")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[o.strip() for o in release_origins if o.strip()],
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-        allow_headers=["Authorization", "Content-Type", "X-*"],
-    )
-    logger.info("CORS: release 模式，允许来源: %s", release_origins)
-
 # ---- 速率限制（per-IP，slowapi）--------------------------------------
 app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
 # ---- 中间件注册顺序说明 -----------------------------------------------
 # Starlette 的 add_middleware 是 insert(0)：后添加的排最外层、最先执行。
 # 因此本段按执行顺序倒序书写，实际执行顺序为：
-#   Context → I18n → Auth → Encryption → CORS
+#   CORS → Context → I18n → Auth → Encryption
 # 新增中间件时按同一规则倒序添加。
 
 # TODO: 上述四个中间件都继承 BaseHTTPMiddleware，而 BaseHTTPMiddleware 会经内存
@@ -149,11 +126,39 @@ else:
 # ---- i18n 语言协商 ------------------------------------------------------
 app.add_middleware(I18nMiddleware)
 
-# ---- 请求上下文（最外层，必须先于 i18n / auth / encryption 执行）------
+# ---- 请求上下文（必须先于 i18n / auth / encryption 执行）--------------
 # ContextMiddleware 一次性解析所有头部 → request.state.ctx / client / encryption
 # 后续所有中间件和路由通过这三个键读取，不再直接访问 request.headers
-# 必须最后添加：它是 i18n / auth / encryption 的数据来源
+# 必须在这三者之前注册：它是 i18n / auth / encryption 的数据来源
 app.add_middleware(ContextMiddleware)
+
+# ---- CORS（中间件链最外层）--------------------------------------------
+# 必须最先执行：浏览器的 preflight（OPTIONS，按规范不带 Authorization）
+# 要由 CORS 直接应答，否则会先被 AuthMiddleware 拦成 401，浏览器随即放弃
+# 真实请求。同时 401 / 429 / 500 等响应也能带上 CORS 头，前端才读得到状态码。
+#
+# allow_headers 用 "*"：Starlette 只把单独的 "*" 当通配（"*" in allow_headers），
+# 写成 "X-*" 会被当成字面量头部名，匹配不上任何真实头部。用 "*" 时 Starlette
+# 会在 preflight 响应里回显客户端请求的头列表，因此带凭证（Authorization）也安全。
+if IS_DEBUG:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    logger.info("CORS: debug 模式，放行所有来源")
+else:
+    release_origins = os.environ.get("CORS_ORIGINS", "").split(",")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in release_origins if o.strip()],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        allow_headers=["*"],
+    )
+    logger.info("CORS: release 模式，允许来源: %s", release_origins)
 
 # ---- 路由 --------------------------------------------------------------
 app.include_router(account_router.router)
@@ -163,9 +168,6 @@ app.include_router(history_router.router)
 app.include_router(knowledge_router.router)
 app.include_router(chat_router.router)
 logger.info("应用路由初始化完成")
-
-# ---- 初始化器将所有子系统挂载到 app.state --------------------------
-initializer.attach_to_app(app)
 
 # ---- 全局异常处理器 ---------------------------------------------------
 register_exception_handler(app)

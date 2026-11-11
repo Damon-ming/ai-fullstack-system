@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/app/config/inference/inference_runtime_config_loader.py
 # 推理运行时配置加载器 —— 运行时配置 + 网关路由 + 聊天并发控制。
 #
 # 连接路径：
