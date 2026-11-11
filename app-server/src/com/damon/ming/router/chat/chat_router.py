@@ -87,7 +87,7 @@ async def chat(request: Request, body: ChatRequest):
 
     # ── 本轮对话的上下文 ─────────────────────────────────────────────
     # 请求作用域（含 CancellationToken，finally 统一 cleanup）
-    scope = request.app.state.pool_mgr.create_request_scope()
+    scope = request.app.state.ai.pool_mgr.create_request_scope()
     # 落库记录器：turn_id 由工厂自动生成，conversation_id 供响应回传
     recorder = _create_recorder(request, body)
 
@@ -182,7 +182,7 @@ async def chat_stream(request: Request, body: ChatRequest):
     logger.info("流式聊天请求开始 | query_length=%s", len(body.query))
 
     # 本轮对话的上下文：请求作用域 + 落库记录器（turn_id 由工厂自动生成）
-    scope = request.app.state.pool_mgr.create_request_scope()
+    scope = request.app.state.ai.pool_mgr.create_request_scope()
     recorder = _create_recorder(request, body)
 
     return EventSourceResponse(
@@ -205,7 +205,7 @@ async def stream_chat_generator(
 
     recorder 由外部工厂创建（turn_id 自动生成），本函数只负责编排与交付。
     """
-    emitter = SseEmitter(retry_ms=request.app.state.retry_ms)
+    emitter = SseEmitter(retry_ms=request.app.state.chat.retry_ms)
     turn_id = recorder.turn_id
     conversation_id = recorder.conversation_id
 

@@ -110,7 +110,7 @@ def get_knowledge_tree(request: Request):
         # 通过 account 服务层获取上传者映射（不直接碰 account 的表）
         uploader_map = AccountService.get_file_uploader_map()
 
-        knowledge_dir = Path(request.app.state.system_config.knowledge_dir)
+        knowledge_dir = Path(request.app.state.config.system_config.knowledge_dir)
         if not knowledge_dir.exists():
             root = KnowledgeNode(
                 name="knowledge",

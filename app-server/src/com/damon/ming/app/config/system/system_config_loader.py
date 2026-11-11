@@ -2,7 +2,7 @@
 """
 系统级配置加载器 —— 跨模块共享的路径和基础设置。
 
-各模块不再自行硬编码路径，统一从 app.state.system_config 读取。
+各模块不再自行硬编码路径，统一从 app.state.config.system_config 读取。
 """
 
 import os

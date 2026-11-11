@@ -51,8 +51,8 @@ class AppInitializer:
         self.rag_app = None
         self.infer_service = None
         self.guardrail = None
-        self.llm_model_name: str = ""
-        self.llm_options: dict = {}
+        self.inference_model_name: str = ""
+        self.inference_options: dict = {}
 
         # 上传改为逐文件同步入库，无需后台任务
 
@@ -84,40 +84,54 @@ class AppInitializer:
         """将初始化完成的子系统挂载到 FastAPI app.state，供路由层使用。
 
         必须在 startup() 之后调用，确保所有子系统已初始化。
+        按语义分组（定义见 app/app_state.py）；app.state.limiter 保持扁平，
+        slowapi 框架硬编码读写该键。
         """
-        app.state.system_config = self.system_config
-        app.state.rag_app = self.rag_app
-        app.state.infer_service = self.infer_service
-        app.state.guardrail = self.guardrail
-        app.state.llm_model_name = self.llm_model_name
-        app.state.llm_options = self.llm_options
-        app.state.pool_mgr = self.pool_mgr
+        from src.com.damon.ming.app.app_state import (
+            AiServices,
+            AppConfig,
+            ChatRuntime,
+            EncryptionState,
+            GuardrailState,
+            Storage,
+        )
 
-        # 推理配置加载器（全进程唯一实例，下游通过参数接收同一份）
-        app.state.inference_loader = self._loader
+        app.state.config = AppConfig(
+            system_config=self.system_config,
+            upload_config=self.upload_config,
+        )
 
-        # 聊天配置（Semaphore 在 lifespan 内创建，绑定到正确的事件循环）
-        app.state.infer_sem = self.chat_sem
-        app.state.rag_sem = self.rag_sem
-        app.state.guardrail_sem = self.guardrail_sem
-        app.state.infer_timeout = self.chat_timeout
-        app.state.guardrail_timeout = self.guardrail_timeout
-        app.state.retry_ms = self.chat_retry_ms
-        app.state.chat_locales = self.chat_locales
+        app.state.ai = AiServices(
+            infer_service=self.infer_service,
+            rag_app=self.rag_app,
+            model_name=self.inference_model_name,
+            options=self.inference_options,
+            pool_mgr=self.pool_mgr,
+        )
 
-        # 上传配置（文件类型白名单 + 大小上限 + 时间窗口）
-        app.state.upload_config = self.upload_config
+        app.state.guardrail = GuardrailState(
+            engine=self.guardrail,
+            sem=self.guardrail_sem,
+            timeout=self.guardrail_timeout,
+        )
 
-        # 数据库连接（上传审计表写入）
-        app.state.db_conn = self.db_conn
+        # Semaphore 在 lifespan 内创建，绑定到正确的事件循环
+        app.state.chat = ChatRuntime(
+            sem=self.chat_sem,
+            rag_sem=self.rag_sem,
+            timeout=self.chat_timeout,
+            retry_ms=self.chat_retry_ms,
+            locales=self.chat_locales,
+        )
 
-        # 加密会话服务（RSA + 内存 + 可选 DB 持久化）
-        app.state.session_service = self.session_service
+        app.state.storage = Storage(db_conn=self.db_conn)
 
-        # HKDF 签名密钥派生 context（中间件读取，来自业务配置）
-        app.state.sign_context = self.sign_context
+        app.state.encryption = EncryptionState(
+            session_service=self.session_service,
+            sign_context=self.sign_context,
+        )
 
-        # 速率限制器（slowapi，per-IP 限流）
+        # 速率限制器（slowapi，per-IP 限流）—— 保持扁平：框架硬性要求
         app.state.limiter = self.limiter
 
         logger.info("子系统已挂载到 app.state")
@@ -222,7 +236,7 @@ class AppInitializer:
             except ImportError:
                 pass
 
-            logger.info("异常类型注册完成（Database / Encryption）")
+            logger.info("异常类型注册完成(Database / Encryption)")
         except Exception as e:
             logger.warning("异常类型注册失败: %s", e)
 
@@ -254,10 +268,10 @@ class AppInitializer:
         self.db_conn.initialize()  # pool 参数从 DbConfig 读取
         set_default_db(self.db_conn)
         self._create_tables()
-        logger.info("数据库引擎初始化完成（YAML 配置）")
+        logger.info("数据库引擎初始化完成(YAML 配置)")
 
     def _create_tables(self) -> None:
-        """创建全部业务表（account / encryption / history / upload）。"""
+        """创建全部业务表(account / encryption / history / upload)。"""
         try:
             from src.com.damon.ming.router.tables import create_all_tables
 
@@ -267,14 +281,14 @@ class AppInitializer:
             logger.warning("业务表创建失败: %s", e)
 
     def _init_rate_limiter(self) -> None:
-        """速率限制器：slowapi 封装，per-IP 限流。"""
+        """速率限制器: slowapi 封装, per-IP 限流。"""
         from src.com.damon.ming.middleware.rate_limiter import limiter
 
         self.limiter = limiter
-        logger.info("速率限制器初始化完成（per-IP，内存存储）")
+        logger.info("速率限制器初始化完成(per-IP,内存存储)")
 
     def _init_encryption(self) -> None:
-        """加密体系：RSAKeyPair（纯技术）+ KeyMaterial（数据密钥）+ SessionService（业务协调）。"""
+        """加密体系: RSAKeyPair(纯技术)+ KeyMaterial(数据密钥)+ SessionService(业务协调)。"""
         from src.com.damon.ming.app.encryption.session_service import SessionService
         from src.com.damon.ming.encryption.v1.key_management import KeyMaterial
         from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
@@ -328,12 +342,12 @@ class AppInitializer:
         return config
 
     def _create_key_store(self):
-        """创建密钥存储后端（有数据库用 PgKeyStore，否则纯内存）。
+        """创建密钥存储后端(有数据库用 PgKeyStore,否则纯内存)。
 
-        KEK 派生参数（salt / info）从业务配置注入，encryption 模块不包含这些常量。
+        KEK 派生参数(salt / info)从业务配置注入,encryption 模块不包含这些常量。
         """
         if self.db_conn is None:
-            logger.info("密钥持久化存储未配置（纯内存模式，重启后会话丢失）")
+            logger.info("密钥持久化存储未配置(纯内存模式,重启后会话丢失)")
             return None, None
 
         try:
@@ -352,14 +366,14 @@ class AppInitializer:
                 kek_salt=kek_salt, kek_info=kek_info, master_key=master_key
             )
             store.cleanup_expired()
-            logger.info("密钥持久化存储已启用（PostgreSQL）")
+            logger.info("密钥持久化存储已启用(PostgreSQL)")
             return store, kek
         except Exception as e:
             logger.warning("密钥持久化存储初始化失败，降级为纯内存: %s", e)
             return None, None
 
     def _init_sign_context(self) -> None:
-        """HKDF 签名密钥派生 context：从 YAML 配置读出，挂到 app.state 供中间件取用。
+        """HKDF 签名密钥派生 context: 从 YAML 配置读出，挂到 app.state 供中间件取用。
 
         encryption 模块不包含此常量，由业务层配置提供。
         """
@@ -418,11 +432,11 @@ class AppInitializer:
         # 推理引擎已由 self._loader.load() 装配（环境变量连接参数 + YAML roles 段）
         _chat_entry = self._loader.load().roles["chat"]
         self.infer_service = _chat_entry.engine
-        self.llm_model_name = _chat_entry.model_name
-        self.llm_options = _chat_entry.options
+        self.inference_model_name = _chat_entry.model_name
+        self.inference_options = _chat_entry.options
         logger.info(
             "RAG、LLM客户端初始化完成 | model=%s | engine=%s",
-            self.llm_model_name,
+            self.inference_model_name,
             _chat_entry.engine_type,
         )
 

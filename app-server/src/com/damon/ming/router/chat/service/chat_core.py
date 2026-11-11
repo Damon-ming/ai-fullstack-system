@@ -39,12 +39,12 @@ async def _build_prompt_messages(
     user message 中，避免 ref_content 中的模板占位符或恶意内容污染 system prompt。
     消息标签从 YAML 配置读取，与 system prompt 同文件管理。
     """
-    chat_cfg = _resolve_locale_text(app_state.chat_locales, get_locale())
+    chat_cfg = _resolve_locale_text(app_state.chat.locales, get_locale())
 
     # RAG 检索在推理信号量外执行（自身有线程池保护 + rag_sem 反压）
-    async with app_state.rag_sem:
+    async with app_state.chat.rag_sem:
         logger.debug("开始执行 RAG 检索")
-        ref_content = await app_state.rag_app.query_rag(
+        ref_content = await app_state.ai.rag_app.query_rag(
             query,
             max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
             cancellation_token=cancellation_token,
@@ -70,19 +70,19 @@ async def generate_answer(
     """Phase 2 全流程：RAG 检索 → prompt 组装 → 推理，逐 token 产出。
 
     超时预算覆盖 RAG + 推理整段（两端点共享同一口径）；
-    仅推理段进入 infer_sem，释放 RAG 等待期间的并发槽。
+    仅推理段进入推理信号量，释放 RAG 等待期间的并发槽。
     CancelledError 不加内层捕获，直接穿透到外层统一处理，
     确保 infer_service 内部 finally 能正确关闭推理流。
     """
-    async with asyncio.timeout(app_state.infer_timeout):
+    async with asyncio.timeout(app_state.chat.timeout):
         prompt_messages = await _build_prompt_messages(
             app_state, query, cancellation_token
         )
-        async with app_state.infer_sem:
-            async for token in app_state.infer_service.stream_generate(
-                model_name=app_state.llm_model_name,
+        async with app_state.chat.sem:
+            async for token in app_state.ai.infer_service.stream_generate(
+                model_name=app_state.ai.model_name,
                 messages=prompt_messages,
                 reason=reason,
-                options=dict(app_state.llm_options),
+                options=dict(app_state.ai.options),
             ):
                 yield token

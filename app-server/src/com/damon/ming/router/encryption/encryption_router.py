@@ -41,7 +41,7 @@ async def get_public_key(request: Request):
     客户端拿到公钥后，用它加密自己生成的 AES-256 密钥，
     再通过 POST /session/v1 注册会话。
     """
-    sm = request.app.state.session_service
+    sm = request.app.state.encryption.session_service
     pem = sm.get_public_key_pem()
     return BaseSuccessResponse(
         code=ErrorCode.OK,
@@ -72,7 +72,7 @@ async def register_session(
       - 会话将绑定到该 session_id，注册前撤销该 session 的旧密钥
     """
     client = request.state.client
-    sm = request.app.state.session_service
+    sm = request.app.state.encryption.session_service
 
     # 注册加密会话（原子替换：清旧录 + 插新录在同一事务）
     try:

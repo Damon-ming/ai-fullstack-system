@@ -145,9 +145,8 @@ def _resolve_api_keys() -> dict[str, str]:
 class InferenceConfigLoader:
     """推理运行时配置加载器。
 
-    由 AppInitializer 持有唯一实例（挂到 app.state.inference_loader），
-    需要推理配置的模块通过参数接收，不要自行构造 —— 引擎实例各自持有
-    连接池，多造一个加载器就多一套引擎。
+    由 AppInitializer 持有唯一实例，需要推理配置的模块通过参数接收，
+    不要自行构造 —— 引擎实例各自持有连接池，多造一个加载器就多一套引擎。
 
         loader = InferenceConfigLoader()
         cfg = loader.load()
@@ -229,7 +228,7 @@ class InferenceConfigLoader:
     def _load_chat(self, raw: dict) -> ChatConfig:
         chat = raw.get("chat")
         if not isinstance(chat, dict):
-            raise ValueError(f"运行时配置缺少 chat 段 | dir={self._config_dir}")
+            raise TypeError(f"运行时配置缺少 chat 段 | dir={self._config_dir}")
 
         return ChatConfig(
             common=self._load_chat_common(chat.get("common")),
@@ -238,7 +237,7 @@ class InferenceConfigLoader:
 
     def _load_chat_common(self, common_raw: Any) -> ChatCommonConfig:
         if not isinstance(common_raw, dict):
-            raise ValueError(f"运行时配置缺少 chat.common 段 | dir={self._config_dir}")
+            raise TypeError(f"运行时配置缺少 chat.common 段 | dir={self._config_dir}")
         try:
             pipeline = common_raw["pipeline"]
             inference = pipeline["inference"]
@@ -262,7 +261,7 @@ class InferenceConfigLoader:
         locales: dict[str, LocaleConfig] = {}
         for locale, section in locales_raw.items():
             if not isinstance(section, dict):
-                raise ValueError(
+                raise TypeError(
                     f"locale '{locale}' 配置格式错误 | dir={self._config_dir}"
                 )
             try:
@@ -283,7 +282,7 @@ class InferenceConfigLoader:
         cleaned: dict[str, dict[str, Any]] = {}
         for role, params in roles.items():
             if not isinstance(params, dict):
-                raise ValueError(f"角色 '{role}' 配置格式错误 | dir={self._config_dir}")
+                raise TypeError(f"角色 '{role}' 配置格式错误 | dir={self._config_dir}")
             cleaned[role] = dict(params)
         return cleaned
 

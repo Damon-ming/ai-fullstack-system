@@ -34,21 +34,21 @@ async def save_files(
     )
 
     # 创建请求级作用域，绑定 CancellationToken
-    scope = request.app.state.pool_mgr.create_request_scope()
+    scope = request.app.state.ai.pool_mgr.create_request_scope()
 
     try:
         # 复用 document 命名池写盘，统一线程资源管理
         # 逐文件原子提交：写盘 + 缓存 + 向量库入库，任一步失败则回滚该文件
-        document_pool = request.app.state.pool_mgr.get_pool("document")
+        document_pool = request.app.state.ai.pool_mgr.get_pool("document")
         result = await UploadService.batch_save_files(
             file_list=files,
-            upload_config=request.app.state.upload_config,
-            rag_app=request.app.state.rag_app,
+            upload_config=request.app.state.config.upload_config,
+            rag_app=request.app.state.ai.rag_app,
             cancellation_token=scope.cancellation_token,
             executor=document_pool,
             token=request.state.client.token,
             device_id=request.state.client.device_id,
-            db_conn=request.app.state.db_conn,
+            db_conn=request.app.state.storage.db_conn,
         )
         logger.info(
             "文件上传请求完成 | success=%s | failed=%s",

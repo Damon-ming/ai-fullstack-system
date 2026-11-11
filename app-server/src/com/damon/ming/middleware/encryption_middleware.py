@@ -201,7 +201,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         return True
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        sm = request.app.state.session_service
+        sm = request.app.state.encryption.session_service
         ctx = request.state.ctx
         enc = request.state.encryption
         encrypt_response = enc.enabled
@@ -343,7 +343,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         # 验证签名（业务层约定：signature/timestamp/nonce 不参与签名）
         # 签名密钥从会话 AES 密钥派生（每个会话独立）
         signing_key = derive_signing_key(
-            session.aes_key, request.app.state.sign_context
+            session.aes_key, request.app.state.encryption.sign_context
         )
         sig_ok, sig_reason = verify_signature(
             params=decrypted_json,
@@ -421,7 +421,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         # 验证签名（业务层约定：signature/timestamp/nonce 不参与签名）
         # 签名密钥从会话 AES 密钥派生（每个会话独立）
         signing_key = derive_signing_key(
-            session.aes_key, request.app.state.sign_context
+            session.aes_key, request.app.state.encryption.sign_context
         )
         sig_ok, sig_reason = verify_signature(
             params=meta,
