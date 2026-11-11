@@ -14,20 +14,19 @@
   - 批量操作（如导出）考虑用 C-extension 或 Rust 重写为可选优化
 
 典型用法：
-    # Model 层
-    class User(Base):
-        phone_enc = Column(String(512))     # 加密存储
-        phone_idx = Column(String(32))      # 盲索引，用于查询
+    fe = FieldEncryptor(key_material)
 
     # 写入
-    user.phone_enc = FieldEncryptor.encrypt(phone, CipherSuite.DATABASE_AES_GCM)
-    user.phone_idx = FieldEncryptor.blind_index(phone)
+    user.phone_enc = fe.encrypt(phone, CipherSuite.DATABASE_AES_GCM)
+    user.phone_idx = fe.blind_index(phone)
 
     # 读取
-    phone = FieldEncryptor.decrypt(user.phone_enc)
+    phone = fe.decrypt(user.phone_enc)
 
     # 查询
-    db.query(User).filter(User.phone_idx == FieldEncryptor.blind_index("13800000000"))
+    db.query(User).filter(User.phone_idx == fe.blind_index("13800000000"))
+
+密钥材料（KeyMaterial）由使用方构造并注入，本模块不持有全局状态。
 """
 
 import base64
@@ -42,6 +41,7 @@ from src.com.damon.ming.encryption.v1.crypto_engine import (
     CryptoEngine,
     EncryptedPayload,
 )
+from src.com.damon.ming.encryption.v1.key_management import KeyMaterial
 
 
 def _pack_ciphertext(key_id: str, nonce: bytes, ciphertext: bytes) -> str:
@@ -103,15 +103,18 @@ def _unpack_ciphertext(packed_b64: str) -> tuple[str, bytes, bytes]:
 
 class FieldEncryptor:
     """
-    数据库字段加解密工具类。
+    数据库字段加解密器（实例类，构造时注入 KeyMaterial）。
 
     与 AesGcmEngine 的区别：
       - AesGcmEngine 返回结构化 EncryptedPayload，适合网络传输
       - FieldEncryptor 返回单个 base64 字符串，适合存入数据库单列
     """
 
-    @staticmethod
+    def __init__(self, key_material: KeyMaterial) -> None:
+        self._key_material = key_material
+
     def encrypt(
+        self,
         plaintext: str,
         suite: CipherSuite = CipherSuite.DATABASE_AES_GCM,
         *,
@@ -125,17 +128,15 @@ class FieldEncryptor:
         参数：
           plaintext:  待加密明文
           suite:       加密套件（默认随机 nonce，最安全）
-          key:         AES-256 密钥（32 字节），为 None 时尝试从 KeyMaterial 取
+          key:         AES-256 密钥（32 字节），为 None 时从注入的 KeyMaterial 取
           key_id:      密钥标识（写入密文，解密时用于取对应密钥）
           index_key:   盲索引密钥（可选，传则同时返回索引）
 
         返回：
           密文字符串。
         """
-        from src.com.damon.ming.encryption.globals import get_key_material
-
         if key is None:
-            key = get_key_material().get_data_key(key_id)
+            key = self._key_material.get_data_key(key_id)
 
         plaintext_bytes = plaintext.encode("utf-8")
 
@@ -152,8 +153,8 @@ class FieldEncryptor:
             ciphertext=base64.b64decode(payload.encrypted),
         )
 
-    @staticmethod
     def decrypt(
+        self,
         packed_b64: str,
         suite: CipherSuite = CipherSuite.DATABASE_AES_GCM,
         *,
@@ -165,19 +166,17 @@ class FieldEncryptor:
         参数：
           packed_b64: FieldEncryptor.encrypt 返回的密文
           suite:       加密套件（需与加密时一致）
-          key_map:      key_id → key 的映射（为 None 时从 KeyMaterial 取）
+          key_map:      key_id → key 的映射（为 None 时从注入的 KeyMaterial 取）
 
         返回：
           解密后的明文字符串。
         """
-        from src.com.damon.ming.encryption.globals import get_key_material
-
         key_id, nonce, ciphertext = _unpack_ciphertext(packed_b64)
 
         if key_map and key_id in key_map:
             key = key_map[key_id]
         else:
-            key = get_key_material().get_data_key(key_id)
+            key = self._key_material.get_data_key(key_id)
 
         payload = EncryptedPayload(
             encrypted=base64.b64encode(ciphertext).decode("ascii"),
@@ -188,21 +187,18 @@ class FieldEncryptor:
         plaintext_bytes = CryptoEngine.decrypt(payload, key, suite)
         return plaintext_bytes.decode("utf-8")
 
-    @staticmethod
-    def blind_index(value: str, index_key: bytes | None = None) -> str:
+    def blind_index(self, value: str, index_key: bytes | None = None) -> str:
         """
         生成盲索引 token。
 
         用法：
           # 写入时
-          user.email_idx = FieldEncryptor.blind_index(user.email)
+          user.email_idx = fe.blind_index(user.email)
 
           # 查询时
-          db.query(User).filter(User.email_idx == FieldEncryptor.blind_index("foo@example.com"))
+          db.query(User).filter(User.email_idx == fe.blind_index("foo@example.com"))
         """
-        from src.com.damon.ming.encryption.globals import get_key_material
-
         if index_key is None:
-            index_key = get_key_material().get_index_key()
+            index_key = self._key_material.get_index_key()
 
         return CryptoEngine.blind_index(value, index_key)

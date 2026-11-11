@@ -23,7 +23,7 @@ import uuid
 from datetime import timedelta
 
 from sqlalchemy import text
-from src.com.damon.ming.db.db_connection import get_default_db
+from src.com.damon.ming.db import get_default_db
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.tables.account import (
     DeviceRow,

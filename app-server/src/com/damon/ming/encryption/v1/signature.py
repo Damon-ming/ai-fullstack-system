@@ -12,7 +12,7 @@
 签名密钥派生：
   - 不再使用全局共享密钥
   - 每个会话从 AES-256 主密钥通过 HKDF-SHA256 派生独立的签名密钥
-  - 派生上下文由调用方从全局注入点获取，确保与前端一致
+  - 派生上下文由调用方从业务配置获取，确保与前端一致
 """
 
 import hashlib
@@ -29,7 +29,7 @@ def derive_signing_key(aes_key: bytes, sign_context: bytes) -> bytes:
     """
     从 AES-256 主密钥派生 HMAC 签名密钥。
 
-    使用 HKDF-SHA256，context 由调用方传入（从全局注入点获取），
+    使用 HKDF-SHA256，context 由调用方传入（取自业务配置），
     确保前后端派生结果一致。
     派生出的 32 字节密钥直接用于 HMAC-SHA256 签名。
 

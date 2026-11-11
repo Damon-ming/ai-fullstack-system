@@ -11,7 +11,6 @@
   - 加密套件枚举（cipher_suite.CipherSuite）
   - 数据库字段加解密（field_encryptor.FieldEncryptor）
   - KEK 工具（key_store/，含 derive_kek / wrap_key / unwrap_key）
-  - 全局注入点（globals.py：set_rsa_key_pair / set_key_material / set_sign_context）
 
 不提供（它们属于业务层 app/）：
   - 配置加载 → 见 app/config/encryption/encryption_config_loader.py

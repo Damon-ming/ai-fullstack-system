@@ -37,6 +37,7 @@ class AppInitializer:
         self.db_conn = None
         self.rsa_key_pair = None
         self.key_material = None
+        self.sign_context: bytes = b""
         self.session_service = None
         self.limiter = None
         self.pool_mgr = None
@@ -103,6 +104,9 @@ class AppInitializer:
 
         # 加密会话服务（RSA + 内存 + 可选 DB 持久化）
         app.state.session_service = self.session_service
+
+        # HKDF 签名密钥派生 context（中间件读取，来自业务配置）
+        app.state.sign_context = self.sign_context
 
         # 速率限制器（slowapi，per-IP 限流）
         app.state.limiter = self.limiter
@@ -263,10 +267,6 @@ class AppInitializer:
     def _init_encryption(self) -> None:
         """加密体系：RSAKeyPair（纯技术）+ KeyMaterial（数据密钥）+ SessionService（业务协调）。"""
         from src.com.damon.ming.app.encryption.session_service import SessionService
-        from src.com.damon.ming.encryption.globals import (
-            set_key_material,
-            set_rsa_key_pair,
-        )
         from src.com.damon.ming.encryption.v1.key_management import KeyMaterial
         from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
 
@@ -275,15 +275,14 @@ class AppInitializer:
         rsa_size = self._enc_config.rsa_key_size
         data_key_id = self._enc_config.data_key_id
 
-        # 1. RSA 密钥对（纯技术）
+        # 1. RSA 密钥对（纯技术）—— 注入 SessionService，不再另存全局副本
         self.rsa_key_pair = RSAKeyPair(rsa_key_size=rsa_size)
         self.rsa_key_pair.initialize()
-        set_rsa_key_pair(self.rsa_key_pair)
 
         # 2. 数据密钥材料（纯技术：字段加解密 + 盲索引）
+        #    由使用方（FieldEncryptor）构造时注入，不再另存全局副本
         self.key_material = KeyMaterial(data_key_id=data_key_id)
         self.key_material.initialize()
-        set_key_material(self.key_material)
 
         # 3. 会话服务（业务协调：RSA + 内存 + 可选 DB）
         ttl_seconds = self._enc_config.session_ttl_seconds
@@ -351,15 +350,13 @@ class AppInitializer:
             return None, None
 
     def _init_sign_context(self) -> None:
-        """HKDF 签名密钥派生 context：从 YAML 配置注入 encryption 模块。
+        """HKDF 签名密钥派生 context：从 YAML 配置读出，挂到 app.state 供中间件取用。
 
         encryption 模块不包含此常量，由业务层配置提供。
         """
-        from src.com.damon.ming.encryption.globals import set_sign_context
-
-        if self._enc_config.sign_context:
-            set_sign_context(self._enc_config.sign_context.encode("utf-8"))
-            logger.info("HKDF sign_context 已从配置注入")
+        self.sign_context = self._enc_config.sign_context.encode("utf-8")
+        if self.sign_context:
+            logger.info("HKDF sign_context 已从配置读出")
         else:
             logger.warning("sign_context 未配置，签名密钥派生将使用空 context")
 

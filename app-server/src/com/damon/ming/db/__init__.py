@@ -14,6 +14,7 @@
   - DbConfig:       数据库连接配置（纯数据类，所有字段必填）
   - DbConnection:   连接管理（SQLAlchemy 引擎 + 连接池 + 自动重连）
   - query / execute: 底层 SQL 执行工具
+  - get_default_db / set_default_db: 默认连接注册表（启动时注入，业务层取用）
 
 不提供（它们属于业务层 app/）：
   - 配置加载 → 见 app/config/db/db_config_loader.py
@@ -35,11 +36,19 @@
 """
 
 from src.com.damon.ming.db.db_config import DbConfig
-from src.com.damon.ming.db.db_connection import DbConnection, execute, query
+from src.com.damon.ming.db.db_connection import (
+    DbConnection,
+    execute,
+    get_default_db,
+    query,
+    set_default_db,
+)
 
 __all__ = [
     "DbConfig",
     "DbConnection",
     "execute",
+    "get_default_db",
     "query",
+    "set_default_db",
 ]

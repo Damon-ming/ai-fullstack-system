@@ -51,7 +51,6 @@ from src.com.damon.ming.encryption.constants import (
     SUPPORTED_ENCRYPTION_VERSIONS,
     SUPPORTED_SIGNATURE_VERSIONS,
 )
-from src.com.damon.ming.encryption.globals import get_sign_context
 from src.com.damon.ming.encryption.v1.crypto_engine import (
     AesGcmEngine,
     EncryptedPayload,
@@ -343,7 +342,9 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
         # 验证签名（业务层约定：signature/timestamp/nonce 不参与签名）
         # 签名密钥从会话 AES 密钥派生（每个会话独立）
-        signing_key = derive_signing_key(session.aes_key, get_sign_context())
+        signing_key = derive_signing_key(
+            session.aes_key, request.app.state.sign_context
+        )
         sig_ok, sig_reason = verify_signature(
             params=decrypted_json,
             secret=signing_key.hex(),
@@ -419,7 +420,9 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
         # 验证签名（业务层约定：signature/timestamp/nonce 不参与签名）
         # 签名密钥从会话 AES 密钥派生（每个会话独立）
-        signing_key = derive_signing_key(session.aes_key, get_sign_context())
+        signing_key = derive_signing_key(
+            session.aes_key, request.app.state.sign_context
+        )
         sig_ok, sig_reason = verify_signature(
             params=meta,
             secret=signing_key.hex(),
