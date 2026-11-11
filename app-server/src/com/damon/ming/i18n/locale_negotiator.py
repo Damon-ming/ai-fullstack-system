@@ -25,6 +25,16 @@ def configure(default_locale: str, supported_locales: list[str]) -> None:
     SUPPORTED_LOCALES = set(supported_locales)
 
 
+def get_default_locale() -> str:
+    """返回 YAML 配置的默认 locale（回退口径）。
+
+    与 negotiate_locale 共用同一配置来源，供需要回退默认 locale 的调用方使用。
+    """
+    if DEFAULT_LOCALE is None:
+        raise RuntimeError("locale_negotiator 未配置，请先调用 configure()")
+    return DEFAULT_LOCALE
+
+
 def negotiate_locale(header_value: str) -> str:
     """解析 X-Language 头 → 最佳匹配 locale。
 

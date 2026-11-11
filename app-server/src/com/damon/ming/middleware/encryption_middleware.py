@@ -450,9 +450,6 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             )
             return _replay_response()
 
-        # TODO: decrypted_meta 目前没有任何消费方（全仓库零读取）。
-        #       若确认后续不用，连同本行一并删除。
-        request.state.decrypted_meta = meta
         request.state.enc_session = session
         logger.debug("FormData 已解密并验证签名 | key_id=%s", session.key_id)
         return session

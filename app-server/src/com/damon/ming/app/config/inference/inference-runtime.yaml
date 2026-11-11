@@ -13,8 +13,6 @@
 
 chat:
   common:
-    config_ttl_seconds: 60    # ChatConfigLoader 缓存 TTL（秒），0=每次请求都读磁盘
-
     pipeline:                 # 聊天主流程（RAG + 推理）
       total_timeout: 30       # RAG + 推理总预算（秒）
       inference:

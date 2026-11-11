@@ -32,6 +32,13 @@ class AppInitializer:
     def __init__(self, is_debug: bool = True) -> None:
         self._is_debug = is_debug
 
+        # 推理配置加载器：进程级单例（引擎只装配一次）
+        from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
+            InferenceConfigLoader,
+        )
+
+        self._loader = InferenceConfigLoader()
+
         # 子系统状态（startup 后填充）
         self.system_config = None
         self.db_conn = None
@@ -44,7 +51,6 @@ class AppInitializer:
         self.rag_app = None
         self.infer_service = None
         self.guardrail = None
-        self.inference: dict = {}
         self.llm_model_name: str = ""
         self.llm_options: dict = {}
 
@@ -86,6 +92,9 @@ class AppInitializer:
         app.state.llm_model_name = self.llm_model_name
         app.state.llm_options = self.llm_options
         app.state.pool_mgr = self.pool_mgr
+
+        # 推理配置加载器（全进程唯一实例，下游通过参数接收同一份）
+        app.state.inference_loader = self._loader
 
         # 聊天配置（Semaphore 在 lifespan 内创建，绑定到正确的事件循环）
         app.state.infer_sem = self.chat_sem
@@ -361,44 +370,31 @@ class AppInitializer:
             logger.warning("sign_context 未配置，签名密钥派生将使用空 context")
 
     def _init_chat(self) -> None:
-        """聊天配置：加载 YAML 中的 Semaphore 参数、超时、多 locale 系统 prompt。"""
+        """聊天配置：从 YAML 读取 Semaphore 参数、超时、多 locale 文本。"""
         import asyncio
 
-        from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
-            ChatConfigLoader,
-            ChatLocaleText,
-        )
-
-        configs = ChatConfigLoader().load_all()
-        # 并发参数所有 locale 相同（来自 common），任选其一提取
-        cfg = configs["zh_CN"]
+        cfg = self._loader.load()
+        common = cfg.chat.common
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
-        self.chat_sem = asyncio.Semaphore(cfg.infer_sem)
-        self.rag_sem = asyncio.Semaphore(cfg.rag_sem)
-        self.guardrail_sem = asyncio.Semaphore(cfg.guardrail_sem)
-        self.chat_timeout = cfg.total_timeout
-        self.guardrail_timeout = cfg.guardrail_timeout
-        self.chat_retry_ms = cfg.sse_retry_ms
-        # 多 locale 文本配置：locale → ChatLocaleText
-        self.chat_locales = {
-            locale: ChatLocaleText(
-                system_prompt=c.system_prompt,
-                ref_label=c.ref_label,
-                query_label=c.query_label,
-            )
-            for locale, c in configs.items()
-        }
+        self.chat_sem = asyncio.Semaphore(common.infer_sem)
+        self.rag_sem = asyncio.Semaphore(common.rag_sem)
+        self.guardrail_sem = asyncio.Semaphore(common.guardrail_sem)
+        self.chat_timeout = common.total_timeout
+        self.guardrail_timeout = common.guardrail_timeout
+        self.chat_retry_ms = common.sse_retry_ms
+        # 多 locale 文本配置：locale → LocaleConfig
+        self.chat_locales = cfg.chat.locales
 
         logger.info(
             "聊天配置初始化完成 | locales=%s | infer_sem=%d | rag_sem=%d | "
             "guardrail_sem=%d | guardrail_timeout=%ds | total_timeout=%ds",
             list(self.chat_locales.keys()),
-            cfg.infer_sem,
-            cfg.rag_sem,
-            cfg.guardrail_sem,
-            cfg.guardrail_timeout,
-            cfg.total_timeout,
+            common.infer_sem,
+            common.rag_sem,
+            common.guardrail_sem,
+            common.guardrail_timeout,
+            common.total_timeout,
         )
 
     def _init_ai(self) -> None:
@@ -407,25 +403,21 @@ class AppInitializer:
         from src.com.damon.ming.ai.registry.inference_registry import (
             register_all_inferences,
         )
-        from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
-            InferenceConfigLoader,
-        )
 
         register_all_inferences()
         # infer_sem 由 _init_chat() 创建（已在 lifespan 事件循环内），
-        # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量
+        # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
+        # loader 同为注入，保证全进程只有一套推理引擎
         self.rag_app = get_rag_container(
             pool_mgr=self.pool_mgr,
             infer_sem=self.chat_sem,
             knowledge_dir=self.system_config.knowledge_dir,
+            loader=self._loader,
         )
 
-        # 全量加载推理引擎和模型（双源合并：环境变量连接 + inference-runtime.yaml 模型参数）
-        self._loader = InferenceConfigLoader()
-        _loaded = self._loader.load_all()
-        self.inference = _loaded
-        _chat_engine, _chat_entry = self._loader.get_engine_for_model("chat")
-        self.infer_service = _chat_engine
+        # 推理引擎已由 self._loader.load() 装配（环境变量连接参数 + YAML roles 段）
+        _chat_entry = self._loader.load().roles["chat"]
+        self.infer_service = _chat_entry.engine
         self.llm_model_name = _chat_entry.model_name
         self.llm_options = _chat_entry.options
         logger.info(
@@ -441,7 +433,7 @@ class AppInitializer:
         )
 
         loader = GuardrailConfigLoader()
-        guardrail_engine, _ = self._loader.get_engine_for_model("guardrail")
+        guardrail_engine = self._loader.load().roles["guardrail"].engine
         loaded = loader.load_all(inference=guardrail_engine)
         self.guardrail = loaded["engine"]
         logger.info("护栏系统初始化完成 | engine=%s", type(self.guardrail).__name__)

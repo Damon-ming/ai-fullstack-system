@@ -11,10 +11,8 @@ import asyncio
 from collections.abc import AsyncGenerator
 
 from src.com.damon.ming.ai.inference.base_inference import StreamToken
-from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
-    ChatConfigLoader,
-)
 from src.com.damon.ming.i18n import get_locale
+from src.com.damon.ming.i18n.locale_negotiator import get_default_locale
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import CancellationToken
 
@@ -27,6 +25,11 @@ logger = pin("chat.core")
 MAX_CONTEXT_TOKEN_BUDGET = 512
 
 
+def _resolve_locale_text(chat_locales: dict, locale: str):
+    """按请求 locale 取文本配置，缺省回退 i18n 配置的 default_locale。"""
+    return chat_locales.get(locale) or chat_locales[get_default_locale()]
+
+
 async def _build_prompt_messages(
     app_state, query: str, cancellation_token: CancellationToken | None = None
 ) -> list[dict[str, str]]:
@@ -36,9 +39,7 @@ async def _build_prompt_messages(
     user message 中，避免 ref_content 中的模板占位符或恶意内容污染 system prompt。
     消息标签从 YAML 配置读取，与 system prompt 同文件管理。
     """
-    chat_cfg = ChatConfigLoader.resolve_locale_text(
-        app_state.chat_locales, get_locale()
-    )
+    chat_cfg = _resolve_locale_text(app_state.chat_locales, get_locale())
 
     # RAG 检索在推理信号量外执行（自身有线程池保护 + rag_sem 反压）
     async with app_state.rag_sem:

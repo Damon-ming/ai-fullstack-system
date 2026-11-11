@@ -77,6 +77,7 @@ def get_rag_container(
     pool_mgr: ThreadPoolManager,
     infer_sem: asyncio.Semaphore,
     knowledge_dir: str,
+    loader: InferenceConfigLoader,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
@@ -84,6 +85,7 @@ def get_rag_container(
         pool_mgr: 由 AppInitializer 注入的全局线程池管理器（必填）。
         infer_sem: 推理信号量（与主推理共用，必填）。
         knowledge_dir: 知识库目录绝对路径（由 app.config 注入，必填）。
+        loader: 推理配置加载器（由 AppInitializer 注入，必填）。
     """
     global _rag_instance
     if _rag_instance is None:
@@ -93,6 +95,7 @@ def get_rag_container(
                     pool_mgr=pool_mgr,
                     infer_sem=infer_sem,
                     knowledge_dir=knowledge_dir,
+                    loader=loader,
                 )
     return _rag_instance
 
@@ -104,6 +107,7 @@ class RAGContainer:
         pool_mgr: ThreadPoolManager | None = None,
         infer_sem: asyncio.Semaphore | None = None,
         knowledge_dir: str = "",
+        loader: InferenceConfigLoader | None = None,
     ):
         logger.info("RAG 容器初始化开始")
         # 线程池管理器：优先使用注入的全局实例，否则回退单例
@@ -114,6 +118,9 @@ class RAGContainer:
         if not knowledge_dir:
             raise ValueError("RAGContainer 初始化失败：knowledge_dir 不能为空")
         self._knowledge_dir = Path(knowledge_dir)
+        # 推理配置加载器：由 AppInitializer 注入（全进程唯一实例）
+        if loader is None:
+            raise ValueError("RAGContainer 初始化失败：loader 不能为空")
         # 步骤1：执行所有模块注册
         register_all_rerankers()
         register_all_tokenizers()
@@ -141,12 +148,11 @@ class RAGContainer:
         self.vector_store: BaseVectorStore = VectorConfigLoader().load("pgvector")
 
         # 步骤4：初始化章节重构 + 摘要服务
-        _infer_loader = InferenceConfigLoader()
-        _infer_engine, _summary_entry = _infer_loader.get_engine_for_model("summary")
+        _summary_entry = loader.load().roles["summary"]
         self.section_recon = SectionReconstructor()
         self.summary = SummaryService(
             tokenizer=self.tokenizer,
-            inference=_infer_engine,
+            inference=_summary_entry.engine,
             summary_model=_summary_entry.model_name,
             summary_options=_summary_entry.options,
             semaphore=self._infer_sem,

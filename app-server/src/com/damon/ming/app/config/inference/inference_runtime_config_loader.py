@@ -1,29 +1,23 @@
 # app-server/src/com/damon/ming/app/config/inference/inference_runtime_config_loader.py
-# 推理运行时配置加载器 —— 运行时配置 + 网关路由 + 聊天并发控制。
+# 推理运行时配置加载器 —— YAML 直接映射 + 推理引擎装配。
 #
 # 连接路径：
 #   app-server → inference-gateway (http://inference-gateway:8080/v1)
 #                              → 按 api_key 路由到 vllm-{role}
 #
 # api_key 由环境变量注入（由 docker-compose 提供），格式：
-#   INFERENCE_API_KEYS  → JSON 字典，如 {"chat":"ak_pool_001","intent":"ak_pool_002"}
+#   INFERENCE_API_KEYS        → JSON 字典，如 {"chat":"ak_pool_001","intent":"ak_pool_002"}
+#   INFERENCE_API_KEY_{ROLE}  → 单个角色，优先级高于 JSON
 #
-# 也可单独设置某个角色的 key：
-#   INFERENCE_API_KEY_CHAT=ak_pool_001
-#   INFERENCE_API_KEY_INTENT=ak_pool_002
-#
-# 动态运行时配置（本目录下唯一的 YAML 文件）：
-#   → roles 段：模型参数（temperature/top_p/max_tokens），与后端无关
-#   → chat 段：并发控制（信号量、超时）和多 locale 系统 prompt
-#
-# 用法：
+# 由 AppInitializer 持有唯一实例并注入下游（rag_tool 通过参数接收，
+# 引擎实例各自持有连接池，必须只装配一次）：
 #   loader = InferenceConfigLoader()
-#   result = loader.load_all()
-#   engine, entry = loader.get_engine_for_model("chat")
+#   cfg = loader.load()
 #
-#   chat_loader = ChatConfigLoader()
-#   configs = chat_loader.load_all()
-#   configs["zh_CN"].system_prompt
+#   cfg.chat.common.infer_sem                # chat.common 段
+#   cfg.chat.locales["zh_CN"].system_prompt  # chat.locales 段
+#   cfg.roles["chat"].options["max_tokens"]  # roles 段原始参数
+#   cfg.roles["chat"].engine                 # 该角色绑定的引擎实例
 
 import json
 import os
@@ -42,97 +36,75 @@ from src.com.damon.ming.app.config._yaml import load_yaml
 # INFERENCE_SERVER:      引擎类型，如 ollama / vllm / sglang
 # INFERENCE_TIMEOUT:     超时秒数（可选，默认 180）
 # INFERENCE_API_KEYS:    JSON 字典 {role: api_key}（必须覆盖所有角色，否则启动报错）
-# INFERANCE_API_KEY_{ROLE}: 单个角色的 api_key（优先级高于 JSON）
+# INFERENCE_API_KEY_{ROLE}: 单个角色的 api_key（优先级高于 JSON）
 
 # api_key 完全由环境变量注入，不设默认值。
-# 未配置的角色在 load_all() 中明确报错。
+# 未配置的角色在 load() 中明确报错。
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 数据类
+# 数据类 —— 与 inference-runtime.yaml 的段落一一对应
 # ═══════════════════════════════════════════════════════════════════════
 
 
 @dataclass(frozen=True)
+class ChatCommonConfig:
+    """chat.common 段 —— 聊天流程并发控制参数。"""
+
+    total_timeout: int  # RAG + 推理总预算（秒）
+    infer_sem: int  # 推理信号量上限（主推理 + 摘要/压缩共享）
+    rag_sem: int  # RAG 检索段信号量上限（反压控制）
+    guardrail_sem: int  # 护栏 LLM 调用信号量上限
+    guardrail_timeout: int  # 护栏检测独立超时（秒），超时 fail-open 放行
+    sse_retry_ms: int  # SSE 断连重连间隔（毫秒），0=禁用
+
+
+@dataclass(frozen=True)
+class LocaleConfig:
+    """chat.locales.{locale} 段 —— 单个 locale 的聊天文本。"""
+
+    ref_label: str
+    query_label: str
+    system_prompt: str
+
+
+@dataclass(frozen=True)
+class ChatConfig:
+    """chat 段。"""
+
+    common: ChatCommonConfig
+    locales: dict[str, LocaleConfig]
+
+
+@dataclass(frozen=True)
 class ModelEntry:
-    """模型层加载结果。"""
+    """roles.{role} 段 + 该角色绑定的引擎实例。
+
+    options 是 YAML 中该角色的原始推理参数（temperature/top_p/max_tokens）；
+    引擎实例由加载器按环境变量连接参数装配，api_key 相同的角色共享同一实例。
+    """
 
     model_name: str
     options: dict[str, Any]
     api_key: str
     engine_type: str
+    engine: BaseInferenceService
 
 
-@dataclass
-class ChatLocaleText:
-    """单个 locale 的聊天文本配置。"""
+@dataclass(frozen=True)
+class InferenceRuntimeConfig:
+    """inference-runtime.yaml 的直接映射。
 
-    system_prompt: str
-    ref_label: str
-    query_label: str
+    chat  —— chat 段（common 并发参数 + locales 文本）
+    roles —— roles 段，每个角色携带 YAML 参数和装配出的引擎实例
+    """
 
-
-class ChatConfig:
-    """AI 并发控制配置参数。所有参数无默认值，必须由 YAML 显式提供。"""
-
-    __slots__ = (
-        "config_ttl_seconds",
-        "guardrail_sem",
-        "guardrail_timeout",
-        "infer_sem",
-        "locale",
-        "name",
-        "query_label",
-        "rag_sem",
-        "ref_label",
-        "sse_retry_ms",
-        "system_prompt",
-        "total_timeout",
-    )
-
-    def __init__(
-        self,
-        name: str,
-        locale: str,
-        system_prompt: str,
-        total_timeout: int,
-        infer_sem: int,
-        rag_sem: int,
-        guardrail_sem: int,
-        guardrail_timeout: int,
-        sse_retry_ms: int,
-        config_ttl_seconds: int,
-        ref_label: str,
-        query_label: str,
-    ):
-        self.name = name
-        self.locale = locale
-        self.system_prompt = system_prompt
-        self.total_timeout = total_timeout
-        self.infer_sem = infer_sem
-        self.rag_sem = rag_sem
-        self.guardrail_sem = guardrail_sem
-        self.guardrail_timeout = guardrail_timeout
-        self.sse_retry_ms = sse_retry_ms
-        self.config_ttl_seconds = config_ttl_seconds
-        self.ref_label = ref_label
-        self.query_label = query_label
-
-
-# common 并发参数的字段名（与 ChatConfig 的 __slots__ 对应）
-_COMMON_FIELDS = (
-    "config_ttl_seconds",
-    "guardrail_sem",
-    "guardrail_timeout",
-    "infer_sem",
-    "rag_sem",
-    "sse_retry_ms",
-    "total_timeout",
-)
+    chat: ChatConfig
+    roles: dict[str, ModelEntry]
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 环境变量覆盖
+# 环境变量解析
 # ═══════════════════════════════════════════════════════════════════════
 
 
@@ -143,7 +115,7 @@ def _resolve_api_keys() -> dict[str, str]:
       1. INFERENCE_API_KEY_{ROLE} 环境变量（单个角色）
       2. INFERENCE_API_KEYS JSON 环境变量（批量）
 
-    未配置的角色不兜底，由 load_all() 报错。
+    未配置的角色不兜底，由 load() 报错。
     """
     keys: dict[str, str] = {}
 
@@ -166,215 +138,154 @@ def _resolve_api_keys() -> dict[str, str]:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 推理引擎配置加载器
+# 加载器
 # ═══════════════════════════════════════════════════════════════════════
 
 
 class InferenceConfigLoader:
-    """连接参数（环境变量） + 运行时配置（YAML）双源合并。
+    """推理运行时配置加载器。
 
-    连接参数由 docker-compose 注入：
-      INFERENCE_GATEWAY_URL  → base_url（如 http://inference-gateway:8080/v1）
-      INFERENCE_SERVER      → engine_type（如 ollama / vllm / sglang）
-      INFERENCE_TIMEOUT     → timeout（可选，默认 180）
-      INFERENCE_API_KEYS    → {role: api_key} JSON 字典（必须覆盖所有角色）
+    由 AppInitializer 持有唯一实例（挂到 app.state.inference_loader），
+    需要推理配置的模块通过参数接收，不要自行构造 —— 引擎实例各自持有
+    连接池，多造一个加载器就多一套引擎。
+
+        loader = InferenceConfigLoader()
+        cfg = loader.load()
+
+    load() 只执行一次，重复调用直接返回缓存结果。
     """
 
-    def __init__(self):
-        self._engine_type: str = ""
-        self._engines: dict[str, BaseInferenceService] = {}
-        self._models: dict[str, ModelEntry] = {}
+    def __init__(self) -> None:
         self._config_dir: str = os.path.dirname(os.path.abspath(__file__))
+        self._config: InferenceRuntimeConfig | None = None
 
-    def load_all(self) -> dict:
-        """一次性加载引擎和模型配置，合并环境变量 + YAML 两个源。"""
-        # ── 连接参数：环境变量 ──
-        self._engine_type = os.environ.get("INFERENCE_SERVER", "ollama")
+    def load(self) -> InferenceRuntimeConfig:
+        """加载 inference-runtime.yaml 并装配推理引擎。
+
+        chat / roles 参数是 YAML 的直接映射；roles 的引擎实例由环境变量
+        连接参数装配。结果缓存，重复调用直接返回。
+        """
+        if self._config is not None:
+            return self._config
+
+        raw = self._read_yaml()
+        self._config = InferenceRuntimeConfig(
+            chat=self._load_chat(raw),
+            roles=self._assemble_roles(self._read_roles(raw)),
+        )
+        return self._config
+
+    # ---- 私有：引擎装配 -------------------------------------------------
+
+    def _assemble_roles(
+        self, roles_raw: dict[str, dict[str, Any]]
+    ) -> dict[str, ModelEntry]:
+        engine_type = os.environ.get("INFERENCE_SERVER", "ollama")
         base_url = os.environ.get(
             "INFERENCE_GATEWAY_URL", "http://inference-gateway:8080/v1"
         )
         timeout = float(os.environ.get("INFERENCE_TIMEOUT", "180"))
         api_keys = _resolve_api_keys()
 
-        # ── 模型参数：本目录下 YAML 的 roles 段 ──
-        runtime_cfg = load_yaml(self._config_dir)
-        if "roles" not in runtime_cfg:
-            raise ValueError(f"运行时配置格式错误，缺少 roles: {self._config_dir}")
-
-        params_roles = runtime_cfg["roles"]
-
-        # ── 校验：所有角色必须有 api_key 配置 ──
-        missing_roles = [r for r in params_roles if r not in api_keys]
+        # 所有角色必须有 api_key 配置
+        missing_roles = [r for r in roles_raw if r not in api_keys]
         if missing_roles:
             raise RuntimeError(
                 f"以下推理角色缺少 api_key 配置（环境变量 INFERENCE_API_KEY_{{ROLE}} "
                 f"或 INFERENCE_API_KEYS JSON）：{', '.join(missing_roles)}"
             )
 
-        # ── 解析引擎类型 ──
-        engine_type = self._engine_type
         impl_cls = resolve_engine(engine_type)
+        engines: dict[str, BaseInferenceService] = {}
+        entries: dict[str, ModelEntry] = {}
 
-        # ── 逐角色创建引擎（不同 api_key → 不同引擎实例）──
-        for role, role_params in params_roles.items():
-            api_key = api_keys.get(role, "")
+        for role, options in roles_raw.items():
+            api_key = api_keys[role]
 
             # api_key 相同的角色共享引擎（如 guardrail 复用 intent）
             engine_key = api_key or "__shared__"
-            if engine_key not in self._engines:
-                params = InferenceParams(
-                    base_url=base_url,
-                    timeout=timeout,
-                    api_key=api_key,
+            if engine_key not in engines:
+                engines[engine_key] = impl_cls(
+                    InferenceParams(
+                        base_url=base_url,
+                        timeout=timeout,
+                        api_key=api_key,
+                    )
                 )
-                self._engines[engine_key] = impl_cls(params)
 
-            # 模型参数来自 inference-runtime.yaml
-            options = dict(role_params.items())
-
-            self._models[role] = ModelEntry(
-                model_name=role,  # 网关模式下 model 由 gateway 注入，这里用 role 占位
+            # 网关模式下 model 由 gateway 注入，这里用 role 占位
+            entries[role] = ModelEntry(
+                model_name=role,
                 options=options,
                 api_key=api_key,
                 engine_type=engine_type,
+                engine=engines[engine_key],
             )
 
-        return {
-            "engines": self._engines,
-            "models": self._models,
-        }
+        return entries
 
-    def get_engine_for_model(
-        self, role: str = "chat"
-    ) -> tuple[BaseInferenceService, ModelEntry]:
-        """获取引擎实例和指定角色的模型信息。"""
-        if not self._models:
-            self.load_all()
-        entry = self._models[role]
-        engine_key = entry.api_key or "__shared__"
-        engine = self._engines[engine_key]
-        return engine, entry
+    # ---- 私有：YAML 段映射 ----------------------------------------------
 
+    def _load_chat(self, raw: dict) -> ChatConfig:
+        chat = raw.get("chat")
+        if not isinstance(chat, dict):
+            raise ValueError(f"运行时配置缺少 chat 段 | dir={self._config_dir}")
 
-# ═══════════════════════════════════════════════════════════════════════
-# 聊天并发配置加载器
-# ═══════════════════════════════════════════════════════════════════════
+        return ChatConfig(
+            common=self._load_chat_common(chat.get("common")),
+            locales=self._load_chat_locales(chat.get("locales")),
+        )
 
-
-class ChatConfigLoader:
-    """从 inference-runtime.yaml 的 chat 段加载并发控制配置。
-
-    用法：
-        loader = ChatConfigLoader()
-        configs = loader.load_all()
-        configs["zh_CN"].system_prompt   # locale 配置（含并发参数）
-        configs["en_US"].infer_sem       # 从 common 继承的并发参数
-    """
-
-    def __init__(self):
-        self._cache: dict[str, ChatConfig] = {}
-        self._cache_loaded_at: float = 0.0
-        self._cache_ttl_seconds: float = 0.0
-        self._config_dir = os.path.dirname(os.path.abspath(__file__))
-
-    def load_all(self) -> dict[str, ChatConfig]:
-        """加载所有 locale 配置，每个配置已合并 common 并发参数。"""
-        import time
-
-        now = time.monotonic()
-        if self._cache and (now - self._cache_loaded_at) < self._cache_ttl_seconds:
-            return self._cache
-        self._cache.clear()
-
-        raw = self._read_yaml()
-        common = self._load_common(raw)
-
-        for locale in self._list_locale_profiles(raw):
-            self._cache[locale] = self._build_locale(locale, common, raw)
-
-        self._cache_loaded_at = now
-        return self._cache
-
-    def load(self, locale: str) -> ChatConfig:
-        """加载指定 locale 的配置。"""
-        import time
-
-        now = time.monotonic()
-        if self._cache and (now - self._cache_loaded_at) < self._cache_ttl_seconds:
-            return self._cache[locale]
-
-        raw = self._read_yaml()
-        common = self._load_common(raw)
-        config = self._build_locale(locale, common, raw)
-        self._cache[locale] = config
-        self._cache_loaded_at = now
-        return config
-
-    # ---- 静态工具方法 ---------------------------------------------------
-
-    @staticmethod
-    def resolve_locale_text(
-        chat_locales: dict[str, ChatLocaleText], locale: str
-    ) -> ChatLocaleText:
-        """根据 locale 选择聊天文本配置，回退到 zh_CN。"""
-        cfg = chat_locales.get(locale)
-        if cfg is None:
-            cfg = chat_locales["zh_CN"]
-        return cfg
-
-    # ---- 私有 ---------------------------------------------------------
-
-    def _load_common(self, raw: dict) -> dict:
-        """从 chat.common 段提取并发参数字典。"""
-        if "chat" not in raw or "common" not in raw["chat"]:
-            raise ValueError("配置文件格式错误：缺少 chat.common 根节点")
-        common_section = raw["chat"]["common"]
-        # TTL 每次构建时刷新
-        self._cache_ttl_seconds = float(common_section.get("config_ttl_seconds", 60))
+    def _load_chat_common(self, common_raw: Any) -> ChatCommonConfig:
+        if not isinstance(common_raw, dict):
+            raise ValueError(f"运行时配置缺少 chat.common 段 | dir={self._config_dir}")
         try:
-            pipeline = common_section["pipeline"]
-            return {
-                "total_timeout": int(pipeline["total_timeout"]),
-                "infer_sem": int(pipeline["inference"]["semaphore"]),
-                "rag_sem": int(pipeline["rag"]["semaphore"]),
-                "guardrail_sem": int(common_section["guardrail"]["semaphore"]),
-                "guardrail_timeout": int(common_section["guardrail"]["timeout"]),
-                "sse_retry_ms": int(common_section["sse_retry_ms"]),
-                "config_ttl_seconds": int(common_section.get("config_ttl_seconds", 60)),
-            }
-        except KeyError as e:
-            raise ValueError(f"common 缺少必填字段: {e}") from e
-
-    def _list_locale_profiles(self, raw: dict) -> list[str]:
-        """列出 chat.locales 下所有 locale 段。"""
-        if "chat" not in raw:
-            raise ValueError("配置文件格式错误：缺少 'chat' 根节点")
-        if "locales" not in raw["chat"]:
-            raise ValueError("配置文件格式错误：缺少 chat.locales 节点")
-        return list(raw["chat"]["locales"].keys())
-
-    def _build_locale(self, locale: str, common: dict, raw: dict) -> ChatConfig:
-        """构建单个 locale 配置，合并 common 并发参数 + locale 文本。"""
-        section = raw["chat"]["locales"].get(locale, {})
-        if not section:
-            raise ValueError(f"配置文件中未找到 locale 段: {locale}")
-        try:
-            return ChatConfig(
-                name=locale,
-                locale=locale,
-                system_prompt=section["system_prompt"],
-                ref_label=str(section["ref_label"]),
-                query_label=str(section["query_label"]),
-                total_timeout=common["total_timeout"],
-                infer_sem=common["infer_sem"],
-                rag_sem=common["rag_sem"],
-                guardrail_sem=common["guardrail_sem"],
-                guardrail_timeout=common["guardrail_timeout"],
-                sse_retry_ms=common["sse_retry_ms"],
-                config_ttl_seconds=common["config_ttl_seconds"],
+            pipeline = common_raw["pipeline"]
+            inference = pipeline["inference"]
+            rag = pipeline["rag"]
+            guardrail = common_raw["guardrail"]
+            return ChatCommonConfig(
+                total_timeout=int(pipeline["total_timeout"]),
+                infer_sem=int(inference["semaphore"]),
+                rag_sem=int(rag["semaphore"]),
+                guardrail_sem=int(guardrail["semaphore"]),
+                guardrail_timeout=int(guardrail["timeout"]),
+                sse_retry_ms=int(common_raw["sse_retry_ms"]),
             )
-        except KeyError as e:
-            raise ValueError(f"locale '{locale}' 缺少必填字段: {e}") from e
+        except (KeyError, TypeError) as e:
+            raise ValueError(f"chat.common 缺少必填字段: {e}") from e
+
+    def _load_chat_locales(self, locales_raw: Any) -> dict[str, LocaleConfig]:
+        if not isinstance(locales_raw, dict) or not locales_raw:
+            raise ValueError(f"运行时配置缺少 chat.locales 段 | dir={self._config_dir}")
+
+        locales: dict[str, LocaleConfig] = {}
+        for locale, section in locales_raw.items():
+            if not isinstance(section, dict):
+                raise ValueError(
+                    f"locale '{locale}' 配置格式错误 | dir={self._config_dir}"
+                )
+            try:
+                locales[locale] = LocaleConfig(
+                    ref_label=str(section["ref_label"]),
+                    query_label=str(section["query_label"]),
+                    system_prompt=str(section["system_prompt"]),
+                )
+            except KeyError as e:
+                raise ValueError(f"locale '{locale}' 缺少必填字段: {e}") from e
+        return locales
+
+    def _read_roles(self, raw: dict) -> dict[str, dict[str, Any]]:
+        roles = raw.get("roles")
+        if not isinstance(roles, dict) or not roles:
+            raise ValueError(f"运行时配置缺少 roles 段 | dir={self._config_dir}")
+
+        cleaned: dict[str, dict[str, Any]] = {}
+        for role, params in roles.items():
+            if not isinstance(params, dict):
+                raise ValueError(f"角色 '{role}' 配置格式错误 | dir={self._config_dir}")
+            cleaned[role] = dict(params)
+        return cleaned
 
     def _read_yaml(self) -> dict:
         return load_yaml(self._config_dir)
