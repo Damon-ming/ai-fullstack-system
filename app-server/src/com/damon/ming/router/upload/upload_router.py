@@ -39,7 +39,7 @@ async def save_files(
     try:
         # 复用 document 命名池写盘，统一线程资源管理
         # 逐文件原子提交：写盘 + 缓存 + 向量库入库，任一步失败则回滚该文件
-        document_pool = request.state.pool_mgr.get_pool("document")
+        document_pool = request.app.state.pool_mgr.get_pool("document")
         result = await UploadService.batch_save_files(
             file_list=files,
             upload_config=request.app.state.upload_config,

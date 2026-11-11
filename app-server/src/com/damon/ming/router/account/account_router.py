@@ -36,7 +36,6 @@ from src.com.damon.ming.router.account.schemas.bean import (
 from src.com.damon.ming.router.account.token_store import (
     create_or_refresh_session,
     get_user_profile,
-    is_token_valid,
     login_or_register,
     refresh_token_ttl,
     register_device,
@@ -124,18 +123,11 @@ async def login(body: LoginRequest, request: Request):
 @limiter.limit("20/minute")
 async def get_profile(request: Request):
     """
-    获取当前用户资料。
+    获取当前用户资料（需认证，token 由 AuthMiddleware 校验）。
 
     从请求上下文提取 token → 查询用户昵称。
-    公开路径，但需要有效的 token（通过 Cookie / Authorization Bearer 传递）。
     """
     ctx = request.state.ctx
-    if not ctx.token or not is_token_valid(ctx.token):
-        return BaseSuccessResponse(
-            code=ErrorCode.AUTH_INVALID_TOKEN,
-            data=ProfileResponseData(name=""),
-        )
-
     user = get_user_profile(ctx.token)
     name = user.name if user else ""
 
@@ -149,17 +141,11 @@ async def get_profile(request: Request):
 @limiter.limit("20/minute")
 async def update_profile(body: ProfileResponseData, request: Request):
     """
-    更新当前用户昵称。
+    更新当前用户昵称（需认证，token 由 AuthMiddleware 校验）。
 
     从请求上下文提取 token → 更新 users 表 name 字段。
     """
     ctx = request.state.ctx
-    if not ctx.token or not is_token_valid(ctx.token):
-        return BaseSuccessResponse(
-            code=ErrorCode.AUTH_INVALID_TOKEN,
-            data=ProfileResponseData(name=""),
-        )
-
     name = body.name.strip()[:64]
     update_user_name(ctx.token, name)
 

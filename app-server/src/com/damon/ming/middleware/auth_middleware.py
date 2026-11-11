@@ -3,6 +3,7 @@
 认证中间件 —— Token + Session + UA 校验。
 
 职责：
+  - 公开路径白名单放行（PUBLIC_PATHS，精确匹配）
   - 从 request.state.ctx 获取已解析的 token / session_id / UA
   - 校验 token → 得到对应 phone
   - 校验 session_id 有效且属于该 token（替代旧的 device 归属校验）
@@ -27,11 +28,13 @@ from starlette.responses import JSONResponse
 
 logger = pin("middleware.auth")
 
-# 无需认证的路径前缀
-PUBLIC_PATH_PREFIXES = (
-    "/api/encryption",
-    "/api/account",
-    "/health",
+# 无需认证的路径（精确匹配 —— 新增端点默认需要认证）
+# /ping 与 /health 不在此列：middleware/health.py 在最外层直接短路，不进入中间件栈。
+PUBLIC_PATHS = frozenset(
+    {
+        "/api/account/login/v1",
+        "/api/encryption/key/v1",
+    }
 )
 
 
@@ -91,45 +94,44 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_SESSION)),
                 ).model_dump(),
             )
-        if ctx.session_id:
-            session = AccountService.get_session_info(ctx.session_id)
-            if session is None:
-                logger.warning(
-                    "认证失败: 无效会话 | path=%s phone_prefix=%s session_id=%s",
-                    request.url.path,
-                    phone[:3] + "***" if phone else "unknown",
-                    ctx.session_id[:8] + "...",
-                )
-                return JSONResponse(
-                    status_code=401,
-                    content=BaseFailedResponse(
-                        code=ErrorCode.AUTH.INVALID_SESSION,
-                        data=BaseBizFailedData(
-                            error_msg=t(I18nKey.AUTH_INVALID_SESSION)
-                        ),
-                    ).model_dump(),
-                )
-            if session.token != ctx.token:
-                logger.warning(
-                    "认证失败: 会话归属不匹配 | path=%s token_phone=%s session_token_phone=%s",
-                    request.url.path,
-                    phone[:3] + "***" if phone else "unknown",
-                    AccountService.get_phone_by_token(session.token)[:3] + "***"
-                    if session.token
-                    else "unknown",
-                )
-                return JSONResponse(
-                    status_code=401,
-                    content=BaseFailedResponse(
-                        code=ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
-                        data=BaseBizFailedData(
-                            error_msg=t(I18nKey.AUTH_SESSION_MISMATCH)
-                        ),
-                    ).model_dump(),
-                )
+        session = AccountService.get_session_info(ctx.session_id)
+        if session is None:
+            logger.warning(
+                "认证失败: 无效会话 | path=%s phone_prefix=%s session_id=%s",
+                request.url.path,
+                phone[:3] + "***" if phone else "unknown",
+                ctx.session_id[:8] + "...",
+            )
+            return JSONResponse(
+                status_code=401,
+                content=BaseFailedResponse(
+                    code=ErrorCode.AUTH.INVALID_SESSION,
+                    data=BaseBizFailedData(
+                        error_msg=t(I18nKey.AUTH_INVALID_SESSION)
+                    ),
+                ).model_dump(),
+            )
+        if session.token != ctx.token:
+            logger.warning(
+                "认证失败: 会话归属不匹配 | path=%s token_phone=%s session_token_phone=%s",
+                request.url.path,
+                phone[:3] + "***" if phone else "unknown",
+                AccountService.get_phone_by_token(session.token)[:3] + "***"
+                if session.token
+                else "unknown",
+            )
+            return JSONResponse(
+                status_code=401,
+                content=BaseFailedResponse(
+                    code=ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
+                    data=BaseBizFailedData(
+                        error_msg=t(I18nKey.AUTH_SESSION_MISMATCH)
+                    ),
+                ).model_dump(),
+            )
 
         # 4. UA 一致性校验（基于 session 签发时的 UA）
-        if ctx.client_ua and ctx.session_id and session is not None:
+        if ctx.client_ua:
             ua_profile = get_ua_profile(ctx)
             if ua_profile and has_ua_changed_significantly(session.ua_hash, ua_profile):
                 logger.info(
@@ -139,13 +141,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 # 当前策略：仅记录，不阻断（宽松模式）
 
-        # 5. 注入 request.state，供下游路由使用
-        request.state.device_token = ctx.token
-        request.state.phone = phone
-        request.state.device_id = ctx.device_id
-        request.state.session_id = ctx.session_id
         return await call_next(request)
 
 
 def _is_public_path(path: str) -> bool:
-    return any(path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES)
+    return path in PUBLIC_PATHS
