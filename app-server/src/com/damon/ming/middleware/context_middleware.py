@@ -26,6 +26,4 @@ class ContextMiddleware(BaseHTTPMiddleware):
         request.state.ctx = build_request_context(request)
         request.state.client = build_client_context(request)
         request.state.encryption = build_encryption_context(request)
-        # 注入加密会话服务（RSA + 内存 + 可选 DB 持久化）
-        request.state.session_service = request.app.state.session_service
         return await call_next(request)

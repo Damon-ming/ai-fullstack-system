@@ -130,6 +130,12 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 #   Context → I18n → Auth → Encryption → CORS
 # 新增中间件时按同一规则倒序添加。
 
+# TODO: 上述四个中间件都继承 BaseHTTPMiddleware，而 BaseHTTPMiddleware 会经内存
+#       stream 转发下游响应体；对 SSE / StreamingResponse 这类流式响应，历史上
+#       多个 Starlette 版本存在响应体被缓冲、连接提前关闭、流式语义丢失等问题。
+#       chat 走 SSE（SseEmitter），一旦出现流式响应异常，优先考虑改为纯 ASGI
+#       中间件（直接实现 async def __call__(self, scope, receive, send)）。
+
 # ---- 加密中间件 ---------------------------------------------------------
 app.add_middleware(EncryptionMiddleware)
 

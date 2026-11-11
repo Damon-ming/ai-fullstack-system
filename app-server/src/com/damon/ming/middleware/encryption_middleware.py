@@ -201,7 +201,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         return True
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        sm = request.state.session_service
+        sm = request.app.state.session_service
         ctx = request.state.ctx
         enc = request.state.encryption
         encrypt_response = enc.enabled
