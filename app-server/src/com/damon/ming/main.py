@@ -144,8 +144,8 @@ else:
 app.add_middleware(I18nMiddleware)
 
 # ---- 请求上下文（最外层，必须先于 i18n / auth / encryption 执行）------
-# ContextMiddleware 一次性解析所有头部 → request.state.ctx
-# 后续所有中间件和路由通过 ctx 读取，不再直接访问 request.headers
+# ContextMiddleware 一次性解析所有头部 → request.state.ctx / client / encryption
+# 后续所有中间件和路由通过这三个键读取，不再直接访问 request.headers
 # 必须最后添加：它是 i18n / auth / encryption 的数据来源
 app.add_middleware(ContextMiddleware)
 

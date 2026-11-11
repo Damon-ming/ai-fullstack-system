@@ -51,8 +51,8 @@ router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
 
 def _request_token(request: Request) -> str:
     """从请求上下文获取当前用户 token（与 history 模块口径一致）。"""
-    ctx = getattr(request.state, "ctx", None)
-    return (ctx.token if ctx else "") or ""
+    client = getattr(request.state, "client", None)
+    return (client.token if client else "") or ""
 
 
 def _create_recorder(request: Request, body) -> ChatTurnRecorder:
@@ -87,7 +87,7 @@ async def chat(request: Request, body: ChatRequest):
 
     # ── 本轮对话的上下文 ─────────────────────────────────────────────
     # 请求作用域（含 CancellationToken，finally 统一 cleanup）
-    ctx = request.app.state.pool_mgr.create_request_scope()
+    scope = request.app.state.pool_mgr.create_request_scope()
     # 落库记录器：turn_id 由工厂自动生成，conversation_id 供响应回传
     recorder = _create_recorder(request, body)
 
@@ -118,7 +118,7 @@ async def chat(request: Request, body: ChatRequest):
 
         # ── Phase 2: RAG + 推理（超时预算覆盖整段，见 generate_answer） ──
         async for token in generate_answer(
-            request.app.state, body.query, body.reason, ctx.cancellation_token
+            request.app.state, body.query, body.reason, scope.cancellation_token
         ):
             recorder.record_token(token.type, token.content, now())
 
@@ -169,7 +169,7 @@ async def chat(request: Request, body: ChatRequest):
         return chat_failure(ErrorCode.CHAT.UNKNOWN, err_msg, recorder.conversation_id)
     finally:
         # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
-        ctx.cleanup()
+        scope.cleanup()
         # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」。
         # 成功路径已落库则跳过；未尝试或上次失败则再给一次机会
         await recorder.ensure_persisted()
@@ -182,11 +182,11 @@ async def chat_stream(request: Request, body: ChatRequest):
     logger.info("流式聊天请求开始 | query_length=%s", len(body.query))
 
     # 本轮对话的上下文：请求作用域 + 落库记录器（turn_id 由工厂自动生成）
-    ctx = request.app.state.pool_mgr.create_request_scope()
+    scope = request.app.state.pool_mgr.create_request_scope()
     recorder = _create_recorder(request, body)
 
     return EventSourceResponse(
-        stream_chat_generator(request, body, ctx, recorder),
+        stream_chat_generator(request, body, scope, recorder),
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
@@ -198,7 +198,7 @@ async def chat_stream(request: Request, body: ChatRequest):
 async def stream_chat_generator(
     request: Request,
     body: ChatRequest,
-    ctx: RequestScope,
+    scope: RequestScope,
     recorder: ChatTurnRecorder,
 ):
     """流式问答 SSE 生成器 —— 编排与同步端点一致，只是交付方式不同。
@@ -250,7 +250,7 @@ async def stream_chat_generator(
 
         # ── Phase 2: RAG + 推理（超时预算覆盖整段，见 generate_answer） ──
         async for token in generate_answer(
-            request.app.state, body.query, body.reason, ctx.cancellation_token
+            request.app.state, body.query, body.reason, scope.cancellation_token
         ):
             # 根据 token 类型发射不同事件：
             #   reasoning → event: "reasoning"（推理过程）
@@ -294,7 +294,7 @@ async def stream_chat_generator(
         )
     except asyncio.CancelledError:
         # 客户端已断开，无需 re-raise（避免 ASGI 层记录 500），
-        # 让 generator 自然结束；ctx.cleanup() 在 finally 中保证执行。
+        # 让 generator 自然结束；scope.cleanup() 在 finally 中保证执行。
         # 主动取消不展示客户端文案，但已交付内容仍要落库。
         logger.warning("【统计】流式SSE请求被客户端主动取消")
         return
@@ -305,7 +305,7 @@ async def stream_chat_generator(
         yield emitter.emit("error", chat_error_event(ErrorCode.CHAT.UNKNOWN, err_msg))
     finally:
         # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
-        ctx.cleanup()
+        scope.cleanup()
         # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」。
         # 成功路径已落库则跳过；未尝试或上次失败则再给一次机会
         await recorder.ensure_persisted()

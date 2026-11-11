@@ -1,14 +1,19 @@
 # app-server/src/com/damon/ming/middleware/context_middleware.py
 """
-请求上下文中间件 —— 在请求链路最前端解析所有头部，统一放入 request.state.ctx。
+请求上下文中间件 —— 在请求链路最前端解析所有头部，统一放入 request.state。
 
-后续中间件和路由通过 request.state.ctx 读取头部数据，不再直接访问 request.headers。
+后续中间件和路由通过 request.state.ctx / client / encryption 读取头部数据，
+不再直接访问 request.headers。
 
 执行顺序：必须是第一个执行的中间件（最外层，先于 i18n / encryption / auth）。
 Starlette 的 add_middleware 是 insert(0)，所以注册时反而要最后添加。
 """
 
-from src.com.damon.ming.middleware.request_context import build_request_context
+from src.com.damon.ming.middleware.request_context import (
+    build_client_context,
+    build_encryption_context,
+    build_request_context,
+)
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
@@ -17,8 +22,10 @@ class ContextMiddleware(BaseHTTPMiddleware):
     """请求上下文中间件 —— 一次性解析所有头部。"""
 
     async def dispatch(self, request: Request, call_next):
-        # 一次性提取所有头部 → 存入 request.state.ctx
+        # 一次性提取所有头部 → 按语义分三组存入 request.state
         request.state.ctx = build_request_context(request)
+        request.state.client = build_client_context(request)
+        request.state.encryption = build_encryption_context(request)
         # 注入加密会话服务（RSA + 内存 + 可选 DB 持久化）
         request.state.session_service = request.app.state.session_service
         return await call_next(request)

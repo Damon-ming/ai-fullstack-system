@@ -3,9 +3,13 @@
 请求上下文 —— 所有头部数据在此收拢，避免各处散落读取 header。
 
 设计：
-  - 单次请求生命周期内，所有中间件 / 路由通过 request.state.ctx 获取头部数据
+  - 单次请求生命周期内，中间件 / 路由通过 request.state 的命名键获取头部数据
   - 不再直接调用 request.headers.get(...)
   - 新增头部字段只需在此处扩展 + 在 ContextMiddleware 中解析一次
+  - 按语义分三组挂在 request.state 上：
+      ctx        请求环境与通用头（UA / 版本 / 环境 / 类型 / 语言 / Content-Type）
+      client     客户端身份（token / session_id / device_id）
+      encryption 客户端声明的加密协议开关与版本
 """
 
 from dataclasses import dataclass
@@ -26,104 +30,115 @@ from src.com.damon.ming.middleware.header_constants import (
     SESSION_ID,
     SIGNATURE_VERSION,
 )
-from src.com.damon.ming.middleware.ua_fingerprint import parse_ua_header
+from src.com.damon.ming.middleware.ua_fingerprint import UAProfile, parse_ua_header
 
 
 @dataclass
-class RequestContext:
+class ClientContext:
     """
-    请求上下文 —— 一次性解析所有头部，后续统一从这里读取。
+    客户端身份 —— 一次解析、请求内共享。
 
     使用方式：
-        ctx = request.state.ctx
-        if ctx.device_id: ...
+        client = request.state.client
+        if client.token: ...
     """
 
     # ---- 认证 ----
     token: str | None = None
 
-    # ---- 设备 ----
-    device_id: str = ""
-    client_ua: str = ""
-    ua_profile: object | None = None  # UAProfile，懒解析
-
     # ---- 会话（token + device 的唯一组合）----
     session_id: str = ""
 
-    # ---- 加密 ----
-    encrypt_enabled: bool = False
-    encrypt_version: str = ""
-    signature_version: str = ""
+    # ---- 设备 ----
+    device_id: str = ""
 
-    # ---- 系统 ----
-    app_version: str = ""
-    client_env: int = 1
-    client_type: int = 0
-    # ---- 本地化 ----
-    language: str = ""  # X-Language 原始值（如 "zh-CN,en;q=0.9"），协商由 i18n 模块负责
+
+@dataclass
+class EncryptionContext:
+    """
+    加密上下文 —— 客户端声明的加密协议开关与版本。
+
+    使用方式：
+        enc = request.state.encryption
+        if enc.enabled: ...
+    """
+
+    enabled: bool = False  # X-Encrypt-Enabled == "1"
+    version: str = ""  # X-Encrypt-Version
+    signature_version: str = ""  # X-Signature-Version
+
+
+@dataclass
+class RequestContext:
+    """
+    请求环境上下文 —— 客户端声明的工作环境 + 通用标准头。
+
+    使用方式：
+        ctx = request.state.ctx
+        if "application/json" in ctx.content_type: ...
+    """
 
     # ---- 标准头 ----
     content_type: str = ""
 
+    # ---- 设备环境（X-Client-UA 摘要，构建时即解析）----
+    ua: str = ""  # X-Client-UA 原始值
+    ua_profile: UAProfile | None = None  # 解析后的环境摘要
+
+    # ---- 客户端声明 ----
+    app_version: str = ""
+    env: int = 1  # 客户端环境：0 = debug，1 = release（默认 release）
+    type: int = 0  # 客户端类型：0 = 浏览器，1 = 移动端
+    language: str = ""  # X-Language 原始值（如 "zh-CN,en;q=0.9"），协商由 i18n 模块负责
+
+
+def build_client_context(request: "Request") -> ClientContext:
+    """解析客户端身份（token / session_id / device_id）。"""
+    headers = request.headers
+    return ClientContext(
+        token=_extract_token(headers),
+        session_id=headers.get(SESSION_ID, ""),
+        device_id=headers.get(DEVICE_ID, ""),
+    )
+
+
+def build_encryption_context(request: "Request") -> EncryptionContext:
+    """解析加密协议相关的头部（开关 + 版本）。"""
+    headers = request.headers
+    return EncryptionContext(
+        enabled=headers.get(ENCRYPT_ENABLED) == "1",
+        version=headers.get(ENCRYPT_VERSION, ""),
+        signature_version=headers.get(SIGNATURE_VERSION, ""),
+    )
+
 
 def build_request_context(request: "Request") -> RequestContext:
-    """
-    从请求中一次性提取所有头部数据，构建 RequestContext。
-
-    在中间件链最前端调用，后续所有组件通过 request.state.ctx 读取。
-    """
+    """解析请求环境与通用头部（UA / 版本 / 环境 / 类型 / 语言 / Content-Type）。"""
     headers = request.headers
 
-    # 加密相关
-    encrypt_version = headers.get(ENCRYPT_VERSION, "")
-    signature_version = headers.get(SIGNATURE_VERSION, "")
-    encrypt_enabled = headers.get(ENCRYPT_ENABLED) == "1"
-
-    # 设备 + UA
-    device_id = headers.get(DEVICE_ID, "")
-    client_ua = headers.get(CLIENT_UA, "")
-
-    # 会话
-    session_id = headers.get(SESSION_ID, "")
-
-    # 系统
-    app_version = headers.get(APP_VERSION, "")
-    # X-Client-Env: 0 = debug, 1 = release（默认 release）
+    # 客户端环境：X-Client-Env 0 = debug, 1 = release（默认 release）
     client_env_raw = headers.get(CLIENT_ENV, "1")
     try:
         client_env = int(client_env_raw)
     except ValueError:
-        client_env = 1  # 解析失败默认 release
-    # X-Client-Type: 0 = 浏览器, 1 = 移动端（默认浏览器）
+        client_env = 1
+    # 客户端类型：X-Client-Type 0 = 浏览器, 1 = 移动端（默认浏览器）
     client_type_raw = headers.get(CLIENT_TYPE, "0")
     try:
         client_type = int(client_type_raw)
     except ValueError:
-        client_type = 0  # 解析失败默认浏览器
+        client_type = 0
 
-    # 本地化
-    language = headers.get(LANGUAGE, "")
-
-    # 标准头
-    content_type = headers.get("content-type", "")
-
-    # Token（Cookie / Authorization Bearer）
-    token = _extract_token(headers)
+    ua = headers.get(CLIENT_UA, "")
 
     return RequestContext(
-        token=token,
-        device_id=device_id,
-        client_ua=client_ua,
-        ua_profile=None,  # 懒解析，需要时调用 parse_ua_header
-        session_id=session_id,
-        encrypt_enabled=encrypt_enabled,
-        encrypt_version=encrypt_version,
-        signature_version=signature_version,
-        app_version=app_version,
-        client_env=client_env,
-        client_type=client_type,
-        language=language,
-        content_type=content_type,
+        content_type=headers.get("content-type", ""),
+        ua=ua,
+        ua_profile=parse_ua_header(ua) if ua else None,
+        app_version=headers.get(APP_VERSION, ""),
+        env=client_env,
+        type=client_type,
+        language=headers.get(LANGUAGE, ""),
     )
 
 
@@ -144,10 +159,3 @@ def _extract_token(headers) -> str | None:
         return auth_header[7:].strip()
 
     return None
-
-
-def get_ua_profile(ctx: RequestContext):
-    """懒解析 UAProfile（仅在需要时计算）。"""
-    if ctx.ua_profile is None and ctx.client_ua:
-        ctx.ua_profile = parse_ua_header(ctx.client_ua)
-    return ctx.ua_profile

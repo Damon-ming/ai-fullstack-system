@@ -71,13 +71,13 @@ async def register_session(
       - X-Session-ID header 必须存在且有效（session 属于该 token）
       - 会话将绑定到该 session_id，注册前撤销该 session 的旧密钥
     """
-    ctx = request.state.ctx
+    client = request.state.client
     sm = request.state.session_service
 
     # 注册加密会话（原子替换：清旧录 + 插新录在同一事务）
     try:
         encrypted_aes_key_bytes = base64.b64decode(encrypted_aes_key)
-        enc_session = sm.register_and_replace(encrypted_aes_key_bytes, ctx.session_id)
+        enc_session = sm.register_and_replace(encrypted_aes_key_bytes, client.session_id)
     except ValueError as e:
         logger.warning("会话注册失败（密钥格式错误）: %s", e)
         return BaseFailedResponse(
@@ -100,7 +100,7 @@ async def register_session(
     logger.info(
         "加密会话注册 | key_id=%s session_id=%s",
         enc_session.key_id[:12] + "...",
-        ctx.session_id[:8] + "...",
+        client.session_id[:8] + "...",
     )
     return BaseSuccessResponse(
         code=ErrorCode.OK,

@@ -6,7 +6,7 @@
   GET    /api/history/v1/{conversation_id}  获取单个会话详情（含全部轮次）
   DELETE /api/history/v1/{conversation_id}  删除会话及其轮次
 
-所有接口从 request.state.ctx.token 获取用户身份，数据按 token 隔离。
+所有接口从 request.state.client.token 获取用户身份，数据按 token 隔离。
 响应 data 直接承载业务负载（列表返回数组、详情返回对象），与前端解包口径一致。
 """
 
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/history", tags=["对话历史"])
 
 def _token(request: Request) -> str:
     """从请求上下文获取当前用户 token。"""
-    return getattr(request.state, "ctx", None) and request.state.ctx.token or ""
+    return getattr(request.state, "client", None) and request.state.client.token or ""
 
 
 # ---------------------------------------------------------------------------

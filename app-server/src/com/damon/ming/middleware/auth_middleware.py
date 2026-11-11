@@ -4,7 +4,7 @@
 
 职责：
   - 公开路径白名单放行（PUBLIC_PATHS，精确匹配）
-  - 从 request.state.ctx 获取已解析的 token / session_id / UA
+  - 从 request.state.client 获取已解析的 token / session_id / UA
   - 校验 token → 得到对应 phone
   - 校验 session_id 有效且属于该 token（替代旧的 device 归属校验）
   - 校验 UA 是否与签发时一致（可选的安全加固）
@@ -18,7 +18,6 @@ from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.middleware.request_context import get_ua_profile
 from src.com.damon.ming.middleware.ua_fingerprint import has_ua_changed_significantly
 from src.com.damon.ming.router.account.service.account_service import AccountService
 from src.com.damon.ming.schemas.response import BaseBizFailedData, BaseFailedResponse
@@ -42,6 +41,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """Token + Session + UA 校验中间件。"""
 
     async def dispatch(self, request: Request, call_next) -> JSONResponse:
+        client = request.state.client
         ctx = request.state.ctx
 
         # 1. 公开路径放行
@@ -49,7 +49,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # 2. token 校验
-        if ctx.token is None:
+        if client.token is None:
             logger.warning(
                 "认证失败: 缺少 Token | path=%s client=%s",
                 request.url.path,
@@ -63,11 +63,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 ).model_dump(),
             )
 
-        if not AccountService.is_token_valid(ctx.token):
+        if not AccountService.is_token_valid(client.token):
             logger.warning(
                 "认证失败: 无效 Token | path=%s token_prefix=%s",
                 request.url.path,
-                ctx.token[:8] + "...",
+                client.token[:8] + "...",
             )
             return JSONResponse(
                 status_code=401,
@@ -77,11 +77,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 ).model_dump(),
             )
 
-        phone = AccountService.get_phone_by_token(ctx.token)
+        phone = AccountService.get_phone_by_token(client.token)
 
         # 3. 校验 session_id（SECURITY: 受保护路由强制要求非空 session_id，
         #    防止空 session_id 绕过加密归属校验 —— P1-1 修复）
-        if not ctx.session_id:
+        if not client.session_id:
             logger.warning(
                 "认证失败: 缺少 session_id | path=%s phone_prefix=%s",
                 request.url.path,
@@ -94,24 +94,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_SESSION)),
                 ).model_dump(),
             )
-        session = AccountService.get_session_info(ctx.session_id)
+        session = AccountService.get_session_info(client.session_id)
         if session is None:
             logger.warning(
                 "认证失败: 无效会话 | path=%s phone_prefix=%s session_id=%s",
                 request.url.path,
                 phone[:3] + "***" if phone else "unknown",
-                ctx.session_id[:8] + "...",
+                client.session_id[:8] + "...",
             )
             return JSONResponse(
                 status_code=401,
                 content=BaseFailedResponse(
                     code=ErrorCode.AUTH.INVALID_SESSION,
-                    data=BaseBizFailedData(
-                        error_msg=t(I18nKey.AUTH_INVALID_SESSION)
-                    ),
+                    data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_SESSION)),
                 ).model_dump(),
             )
-        if session.token != ctx.token:
+        if session.token != client.token:
             logger.warning(
                 "认证失败: 会话归属不匹配 | path=%s token_phone=%s session_token_phone=%s",
                 request.url.path,
@@ -124,20 +122,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
                 content=BaseFailedResponse(
                     code=ErrorCode.AUTH.SESSION_TOKEN_MISMATCH,
-                    data=BaseBizFailedData(
-                        error_msg=t(I18nKey.AUTH_SESSION_MISMATCH)
-                    ),
+                    data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_SESSION_MISMATCH)),
                 ).model_dump(),
             )
 
         # 4. UA 一致性校验（基于 session 签发时的 UA）
-        if ctx.client_ua:
-            ua_profile = get_ua_profile(ctx)
+        if ctx.ua:
+            ua_profile = ctx.ua_profile
             if ua_profile and has_ua_changed_significantly(session.ua_hash, ua_profile):
                 logger.info(
                     "UA 发生变化 | phone=%s session_id=%s",
                     phone[:3] + "***" if phone else "unknown",
-                    ctx.session_id[:8] + "...",
+                    client.session_id[:8] + "...",
                 )
                 # 当前策略：仅记录，不阻断（宽松模式）
 

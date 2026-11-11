@@ -23,7 +23,6 @@ from fastapi import APIRouter, Request
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
-from src.com.damon.ming.middleware.request_context import get_ua_profile
 from src.com.damon.ming.middleware.ua_fingerprint import (
     compute_device_id,
     compute_ua_hash,
@@ -77,7 +76,7 @@ async def login(body: LoginRequest, request: Request):
 
     # 2. 从 ctx 获取 UA → 计算设备指纹
     ctx = request.state.ctx
-    ua_profile = get_ua_profile(ctx)
+    ua_profile = ctx.ua_profile
     device_id = compute_device_id(ua_profile) if ua_profile else ""
     ua_hash = compute_ua_hash(ua_profile)
 
@@ -127,8 +126,8 @@ async def get_profile(request: Request):
 
     从请求上下文提取 token → 查询用户昵称。
     """
-    ctx = request.state.ctx
-    user = get_user_profile(ctx.token)
+    client = request.state.client
+    user = get_user_profile(client.token)
     name = user.name if user else ""
 
     return BaseSuccessResponse(
@@ -145,11 +144,11 @@ async def update_profile(body: ProfileResponseData, request: Request):
 
     从请求上下文提取 token → 更新 users 表 name 字段。
     """
-    ctx = request.state.ctx
+    client = request.state.client
     name = body.name.strip()[:64]
-    update_user_name(ctx.token, name)
+    update_user_name(client.token, name)
 
-    logger.info("用户资料已更新 | token_prefix=%s name=%s", ctx.token[:8] + "...", name)
+    logger.info("用户资料已更新 | token_prefix=%s name=%s", client.token[:8] + "...", name)
 
     return BaseSuccessResponse(
         code=ErrorCode.OK,

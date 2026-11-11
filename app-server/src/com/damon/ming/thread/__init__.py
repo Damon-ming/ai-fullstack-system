@@ -27,11 +27,11 @@
   executor = pool_mgr.get_pool("retrieval")
 
   # 在路由入口创建请求作用域：
-  ctx = pool_mgr.create_request_scope()
+  scope = pool_mgr.create_request_scope()
   try:
-      result = await ai_work(ctx.cancellation_token, ...)
+      result = await ai_work(scope.cancellation_token, ...)
   finally:
-      ctx.cleanup()
+      scope.cleanup()
 
   # 在 AppInitializer.shutdown() 中：
   pool_mgr.shutdown()

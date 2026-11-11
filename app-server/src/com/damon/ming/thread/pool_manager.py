@@ -25,11 +25,11 @@
   executor = pool_mgr.get_pool("retrieval")
 
   # 请求级作用域（在路由入口处）：
-  ctx = pool_mgr.create_request_scope()
+  scope = pool_mgr.create_request_scope()
   try:
-      future = executor.submit(work_fn, ctx.cancellation_token, ...)
+      future = executor.submit(work_fn, scope.cancellation_token, ...)
   finally:
-      ctx.cleanup()
+      scope.cleanup()
 
   # AppInitializer.shutdown 中：
   pool_mgr.shutdown()
@@ -166,9 +166,9 @@ class ThreadPoolManager:
         """
         req_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
         cancellation_token = CancellationToken(token_id=f"{req_id}-tok")
-        ctx = RequestScope(request_id=req_id, cancellation_token=cancellation_token)
+        scope = RequestScope(request_id=req_id, cancellation_token=cancellation_token)
         logger.debug("请求作用域已创建 | request_id=%s", req_id)
-        return ctx
+        return scope
 
     def get_stats(self) -> dict[str, Any]:
         """获取线程池运行状态，用于监控。"""

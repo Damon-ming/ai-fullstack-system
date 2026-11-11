@@ -105,7 +105,8 @@ def compute_ua_hash(profile: UAProfile) -> str:
     与 compute_device_id 不同，这个包含完整原始 UA，
     任何字段变化都会导致哈希不同，用于安全校验。
     """
-    fingerprint_input = f"{profile.raw_ua}|{profile.lang}|{profile.platform}|{profile.screen}|{profile.tz}"
+    # UAProfile 是 NamedTuple，直接遍历全部字段（与前端 encodeClientUA 同口径）
+    fingerprint_input = "|".join(profile)
     return hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest()
 
 

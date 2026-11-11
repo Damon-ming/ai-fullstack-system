@@ -2,16 +2,16 @@
 """
 请求级作用域 —— 封装 CancellationToken + 生命周期管理。
 
-与 middleware/request_context.py 的 RequestContext 区分：那个的 token 是
+与 middleware/request_context.py 的 ClientContext 区分：那个的 token 是
 认证令牌（字符串），本对象的 cancellation_token 是 CancellationToken。
 
 用法（在路由处理入口）：
-    ctx = pool_mgr.create_request_scope()
+    scope = pool_mgr.create_request_scope()
     try:
-        # 将 ctx.cancellation_token 传给 AI 模块
-        result = await ai_work(ctx.cancellation_token, ...)
+        # 将 scope.cancellation_token 传给 AI 模块
+        result = await ai_work(scope.cancellation_token, ...)
     finally:
-        ctx.cleanup()  # 标记取消 + 从注册表移除
+        scope.cleanup()  # 标记取消 + 从注册表移除
 """
 
 from __future__ import annotations

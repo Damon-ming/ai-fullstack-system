@@ -34,7 +34,7 @@ async def save_files(
     )
 
     # 创建请求级作用域，绑定 CancellationToken
-    ctx = request.app.state.pool_mgr.create_request_scope()
+    scope = request.app.state.pool_mgr.create_request_scope()
 
     try:
         # 复用 document 命名池写盘，统一线程资源管理
@@ -44,10 +44,10 @@ async def save_files(
             file_list=files,
             upload_config=request.app.state.upload_config,
             rag_app=request.app.state.rag_app,
-            cancellation_token=ctx.cancellation_token,
+            cancellation_token=scope.cancellation_token,
             executor=document_pool,
-            token=request.state.ctx.token,
-            device_id=request.state.ctx.device_id,
+            token=request.state.client.token,
+            device_id=request.state.client.device_id,
             db_conn=request.app.state.db_conn,
         )
         logger.info(
@@ -72,4 +72,4 @@ async def save_files(
         return BaseFailedResponse(code=ErrorCode.UPLOAD.UPLOAD_FAILED, data=fail_data)
     finally:
         # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
-        ctx.cleanup()
+        scope.cleanup()

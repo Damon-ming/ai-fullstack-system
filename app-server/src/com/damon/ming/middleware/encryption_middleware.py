@@ -204,11 +204,12 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         sm = request.state.session_service
         ctx = request.state.ctx
-        encrypt_response = ctx.encrypt_enabled
+        enc = request.state.encryption
+        encrypt_response = enc.enabled
         session: SessionKey | None = None
 
         # ---- 0. 版本校验（header 层级，不解密即可拒绝）-----------
-        version_error = _check_version_header(ctx.encrypt_version)
+        version_error = _check_version_header(enc.version)
         if version_error is not None:
             i18n_key, i18n_params = version_error
             logger.warning("加密版本校验失败: %s | path=%s", i18n_key, request.url.path)
@@ -220,7 +221,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                 ).model_dump(),
             )
 
-        sig_version_error = _check_signature_version_header(ctx.signature_version)
+        sig_version_error = _check_signature_version_header(enc.signature_version)
         if sig_version_error is not None:
             i18n_key, i18n_params = sig_version_error
             logger.warning(
@@ -324,7 +325,9 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
           JSONResponse — 空 nonce 或重放命中（已构建好的错误响应，调用方应直接返回）
         """
         key_id = body_json.get("keyId", "")
-        session = await sm.get_session(key_id, session_id=request.state.ctx.session_id)
+        session = await sm.get_session(
+            key_id, session_id=request.state.client.session_id
+        )
         if session is None:
             return None
 
@@ -398,7 +401,9 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             return None
 
         key_id = meta_encrypted.get("keyId", "")
-        session = await sm.get_session(key_id, session_id=request.state.ctx.session_id)
+        session = await sm.get_session(
+            key_id, session_id=request.state.client.session_id
+        )
         if session is None:
             return None
 
