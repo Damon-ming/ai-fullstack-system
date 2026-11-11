@@ -33,8 +33,8 @@ async def save_files(
         [file.filename for file in files],
     )
 
-    # 创建请求级上下文，绑定 CancellationToken
-    ctx = request.app.state.pool_mgr.create_request_context()
+    # 创建请求级作用域，绑定 CancellationToken
+    ctx = request.app.state.pool_mgr.create_request_scope()
 
     try:
         # 复用 document 命名池写盘，统一线程资源管理

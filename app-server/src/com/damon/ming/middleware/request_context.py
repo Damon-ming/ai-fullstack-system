@@ -57,9 +57,8 @@ class RequestContext:
 
     # ---- 系统 ----
     app_version: str = ""
-    client_env: int = 1  # 客户端环境：0 = debug，1 = release（默认 release）
-    client_type: int = 0  # 客户端类型：0 = 浏览器，1 = 移动端
-
+    client_env: int = 1
+    client_type: int = 0
     # ---- 本地化 ----
     language: str = ""  # X-Language 原始值（如 "zh-CN,en;q=0.9"），协商由 i18n 模块负责
 

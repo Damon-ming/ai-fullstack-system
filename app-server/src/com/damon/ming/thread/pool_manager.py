@@ -13,7 +13,7 @@
 
 职责：
   - 集中式命名线程池：按需创建，全局复用，避免每个模块各自创建/销毁
-  - 请求级上下文：通过 create_request_context() 创建
+  - 请求级作用域：通过 create_request_scope() 创建
   - 优雅关闭：shutdown 时先取消所有令牌，再关闭所有线程池
 
 用法：
@@ -24,8 +24,8 @@
   # AI 模块获取命名线程池：
   executor = pool_mgr.get_pool("retrieval")
 
-  # 请求级上下文（在路由入口处）：
-  ctx = pool_mgr.create_request_context()
+  # 请求级作用域（在路由入口处）：
+  ctx = pool_mgr.create_request_scope()
   try:
       future = executor.submit(work_fn, ctx.cancellation_token, ...)
   finally:
@@ -44,7 +44,7 @@ from typing import Any, Self
 
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread.cancellation import CancellationToken
-from src.com.damon.ming.thread.request_context import RequestContext
+from src.com.damon.ming.thread.request_scope import RequestScope
 
 logger = pin("thread.pool_manager")
 
@@ -118,7 +118,7 @@ class ThreadPoolManager:
         if not self._initialized:
             return
 
-        # 1. 关闭所有线程池（RequestContext.cleanup() 会在路由层单独取消各令牌）
+        # 1. 关闭所有线程池（RequestScope.cleanup() 会在路由层单独取消各令牌）
         for name, pool in self._pools.items():
             try:
                 pool.shutdown(wait=wait, cancel_futures=cancel_futures)
@@ -155,19 +155,19 @@ class ThreadPoolManager:
 
         raise ValueError(f"线程池 '{name}' 不存在。已注册: {list(self._pools.keys())}")
 
-    def create_request_context(self, request_id: str | None = None) -> RequestContext:
-        """创建请求级上下文，绑定一个 CancellationToken。
+    def create_request_scope(self, request_id: str | None = None) -> RequestScope:
+        """创建请求级作用域，绑定一个 CancellationToken。
 
         Args:
             request_id: 请求标识（默认自动生成 UUID）。
 
         Returns:
-            RequestContext 实例。
+            RequestScope 实例。
         """
         req_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
-        token = CancellationToken(token_id=f"{req_id}-tok")
-        ctx = RequestContext(request_id=req_id, token=token)
-        logger.debug("请求上下文已创建 | request_id=%s", req_id)
+        cancellation_token = CancellationToken(token_id=f"{req_id}-tok")
+        ctx = RequestScope(request_id=req_id, cancellation_token=cancellation_token)
+        logger.debug("请求作用域已创建 | request_id=%s", req_id)
         return ctx
 
     def get_stats(self) -> dict[str, Any]:

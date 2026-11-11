@@ -4,18 +4,18 @@
 
 子模块：
   - cancellation: CancellationToken（协作式取消令牌）
-  - request_context: RequestContext（请求级上下文）
+  - request_scope: RequestScope（请求级作用域）
   - pool_manager: ThreadPoolManager（进程级线程池管理器单例）
 
 公开导出：
   - CancellationToken: 协作式取消令牌
-  - RequestContext: 请求级上下文（绑定 CancellationToken）
+  - RequestScope: 请求级作用域（绑定 CancellationToken）
   - ThreadPoolManager: 进程级线程池管理器
 
 用法：
   from src.com.damon.ming.thread import (
       CancellationToken,
-      RequestContext,
+      RequestScope,
       ThreadPoolManager,
   )
 
@@ -26,8 +26,8 @@
   # AI 模块中获取线程池：
   executor = pool_mgr.get_pool("retrieval")
 
-  # 在路由入口创建请求上下文：
-  ctx = pool_mgr.create_request_context()
+  # 在路由入口创建请求作用域：
+  ctx = pool_mgr.create_request_scope()
   try:
       result = await ai_work(ctx.cancellation_token, ...)
   finally:
@@ -39,10 +39,10 @@
 
 from src.com.damon.ming.thread.cancellation import CancellationToken
 from src.com.damon.ming.thread.pool_manager import ThreadPoolManager
-from src.com.damon.ming.thread.request_context import RequestContext
+from src.com.damon.ming.thread.request_scope import RequestScope
 
 __all__ = [
     "CancellationToken",
-    "RequestContext",
+    "RequestScope",
     "ThreadPoolManager",
 ]

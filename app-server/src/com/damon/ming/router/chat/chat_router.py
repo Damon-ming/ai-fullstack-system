@@ -40,7 +40,7 @@ from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
 from src.com.damon.ming.router.chat.service.chat_core import generate_answer
 from src.com.damon.ming.router.chat.service.chat_turn import ChatTurnRecorder
 from src.com.damon.ming.router.chat.sse import SseEmitter, SseMessageFactory
-from src.com.damon.ming.thread.pool_manager import RequestContext
+from src.com.damon.ming.thread.pool_manager import RequestScope
 from src.com.damon.ming.utils.time import now
 from sse_starlette.sse import EventSourceResponse
 
@@ -86,8 +86,8 @@ async def chat(request: Request, body: ChatRequest):
     )
 
     # ── 本轮对话的上下文 ─────────────────────────────────────────────
-    # 请求上下文（含 CancellationToken，finally 统一 cleanup）
-    ctx = request.app.state.pool_mgr.create_request_context()
+    # 请求作用域（含 CancellationToken，finally 统一 cleanup）
+    ctx = request.app.state.pool_mgr.create_request_scope()
     # 落库记录器：turn_id 由工厂自动生成，conversation_id 供响应回传
     recorder = _create_recorder(request, body)
 
@@ -181,8 +181,8 @@ async def chat_stream(request: Request, body: ChatRequest):
     """流式问答接口，SSE流式输出（W3C EventSource 标准格式）"""
     logger.info("流式聊天请求开始 | query_length=%s", len(body.query))
 
-    # 本轮对话的上下文：请求上下文 + 落库记录器（turn_id 由工厂自动生成）
-    ctx = request.app.state.pool_mgr.create_request_context()
+    # 本轮对话的上下文：请求作用域 + 落库记录器（turn_id 由工厂自动生成）
+    ctx = request.app.state.pool_mgr.create_request_scope()
     recorder = _create_recorder(request, body)
 
     return EventSourceResponse(
@@ -198,7 +198,7 @@ async def chat_stream(request: Request, body: ChatRequest):
 async def stream_chat_generator(
     request: Request,
     body: ChatRequest,
-    ctx: RequestContext,
+    ctx: RequestScope,
     recorder: ChatTurnRecorder,
 ):
     """流式问答 SSE 生成器 —— 编排与同步端点一致，只是交付方式不同。
