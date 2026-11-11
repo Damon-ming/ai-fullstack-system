@@ -50,8 +50,8 @@ TRUSTED_PROXIES: set[str] = {"127.0.0.1"}
 def _rate_limit_key(request: Request) -> str:
     """获取客户端真实 IP 用于限流。
 
-    仅在可信反向代理后方时解析 X-Forwarded-For（取最左侧原始客户端 IP），
-    否则直接使用 TCP peer IP，避免客户端伪造 header 绕过限流配额。
+    仅在可信反向代理后方时解析 X-Forwarded-For(取最左侧原始客户端 IP),
+    否则直接使用 TCP peer IP,避免客户端伪造 header 绕过限流配额。
     """
     peer_ip = request.client.host if request.client else "unknown"
     if peer_ip in TRUSTED_PROXIES:

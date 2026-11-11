@@ -9,7 +9,7 @@ UA 指纹工具 —— 从浏览器环境摘要计算设备唯一标识。
 
 设计：
   - 纯工具模块，不含业务逻辑、不依赖 store / DB
-  - device_id = SHA-256(UA 关键字段)，同一浏览器大概率相同
+  - device_id = SHA-256(UA 稳定字段)，同一浏览器大概率相同
   - UA 比对允许部分字段变化（如版本号升级），不要求完全一致
 """
 
@@ -83,8 +83,12 @@ def compute_device_id(profile: UAProfile) -> str:
     """
     根据浏览器环境摘要计算设备唯一标识。
 
-    取 UA 核心字段 + platform + screen + lang 组合哈希，
+    取 UA 核心字段 + platform + screen 组合哈希，
     同一浏览器在同一台机器上大概率产出相同指纹。
+
+    只取稳定字段：lang / tz 是用户偏好与环境信息，换浏览器语言或
+    跨时区不应让设备重新注册，因此不参与计算
+    （lang 仍会写入 devices.lang 字段，只是不进指纹）。
 
     返回 16 进制字符串（SHA-256 前 16 字节）。
     """
@@ -92,7 +96,6 @@ def compute_device_id(profile: UAProfile) -> str:
         _normalize_ua(profile.raw_ua),
         profile.platform,
         profile.screen,
-        profile.lang,
     ]
     fingerprint_input = "||".join(components)
     return hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest()[:32]
@@ -122,8 +125,8 @@ def is_same_device(
     """
     判断两次 UA 是否指向同一设备。
 
-    策略：UA 核心指纹 + platform + screen + lang 完全匹配即视为同一设备。
-    timezone 不参与（用户跨时区旅行时不应掉登录）。
+    策略：UA 核心指纹 + platform + screen 完全匹配即视为同一设备。
+    lang / timezone 不参与（换浏览器语言、跨时区旅行都不应掉登录）。
     """
     return compute_device_id(issued_profile) == compute_device_id(current_profile)
 

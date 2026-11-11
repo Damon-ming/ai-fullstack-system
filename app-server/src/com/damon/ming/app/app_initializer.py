@@ -128,45 +128,16 @@ class AppInitializer:
     # -----------------------------------------------------------------------
 
     def _init_i18n(self) -> None:
-        """i18n 模块初始化：加载配置 + 注入 LocalResolver。"""
-
-        # 加载 YAML 配置
+        """i18n 模块初始化：加载 YAML 配置 + 交给 i18n 自己装配。"""
         from src.com.damon.ming.app.config.i18n.i18n_config_loader import (
             I18nConfigLoader,
         )
-        from src.com.damon.ming.i18n import configure
-        from src.com.damon.ming.i18n.locale_negotiator import (
-            configure as configure_negotiator,
-        )
-        from src.com.damon.ming.i18n.resolver import LocalResolver
+        from src.com.damon.ming.i18n import initialize as initialize_i18n
 
         i18n_cfg = I18nConfigLoader().load()
-        configure_negotiator(
+        initialize_i18n(
             default_locale=i18n_cfg.default_locale,
             supported_locales=i18n_cfg.supported_locales,
-        )
-
-        # 注入 resolver
-        locales_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "..",
-            "i18n",
-            "locales",
-        )
-        locales_dir = os.path.normpath(locales_dir)
-        configure(
-            LocalResolver(
-                locales_dir=locales_dir,
-                default_locale=i18n_cfg.default_locale,
-                supported_locales=set(i18n_cfg.supported_locales),
-            )
-        )
-        logger.info(
-            "i18n 模块初始化完成 | default=%s | supported=%s | locales_dir=%s",
-            i18n_cfg.default_locale,
-            i18n_cfg.supported_locales,
-            locales_dir,
         )
 
     def _init_thread_pool(self) -> None:

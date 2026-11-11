@@ -15,14 +15,18 @@
   from i18n import t, I18nKey
   error_msg = t(I18nKey.UPLOAD_SIZE_EXCEEDED, max_mb="10")
 
-启动时：
-  from i18n import configure
-  from i18n.resolver import LocalResolver
-  configure(LocalResolver(locales_dir="i18n/locales"))
+启动时（由 app_initializer 调用一次，配置值来自 YAML）：
+  from i18n import initialize
+  initialize(default_locale="zh_CN", supported_locales=["zh_CN", "en_US"])
 """
 
 import contextvars
+import os
 from typing import Protocol
+
+from src.com.damon.ming.log import pin
+
+logger = pin("i18n")
 
 # 请求级 locale —— 中间件设置，t() 读取
 _locale_var: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -63,6 +67,36 @@ def get_locale() -> str:
 
 
 def configure(resolver: MessageResolver) -> None:
-    """AppInitializer 启动时注入 resolver 实现。"""
+    """注入 resolver 实现（initialize 内部调用；测试可单独注入假实现）。"""
     global _resolver
     _resolver = resolver
+
+
+def initialize(default_locale: str, supported_locales: list[str]) -> None:
+    """启动时初始化 i18n —— 由 app_initializer 调用一次。
+
+    注入 locale 协商配置 + 构建本地 resolver 并挂载。
+    locales 目录由本模块自己定位，调用方只需提供 YAML 里的配置值。
+    """
+    from .locale_negotiator import configure as configure_negotiator
+    from .resolver import LocalResolver
+
+    configure_negotiator(
+        default_locale=default_locale,
+        supported_locales=supported_locales,
+    )
+
+    locales_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locales")
+    configure(
+        LocalResolver(
+            locales_dir=locales_dir,
+            default_locale=default_locale,
+            supported_locales=set(supported_locales),
+        )
+    )
+    logger.info(
+        "i18n 初始化完成 | default=%s | supported=%s | locales_dir=%s",
+        default_locale,
+        supported_locales,
+        locales_dir,
+    )
