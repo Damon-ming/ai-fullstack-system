@@ -8,6 +8,7 @@ import type {
   SseStreamStatus,
   SseFinalState,
   SseMessageInterceptor,
+  SseDecryptData,
 } from "./types";
 
 const log = createLogger("net/sse-parser");
@@ -31,6 +32,7 @@ function defaultValidateMessage<T>(payload: T): { isError: boolean; error?: BizA
 
 interface SseParserOptions<T> {
   parse?: ((raw: string) => T) | false;
+  decryptData?: SseDecryptData;
   validateMessage?: (payload: T) => {
     isError: boolean;
     error?: BizApiErrorResponse;
@@ -179,7 +181,7 @@ export class SseParser<T = any> {
     };
 
     try {
-      const payload = this.parsePayload(rawPayload);
+      const payload = await this.parsePayload(rawPayload);
 
       // 服务端通过 SSE event: error 通知异常终止
       if (this.eventType === "error" && !this.hasError) {
@@ -239,9 +241,16 @@ export class SseParser<T = any> {
     }
   }
 
-  private parsePayload(rawPayload: string): T {
+  /**
+   * 解析 data 字段：优先解密（加密链路），否则按 parse / JSON.parse 解析。
+   * 解密是异步的（WebCrypto），因此本方法必须 await。
+   */
+  private async parsePayload(rawPayload: string): Promise<T> {
     if (!rawPayload) return {} as T; // error 事件无 data: 时兜底
     if (this.opts.parse === false) return rawPayload as T;
+    if (this.opts.decryptData) {
+      return (await this.opts.decryptData(rawPayload)) as T;
+    }
     return (this.opts.parse ?? JSON.parse)(rawPayload);
   }
 

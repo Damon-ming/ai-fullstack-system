@@ -39,6 +39,8 @@
   "encrypt.session_reg_failed": "会话注册失败",
   "encrypt.replay_detected": "请求已处理，请勿重复提交",
   "encrypt.empty_nonce": "缺少 nonce 参数",
+  "encrypt.required": "当前环境要求加密传输，请求未按加密协议发送",
+  "encrypt.response_failed": "响应加密失败，请重新建立会话",
 
   "sys.database_failure": "数据服务暂不可用，请稍后重试",
   "sys.encryption_failure": "安全服务异常，请重新建立会话",

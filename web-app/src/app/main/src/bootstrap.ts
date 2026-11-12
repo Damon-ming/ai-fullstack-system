@@ -1,11 +1,22 @@
 // src/app/main/src/bootstrap.ts
-import { initNetApi, setLanguageGetter } from "@ming/biz-common-net-api";
+import {
+  initNetApi,
+  setLanguageGetter,
+  decryptSsePayload,
+} from "@ming/biz-common-net-api";
 import { createLogger } from "@ming/core-log";
-import { isDebug, initDebugEnv } from "@ming/biz-common-debug";
+import {
+  isDebug,
+  initDebugEnv,
+  isEncryptionEnabled,
+} from "@ming/biz-common-debug";
 import { i18n } from "@ming/i18n";
 import {
   setEncryptionSession,
+  getEncryptionSession,
+  getSessionContext,
   clearSessionContext,
+  clearEncryptionSession,
 } from "@ming/biz-common-storage";
 import { setClearSessionCallback } from "@ming/store";
 import { exchangeKeys } from "@ming/feature-encryption-api";
@@ -23,7 +34,12 @@ export async function bootstrap(): Promise<void> {
   initDebugEnv();
 
   // 0.1 注册认证清除回调（setter 注入，解耦 store → biz-common-storage）
-  setClearSessionCallback(clearSessionContext);
+  //     登出必须同时清掉加密会话：否则旧 AES 密钥残留，
+  //     下一次登录若复用同一 session_id 会解密失败。
+  setClearSessionCallback(() => {
+    clearSessionContext();
+    clearEncryptionSession();
+  });
 
   // 0.2 注册语言 getter（setter 注入，解耦 biz-common/net → i18n）
   setLanguageGetter(() => i18n.language);
@@ -41,32 +57,57 @@ export async function bootstrap(): Promise<void> {
 /**
  * 全局网络层初始化
  *
- * 通过 isDebug 判断开关，一次性注入拦截器：
- *   debug:    加密关、日志开、认证关
- *   release:  加密开、日志关、认证开
+ * 通过 isEncryptionEnabled 判断开关，一次性注入拦截器：
+ *   release:          加密开、日志关
+ *   debug（开关关）:  加密关、日志开
+ *   debug（开关开）:  加密开、日志开
  *
- * release 模式下，登录和密钥交换必须成功，否则抛错中止启动。
+ * 启动阶段不做密钥交换：交换需要登录下发的 session_id，
+ * 未登录时调用必然失败。仅在检测到已有登录态（刷新恢复）时补建。
  */
 async function initGlobalNetwork(): Promise<void> {
   const debug = isDebug();
+  const encryptionOn = isEncryptionEnabled();
 
   initNetApi({
     baseURL: "",
     timeout: 15000,
-    enableEncryption: !debug,
-    // 白名单：密钥交换端点无加密会话可用，必须跳过加密拦截器
-    encryptionExcludePaths: ["/api/encryption"],
+    enableEncryption: encryptionOn,
+    // SSE 响应不经加密中间件，解密钩子由客户端在解析阶段就地完成
+    sseDecryptData: encryptionOn ? decryptSsePayload : undefined,
     enableLogging: debug,
   });
 
-  // release 模式时，token 初始化和密钥交换必须成功
-  if (!debug) {
-    const session = await exchangeKeys();
-    await setEncryptionSession(session);
-    log.info("加密会话初始化完成", { key_id: session.keyId });
+  // 已登录（页面刷新恢复会话）时补建加密会话；未登录交给登录成功入口。
+  // fail-closed：加密开启时交换失败一律中止启动，debug 也不例外 ——
+  // debug 只放宽「要不要加密」，不放宽「加密失败要不要容忍」。
+  if (encryptionOn) {
+    await ensureEncryptionSession();
   }
 
   log.info(
-    `网络层初始化完成 | debug=${debug} | 加密: ${!debug ? "开" : "关"} | 认证: ${!debug ? "开" : "关"} | 日志: ${debug ? "开" : "关"}`,
+    `网络层初始化完成 | debug=${debug} | 加密: ${encryptionOn ? "开" : "关"} | 日志: ${debug ? "开" : "关"}`,
   );
+}
+
+/**
+ * 确保加密会话存在（已登录且开启加密时）。
+ *
+ * 密钥交换必须在登录之后：/api/encryption/session/v1 需要 token + session_id，
+ * 二者由登录下发。登录成功与刷新恢复两个入口都调用本函数。
+ *
+ * 幂等：已有未过期会话时直接返回，不重复交换。
+ */
+export async function ensureEncryptionSession(): Promise<void> {
+  if (!isEncryptionEnabled()) return;
+
+  const ctx = getSessionContext();
+  if (!ctx?.token) return;
+
+  const existing = await getEncryptionSession();
+  if (existing) return;
+
+  const session = await exchangeKeys();
+  await setEncryptionSession(session);
+  log.info("加密会话已建立", { key_id: session.keyId });
 }

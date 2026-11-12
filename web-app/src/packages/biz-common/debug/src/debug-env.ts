@@ -14,6 +14,7 @@
 import { get, set, remove } from "@ming/core-storage";
 
 const DEBUG_OVERRIDE_KEY = "__debug_override__";
+const ENCRYPTION_TOGGLE_KEY = "__encryption_toggle__";
 
 /** 构建时默认值（不可变底线） */
 const BUILD_DEFAULT = import.meta.env.DEV;
@@ -80,4 +81,38 @@ export function clearDebugOverride(): void {
   if (!BUILD_DEFAULT) return;
   remove(DEBUG_OVERRIDE_KEY);
   cachedDebug = BUILD_DEFAULT;
+}
+
+// ---------------------------------------------------------------------------
+// 加密开关（仅开发构建可调）
+// ---------------------------------------------------------------------------
+
+/**
+ * debug 下的加解密开关（默认关）。
+ *
+ * 由服务端策略主导：release 恒为 true（配置层面不允许关闭），
+ * debug 由本开关决定，便于本地调试明文 / 密文两种链路。
+ */
+export function isEncryptionToggleOn(): boolean {
+  if (!BUILD_DEFAULT) return false;
+  return get(ENCRYPTION_TOGGLE_KEY) === "true";
+}
+
+export function setEncryptionToggle(on: boolean): void {
+  if (!BUILD_DEFAULT) return;
+  set(ENCRYPTION_TOGGLE_KEY, String(on));
+}
+
+/**
+ * 加解密开关（服务端主导）。
+ *
+ *   release: 恒开 —— 服务端 fail-closed，未声明加密直接拒绝
+ *   debug:   由 localStorage 开关决定（默认关，保持现状）
+ *
+ * 开关只影响「客户端是否发送密文」，服务端策略始终优先。
+ * 定义在本模块而非 app 层：两个原语（isDebug / isEncryptionToggleOn）
+ * 都在这里，派生值跟着原语走。
+ */
+export function isEncryptionEnabled(): boolean {
+  return !isDebug() || isEncryptionToggleOn();
 }

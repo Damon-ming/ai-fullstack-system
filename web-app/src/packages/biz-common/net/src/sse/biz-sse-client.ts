@@ -3,6 +3,7 @@ import type { HttpManager } from "@ming/core-network";
 import { createLogger } from "@ming/core-log";
 import type { BizHttpClientConfig, BizApiErrorResponse } from "../shared/types";
 import type {
+  SseDecryptData,
   SseFinalState,
   SseGlobalMessageInterceptor,
   SseMessageInterceptor,
@@ -20,15 +21,17 @@ const log = createLogger("net/sse-client");
 export class BizSseClient {
   private responseHeadersInterceptors: SseResponseHeadersInterceptor[] = [];
   private messageInterceptors: SseGlobalMessageInterceptor[] = [];
+  private decryptData: SseDecryptData | undefined;
 
   constructor(private readonly httpManager: HttpManager) {}
 
   configure(
     config: Pick<
       BizHttpClientConfig,
-      "sseResponseHeadersInterceptors" | "sseMessageInterceptors"
+      "sseResponseHeadersInterceptors" | "sseMessageInterceptors" | "sseDecryptData"
     >,
   ) {
+    this.decryptData = config.sseDecryptData;
     this.responseHeadersInterceptors = config.sseResponseHeadersInterceptors
       ? Array.isArray(config.sseResponseHeadersInterceptors)
         ? config.sseResponseHeadersInterceptors
@@ -97,9 +100,12 @@ export class BizSseClient {
       validateMessage,
       messageInterceptors,
       onResponseHeaders,
+      decryptData,
       ...transportOptions
     } = opts;
     const localInterceptors = this.normalizeInterceptors(messageInterceptors);
+    // 单次调用可覆盖全局配置；两者都无则不解密（明文链路）
+    const effectiveDecryptData = decryptData ?? this.decryptData;
 
     try {
       // ── 1. 建立连接 ─────────────────────────────────────────
@@ -133,6 +139,7 @@ export class BizSseClient {
       this.emitStatus(callbacks, "connected");
       const parser = new SseParser<T>(callbacks, {
         parse,
+        decryptData: effectiveDecryptData,
         validateMessage,
         globalInterceptors: this.messageInterceptors,
         localInterceptors,

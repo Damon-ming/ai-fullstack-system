@@ -9,7 +9,8 @@
  *   - debug 环境标志 → 直接调用 @ming/biz-common-debug 的 isDebug()
  *   - token / device_id / session_id 存储 → biz-common/storage（auth-store），拦截器直接读取
  *   - 加密会话 → biz-common/storage（encryption-store），拦截器直接读取
- *   - 加密/认证开关 → 拦截器内部通过 isDebug() 运行时决定
+ *   - 加密开关 → @ming/biz-common-debug 的 isEncryptionEnabled()（app 层策略，
+ *     开关关闭时拦截器不注册；开启时无会话则跳过加密，由服务端 fail-closed 拒绝）
  *   - 业务状态 → 在 biz/ 目录下（chat、upload 等）
  *
  * 所有模块通过 @ming/store 统一访问。

@@ -13,10 +13,13 @@ Account 路由 —— 用户登录 / Token 签发 / 资料管理
 用法：
   POST /api/account/login/v1     body: { "phone": "+8613800138000", "password": "Abc123_45" }
     → { "token": "xxx", "device_id": "dev_sha256abc...", "session_id": "uuid...", "is_new": false }
-  GET  /api/account/profile/v1
+  GET  /api/account/profile/get/v1
     → { "name": "Murphy" }
-  POST /api/account/profile/v1   body: { "name": "NewName" }
+  POST /api/account/profile/update/v1   body: { "name": "NewName" }
     → { "name": "NewName" }
+
+profile 拆成两个路径的原因：加密白名单按路径前缀匹配，
+GET 无 body 可加密需放行，POST 有 body 必须加密，同一前缀无法区分。
 """
 
 from fastapi import APIRouter, Request
@@ -118,13 +121,14 @@ async def login(body: LoginRequest, request: Request):
     )
 
 
-@router.get("/profile/v1", response_model=BaseSuccessResponse[ProfileResponseData])
+@router.get("/profile/get/v1", response_model=BaseSuccessResponse[ProfileResponseData])
 @limiter.limit("20/minute")
 async def get_profile(request: Request):
     """
     获取当前用户资料（需认证，token 由 AuthMiddleware 校验）。
 
     从请求上下文提取 token → 查询用户昵称。
+    路径独立于 update：GET 无 body，命中加密白名单明文放行。
     """
     client = request.state.client
     user = get_user_profile(client.token)
@@ -136,13 +140,16 @@ async def get_profile(request: Request):
     )
 
 
-@router.post("/profile/v1", response_model=BaseSuccessResponse[ProfileResponseData])
+@router.post(
+    "/profile/update/v1", response_model=BaseSuccessResponse[ProfileResponseData]
+)
 @limiter.limit("20/minute")
 async def update_profile(body: ProfileResponseData, request: Request):
     """
     更新当前用户昵称（需认证，token 由 AuthMiddleware 校验）。
 
     从请求上下文提取 token → 更新 users 表 name 字段。
+    路径独立于 get：POST 携带 body，必须走加密通道。
     """
     client = request.state.client
     name = body.name.strip()[:64]

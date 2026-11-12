@@ -3,7 +3,10 @@ export { BizHttp } from "./biz-http";
 export { VERSION } from "../../../../version";
 export { createCommonHeaderInterceptor } from "./header/common-header-interceptor";
 export { setLanguageGetter } from "./header/language-getter";
-export { createEncryptionInterceptors } from "./encryption/encryption-interceptor";
+export {
+  createEncryptionInterceptors,
+  decryptSsePayload,
+} from "./encryption/encryption-interceptor";
 export {
   ENCRYPTION_VERSION,
   SIGNATURE_VERSION,

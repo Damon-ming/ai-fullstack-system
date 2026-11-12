@@ -38,8 +38,8 @@ export class BizHttp implements INetClient {
       timeout = BizRestClient.getDefaultTimeout(),
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
+      sseDecryptData,
       enableEncryption = false,
-      encryptionExcludePaths,
       enableLogging = false,
       axiosConfig,
       ...restConfig
@@ -53,6 +53,7 @@ export class BizHttp implements INetClient {
     this.sseClient.configure({
       sseResponseHeadersInterceptors,
       sseMessageInterceptors,
+      sseDecryptData,
     });
 
     // 公共请求头：每次请求必须携带（系统版本 + 环境标志）
@@ -60,9 +61,7 @@ export class BizHttp implements INetClient {
 
     // 加密 + 签名拦截器：release 模式注册，debug 模式不注册
     if (enableEncryption) {
-      const encryption = createEncryptionInterceptors({
-        excludePaths: encryptionExcludePaths,
-      });
+      const encryption = createEncryptionInterceptors();
       client.addRequestInterceptor(encryption.requestEncrypt);
       client.addResponseInterceptor(encryption.responseDecrypt);
     }

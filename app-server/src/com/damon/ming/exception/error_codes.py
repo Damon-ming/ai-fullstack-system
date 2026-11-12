@@ -115,6 +115,10 @@ class _Encryption:
         detail=9, business=Business.ENCRYPTION
     )  # 200002009
     EMPTY_NONCE = _build(detail=10, business=Business.ENCRYPTION)  # 200002010
+    # release 环境缺少加密标识 / 加密体（fail-closed，不降级明文）
+    ENCRYPTION_REQUIRED = _build(detail=11, business=Business.ENCRYPTION)  # 200002011
+    # 响应加密失败（安全关键路径，拒绝返回明文）
+    ENCRYPTION_RESPONSE_FAILED = _build(detail=12, business=Business.ENCRYPTION)  # 200002012
 
 
 class _Auth:

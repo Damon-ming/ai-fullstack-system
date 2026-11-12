@@ -7,6 +7,7 @@ FastAPI 加密 + 签名中间件
     * JSON 加密格式 → 解密 → 验证签名
     * FormData → 解密 meta_json_encrypted → 验证签名 → 还原 meta_json
   - 拦截响应体：加密后再发回客户端
+  - SSE 响应不在此加密：由 chat_router 逐事件加密 event.data
 
 协议：
   JSON:    加密 body = { "encrypted", "nonce", "keyId" }
@@ -17,6 +18,15 @@ FastAPI 加密 + 签名中间件
   X-Timestamp, X-Nonce, X-Signature  → 或从 FormData 字段读取
   X-Signature-Version               → 客户端签名协议版本
 
+开关与白名单（服务端主导，客户端不再自行决定）：
+  命中白名单前缀的路径 → 明文放行（不解密、不加密响应）
+  白名单来自 app.state.config.system_config.whitelist（系统配置，
+  环境无关的 HTTP 路由策略；不放在 encryption-config.yaml）
+  未命中白名单时按 X-Encrypt-Enabled 头 + 运行环境决定：
+    debug  ：客户端未声明加密 → 明文放行（前端可调试开关）
+    release：客户端未声明加密 → 400（必须加密，fail-closed）
+  声明加密后，版本头与加密体缺一不可，否则 400。
+
 错误码（统一 ErrorCode 分段码，详见 exception/error_codes.py）：
   200002003: 客户端加密协议版本不受支持（X-Encrypt-Version header）
   200002004: JSON 解密失败
@@ -26,6 +36,8 @@ FastAPI 加密 + 签名中间件
   200002008: 客户端签名协议版本不受支持（X-Signature-Version header）
   200002009: 请求重放拦截（nonce 已使用过）
   200002010: 空 nonce 拒绝（加密请求必须携带非空 nonce）
+  200002011: 当前环境要求加密，请求未按加密协议发送
+  200002012: 响应加密失败（安全关键路径，拒绝返回明文）
 
 版本校验：
   加密版本：客户端必须通过 X-Encrypt-Version header 告知服务端，缺失或不支持返回 200002003。
@@ -46,6 +58,7 @@ from collections.abc import Callable
 from typing import ClassVar
 
 from fastapi import Request
+from src.com.damon.ming.debug import is_debug
 from src.com.damon.ming.encryption.constants import (
     SIGNATURE_TIMESTAMP_TOLERANCE_MS,
     SUPPORTED_ENCRYPTION_VERSIONS,
@@ -60,6 +73,7 @@ from src.com.damon.ming.encryption.v1.signature import (
     derive_signing_key,
     verify_signature,
 )
+from src.com.damon.ming.exception import EncryptionError
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
@@ -145,6 +159,26 @@ def _check_signature_version_header(client_version: str) -> tuple[str, dict] | N
     return None
 
 
+def _encryption_required_response() -> JSONResponse:
+    """构建「当前环境要求加密」拒绝响应（400 + ENCRYPTION_REQUIRED）。
+
+    用于 release 缺少加密标识、或声明加密但未携带加密体的情况。
+    fail-closed：不回退明文，避免加密模式被静默绕过。
+    """
+    return JSONResponse(
+        status_code=400,
+        content=BaseFailedResponse(
+            code=ErrorCode.ENCRYPT.ENCRYPTION_REQUIRED,
+            data=BaseBizFailedData(error_msg=t(I18nKey.ENCRYPT_REQUIRED)),
+        ).model_dump(),
+    )
+
+
+def _is_whitelisted(path: str, whitelist: tuple[str, ...]) -> bool:
+    """前缀匹配白名单（路径级全放行，不区分方法）。"""
+    return any(path.startswith(prefix) for prefix in whitelist)
+
+
 class EncryptionMiddleware(BaseHTTPMiddleware):
     """透明加密 / 解密 + 签名验证中间件。"""
 
@@ -201,17 +235,39 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         return True
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        sm = request.app.state.encryption.session_service
+        enc_state = request.app.state.encryption
+        sm = enc_state.session_service
         ctx = request.state.ctx
         enc = request.state.encryption
-        encrypt_response = enc.enabled
-        session: SessionKey | None = None
+        path = request.url.path
+        # 白名单是环境无关的 HTTP 路由策略，由系统配置提供
+        whitelist = request.app.state.config.system_config.whitelist
 
-        # ---- 0. 版本校验（header 层级，不解密即可拒绝）-----------
+        # ---- 0. 白名单：明文放行（不解密、不加密响应）-------------------
+        if _is_whitelisted(path, whitelist):
+            logger.debug("加密白名单命中，明文放行 | path=%s", path)
+            return await call_next(request)
+
+        # ---- 1. 开关判定（服务端主导）-----------------------------------
+        # X-Encrypt-Enabled 由客户端声明，是否接受由服务端按环境决定：
+        #   debug  ：前端可调试开关，未声明 → 明文放行
+        #   release：必须加密，未声明 → 400
+        if not enc.enabled:
+            if is_debug():
+                logger.debug("debug 模式，客户端未开启加密，明文放行 | path=%s", path)
+                return await call_next(request)
+            logger.warning(
+                "release 模式，客户端未开启加密 | path=%s client=%s",
+                path,
+                request.client.host if request.client else "unknown",
+            )
+            return _encryption_required_response()
+
+        # ---- 2. 版本校验（header 层级，不解密即可拒绝）-------------------
         version_error = _check_version_header(enc.version)
         if version_error is not None:
             i18n_key, i18n_params = version_error
-            logger.warning("加密版本校验失败: %s | path=%s", i18n_key, request.url.path)
+            logger.warning("加密版本校验失败: %s | path=%s", i18n_key, path)
             return JSONResponse(
                 status_code=400,
                 content=BaseFailedResponse(
@@ -223,11 +279,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         sig_version_error = _check_signature_version_header(enc.signature_version)
         if sig_version_error is not None:
             i18n_key, i18n_params = sig_version_error
-            logger.warning(
-                "签名版本校验失败: %s | path=%s",
-                i18n_key,
-                request.url.path,
-            )
+            logger.warning("签名版本校验失败: %s | path=%s", i18n_key, path)
             return JSONResponse(
                 status_code=400,
                 content=BaseFailedResponse(
@@ -237,30 +289,35 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
             )
 
         content_type = ctx.content_type
+        session: SessionKey | None = None
 
-        # ---- 1. JSON 加密请求：解密 + 验证签名 -----------------------
+        # ---- 3. 解密 + 验签（声明加密后，加密体缺一不可）-----------------
         if "application/json" in content_type:
             try:
                 raw_body = await request.body()
-                if raw_body:
-                    body_json = json.loads(raw_body)
-                    if _is_encrypted_body(body_json):
-                        session = await self._decrypt_and_verify_json(
-                            request, sm, body_json
-                        )
-                        if isinstance(session, Response):
-                            return session
-                        if session is None:
-                            return JSONResponse(
-                                status_code=401,
-                                content=BaseFailedResponse(
-                                    code=ErrorCode.ENCRYPT.SESSION_INVALID,
-                                    data=BaseBizFailedData(
-                                        error_msg=t(I18nKey.ENCRYPT_SESSION_INVALID)
-                                    ),
-                                ).model_dump(),
-                            )
-                        encrypt_response = True
+                if not raw_body:
+                    logger.warning("加密请求体为空 | path=%s", path)
+                    return _encryption_required_response()
+                body_json = json.loads(raw_body)
+                if not _is_encrypted_body(body_json):
+                    logger.warning("请求体未按加密协议发送 | path=%s", path)
+                    return _encryption_required_response()
+                session = await self._decrypt_and_verify_json(
+                    request, sm, body_json
+                )
+                if isinstance(session, Response):
+                    return session
+                if session is None:
+                    return JSONResponse(
+                        status_code=401,
+                        content=BaseFailedResponse(
+                            code=ErrorCode.ENCRYPT.SESSION_INVALID,
+                            data=BaseBizFailedData(
+                                error_msg=t(I18nKey.ENCRYPT_SESSION_INVALID)
+                            ),
+                        ).model_dump(),
+                    )
+                request.state.enc_active = True
             except Exception as e:
                 logger.warning("JSON 解密失败: %s", e)
                 return JSONResponse(
@@ -273,9 +330,19 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                     ).model_dump(),
                 )
 
-        # ---- 2. FormData 加密请求：解密 meta + 验证签名 ----------------
         elif "multipart/form-data" in content_type:
             try:
+                # 加密体检查：缺少 meta_json_encrypted 视为未按协议发送
+                form = await request.form()
+                meta_encrypted_str = form.get("meta_json_encrypted")
+                if not meta_encrypted_str:
+                    logger.warning("FormData 未按加密协议发送 | path=%s", path)
+                    return _encryption_required_response()
+                meta_encrypted = json.loads(meta_encrypted_str)
+                if not _is_encrypted_body(meta_encrypted):
+                    logger.warning("FormData meta 未按加密协议发送 | path=%s", path)
+                    return _encryption_required_response()
+
                 session = await self._decrypt_and_verify_formdata(request, sm)
                 if isinstance(session, Response):
                     return session
@@ -289,7 +356,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                             ),
                         ).model_dump(),
                     )
-                encrypt_response = True
+                request.state.enc_active = True
             except Exception as e:
                 logger.warning("FormData 解密失败: %s", e)
                 return JSONResponse(
@@ -302,11 +369,22 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                     ).model_dump(),
                 )
 
-        # ---- 3. 调用下游 --------------------------------------------
+        else:
+            # 声明加密但没有可解密的 body（如异常情况下 GET 携带加密头）
+            logger.warning(
+                "请求未携带可解密的 body | path=%s content_type=%s",
+                path,
+                content_type,
+            )
+            return _encryption_required_response()
+
+        # ---- 4. 调用下游 -----------------------------------------------
         response = await call_next(request)
 
-        # ---- 4. 加密响应 --------------------------------------------
-        if encrypt_response and _is_json_response(response):
+        # ---- 5. 加密响应（失败 → 抛异常 500，不回退明文）---------------
+        # SSE（text/event-stream）在此不处理：由 chat_router 逐事件加密，
+        # 中间件缓冲整个流会破坏流式语义。
+        if _is_json_response(response):
             return await self._encrypt_response(request, response, session)
 
         return response
@@ -469,27 +547,38 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         async for chunk in response.body_iterator:
             response_body += chunk
 
-        body_json = json.loads(response_body)
+        active_session = session or getattr(request.state, "enc_session", None)
+        if active_session is None:
+            # fail-closed：无会话时拒绝加密响应，绝不回退明文
+            raise EncryptionError(
+                "响应加密失败：缺少加密会话",
+                biz_code=ErrorCode.ENCRYPT.ENCRYPTION_RESPONSE_FAILED,
+            )
+
+        try:
+            body_json = json.loads(response_body)
+        except Exception as e:
+            raise EncryptionError(
+                f"响应加密失败：响应体不是合法 JSON（{type(e).__name__}）",
+                biz_code=ErrorCode.ENCRYPT.ENCRYPTION_RESPONSE_FAILED,
+            ) from e
+
+        try:
+            encrypted_payload = AesGcmEngine.encrypt_json(
+                json.dumps(body_json, ensure_ascii=False),
+                active_session.aes_key,
+                active_session.key_id,
+            )
+        except Exception as e:
+            raise EncryptionError(
+                f"响应加密失败：{type(e).__name__}",
+                biz_code=ErrorCode.ENCRYPT.ENCRYPTION_RESPONSE_FAILED,
+            ) from e
+
         logger.debug(
             "响应加密 | path=%s | body_bytes=%d",
             request.url.path,
             len(response_body),
-        )
-        active_session = session or getattr(request.state, "enc_session", None)
-        if active_session is None:
-            # 协议层面不应发生（encrypt_response=True 时 session 必须存在），
-            # 作为最后的安全网直接返回原始体。
-            return Response(
-                content=response_body,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.media_type,
-            )
-
-        encrypted_payload = AesGcmEngine.encrypt_json(
-            json.dumps(body_json, ensure_ascii=False),
-            active_session.aes_key,
-            active_session.key_id,
         )
         return JSONResponse(content=encrypted_payload.to_dict())
 
@@ -504,7 +593,13 @@ def _is_encrypted_body(body: dict) -> bool:
 
 
 def _is_json_response(response: Response) -> bool:
-    return response.media_type == "application/json"
+    """判断响应体是否为 JSON（决定是否加密响应）。
+
+    必须读 content-type 头，不能用 response.media_type：
+    BaseHTTPMiddleware 的 call_next 返回的是 _StreamingResponse，
+    它只从下游拷贝 raw_headers，media_type 恒为 None。
+    """
+    return "application/json" in response.headers.get("content-type", "")
 
 
 def _patch_request_body(request: Request, new_body: str) -> None:

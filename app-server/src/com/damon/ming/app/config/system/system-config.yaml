@@ -1,5 +1,25 @@
+# app-server/src/com/damon/ming/app/config/system/system-config.yaml
 # 系统级配置 —— 跨模块共享的路径和基础设置。
-# 各模块从 app.state.system_config 读取，不再自行硬编码路径。
+# 各模块从 app.state.config.system_config 读取，不再自行硬编码路径。
 
 # 知识库目录（绝对路径，与 docker-compose volume 挂载一致）
 knowledge_dir: "/app-server/knowledges"
+
+# 加密豁免白名单 —— 命中前缀的请求明文放行（不加密请求体、不加密响应体）。
+#
+# 为什么放在系统配置而不是 encryption-config.yaml：
+#   白名单内容与运行环境无关（debug / release 共用同一份），本质是
+#   HTTP 路由层面的豁免策略，不是加密算法参数。encryption-config.yaml
+#   只保留随剖面变化的加密参数（rsa_key_size / ttl / kek_* 等）。
+#
+# 约束（加载时校验，不满足直接抛异常）：
+#   - 必须是非空列表，每项以 / 开头
+#   - 必须覆盖密钥交换端点 /api/encryption，否则客户端无法建立加密会话
+whitelist:
+  - /api/encryption                # key/v1（GET）+ session/v1（POST）
+  - /api/account/login/v1          # 登录（加密会话尚未建立）
+  - /api/account/profile/get/v1    # 资料读取（GET，无 body）
+  - /api/history                   # list + detail(GET/DELETE)，均无 body
+  - /api/knowledge/tree/v1         # 知识库树（GET，无 body）
+  - /ping
+  - /health

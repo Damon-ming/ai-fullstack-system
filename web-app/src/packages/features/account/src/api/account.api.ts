@@ -56,7 +56,7 @@ export async function fetchProfile(): Promise<
   DataApiResponse<ProfileResponse>
 > {
   log.debug("获取用户资料");
-  return dataApi.get<ProfileResponse>("/api/account/profile/v1");
+  return dataApi.get<ProfileResponse>("/api/account/profile/get/v1");
 }
 
 /** 更新当前用户昵称。 */
@@ -64,5 +64,5 @@ export async function updateProfile(
   body: ProfileRequest,
 ): Promise<DataApiResponse<ProfileResponse>> {
   log.debug("更新用户资料", { name: body.name });
-  return dataApi.post<ProfileResponse>("/api/account/profile/v1", body);
+  return dataApi.post<ProfileResponse>("/api/account/profile/update/v1", body);
 }

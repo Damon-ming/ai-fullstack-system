@@ -2,8 +2,12 @@
 /**
  * 加密 + 签名拦截器 — 纯加解密，不感知密钥交换。
  *
- * 密钥交换在 bootstrap 阶段由 features-encryption-api 完成，
- * 会话写入 localStorage，拦截器从 biz-common-util 读取。
+ * 密钥交换在登录之后由 app 层触发（features-encryption-api），
+ * 会话写入 localStorage，拦截器从 biz-common-storage 读取。
+ *
+ * 是否放行由服务端策略决定（release 强制加密、debug 由开关决定），
+ * 客户端不做路径白名单：命中服务端白名单的请求本就无密文可发，
+ * 这里「无会话即明文」的懒惰策略对所有端点天然成立。
  *
  * 支持两种请求类型：
  *   1. JSON: 整体签名 → 整体加密
@@ -23,6 +27,7 @@
  *
  * 响应流程：
  *   收到密文 → 解密 → 明文 JSON
+ *   SSE 响应不走本拦截器（见 decryptSsePayload）
  */
 
 import type { InterceptorConfig } from "@ming/core-network";
@@ -40,42 +45,21 @@ const log = createLogger("net/encryption");
 // 工厂函数
 // ---------------------------------------------------------------------------
 
-export interface EncryptionInterceptorOptions {
-  /**
-   * 加密白名单 —— 命中这些前缀的请求跳过加密/解密。
-   * 由调用方注入，拦截器本身不感知业务路径。
-   */
-  excludePaths?: string[];
-}
-
-export function createEncryptionInterceptors(
-  options: EncryptionInterceptorOptions = {},
-): {
+export function createEncryptionInterceptors(): {
   requestEncrypt: InterceptorConfig;
   responseDecrypt: InterceptorConfig;
 } {
-  const excludePaths = options.excludePaths ?? [];
-
-  /** 检查 URL 是否命中排除前缀 */
-  const isExcluded = (url: string | undefined): boolean => {
-    if (!url || excludePaths.length === 0) return false;
-    return excludePaths.some((prefix) => url.startsWith(prefix));
-  };
-
   // ---- 请求拦截器：签名 + 加密 ---------------------------------------
 
   const requestEncrypt: InterceptorConfig = {
     onFulfilled: async (request) => {
-      // 白名单路径：不加密，直接放行
-      if (isExcluded(request.url)) {
-        log.debug("加密白名单命中，跳过加密: %s", request.url);
-        return request;
-      }
-
       const session = await getEncryptionSession();
       if (!session) {
-        log.error("加密会话不可用，请求中止");
-        throw new Error("加密会话不可用，请求中止");
+        // 无加密会话 → 明文放行。
+        // 登录 / 密钥交换本身必须走这条路（会话尚未建立）；
+        // release 下其它请求会被服务端以 ENCRYPTION_REQUIRED 拒绝（fail-closed）。
+        log.debug("无加密会话，跳过加密: %s", request.url);
+        return request;
       }
 
       // FormData：文件上传场景
@@ -84,7 +68,8 @@ export function createEncryptionInterceptors(
       }
 
       // GET / HEAD 等无 body 的请求：无数据可加密，直接放行
-      if (!request.method || request.method.toUpperCase() === "GET" || request.method.toUpperCase() === "HEAD") {
+      const method = (request.method ?? "GET").toUpperCase();
+      if (method === "GET" || method === "HEAD") {
         log.debug("GET/HEAD 请求跳过加密: %s", request.url);
         return request;
       }
@@ -116,11 +101,6 @@ export function createEncryptionInterceptors(
         return response;
       }
 
-      // 白名单路径：不尝试解密，直接放行
-      if (isExcluded(response.config?.url)) {
-        return response;
-      }
-
       if (!isEncryptedPayload(response.data)) return response;
 
       const session = await getEncryptionSession();
@@ -141,6 +121,37 @@ export function createEncryptionInterceptors(
   };
 
   return { requestEncrypt, responseDecrypt };
+}
+
+// ---------------------------------------------------------------------------
+// SSE 事件解密
+// ---------------------------------------------------------------------------
+
+/**
+ * 解密 SSE 事件的 data 字段。
+ *
+ * 服务端对每个事件的 data 单独加密（event / id / retry 保持明文以便路由），
+ * 因此这里只负责「data → 明文对象」，协议字段由 SSE 解析器处理。
+ *
+ * 明文链路（debug 未开启加密 / 命中服务端白名单）时 data 本身就是业务 JSON，
+ * 解析后原样返回；非 JSON 字符串（心跳等）也原样返回。
+ */
+export async function decryptSsePayload(raw: string): Promise<unknown> {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+  if (!isEncryptedPayload(payload)) return payload;
+
+  const session = await getEncryptionSession();
+  if (!session) {
+    log.error("SSE 解密失败：加密会话不可用");
+    throw new Error("SSE 解密失败：加密会话不可用");
+  }
+  const decryptedStr = await decryptPayload(payload, session.aesKey);
+  return JSON.parse(decryptedStr);
 }
 
 // ==== 私有 ==========================================================

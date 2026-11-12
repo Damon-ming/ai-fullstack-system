@@ -10,24 +10,25 @@ from src.com.damon.ming.log import pin
 logger = pin("app.precheck")
 
 
-def _check_master_key() -> list[str]:
-    """检查 MASTER_KEY 是否设置。
+def _check_master_key() -> None:
+    """检查 MASTER_KEY 是否设置（缺失直接终止，不返回错误列表）。
 
-    所有环境都必须通过 .env 设置 MASTER_KEY，不允许自动生成。
-    所有环境：密钥长度必须 ≥ MASTER_KEY_MIN_LENGTH 字符。
+    与 _check_encryption_config 同一处理方式：MASTER_KEY 是加密体系的前提，
+    缺失时无论 debug / release 都必须终止。走「返回错误列表」路径会被
+    main.py 在 debug 下降级为 warning 后继续启动，随后密钥存储静默退化为
+    纯内存（重启后所有加密会话丢失），与 fail-closed 冲突。
     """
-    errors = []
     master_key = get_master_key()
 
     if not master_key:
-        errors.append("MASTER_KEY 未设置（所有环境必须通过 .env 注入）")
-    elif len(master_key) < MASTER_KEY_MIN_LENGTH:
-        errors.append(
-            f"MASTER_KEY 长度不足（当前 {len(master_key)} 字符，"
+        raise RuntimeError(
+            "MASTER_KEY 未设置，启动终止（所有环境必须通过 .env 注入）"
+        )
+    if len(master_key) < MASTER_KEY_MIN_LENGTH:
+        raise RuntimeError(
+            f"MASTER_KEY 长度不足，启动终止（当前 {len(master_key)} 字符，"
             f"要求 ≥{MASTER_KEY_MIN_LENGTH}）"
         )
-
-    return errors
 
 
 def _check_encryption_config(is_debug: bool) -> None:
@@ -72,6 +73,9 @@ def _check_encryption_config(is_debug: bool) -> None:
             f"请检查 app/config/encryption/encryption-config.yaml 的 {profile} 剖面。"
         )
 
+    # 加密豁免白名单已移至系统配置（app/config/system/system-config.yaml），
+    # 由 SystemConfigLoader.load() 校验格式与必要端点，此处不再检查。
+
 
 def _check_database() -> list[str]:
     """检查数据库配置是否可用。
@@ -104,16 +108,17 @@ def _check_database() -> list[str]:
 def run_precheck(is_debug: bool) -> list[str]:
     """执行所有启动前校验。
 
-    加密配置检查失败会直接抛异常（不可降级），其他检查返回错误列表。
-    无错误返回空列表。
+    加密相关检查（MASTER_KEY / 加密配置）失败会直接抛异常（不可降级），
+    其他检查返回错误列表。无错误返回空列表。
     """
     logger.info("执行启动前环境校验 | debug=%s", is_debug)
 
-    # 加密配置：缺失直接终止，不返回错误列表（默认值会导致加密静默失败）
+    # 加密相关配置：缺失直接终止，不返回错误列表
+    # （默认值 / 降级会导致加密静默失败，debug 下同样不允许）
+    _check_master_key()
     _check_encryption_config(is_debug)
 
     errors = []
-    errors.extend(_check_master_key())
     errors.extend(_check_database())
 
     if errors:

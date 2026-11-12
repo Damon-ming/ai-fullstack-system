@@ -39,6 +39,8 @@
   "encrypt.session_reg_failed": "Session registration failed",
   "encrypt.replay_detected": "Request already processed, do not resubmit",
   "encrypt.empty_nonce": "Missing nonce parameter",
+  "encrypt.required": "This environment requires encrypted transport; the request was not sent per the encryption protocol",
+  "encrypt.response_failed": "Failed to encrypt the response, please re-establish the session",
 
   "sys.database_failure": "Database service unavailable, please try again later",
   "sys.encryption_failure": "Security service error, please re-establish session",

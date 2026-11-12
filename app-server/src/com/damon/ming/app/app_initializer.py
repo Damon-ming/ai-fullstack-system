@@ -299,7 +299,7 @@ class AppInitializer:
         data_key_id = self._enc_config.data_key_id
 
         # 1. RSA 密钥对（纯技术）—— 注入 SessionService，不再另存全局副本
-        self.rsa_key_pair = RSAKeyPair(rsa_key_size=rsa_size)
+        self.rsa_key_pair = RSAKeyPair(key_size=rsa_size)
         self.rsa_key_pair.initialize()
 
         # 2. 数据密钥材料（纯技术：字段加解密 + 盲索引）
@@ -369,8 +369,11 @@ class AppInitializer:
             logger.info("密钥持久化存储已启用(PostgreSQL)")
             return store, kek
         except Exception as e:
-            logger.warning("密钥持久化存储初始化失败，降级为纯内存: %s", e)
-            return None, None
+            # fail-closed：加密存储是安全关键路径，不允许降级为纯内存
+            # （重启后所有加密会话丢失，且与「不允许静默降级」冲突）。
+            # 不区分环境：debug 下开启加密时同样必须终止。
+            logger.error("密钥持久化存储初始化失败，启动终止: %s", e)
+            raise
 
     def _init_sign_context(self) -> None:
         """HKDF 签名密钥派生 context: 从 YAML 配置读出，挂到 app.state 供中间件取用。
@@ -378,10 +381,12 @@ class AppInitializer:
         encryption 模块不包含此常量，由业务层配置提供。
         """
         self.sign_context = self._enc_config.sign_context.encode("utf-8")
-        if self.sign_context:
-            logger.info("HKDF sign_context 已从配置读出")
-        else:
-            logger.warning("sign_context 未配置，签名密钥派生将使用空 context")
+        if not self.sign_context:
+            raise RuntimeError(
+                "sign_context 未配置，启动终止。"
+                "签名密钥派生需要非空 context，请检查 encryption-config.yaml。"
+            )
+        logger.info("HKDF sign_context 已从配置读出")
 
     def _init_chat(self) -> None:
         """聊天配置：从 YAML 读取 Semaphore 参数、超时、多 locale 文本。"""

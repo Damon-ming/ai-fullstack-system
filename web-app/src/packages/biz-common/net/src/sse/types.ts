@@ -18,12 +18,29 @@ export interface SseMessageInterceptor<T = any> {
 }
 
 /**
+ * SSE 事件 data 解密钩子。
+ *
+ * SSE 响应不经过普通响应拦截器（SseTransport 只跑请求拦截器），
+ * 且 error 事件的判定发生在拦截器链之前，因此加密事件必须在
+ * parsePayload 阶段就地解密。
+ *
+ * 入参是 SSE data 字段的原始字符串（服务端加密后的 JSON 序列化密文），
+ * 返回解密并反序列化后的业务对象。
+ */
+export type SseDecryptData = (raw: string) => unknown | Promise<unknown>;
+
+/**
  * SSE 流式请求选项（biz-common-net 业务层）
  * 继承基础 SseRequestOptions，扩展业务能力
  */
 export interface SseStreamOptions<T = any> extends SseRequestOptions {
   /** 消息解析函数，默认 JSON.parse；传 false 则给原始字符串 */
   parse?: ((raw: string) => T) | false;
+  /**
+   * 事件 data 解密钩子（可选）。
+   * 优先级高于 parse：配置后 data 字段统一先解密再交给校验/拦截器。
+   */
+  decryptData?: SseDecryptData;
   /**
    * 业务消息校验（可选）：判断解析后的消息是否为业务错误
    * 对齐 restful 的 code 解析；不配置则所有消息都走 onMessage

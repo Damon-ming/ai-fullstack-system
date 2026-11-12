@@ -86,6 +86,10 @@ const _Encryption = {
   SESSION_INVALID: _build(6, Business.ENCRYPTION),         // 200002006 会话无效/过期
   SIGNATURE_FAILED: _build(7, Business.ENCRYPTION),        // 200002007 签名验证失败
   UNSUPPORTED_SIGNATURE_VERSION: _build(8, Business.ENCRYPTION), // 200002008 不支持的签名协议版本
+  SIGNATURE_REPLAY_DETECTED: _build(9, Business.ENCRYPTION), // 200002009 签名重放检测
+  EMPTY_NONCE: _build(10, Business.ENCRYPTION), // 200002010 空 nonce
+  ENCRYPTION_REQUIRED: _build(11, Business.ENCRYPTION), // 200002011 当前环境要求加密（fail-closed）
+  ENCRYPTION_RESPONSE_FAILED: _build(12, Business.ENCRYPTION), // 200002012 响应加密失败
 } as const;
 
 const _Auth = {
