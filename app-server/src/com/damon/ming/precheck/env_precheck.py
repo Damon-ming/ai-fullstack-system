@@ -3,6 +3,7 @@
 
 import os
 
+from src.com.damon.ming.app.config.env import get_master_key
 from src.com.damon.ming.encryption.constants import MASTER_KEY_MIN_LENGTH
 from src.com.damon.ming.log import pin
 
@@ -16,7 +17,7 @@ def _check_master_key() -> list[str]:
     所有环境：密钥长度必须 ≥ MASTER_KEY_MIN_LENGTH 字符。
     """
     errors = []
-    master_key = os.environ.get("MASTER_KEY", "")
+    master_key = get_master_key()
 
     if not master_key:
         errors.append("MASTER_KEY 未设置（所有环境必须通过 .env 注入）")

@@ -16,12 +16,16 @@
   INFERENCE_SERVER        推理后端：ollama / vllm / sglang（默认 ollama，连接信息由环境变量注入）
   INFERENCE_GATEWAY_URL   推理网关地址（默认 http://inference-gateway:8080/v1）
   INFERENCE_TIMEOUT       推理超时秒数（默认 180）
-  CHAT_TEMPERATURE        聊天采样温度（环境变量覆盖 inference-runtime.yaml，格式 ROLE_PARAM）
+  CHAT_TEMPERATURE        聊天采样温度（环境变量覆盖 inference-runtime.yaml，格式 ROLE_PARAM）【未实现】
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 
 【配置文件（YAML）】
   app/config/db/db-config.yaml  数据库连接池配置（由 app 层注入 db 模块）
   app/config/encryption/encryption-config.yaml  加密业务配置（RSA 密钥大小、会话 TTL、sign_context 等，由 app 层注入 encryption 模块）
+
+【环境变量读取入口】
+  裸变量（无 YAML 归属）集中在 app/config/env.py 定义和读取，新增变量请加到该模块。
+  DB_* / INFERENCE_* 等带 YAML 归属的变量仍在各自 loader 中读取。
 
 【构建时注入（生产环境）】
   src/com/damon/ming/debug/build_info.py  由 Dockerfile/CI 在镜像构建时生成
@@ -31,7 +35,6 @@
 ══════════════════════════════════════════════════════════════════════
 """
 
-import os
 import sys
 
 import uvicorn
@@ -39,6 +42,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from src.com.damon.ming.app import AppInitializer, create_lifespan
+from src.com.damon.ming.app.config.env import get_cors_origins
 from src.com.damon.ming.debug import is_debug
 from src.com.damon.ming.exception import register_exception_handler
 from src.com.damon.ming.log import init_logging, pin
@@ -150,10 +154,10 @@ if IS_DEBUG:
     )
     logger.info("CORS: debug 模式，放行所有来源")
 else:
-    release_origins = os.environ.get("CORS_ORIGINS", "").split(",")
+    release_origins = get_cors_origins()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[o.strip() for o in release_origins if o.strip()],
+        allow_origins=release_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
         allow_headers=["*"],

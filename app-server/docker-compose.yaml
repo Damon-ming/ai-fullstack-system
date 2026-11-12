@@ -51,7 +51,7 @@ services:
       - ${DATA_DIR}/chroma:/app-server/chroma
       - ${DATA_DIR}/knowledges:/app-server/knowledges
     environment:
-      - LOG_LEVEL=DEBUG
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
       - INFERENCE_GATEWAY_URL=http://inference-gateway:8080/v1
       - INFERENCE_API_KEYS={"chat":"ak_pool_001","intent":"ak_pool_002","rewrite":"ak_pool_003","summary":"ak_pool_004","guardrail":"ak_pool_005"}

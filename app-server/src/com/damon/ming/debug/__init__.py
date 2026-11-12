@@ -21,6 +21,7 @@
 import os
 from typing import Any
 
+from src.com.damon.ming.app.config.env import get_app_env
 from src.com.damon.ming.log import pin
 
 logger = pin("ming.debug")
@@ -57,12 +58,12 @@ def _resolve_is_debug() -> bool:
                 return False
 
             # SERVER_BUILD_ENV = 1 → 可切换模式，读取 APP_ENV（默认 debug）
-            env = os.environ.get("APP_ENV", "debug").lower()
+            env = get_app_env()
             logger.info("使用环境标志（来源: SERVER_BUILD_ENV=1 + APP_ENV=%s）", env)
             return env == "debug"
 
     # 本地开发：读取 APP_ENV（默认 debug）
-    env = os.environ.get("APP_ENV", "debug").lower()
+    env = get_app_env()
     logger.info("使用环境标志（来源: APP_ENV=%s）", env)
     return env == "debug"
 

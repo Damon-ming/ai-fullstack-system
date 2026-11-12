@@ -4,6 +4,7 @@
   服务端启动时由 main.py 调用 init_logging(is_debug)，注入环境标志。
   - debug：完整输出到 stdout，含堆栈
   - release：输出到 logs/app.log 文件，不泄漏到容器日志采集
+  - 日志级别由 LOG_LEVEL 环境变量决定（默认 INFO），读取入口在 app/config/env.py
 
 TODO: release 环境日志加密上传云端
   - 本地日志文件按日滚动，达到阈值后加密打包
@@ -41,6 +42,13 @@ def init_logging(is_debug: bool) -> None:
         _root_configured = True
         return
 
+    # 延迟导入：log 是基础模块，而 app.config.env 会触发 app 包初始化，
+    # app_initializer 又依赖 log —— 模块级导入会形成循环依赖
+    from src.com.damon.ming.app.config.env import get_log_level
+
+    level_name = get_log_level()
+    level = _LOG_LEVELS.get(level_name, logging.INFO)
+
     log_fmt = (
         "%(asctime)s | %(levelname)-8s | %(process)d | %(threadName)-15s "
         "| %(name)s | %(filename)s:%(lineno)d | %(message)s"
@@ -50,7 +58,7 @@ def init_logging(is_debug: bool) -> None:
 
     if is_debug:
         logging.basicConfig(
-            level=logging.INFO,
+            level=level,
             format=log_fmt,
             datefmt="%Y-%m-%d %H:%M:%S.%f",
             stream=sys.stdout,
@@ -63,9 +71,18 @@ def init_logging(is_debug: bool) -> None:
         os.makedirs(_log_dir, exist_ok=True)
         _log_file = os.path.join(_log_dir, "app.log")
         file_handler = logging.FileHandler(_log_file, encoding="utf-8")
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(level)
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
+        # root 默认级别是 WARNING，不显式降级会让 INFO 根本写不进文件
+        root_logger.setLevel(level)
+
+    if level_name not in _LOG_LEVELS:
+        root_logger.warning(
+            "LOG_LEVEL=%r 无效，已回退为 INFO（可选：%s）",
+            level_name,
+            ", ".join(_LOG_LEVELS),
+        )
 
     _root_configured = True
 

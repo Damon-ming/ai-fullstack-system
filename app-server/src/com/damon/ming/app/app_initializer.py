@@ -11,9 +11,9 @@
   - 上传服务 SHA 缓存
 """
 
-import os
 from contextlib import asynccontextmanager
 
+from src.com.damon.ming.app.config.env import get_master_key
 from src.com.damon.ming.log import pin
 
 logger = pin("app.init")
@@ -361,7 +361,7 @@ class AppInitializer:
             store = PgKeyStore(self.db_conn)
             store.initialize()
             # MASTER_KEY 由业务层读取并注入，encryption 模块不感知配置来源
-            master_key = os.environ.get("MASTER_KEY", "")
+            master_key = get_master_key()
             kek = derive_kek(
                 kek_salt=kek_salt, kek_info=kek_info, master_key=master_key
             )
