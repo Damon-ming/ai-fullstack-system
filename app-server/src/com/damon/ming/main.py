@@ -185,12 +185,21 @@ app = wrap_health_app(app)
 # 入口
 # ---------------------------------------------------------------------------
 
+# 容器内必须绑全接口：nginx 是独立容器，经 Docker 内网访问本服务，
+# 绑 127.0.0.1 会让前端 /api/ 全部 502。
+# 公网暴露由 compose 控制（app-server 用 expose，不发布端口），
+# 因此这里绑 0.0.0.0 不会暴露到宿主机。
+_HOST = "0.0.0.0"  # nosec B104 - 见上：容器网络命名空间内绑定，非公网暴露
+_PORT = 8000
+
 if __name__ == "__main__":
-    logger.info("启动 FastAPI 服务 | host=127.0.0.1 | port=8000 | debug=%s", IS_DEBUG)
+    logger.info(
+        "启动 FastAPI 服务 | host=%s | port=%s | debug=%s", _HOST, _PORT, IS_DEBUG
+    )
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8000,
+        host=_HOST,
+        port=_PORT,
         workers=1,  # GPU项目必须保持1个worker，不能多（多worker导致CUDA上下文重复加载，显存爆炸）
         limit_concurrency=50,  # 并发连接上限含SSE长连接；GPU推理能力(1-4并发)才是真正瓶颈，此值足够。
         # 若未来用户量增长优先扩GPU，盲目调大只会增加GPU排队延迟。
