@@ -508,10 +508,11 @@ def _is_json_response(response: Response) -> bool:
 
 
 def _patch_request_body(request: Request, new_body: str) -> None:
-    body_bytes = new_body.encode("utf-8")
-    request._body = body_bytes
+    """把解密后的 body 写回请求,供下游路由读取。
 
-    def _new_body() -> bytes:
-        return body_bytes
-
-    request.body = _new_body  # type: ignore[method-assign]
+    BaseHTTPMiddleware 用 _CachedRequest 包住请求,其 wrapped_receive 会优先
+    返回 _body —— 下游 app 新建的 Request 从 receive 读到的就是这里写入的
+    解密内容。只设 _body 即可,无需替换 body 方法(下游拿到的是另一个 Request
+    对象,替换它的 body 方法不会生效)。
+    """
+    request._body = new_body.encode("utf-8")
