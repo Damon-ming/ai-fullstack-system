@@ -39,11 +39,7 @@ from src.com.damon.ming.router.chat.preflight import (
 from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
 from src.com.damon.ming.router.chat.service.chat_core import generate_answer
 from src.com.damon.ming.router.chat.service.chat_turn import ChatTurnRecorder
-from src.com.damon.ming.router.chat.sse import (
-    SseEmitter,
-    SseMessageFactory,
-    encrypt_sse_events,
-)
+from src.com.damon.ming.router.chat.sse import SseEmitter, SseMessageFactory
 from src.com.damon.ming.thread.pool_manager import RequestScope
 from src.com.damon.ming.utils.time import now
 from sse_starlette.sse import EventSourceResponse
@@ -190,9 +186,7 @@ async def chat_stream(request: Request, body: ChatRequest):
     recorder = _create_recorder(request, body)
 
     return EventSourceResponse(
-        encrypt_sse_events(
-            request, stream_chat_generator(request, body, scope, recorder)
-        ),
+        stream_chat_generator(request, body, scope, recorder),
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",

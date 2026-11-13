@@ -61,7 +61,6 @@ class I18nKey(StrEnum):
     ENCRYPT_REPLAY_DETECTED = "encrypt.replay_detected"
     ENCRYPT_EMPTY_NONCE = "encrypt.empty_nonce"
     ENCRYPT_REQUIRED = "encrypt.required"
-    ENCRYPT_RESPONSE_FAILED = "encrypt.response_failed"
 
     # ── 子系统兜底 ──
     SYS_DATABASE_FAILURE = "sys.database_failure"

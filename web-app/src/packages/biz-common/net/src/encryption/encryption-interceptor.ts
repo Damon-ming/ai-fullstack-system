@@ -13,6 +13,9 @@
  *   1. JSON: 整体签名 → 整体加密
  *   2. FormData (文件上传): 提取 meta_json → 签名 + 加密 meta → 重新组装 FormData
  *
+ * GET / HEAD / 无 body 的请求不加密（服务端对这类路径走白名单明文放行）。
+ * 会话未建立时一律明文放行，是否接受由服务端按环境决定（release fail-closed）。
+ *
  * 请求头（加密协议层，仅版本控制 + 加密开关）：
  *   X-Encrypt-Enabled: 1       → 服务端对响应也加密
  *   X-Encrypt-Version: v1      → 客户端加密协议版本
@@ -58,6 +61,11 @@ export function createEncryptionInterceptors(): {
         // 无加密会话 → 明文放行。
         // 登录 / 密钥交换本身必须走这条路（会话尚未建立）；
         // release 下其它请求会被服务端以 ENCRYPTION_REQUIRED 拒绝（fail-closed）。
+        //
+        // TODO(会话续期): 过期会话在这里被静默放行，用户随后会一路收到服务端的
+        // 200002006（会话无效）/ 200002011（环境要求加密），只能靠刷页面重建。
+        // 续期拦截器要做的事：识别这两个码 → clearEncryptionSession()
+        // → 重新 exchangeKeys() → 用新会话重放原请求。
         log.debug("无加密会话，跳过加密: %s", request.url);
         return request;
       }
@@ -67,20 +75,24 @@ export function createEncryptionInterceptors(): {
         return handleFormData(request, session);
       }
 
-      // GET / HEAD 等无 body 的请求：无数据可加密，直接放行
+      // GET / HEAD / 无 body 的请求：无数据可加密，直接放行。
+      // 无 body 分支同时覆盖 DELETE 等无 body 方法——服务端对这类路径走
+      // 白名单明文放行，客户端发明文正好对上。
       const method = (request.method ?? "GET").toUpperCase();
       if (method === "GET" || method === "HEAD") {
         log.debug("GET/HEAD 请求跳过加密: %s", request.url);
         return request;
       }
+      if (request.data === undefined || request.data === null) {
+        log.debug("请求无 body，跳过加密: %s", request.url);
+        return request;
+      }
 
       // JSON 请求
-      const contentType = request.headers["content-type"] || "";
-      if (!contentType.includes("application/json")) {
-        log.error("不支持加密的内容类型: %s", contentType);
-        throw new Error(`不支持加密的内容类型: ${contentType}`);
-      }
-      if (typeof request.data !== "object" || request.data === null) {
+      // 刻意不校验 content-type：自定义拦截器跑在 axios transformRequest 之前，
+      // 那时 content-type 还没设置（restful 由 axios 设置、SSE 由 transport 在
+      // pipeline 之后设置），据此判断会误伤所有加密请求。body 类型由下一行把守。
+      if (typeof request.data !== "object") {
         log.error("请求体格式异常，无法加密");
         throw new Error("请求体格式异常，无法加密");
       }

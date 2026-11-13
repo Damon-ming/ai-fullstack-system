@@ -20,11 +20,6 @@ class SystemConfig:
     whitelist: tuple[str, ...]  # 加密豁免路径前缀（明文放行）
 
 
-# 密钥交换端点必须在白名单内：它自身没有加密会话可用，
-# 漏配会让所有客户端无法建立加密会话（release 下直接不可用）。
-_REQUIRED_WHITELIST_PREFIX = "/api/encryption"
-
-
 class SystemConfigLoader:
     """从 YAML 加载系统级配置，解析相对路径为绝对路径。
 
@@ -71,15 +66,6 @@ class SystemConfigLoader:
         if invalid:
             raise ValueError(
                 f"系统配置中 whitelist 条目必须以 / 开头：{', '.join(invalid)}"
-            )
-
-        if not any(
-            _REQUIRED_WHITELIST_PREFIX.startswith(prefix)
-            for prefix in whitelist
-        ):
-            raise ValueError(
-                f"系统配置中 whitelist 缺少必要端点：{_REQUIRED_WHITELIST_PREFIX}"
-                f"（密钥交换无法完成）"
             )
 
         return whitelist

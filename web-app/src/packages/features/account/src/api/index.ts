@@ -8,6 +8,7 @@ export {
   setSessionContext,
   clearSessionContext,
   setDeviceId,
+  clearEncryptionSession,
 } from "./account.api";
 export type {
   AccountProfile,

@@ -18,6 +18,7 @@ import {
   setSessionContext,
   clearSessionContext,
   setDeviceId,
+  clearEncryptionSession,
 } from "../api";
 import type { LoginRequest } from "../api";
 
@@ -125,6 +126,9 @@ export async function login(
 export async function refreshDeviceToken(
   request: LoginRequest,
 ): Promise<string> {
+  // 必须同时清加密会话：登录端点在服务端白名单里（明文放行），
+  // 残留的会话会让登录请求被加密 → 服务端按明文解析失败。
+  clearEncryptionSession();
   clearSessionContext();
   const result = await login(request);
   return result.token;

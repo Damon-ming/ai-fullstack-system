@@ -14,12 +14,12 @@ knowledge_dir: "/app-server/knowledges"
 #
 # 约束（加载时校验，不满足直接抛异常）：
 #   - 必须是非空列表，每项以 / 开头
-#   - 必须覆盖密钥交换端点 /api/encryption，否则客户端无法建立加密会话
+# 注意：/api/encryption 必须列入，否则客户端无法建立加密会话
+#       （漏配不再拦截启动，运行时表现为客户端无法加密）。
 whitelist:
   - /api/encryption                # key/v1（GET）+ session/v1（POST）
   - /api/account/login/v1          # 登录（加密会话尚未建立）
   - /api/account/profile/get/v1    # 资料读取（GET，无 body）
   - /api/history                   # list + detail(GET/DELETE)，均无 body
   - /api/knowledge/tree/v1         # 知识库树（GET，无 body）
-  - /ping
-  - /health
+  # 注：/health、/ping 由 wrap_health_app 在中间件之前短路，不经过加密中间件，无需列入。

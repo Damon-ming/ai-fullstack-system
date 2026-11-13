@@ -6,8 +6,8 @@
  *   - 网络请求（login / fetchProfile / updateProfile）：返回原始 DataApiResponse，
  *     不解包、不转换、不做业务判断
  *   - 存储原语 re-export：getSessionContext / setSessionContext /
- *     clearSessionContext / setDeviceId —— 直接透传 biz-common-storage，
- *     不附加任何逻辑
+ *     clearSessionContext / setDeviceId / clearEncryptionSession ——
+ *     直接透传 biz-common-storage，不附加任何逻辑
  *
  * 不做：
  *   - 业务编排（"有缓存就跳过"、"失败了怎么办"）→ hook/ 层
@@ -37,6 +37,7 @@ export {
   setSessionContext,
   clearSessionContext,
   setDeviceId,
+  clearEncryptionSession,
 } from "@ming/biz-common-storage";
 
 // ---------------------------------------------------------------------------

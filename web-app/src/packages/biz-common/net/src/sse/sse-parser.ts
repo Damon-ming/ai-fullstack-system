@@ -282,7 +282,7 @@ export class SseParser<T = any> {
     try {
       this.callbacks.onMessageError?.(error, rawPayload);
     } catch (callbackError) {
-      log.warn("onMessageError callback error", callbackError);
+      log.warn("onMessageError callback error", { error: String(callbackError) });
     }
   };
 
@@ -298,7 +298,7 @@ export class SseParser<T = any> {
     try {
       this.callbacks.onStatus?.(status);
     } catch (error) {
-      log.warn("onStatus callback error", error);
+      log.warn("onStatus callback error", { error: String(error) });
     }
   };
 }

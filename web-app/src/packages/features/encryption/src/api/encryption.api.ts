@@ -2,7 +2,11 @@
 /**
  * 加密密钥交换的原始 HTTP 调用。
  *
- * 使用 netClient（/api/encryption 路径已加入加密白名单，不会递归加密）。
+ * 这两个端点由服务端加密白名单明文放行（system-config.yaml 的 whitelist）。
+ * 客户端侧没有路径白名单（excludePaths 已移除）：它们不会被递归加密，
+ * 靠的是「交换发生时客户端必然还没有会话」——bootstrap 的
+ * ensureEncryptionSession() 在已有会话时会早退，不会走到这里。
+ * 因此不要在已有会话时直接调用 exchangeKeys()。
  *
  * @internal
  */
