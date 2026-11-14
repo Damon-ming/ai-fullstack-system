@@ -1,7 +1,8 @@
+# app-server/src/com/damon/ming/log/logger.py
 """统一日志模块 —— 业务层只需调用 pin(name) 获取 logger。
 
 初始化：
-  服务端启动时由 main.py 调用 init_logging(is_debug)，注入环境标志。
+  服务端启动时由 main.py 调用 init_logging(is_debug)，通过参数注入环境标志。
   - debug：完整输出到 stdout，含堆栈
   - release：输出到 logs/app.log 文件，不泄漏到容器日志采集
   - 日志级别由 LOG_LEVEL 环境变量决定（默认 INFO），读取入口在 app/config/env.py
@@ -29,12 +30,7 @@ _root_configured = False
 
 
 def init_logging(is_debug: bool) -> None:
-    """初始化日志系统，由服务端启动时调用一次。
-
-    参数：
-      is_debug: 来自 src.com.damon.ming.debug.is_debug()，
-               构建时/启动时冻结，运行时不可变。
-    """
+    """初始化日志系统，由调用方传入环境标志，不依赖 debug 包。"""
     global _root_configured
     root_logger = logging.getLogger()
 

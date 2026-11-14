@@ -2,7 +2,7 @@
 
 用法：
     from src.com.damon.ming.precheck import run_precheck
-    run_precheck(is_debug=False)
+    run_precheck()
 
 校验项：
   - MASTER_KEY                             加密主密钥（所有环境必须，长度 ≥32 字符）

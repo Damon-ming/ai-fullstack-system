@@ -23,15 +23,13 @@ class AppInitializer:
     """应用初始化器。
 
     用法:
-        init = AppInitializer(is_debug=True)
+        init = AppInitializer()
         init.startup()
         # ... 运行应用 ...
         init.shutdown()
     """
 
-    def __init__(self, is_debug: bool = True) -> None:
-        self._is_debug = is_debug
-
+    def __init__(self) -> None:
         # 推理配置加载器：进程级单例（引擎只装配一次）
         from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
             InferenceConfigLoader,
@@ -62,7 +60,9 @@ class AppInitializer:
 
     def startup(self) -> None:
         """启动所有子系统。"""
-        logger.info("应用启动开始 | debug=%s", self._is_debug)
+        from src.com.damon.ming.debug import is_debug
+
+        logger.info("应用启动开始 | debug=%s", is_debug())
 
         self._register_exception_types()
         self._init_system_config()  # 必须在其他子系统之前：提供 knowledge_dir
@@ -330,8 +330,9 @@ class AppInitializer:
         from src.com.damon.ming.app.config.encryption.encryption_config_loader import (
             EncryptionConfigLoader,
         )
+        from src.com.damon.ming.debug import get_env
 
-        profile = "debug" if self._is_debug else "release"
+        profile = get_env()
         config = EncryptionConfigLoader().load(profile=profile)
         logger.info(
             "加密配置加载完成 | profile=%s | rsa=%d | ttl=%dh",
@@ -467,7 +468,7 @@ def create_lifespan(initializer: AppInitializer):
     """生成 FastAPI 可用的 lifespan 回调。
 
     用法：
-        initializer = AppInitializer(is_debug=IS_DEBUG)
+        initializer = AppInitializer()
         app = FastAPI(lifespan=create_lifespan(initializer))
 
     注意：lifespan 参数要求传入**可调用对象**（(app) -> 异步上下文管理器），

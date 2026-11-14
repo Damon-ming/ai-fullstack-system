@@ -9,8 +9,8 @@
 用法（在 main.py 中）：
     from src.com.damon.ming.app import AppInitializer, create_lifespan
 
-    initializer = AppInitializer(is_debug=IS_DEBUG)
-    app = FastAPI(title="...", lifespan=create_lifespan(initializer), debug=IS_DEBUG)
+    initializer = AppInitializer()
+    app = FastAPI(title="...", lifespan=create_lifespan(initializer))
 """
 
 from src.com.damon.ming.app.app_initializer import AppInitializer, create_lifespan

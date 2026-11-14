@@ -20,7 +20,7 @@
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 
 【配置文件（YAML）】
-  app/config/db/db-config.yaml  数据库连接池池配置（由 app 层注入 db 模块）
+  app/config/db/db-config.yaml  数据库连接池配置（由 app 层注入 db 模块）
   app/config/encryption/encryption-config.yaml  加密业务配置（RSA 密钥大小、会话 TTL、sign_context 等，由 app 层注入 encryption 模块）
 
 【环境变量读取入口】
@@ -58,34 +58,25 @@ logger = pin("app.main")
 
 
 # ---------------------------------------------------------------------------
-# 环境判断
-# ---------------------------------------------------------------------------
-
-IS_DEBUG = is_debug()
-
-# ---------------------------------------------------------------------------
 # 日志初始化（环境感知：debug → stdout，release → 文件）
 # ---------------------------------------------------------------------------
 
-init_logging(is_debug=IS_DEBUG)
+init_logging(is_debug=is_debug())
 
 # ---------------------------------------------------------------------------
 # 启动前校验 —— 缺少关键配置时立即终止，避免运行时才发现
 # ---------------------------------------------------------------------------
 
-_precheck_errors = run_precheck(is_debug=IS_DEBUG)
+_precheck_errors = run_precheck()
 if _precheck_errors:
-    if IS_DEBUG:
-        logger.warning("开发环境跳过校验缺失，启动继续")
-    else:
-        logger.error("启动失败，请检查上述环境变量/配置")
-        sys.exit(1)
+    logger.error("启动失败，请检查上述环境变量/配置")
+    sys.exit(1)
 
 # ---------------------------------------------------------------------------
 # 初始化器（封装所有子系统的启动/关闭）
 # ---------------------------------------------------------------------------
 
-initializer = AppInitializer(is_debug=IS_DEBUG)
+initializer = AppInitializer()
 
 # ---------------------------------------------------------------------------
 # App 装配
@@ -94,7 +85,6 @@ initializer = AppInitializer(is_debug=IS_DEBUG)
 app = FastAPI(
     title="我的多功能应用",
     lifespan=create_lifespan(initializer),
-    debug=IS_DEBUG,
 )
 
 
@@ -105,7 +95,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 # inbound:  CORS → Encryption → Auth → I18n → Context → 路由
 # outbound: 路由 → Context → I18n → Auth → Encryption → CORS
 # 详细逻辑见 middleware/__init__.py
-register_middlewares(app, is_debug=IS_DEBUG)
+register_middlewares(app)
 
 # ---- 路由 --------------------------------------------------------------
 app.include_router(account_router.router)
@@ -137,7 +127,7 @@ _PORT = 8000
 
 if __name__ == "__main__":
     logger.info(
-        "启动 FastAPI 服务 | host=%s | port=%s | debug=%s", _HOST, _PORT, IS_DEBUG
+        "启动 FastAPI 服务 | host=%s | port=%s | debug=%s", _HOST, _PORT, is_debug()
     )
     uvicorn.run(
         app,

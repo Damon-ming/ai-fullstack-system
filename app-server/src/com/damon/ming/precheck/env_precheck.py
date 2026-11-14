@@ -4,6 +4,7 @@
 import os
 
 from src.com.damon.ming.app.config.env import get_master_key
+from src.com.damon.ming.debug import get_env, is_debug
 from src.com.damon.ming.encryption.constants import MASTER_KEY_MIN_LENGTH
 from src.com.damon.ming.log import pin
 
@@ -14,16 +15,13 @@ def _check_master_key() -> None:
     """检查 MASTER_KEY 是否设置（缺失直接终止，不返回错误列表）。
 
     与 _check_encryption_config 同一处理方式：MASTER_KEY 是加密体系的前提，
-    缺失时无论 debug / release 都必须终止。走「返回错误列表」路径会被
-    main.py 在 debug 下降级为 warning 后继续启动，随后密钥存储静默退化为
-    纯内存（重启后所有加密会话丢失），与 fail-closed 冲突。
+    缺失时直接抛异常终止。其他检查返回的错误列表也由 main.py 统一终止启动，
+    所有环境均不允许校验失败后继续启动。
     """
     master_key = get_master_key()
 
     if not master_key:
-        raise RuntimeError(
-            "MASTER_KEY 未设置，启动终止（所有环境必须通过 .env 注入）"
-        )
+        raise RuntimeError("MASTER_KEY 未设置，启动终止（所有环境必须通过 .env 注入）")
     if len(master_key) < MASTER_KEY_MIN_LENGTH:
         raise RuntimeError(
             f"MASTER_KEY 长度不足，启动终止（当前 {len(master_key)} 字符，"
@@ -31,21 +29,20 @@ def _check_master_key() -> None:
         )
 
 
-def _check_encryption_config(is_debug: bool) -> None:
+def _check_encryption_config() -> None:
     """检查加密配置（YAML）中的必要字段是否填写。
 
     这些字段属于业务协议标识，encryption 模块不包含，必须由业务层配置。
     缺失任何一个字段都直接抛异常，不使用默认值降级——
     空的 salt/info/context 会导致加密/签名静默失败，比不启动更危险。
 
-    Args:
-        is_debug: 运行时环境标志，决定读取 debug 还是 release 剖面。
+    根据全局环境状态读取 debug 或 release 剖面。
     """
     from src.com.damon.ming.app.config.encryption.encryption_config_loader import (
         EncryptionConfigLoader,
     )
 
-    profile = "debug" if is_debug else "release"
+    profile = get_env()
 
     try:
         config = EncryptionConfigLoader().load(profile=profile)
@@ -105,18 +102,18 @@ def _check_database() -> list[str]:
     return []
 
 
-def run_precheck(is_debug: bool) -> list[str]:
+def run_precheck() -> list[str]:
     """执行所有启动前校验。
 
     加密相关检查（MASTER_KEY / 加密配置）失败会直接抛异常（不可降级），
     其他检查返回错误列表。无错误返回空列表。
     """
-    logger.info("执行启动前环境校验 | debug=%s", is_debug)
+    logger.info("执行启动前环境校验 | debug=%s", is_debug())
 
     # 加密相关配置：缺失直接终止，不返回错误列表
     # （默认值 / 降级会导致加密静默失败，debug 下同样不允许）
     _check_master_key()
-    _check_encryption_config(is_debug)
+    _check_encryption_config()
 
     errors = []
     errors.extend(_check_database())

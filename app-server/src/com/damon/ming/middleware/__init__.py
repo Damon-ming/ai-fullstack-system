@@ -4,13 +4,14 @@ Middleware 模块入口。
 
 用法：
     from src.com.damon.ming.middleware import register_middlewares
-    register_middlewares(app, is_debug=True)
+    register_middlewares(app)
 
 约定：每个 middleware 自带 inbound + outbound 两段逻辑；
 本模块按执行顺序倒序注册（见下方函数注释）。
 """
 
 from fastapi import FastAPI
+from src.com.damon.ming.debug import is_debug
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.auth_middleware import AuthMiddleware
 from src.com.damon.ming.middleware.context_middleware import ContextMiddleware
@@ -29,7 +30,7 @@ __all__ = [
 ]
 
 
-def register_middlewares(app: FastAPI, is_debug: bool) -> None:
+def register_middlewares(app: FastAPI) -> None:
     """注册所有中间件。
 
     每个 middleware 自带 inbound + outbound 两段逻辑，注册顺序决定执行顺序。
@@ -58,7 +59,7 @@ def register_middlewares(app: FastAPI, is_debug: bool) -> None:
     from fastapi.middleware.cors import CORSMiddleware
     from src.com.damon.ming.app.config.env import get_cors_origins
 
-    if is_debug:
+    if is_debug():
         app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
