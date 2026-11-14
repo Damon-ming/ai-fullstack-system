@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 from dataclasses import dataclass
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -29,6 +30,7 @@ from src.com.damon.ming.encryption.constants import (
     AES_NONCE_SIZE,
     BLIND_INDEX_DIGEST_SIZE,
     ENCRYPTION_VERSION,
+    INDEX_KEY_SIZE,
 )
 from src.com.damon.ming.encryption.v1.cipher_suite import CipherSuite
 
@@ -217,6 +219,11 @@ class CryptoEngine:
             return AesGcmEngine.decrypt(nonce, ciphertext, key, aad)
 
         raise ValueError(f"CryptoEngine.decrypt 不支持套件: {suite}（{suite.value}）")
+
+    @staticmethod
+    def generate_blind_index_key() -> bytes:
+        """生成盲索引专用密钥。"""
+        return secrets.token_bytes(INDEX_KEY_SIZE)
 
     @staticmethod
     def blind_index(

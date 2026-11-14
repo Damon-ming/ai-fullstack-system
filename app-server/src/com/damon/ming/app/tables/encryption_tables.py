@@ -11,7 +11,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, String, Table, Text
+from sqlalchemy import Column, DateTime, Integer, LargeBinary, String, Table, Text
 from src.com.damon.ming.app.tables.base import metadata
 
 # ---------------------------------------------------------------------------
@@ -26,6 +26,15 @@ encryption_sessions_table = Table(
     Column("session_id", String(128), nullable=False, server_default=""),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("expires_at", DateTime(timezone=True), nullable=False),
+)
+
+# 字段加密密钥：单例记录保存活动数据密钥及盲索引密钥，明文持久化。
+field_encryption_keys_table = Table(
+    "field_encryption_keys",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("data_key", LargeBinary, nullable=False),
+    Column("index_key", LargeBinary, nullable=False),
 )
 
 
@@ -45,6 +54,7 @@ class EncryptionSessionRow:
 _ENCRYPTION_INDEX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_enc_sessions_session_id ON encryption_sessions (session_id)",
     "CREATE INDEX IF NOT EXISTS idx_enc_sessions_expires ON encryption_sessions (expires_at)",
+    "ALTER TABLE field_encryption_keys DROP COLUMN IF EXISTS data_key_id",
 ]
 
 

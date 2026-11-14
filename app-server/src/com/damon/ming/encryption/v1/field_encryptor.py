@@ -3,7 +3,7 @@
 数据库字段加解密
 
 将加密 / 解密能力封装到单个字符串，直接存入数据库 VARCHAR/TEXT 列。
-密文格式：base64( version_byte + key_id_len + key_id + nonce + ciphertext )
+密文格式：base64( version_byte + nonce + ciphertext )
 
 支持两种模式（通过 CipherSuite 选择）：
   - DATABASE_AES_GCM:      随机 nonce，每次结果不同（默认，最安全）
@@ -48,43 +48,33 @@ class KeyProvider(ABC):
     """密钥提供者抽象接口，实现类必须显式继承并实现全部抽象方法。"""
 
     @abstractmethod
-    def get_data_key(self, key_id: str = "") -> bytes: ...
+    def get_data_key(self) -> bytes: ...
 
     @abstractmethod
     def get_index_key(self) -> bytes: ...
 
 
-def _pack_ciphertext(key_id: str, nonce: bytes, ciphertext: bytes) -> str:
+def _pack_ciphertext(nonce: bytes, ciphertext: bytes) -> str:
     """
-    将 key_id + nonce + ciphertext 打包成单个 base64 字符串。
+    将 nonce + ciphertext 打包成单个 base64 字符串。
 
     格式（打包前）：
-      [version:1][key_id_len:1][key_id:variable][nonce:variable][ciphertext:variable]
-
-    所有长度用大端 uint8（key_id_len ≤ 255 字节，足够用了）。
+      [version:1][nonce:固定长度][ciphertext:variable]
     """
-    key_id_bytes = key_id.encode("utf-8")
-    if len(key_id_bytes) > 255:
-        raise ValueError(f"key_id too long: {len(key_id_bytes)} bytes (max 255)")
-
     packed = (
         # 把 Python 的数字，打包成固定格式的二进制字节；或者把二进制字节解析回数字。
         # - `!`：**大端序（网络字节序）**，跨平台解析不会乱（Windows/Linux 解析一致）
-        # - `B`：unsigned char，**1 字节无符号整数，范围 0~255**
-        struct.pack("!B", CIPHERTEXT_FORMAT_VERSION)
-        + struct.pack("!B", len(key_id_bytes))
-        + key_id_bytes
-        + nonce
-        + ciphertext
+        # - `B`：unsigned char，1 字节无符号整数，范围 0~255
+        struct.pack("!B", CIPHERTEXT_FORMAT_VERSION) + nonce + ciphertext
     )
     return base64.b64encode(packed).decode("ascii")
 
 
-def _unpack_ciphertext(packed_b64: str) -> tuple[str, bytes, bytes]:
-    """从 base64 字符串解包出 (key_id, nonce, ciphertext)。"""
+def _unpack_ciphertext(packed_b64: str) -> tuple[bytes, bytes]:
+    """从 base64 字符串解包出 (nonce, ciphertext)。"""
     raw = base64.b64decode(packed_b64)
     # 二进制是一整块连续流，没有分隔符。
-    # 靠 offset 记录**当前读到哪里**，一段一段依次截取：版本 → key_id 长度 → key_id → nonce → 密文。
+    # 靠 offset 记录当前读取位置：版本 → nonce → 密文。
     offset = 0
 
     version = raw[offset]
@@ -92,18 +82,12 @@ def _unpack_ciphertext(packed_b64: str) -> tuple[str, bytes, bytes]:
     if version != CIPHERTEXT_FORMAT_VERSION:
         raise ValueError(f"Unsupported ciphertext format version: {version}")
 
-    key_id_len = raw[offset]
-    offset += 1
-
-    key_id = raw[offset : offset + key_id_len].decode("utf-8")
-    offset += key_id_len
-
     nonce = raw[offset : offset + AES_NONCE_SIZE]
     offset += AES_NONCE_SIZE
 
     ciphertext = raw[offset:]
 
-    return key_id, nonce, ciphertext
+    return nonce, ciphertext
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +115,6 @@ class FieldEncryptor:
         suite: CipherSuite = CipherSuite.DATABASE_AES_GCM,
         *,
         key: bytes | None = None,
-        key_id: str = "",
         index_key: bytes | None = None,
     ) -> str:
         """
@@ -141,14 +124,13 @@ class FieldEncryptor:
           plaintext:  待加密明文
           suite:       加密套件（默认随机 nonce，最安全）
           key:         AES-256 密钥（32 字节），为 None 时从注入的密钥提供者取
-          key_id:      密钥标识（写入密文，解密时用于取对应密钥）
           index_key:   盲索引密钥（可选，传则同时返回索引）
 
         返回：
           密文字符串。
         """
         if key is None:
-            key = self._key_material.get_data_key(key_id)
+            key = self._key_material.get_data_key()
 
         plaintext_bytes = plaintext.encode("utf-8")
 
@@ -160,7 +142,6 @@ class FieldEncryptor:
             )
 
         return _pack_ciphertext(
-            key_id=payload.key_id or key_id,
             nonce=base64.b64decode(payload.nonce),
             ciphertext=base64.b64decode(payload.encrypted),
         )
@@ -169,8 +150,6 @@ class FieldEncryptor:
         self,
         packed_b64: str,
         suite: CipherSuite = CipherSuite.DATABASE_AES_GCM,
-        *,
-        key_map: dict[str, bytes] | None = None,
     ) -> str:
         """
         解密数据库字段。
@@ -178,22 +157,17 @@ class FieldEncryptor:
         参数：
           packed_b64: FieldEncryptor.encrypt 返回的密文
           suite:       加密套件（需与加密时一致）
-          key_map:      key_id → key 的映射（为 None 时从注入的密钥提供者取）
 
         返回：
           解密后的明文字符串。
         """
-        key_id, nonce, ciphertext = _unpack_ciphertext(packed_b64)
-
-        if key_map and key_id in key_map:
-            key = key_map[key_id]
-        else:
-            key = self._key_material.get_data_key(key_id)
+        nonce, ciphertext = _unpack_ciphertext(packed_b64)
+        key = self._key_material.get_data_key()
 
         payload = EncryptedPayload(
             encrypted=base64.b64encode(ciphertext).decode("ascii"),
             nonce=base64.b64encode(nonce).decode("ascii"),
-            key_id=key_id,
+            key_id="",
         )
 
         plaintext_bytes = CryptoEngine.decrypt(payload, key, suite)

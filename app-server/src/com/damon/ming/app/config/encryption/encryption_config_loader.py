@@ -23,7 +23,6 @@ class EncryptionConfig:
         "sign_context",
         "kek_salt",
         "kek_info",
-        "data_key_id",
     )
 
     def __init__(self, raw: dict):
@@ -36,7 +35,6 @@ class EncryptionConfig:
         self.sign_context: str = str(raw["sign_context"])
         self.kek_salt: str = str(raw["kek_salt"])
         self.kek_info: str = str(raw["kek_info"])
-        self.data_key_id: str = str(raw["data_key_id"])
 
     @property
     def session_ttl_seconds(self) -> int:

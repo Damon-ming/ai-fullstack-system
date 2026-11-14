@@ -290,7 +290,8 @@ class AppInitializer:
 
     def _init_encryption(self) -> None:
         """加密体系: RSAKeyPair(纯技术)+ KeyMaterial(数据密钥)+ SessionService(业务协调)。"""
-        from src.com.damon.ming.app.encryption.key_material import KeyMaterial
+        from src.com.damon.ming.app.encryption.field_key_material import KeyMaterial
+        from src.com.damon.ming.app.encryption.field_key_store import PgFieldKeyStore
         from src.com.damon.ming.app.encryption.session_service import SessionService
         from src.com.damon.ming.app.thread_pools import get_database_query_pool
         from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
@@ -298,19 +299,13 @@ class AppInitializer:
         self._enc_config = self._load_encryption_config()
         key_store, kek = self._create_key_store()
         rsa_size = self._enc_config.rsa_key_size
-        data_key_id = self._enc_config.data_key_id
 
         # 1. RSA 密钥对（纯技术）—— 注入 SessionService，不再另存全局副本
         self.rsa_key_pair = RSAKeyPair(key_size=rsa_size)
         self.rsa_key_pair.initialize()
 
-        # 2. 应用密钥材料生命周期（供字段加解密和盲索引使用）
-        #    由使用方（FieldEncryptor）构造时注入，不再另存全局副本
-        # TODO: 接入敏感字段入库加密前，先将数据密钥和盲索引密钥用 KEK 加密持久化，
-        # 保证重启可恢复，避免当前随机初始化导致历史密文无法解密、盲索引失效。
-        # 后续确认加密范围（手机号/昵称/对话内容等），在存储层接入 FieldEncryptor；
-        # 手机号查询及唯一性使用盲索引，并提供历史明文迁移、验证和清除流程。
-        self.key_material = KeyMaterial(data_key_id=data_key_id)
+        # 2. 字段加密密钥从数据库读取并缓存；首次启动时在 DB 创建密钥记录
+        self.key_material = KeyMaterial(PgFieldKeyStore(self.db_conn))
         self.key_material.initialize()
 
         # 3. 会话服务（RSA + 必填 DB 存储，无会话密钥缓存）

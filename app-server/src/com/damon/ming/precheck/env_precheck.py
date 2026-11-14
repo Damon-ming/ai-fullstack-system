@@ -59,9 +59,6 @@ def _check_encryption_config() -> None:
         missing.append("kek_salt")
     if not config.kek_info:
         missing.append("kek_info")
-    if not config.data_key_id:
-        missing.append("data_key_id")
-
     if missing:
         raise RuntimeError(
             f"加密配置缺失必要字段，启动终止：{', '.join(missing)}。"

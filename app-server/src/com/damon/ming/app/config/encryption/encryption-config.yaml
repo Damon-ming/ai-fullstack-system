@@ -10,7 +10,6 @@ encryption:
     sign_context: "ai-fullstack-signature-v1"
     kek_salt: "encryption-key-store-v1"
     kek_info: "encryption-session-key-wrap"
-    data_key_id: "data-key-v1"
 
   # 生产环境
   release:
@@ -19,4 +18,3 @@ encryption:
     sign_context: "ai-fullstack-signature-v1"
     kek_salt: "encryption-key-store-v1"
     kek_info: "encryption-session-key-wrap"
-    data_key_id: "data-key-v1"

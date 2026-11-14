@@ -8,7 +8,7 @@ gate 之间不通过参数传递状态：解密层把会话写进 ctx.session，
 from collections.abc import Awaitable, Callable
 
 from fastapi import Request
-from src.com.damon.ming.app.encryption.key_material import DecryptedSessionKey
+from src.com.damon.ming.app.encryption.session_key import DecryptedSessionKey
 from src.com.damon.ming.middleware.request_context import (
     EncryptionContext as EncryptionHeaders,
 )
