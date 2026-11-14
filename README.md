@@ -299,6 +299,7 @@ docker compose down
 | 传输加密 | RSA-OAEP-2048 + AES-256-GCM + HMAC-SHA256 |
 | 签名防重放 | nonce 缓存（10min TTL，LRU 10000 上限） |
 | 会话绑定 | session_id = (token + device_id)，加密密钥与设备绑定 |
+| 会话密钥存储 | 强制 DB 持久化，每次查询直查 DB，无内存会话密钥缓存；存储不可用时直接报错 |
 | 速率限制 | slowapi 全端点 per-IP 限流 |
 | 输入验证 | 独立护栏模型，超时 fail-open |
 | 数据隔离 | 多用户共享知识库，对话历史按 token 隔离 |

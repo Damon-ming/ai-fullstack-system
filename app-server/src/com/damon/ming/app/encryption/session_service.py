@@ -19,9 +19,12 @@
   - BaseKeyStore 实现 (同目录)          — 持久化后端
 """
 
+from __future__ import annotations
+
 import asyncio
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from src.com.damon.ming.app.encryption.base_key_store import StoredSession
 from src.com.damon.ming.encryption.constants import AES_KEY_SIZES
@@ -31,6 +34,9 @@ from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
 from src.com.damon.ming.log import pin
 
 logger = pin("app.encryption.session_service")
+
+if TYPE_CHECKING:
+    from src.com.damon.ming.app.encryption.key_store import PgKeyStore
 
 
 def _stored_ttl_seconds(stored: StoredSession) -> int:
@@ -52,42 +58,48 @@ class SessionService:
     保证 DB 的删除/过期/续签/失效等状态变更即时生效。
 
     用法：
-        ss = SessionService(rsa_key_pair, kek)
-        ss.initialize()                          # 初始化存储后端
-        ss.set_key_store(store)                  # 设置存储后端（有 DB 时）
+        ss = SessionService(rsa_key_pair, kek, ttl_seconds, key_store=store)
+        ss.initialize()                          # 初始化 DB 存储后端
 
         # 注册会话（原子替换）
         session = ss.register_and_replace(encrypted_aes_key, session_id)
 
         # 查找会话
-        session = ss.get_session(key_id)
+        session = await ss.get_session(key_id, session_id)
     """
 
-    def __init__(self, rsa_key_pair: RSAKeyPair, kek: bytes, ttl_seconds: int) -> None:
+    def __init__(
+        self,
+        rsa_key_pair: RSAKeyPair,
+        kek: bytes,
+        ttl_seconds: int,
+        *,
+        key_store: PgKeyStore,
+    ) -> None:
         """
         参数：
           rsa_key_pair:  已初始化的 RSAKeyPair 实例。
           kek:         Key Encryption Key（业务配置派生）。
           ttl_seconds: 会话有效期（秒），从业务配置读取。
+          key_store:   必填 DB 存储后端，不支持内存模式。
         """
+        if key_store is None:
+            raise RuntimeError("加密会话必须配置数据库密钥存储")
+        if not kek:
+            raise ValueError("加密会话 KEK 不能为空")
         self._rsa = rsa_key_pair
         self._kek = kek
         self._ttl_seconds = ttl_seconds
-        self._key_store = None  # 可选存储后端
+        self._key_store = key_store
 
     def get_public_key_pem(self) -> bytes:
         """RSA 公钥 PEM（分发给客户端）。"""
         return self._rsa.get_public_key_pem()
 
-    def set_key_store(self, store) -> None:
-        """设置持久化存储后端（有 DB 时调用）。"""
-        self._key_store = store
-
     def initialize(self) -> None:
         """初始化存储后端。应用启动时调用一次。"""
-        if self._key_store is not None:
-            self._key_store.initialize()
-            self._key_store.cleanup_expired()
+        self._key_store.initialize()
+        self._key_store.cleanup_expired()
 
     def register_and_replace(
         self, encrypted_aes_key: bytes, session_id: str
@@ -129,16 +141,15 @@ class SessionService:
         )
 
         # 3. 持久化（原子替换）
-        if self._key_store is not None:
-            expires_at = datetime.now(tz=UTC) + timedelta(seconds=session.ttl_seconds)
-            stored = StoredSession(
-                key_id=key_id,
-                aes_key_enc=wrap_key(aes_key, self._kek),
-                session_id=session_id,
-                created_at=datetime.now(tz=UTC),
-                expires_at=expires_at,
-            )
-            self._key_store.replace_session(session_id, stored)
+        expires_at = datetime.now(tz=UTC) + timedelta(seconds=session.ttl_seconds)
+        stored = StoredSession(
+            key_id=key_id,
+            aes_key_enc=wrap_key(aes_key, self._kek),
+            session_id=session_id,
+            created_at=datetime.now(tz=UTC),
+            expires_at=expires_at,
+        )
+        self._key_store.replace_session(session_id, stored)
 
         return session
 
@@ -157,10 +168,6 @@ class SessionService:
         # SECURITY: 拒绝空 session_id，防止绕过归属校验（P1-1 修复）
         if not session_id:
             logger.warning("加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12])
-            return None
-
-        # 无 DB 时无法查找
-        if self._key_store is None:
             return None
 
         # 直查 DB（卸载到线程池，不阻塞事件循环）

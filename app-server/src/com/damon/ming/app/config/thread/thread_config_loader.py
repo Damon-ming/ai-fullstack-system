@@ -38,7 +38,7 @@ class ThreadPoolConfigLoader:
     def parse_pools(raw: object) -> dict[str, int]:
         """校验命名线程池配置：名称非空，线程数必须为正整数。"""
         if not isinstance(raw, dict):
-            raise ValueError("线程池配置必须是键值对")
+            raise TypeError("线程池配置必须是键值对")
         for name, workers in raw.items():
             if not isinstance(name, str) or not name.strip():
                 raise ValueError("线程池名称必须是非空字符串")

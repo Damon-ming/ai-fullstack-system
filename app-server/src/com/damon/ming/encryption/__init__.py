@@ -14,7 +14,7 @@
 
 不提供（它们属于业务层 app/）：
   - 配置加载 → 见 app/config/encryption/encryption_config_loader.py
-  - 会话存储后端 → 见 app/encryption/（base_key_store / memory_key_store / key_store）
+  - 会话存储后端 → 见 app/encryption/（base_key_store / key_store）
   - 会话业务协调 → 见 app/encryption/session_service.py
   - 中间件 → 见 middleware/encryption_middleware.py
   - 路由 → 见 router/encryption/encryption_router.py

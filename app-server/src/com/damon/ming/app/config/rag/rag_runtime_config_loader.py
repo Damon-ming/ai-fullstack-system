@@ -166,9 +166,8 @@ class RagConfigLoader:
             api_key = api_keys[role]
 
             # api_key 相同的角色共享引擎（如 guardrail 复用 intent）
-            engine_key = api_key
-            if engine_key not in engines:
-                engines[engine_key] = impl_cls(
+            if api_key not in engines:
+                engines[api_key] = impl_cls(
                     InferenceParams(
                         base_url=base_url,
                         timeout=timeout_seconds,
@@ -182,7 +181,7 @@ class RagConfigLoader:
                 options=dict(config["options"]),
                 api_key=api_key,
                 engine_type=engine_type,
-                engine=engines[engine_key],
+                engine=engines[api_key],
             )
 
         return entries
@@ -313,7 +312,7 @@ class RagConfigLoader:
             model_name = self._text(params.get("model_name"), f"{path}.model_name")
             options = params.get("options")
             if not isinstance(options, dict):
-                raise ValueError(f"{path}.options 必须是键值对")
+                raise TypeError(f"{path}.options 必须是键值对")
             if "max_tokens" in options:
                 self._integer(options["max_tokens"], f"{path}.options.max_tokens")
             for field, lower, upper in (("temperature", 0, 2), ("top_p", 0, 1)):

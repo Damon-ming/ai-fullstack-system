@@ -314,22 +314,20 @@ class AppInitializer:
         self.key_material = KeyMaterial(data_key_id=data_key_id)
         self.key_material.initialize()
 
-        # 3. 会话服务（业务协调：RSA + 内存 + 可选 DB）
+        # 3. 会话服务（RSA + 必填 DB 存储，无会话密钥缓存）
         ttl_seconds = self._enc_config.session_ttl_seconds
         self.session_service = SessionService(
             rsa_key_pair=self.rsa_key_pair,
-            kek=kek or b"",
+            kek=kek,
             ttl_seconds=ttl_seconds,
+            key_store=key_store,
         )
-        if key_store is not None:
-            self.session_service.set_key_store(key_store)
         self.session_service.initialize()
 
         logger.info(
-            "加密体系初始化完成 | rsa=%d | ttl=%dh | 持久化=%s",
+            "加密体系初始化完成 | rsa=%d | ttl=%dh | 持久化=DB",
             rsa_size,
             ttl_seconds // 3600,
-            "启用" if key_store is not None else "纯内存",
         )
 
     def _load_encryption_config(self):
@@ -350,13 +348,12 @@ class AppInitializer:
         return config
 
     def _create_key_store(self):
-        """创建密钥存储后端(有数据库用 PgKeyStore,否则纯内存)。
+        """创建必填的数据库密钥存储后端，缺失或失败直接中止启动。
 
         KEK 派生参数(salt / info)从业务配置注入,encryption 模块不包含这些常量。
         """
         if self.db_conn is None:
-            logger.info("密钥持久化存储未配置(纯内存模式,重启后会话丢失)")
-            return None, None
+            raise RuntimeError("加密会话必须使用数据库存储，请先初始化数据库连接")
 
         try:
             from src.com.damon.ming.app.encryption.key_store import PgKeyStore
