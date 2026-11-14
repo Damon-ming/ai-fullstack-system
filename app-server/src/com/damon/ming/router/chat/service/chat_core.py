@@ -69,12 +69,12 @@ async def generate_answer(
 ) -> AsyncGenerator[StreamToken, None]:
     """Phase 2 全流程：RAG 检索 → prompt 组装 → 推理，逐 token 产出。
 
-    超时预算覆盖 RAG + 推理整段（两端点共享同一口径）；
+    超时预算覆盖检索、上下文构造、主推理及并发槽等待，不含前置护栏检测；
     仅推理段进入推理信号量，释放 RAG 等待期间的并发槽。
     CancelledError 不加内层捕获，直接穿透到外层统一处理，
     确保 infer_service 内部 finally 能正确关闭推理流。
     """
-    async with asyncio.timeout(app_state.chat.timeout):
+    async with asyncio.timeout(app_state.chat.execution_timeout_seconds):
         prompt_messages = await _build_prompt_messages(
             app_state, query, cancellation_token
         )

@@ -1,5 +1,5 @@
-# app-server/src/com/damon/ming/app/config/inference/inference_runtime_config_loader.py
-# 推理运行时配置加载器 —— YAML 直接映射 + 推理引擎装配。
+# app-server/src/com/damon/ming/app/config/rag/rag_runtime_config_loader.py
+# RAG 运行时配置加载器 —— YAML 直接映射 + 推理引擎装配。
 #
 # 连接路径：
 #   app-server → inference-gateway (http://inference-gateway:8080/v1)
@@ -11,11 +11,11 @@
 #
 # 由 AppInitializer 持有唯一实例并注入下游（rag_tool 通过参数接收，
 # 引擎实例各自持有连接池，必须只装配一次）：
-#   loader = InferenceConfigLoader()
+#   loader = RagConfigLoader()
 #   cfg = loader.load()
 #
-#   cfg.rag.infer_sem                # rag 段
-#   cfg.rag.locales["zh_CN"].system_prompt  # rag.locales 段
+#   cfg.rag.shared_inference_max_concurrency  # 主推理与摘要共享的并发限制
+#   cfg.rag.locales["zh_CN"].system_prompt  # YAML rag.locales 段
 #   cfg.rag.roles["inference"].options["max_tokens"]  # 角色参数
 #   cfg.rag.roles["inference"].engine                 # 角色引擎
 
@@ -37,6 +37,7 @@ from src.com.damon.ming.app.config.env import (
     get_inference_server,
     get_inference_timeout,
 )
+from src.com.damon.ming.app.config.thread import ThreadPoolConfigLoader
 
 # ── 连接参数来源：环境变量（由 docker-compose 注入）────────────────────
 # INFERENCE_GATEWAY_URL: 推理网关地址，如 http://inference-gateway:8080/v1
@@ -50,7 +51,7 @@ from src.com.damon.ming.app.config.env import (
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 数据类 —— 与 inference-runtime.yaml 的段落一一对应
+# 数据类 —— 与 rag-runtime.yaml 的段落一一对应
 # ═══════════════════════════════════════════════════════════════════════
 
 
@@ -67,11 +68,12 @@ class LocaleConfig:
 class RagConfig:
     """rag 段。"""
 
-    total_timeout: int  # RAG + 推理总预算（秒）
-    infer_sem: int
-    retrieval_sem: int
-    guardrail_sem: int
-    guardrail_timeout: int
+    execution_timeout_seconds: int  # 检索、上下文构造和主推理预算（秒），不含护栏
+    thread_pools: dict[str, int]
+    shared_inference_max_concurrency: int
+    retrieval_max_concurrency: int
+    guardrail_max_concurrency: int
+    guardrail_timeout_seconds: int
     sse_retry_ms: int
     roles: dict[str, ModelEntry]
     locales: dict[str, LocaleConfig]
@@ -93,8 +95,8 @@ class ModelEntry:
 
 
 @dataclass(frozen=True)
-class InferenceRuntimeConfig:
-    """inference-runtime.yaml 的直接映射。
+class RagRuntimeConfig:
+    """rag-runtime.yaml 的直接映射。
 
     rag —— rag 段（并发参数、角色引擎和 locales 文本）。
     """
@@ -107,13 +109,13 @@ class InferenceRuntimeConfig:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-class InferenceConfigLoader:
-    """推理运行时配置加载器。
+class RagConfigLoader:
+    """RAG 运行时配置加载器。
 
     由 AppInitializer 持有唯一实例，需要推理配置的模块通过参数接收，
     不要自行构造 —— 引擎实例各自持有连接池，多造一个加载器就多一套引擎。
 
-        loader = InferenceConfigLoader()
+        loader = RagConfigLoader()
         cfg = loader.load()
 
     load() 只执行一次，重复调用直接返回缓存结果。
@@ -121,10 +123,10 @@ class InferenceConfigLoader:
 
     def __init__(self) -> None:
         self._config_dir: str = os.path.dirname(os.path.abspath(__file__))
-        self._config: InferenceRuntimeConfig | None = None
+        self._config: RagRuntimeConfig | None = None
 
-    def load(self) -> InferenceRuntimeConfig:
-        """加载 inference-runtime.yaml 并装配推理引擎。
+    def load(self) -> RagRuntimeConfig:
+        """加载 rag-runtime.yaml 并装配推理引擎。
 
         rag 参数是 YAML 的直接映射；rag.roles 的引擎实例由环境变量
         连接参数装配。结果缓存，重复调用直接返回。
@@ -133,7 +135,7 @@ class InferenceConfigLoader:
             return self._config
 
         raw = self._read_yaml()
-        self._config = InferenceRuntimeConfig(
+        self._config = RagRuntimeConfig(
             rag=self._load_rag(raw),
         )
         return self._config
@@ -194,21 +196,32 @@ class InferenceConfigLoader:
 
         try:
             pipeline = rag["pipeline"]
-            inference = pipeline["inference"]
+            shared_inference = pipeline["shared_inference"]
             retrieval = pipeline["retrieval"]
             guardrail = pipeline["guardrail"]
             return RagConfig(
-                total_timeout=int(pipeline["total_timeout"]),
-                infer_sem=int(inference["semaphore"]),
-                retrieval_sem=int(retrieval["semaphore"]),
-                guardrail_sem=int(guardrail["semaphore"]),
-                guardrail_timeout=int(guardrail["timeout"]),
-                sse_retry_ms=int(rag["sse_retry_ms"]),
+                thread_pools=self._load_thread_pools(pipeline.get("thread_pools")),
+                execution_timeout_seconds=int(pipeline["execution_timeout_seconds"]),
+                shared_inference_max_concurrency=int(shared_inference["max_concurrency"]),
+                retrieval_max_concurrency=int(retrieval["max_concurrency"]),
+                guardrail_max_concurrency=int(guardrail["max_concurrency"]),
+                guardrail_timeout_seconds=int(guardrail["timeout_seconds"]),
+                sse_retry_ms=int(rag["transport"]["sse"]["retry_ms"]),
                 roles=self._assemble_roles(self._read_roles(rag)),
                 locales=self._load_rag_locales(rag.get("locales")),
             )
         except (KeyError, TypeError) as e:
             raise ValueError(f"rag 缺少必填字段: {e}") from e
+
+    def _load_thread_pools(self, raw: object) -> dict[str, int]:
+        pools = ThreadPoolConfigLoader.parse_pools(raw)
+        required = {"retrieval", "document", "rerank", "bm25"}
+        missing = required - pools.keys()
+        if missing:
+            raise ValueError(
+                f"rag.pipeline.thread_pools 缺少必需线程池：{', '.join(sorted(missing))}"
+            )
+        return pools
 
     def _load_rag_locales(self, locales_raw: Any) -> dict[str, LocaleConfig]:
         if not isinstance(locales_raw, dict) or not locales_raw:

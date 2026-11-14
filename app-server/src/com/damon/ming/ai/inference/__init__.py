@@ -10,7 +10,7 @@
   - resolve_engine: 根据引擎名称解析实现类
   - list_engines: 列出所有已注册的引擎名称
 
-配置加载见 config/inference/，本模块不感知配置来源。
+配置加载见 config/rag/，本模块不感知配置来源。
 
 引擎注册表由各实现类通过 @register_engine 自动注册。
 """

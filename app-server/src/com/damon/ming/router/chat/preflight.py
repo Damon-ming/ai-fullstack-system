@@ -66,12 +66,15 @@ async def check_guardrail_with_timeout(
 
     guardrail_sem 保护护栏 LLM 调用不被打爆。
     """
-    guardrail_timeout = app_state.guardrail.timeout
+    guardrail_timeout_seconds = app_state.guardrail.timeout_seconds
     guardrail_sem = app_state.guardrail.sem
     try:
-        async with asyncio.timeout(guardrail_timeout):
+        async with asyncio.timeout(guardrail_timeout_seconds):
             async with guardrail_sem:
                 return await _check_guardrail(app_state, query)
     except TimeoutError:
-        logger.warning("护栏检测超时，fail-open 放行 | timeout=%ds", guardrail_timeout)
+        logger.warning(
+            "护栏检测超时，fail-open 放行 | timeout_seconds=%d",
+            guardrail_timeout_seconds,
+        )
         return None

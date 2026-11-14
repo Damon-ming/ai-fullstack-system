@@ -6,6 +6,7 @@
 """
 
 import os
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,10 +15,10 @@ from src.com.damon.ming.app.config._yaml import load_yaml
 
 @dataclass(frozen=True)
 class SystemConfig:
-    """系统级配置（纯数据类）。所有参数由 YAML 显式声明，无内置默认值。"""
+    """系统级配置（纯数据类）。whitelist 可省略，其余参数由 YAML 显式声明。"""
 
     knowledge_dir: str  # 知识库目录绝对路径
-    whitelist: tuple[str, ...]  # 加密豁免路径前缀（明文放行）
+    whitelist: Collection[str]  # 加密豁免路径前缀，未配置时为空字典
 
 
 class SystemConfigLoader:
@@ -50,16 +51,12 @@ class SystemConfigLoader:
 
         return SystemConfig(knowledge_dir=knowledge_dir, whitelist=whitelist)
 
-    def _parse_whitelist(self, raw: object) -> tuple[str, ...]:
-        """解析加密豁免白名单（缺失/为空直接抛异常，不静默降级）。
-
-        白名单决定哪些请求可以明文通过，是安全策略的一部分：
-        空列表会让所有端点强制加密，漏配密钥交换端点会让系统不可用。
-        """
+    def _parse_whitelist(self, raw: object) -> Collection[str]:
+        """解析可选加密豁免白名单，未配置返回 {}，已配置时校验格式。"""
         if raw is None:
-            raise ValueError("系统配置缺少必填字段：whitelist")
-        if not isinstance(raw, (list, tuple)) or len(raw) == 0:
-            raise ValueError("系统配置中 whitelist 必须是非空列表")
+            return {}
+        if not isinstance(raw, (list, tuple)):
+            raise ValueError("系统配置中 whitelist 必须是列表")
 
         whitelist = tuple(str(item) for item in raw)
         invalid = [item for item in whitelist if not item.startswith("/")]

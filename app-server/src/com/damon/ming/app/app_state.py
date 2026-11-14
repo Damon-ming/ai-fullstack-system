@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from src.com.damon.ming.ai.guardrail.base_guardrail import BaseGuardrail
     from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
     from src.com.damon.ming.ai.rag_tool import RAGContainer
-    from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
+    from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
         LocaleConfig,
     )
     from src.com.damon.ming.app.config.system.system_config_loader import SystemConfig
@@ -72,21 +72,21 @@ class GuardrailState:
 
     engine: BaseGuardrail
     sem: asyncio.Semaphore
-    timeout: int
+    timeout_seconds: int
 
 
 @dataclass
 class ChatRuntime:
     """聊天链路运行时 —— 并发 / 超时 / 重试 / 多 locale 文案。
 
-    字段名去掉了与分组名重复的前缀：chat_sem → sem、chat_timeout → timeout，
+    字段名去掉了与分组名重复的前缀：chat_sem → sem、execution_timeout_seconds 显式标注秒单位，
     与 request_context.py 中 ClientContext.token（而非 client_token）同一约定。
     retrieval_sem 标识检索阶段：与 sem 是两个不同用途的信号量，需要区分。
     """
 
     sem: asyncio.Semaphore
     retrieval_sem: asyncio.Semaphore
-    timeout: int
+    execution_timeout_seconds: int
     retry_ms: int
     locales: dict[str, LocaleConfig]
 

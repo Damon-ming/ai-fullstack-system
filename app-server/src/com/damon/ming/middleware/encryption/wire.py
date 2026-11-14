@@ -1,11 +1,13 @@
 # app-server/src/com/damon/ming/middleware/encryption/wire.py
 """线格式判定与小工具（白名单 / 加密体 / 响应类型 / body 回写）。"""
 
+from collections.abc import Collection
+
 from fastapi import Request
 from starlette.responses import Response
 
 
-def is_whitelisted(path: str, whitelist: tuple[str, ...]) -> bool:
+def is_whitelisted(path: str, whitelist: Collection[str]) -> bool:
     """前缀匹配白名单（路径级全放行，不区分方法）。"""
     return any(path.startswith(prefix) for prefix in whitelist)
 

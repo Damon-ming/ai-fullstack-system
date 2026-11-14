@@ -60,8 +60,8 @@ from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
 from src.com.damon.ming.ai.summary import SummaryService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
-from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
-    InferenceConfigLoader,
+from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
+    RagConfigLoader,
 )
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import CancellationToken, ThreadPoolManager
@@ -77,7 +77,7 @@ def get_rag_container(
     pool_mgr: ThreadPoolManager,
     infer_sem: asyncio.Semaphore,
     knowledge_dir: str,
-    loader: InferenceConfigLoader,
+    loader: RagConfigLoader,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
@@ -107,7 +107,7 @@ class RAGContainer:
         pool_mgr: ThreadPoolManager | None = None,
         infer_sem: asyncio.Semaphore | None = None,
         knowledge_dir: str = "",
-        loader: InferenceConfigLoader | None = None,
+        loader: RagConfigLoader | None = None,
     ):
         logger.info("RAG 容器初始化开始")
         # 线程池管理器：优先使用注入的全局实例，否则回退单例

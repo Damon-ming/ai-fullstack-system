@@ -31,11 +31,11 @@ class AppInitializer:
 
     def __init__(self) -> None:
         # 推理配置加载器：进程级单例（引擎只装配一次）
-        from src.com.damon.ming.app.config.inference.inference_runtime_config_loader import (
-            InferenceConfigLoader,
+        from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
+            RagConfigLoader,
         )
 
-        self._loader = InferenceConfigLoader()
+        self._loader = RagConfigLoader()
 
         # 子系统状态（startup 后填充）
         self.system_config = None
@@ -112,14 +112,14 @@ class AppInitializer:
         app.state.guardrail = GuardrailState(
             engine=self.guardrail,
             sem=self.guardrail_sem,
-            timeout=self.guardrail_timeout,
+            timeout_seconds=self.guardrail_timeout_seconds,
         )
 
         # Semaphore 在 lifespan 内创建，绑定到正确的事件循环
         app.state.chat = ChatRuntime(
             sem=self.chat_sem,
             retrieval_sem=self.retrieval_sem,
-            timeout=self.chat_timeout,
+            execution_timeout_seconds=self.execution_timeout_seconds,
             retry_ms=self.chat_retry_ms,
             locales=self.chat_locales,
         )
@@ -177,6 +177,13 @@ class AppInitializer:
 
         loader = ThreadPoolConfigLoader()
         pool_configs = loader.load()
+        rag_pools = self._loader.load().rag.thread_pools
+        duplicates = pool_configs.keys() & rag_pools.keys()
+        if duplicates:
+            raise ValueError(
+                f"通用与 RAG 线程池配置名称重复：{', '.join(sorted(duplicates))}"
+            )
+        pool_configs.update(rag_pools)
         logger.info("线程池配置已从 YAML 加载: %s", pool_configs)
 
         self.pool_mgr = ThreadPoolManager()
@@ -397,24 +404,24 @@ class AppInitializer:
         rag = cfg.rag
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
-        self.chat_sem = asyncio.Semaphore(rag.infer_sem)
-        self.retrieval_sem = asyncio.Semaphore(rag.retrieval_sem)
-        self.guardrail_sem = asyncio.Semaphore(rag.guardrail_sem)
-        self.chat_timeout = rag.total_timeout
-        self.guardrail_timeout = rag.guardrail_timeout
+        self.chat_sem = asyncio.Semaphore(rag.shared_inference_max_concurrency)
+        self.retrieval_sem = asyncio.Semaphore(rag.retrieval_max_concurrency)
+        self.guardrail_sem = asyncio.Semaphore(rag.guardrail_max_concurrency)
+        self.execution_timeout_seconds = rag.execution_timeout_seconds
+        self.guardrail_timeout_seconds = rag.guardrail_timeout_seconds
         self.chat_retry_ms = rag.sse_retry_ms
         # 多 locale 文本配置：locale → LocaleConfig
         self.chat_locales = cfg.rag.locales
 
         logger.info(
-            "RAG 配置初始化完成 | locales=%s | infer_sem=%d | retrieval_sem=%d | "
-            "guardrail_sem=%d | guardrail_timeout=%ds | total_timeout=%ds",
+            "RAG 配置初始化完成 | locales=%s | shared_inference_max_concurrency=%d | retrieval_max_concurrency=%d | "
+            "guardrail_max_concurrency=%d | guardrail_timeout_seconds=%d | execution_timeout_seconds=%d",
             list(self.chat_locales.keys()),
-            rag.infer_sem,
-            rag.retrieval_sem,
-            rag.guardrail_sem,
-            rag.guardrail_timeout,
-            rag.total_timeout,
+            rag.shared_inference_max_concurrency,
+            rag.retrieval_max_concurrency,
+            rag.guardrail_max_concurrency,
+            rag.guardrail_timeout_seconds,
+            rag.execution_timeout_seconds,
         )
 
     def _init_ai(self) -> None:

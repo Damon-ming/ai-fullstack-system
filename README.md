@@ -312,11 +312,12 @@ docker compose down
 |------|------|------|
 | 系统配置 | `config/system/` | knowledge_dir 等路径 |
 | 数据库 | `config/db/` | 连接池参数 |
-| 推理运行时 | `config/inference/inference-runtime.yaml` | 模型参数 + 并发控制 |
+| RAG 运行时 | `config/rag/rag-runtime.yaml` | 流水线资源、模型参数和并发控制；`rag.pipeline.shared_inference` 为共享推理并发限制，`rag.transport.sse.retry_ms` 为 SSE 重试间隔 |
 | 加密 | `config/encryption/` | RSA 密钥大小、TTL |
 | i18n | `config/i18n/` | 默认语言、支持语言列表 |
 | 上传 | `config/upload/` | 文件类型白名单、大小限制 |
-| 线程池 | `config/thread/` | 各池大小 |
+| RAG 线程池 | `config/rag/rag-runtime.yaml` → `rag.pipeline.thread_pools` | 检索、文档、推理辅助、重排及索引重建线程数 |
+| 通用线程池 | `config/thread/` | 暂为空，预留其他命名线程池配置 |
 | 网关路由 | `inference-gateway/config/gateway.yaml` | api_key → upstream 映射 |
 
 环境变量覆盖：
@@ -336,7 +337,7 @@ max_model_len ≥ system_prompt + labels + max_context_tokens + query + 模板�
 | 参数 | 当前值 | 配置位置 | 作用 |
 |---|---|---|---|
 | `max_model_len` | 2048 | `inference-gateway/config/docker/docker-vllm.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
-| `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/inference/inference-runtime.yaml` → `rag.roles.inference.max_tokens` | 主推理的**输出** token 上限 |
+| `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/rag/rag-runtime.yaml` → `rag.roles.inference.max_tokens` | 主推理的**输出** token 上限 |
 | `max_context_tokens` | 512 | `app-server/src/com/damon/ming/router/chat/chat_router.py` → `MAX_CONTEXT_TOKEN_BUDGET` | RAG 检索上下文的**输入** token 上限（章节拼接 + 全局摘要后的最终值） |
 
 固定开销（zh_CN）：system prompt ≈ 230 token、参考资料/问题标签 ≈ 10 token、聊天模板 ≈ 15 token；query 未设上限。
@@ -378,7 +379,7 @@ python gateway.py
 1. 新建 `inference-gateway/config/docker/docker-{name}.yaml`（容器编排）
 2. `gateway.yaml` 添加路由条目
 3. `.env` 设置 `INFERENCE_API_KEYS` 映射
-4. `inference-runtime.yaml` 的 `rag.roles` 添加角色参数
+4. `rag-runtime.yaml` 的 `rag.roles` 添加角色参数
 5. `INFERENCE_SERVER={name}` 部署
 
 ## 并发控制模型
@@ -429,7 +430,7 @@ ThreadPoolManager（进程单例）
 [Phase 1] 护栏检测（独立超时 5s，guardrail_sem=2，超时 fail-open）
    │ 不通过 → 返回护栏拦截
    ▼
-[Phase 2] RAG 检索（retrieval_sem=3，total_timeout=30s 预算内）
+[Phase 2] RAG 检索（retrieval_sem=3，execution_timeout_seconds=30 秒预算内，不含前置护栏）
    │
    ├── Dense 检索（pgvector 余弦相似度）
    ├── Sparse 检索（BM25 + jieba 中文分词）
