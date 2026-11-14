@@ -21,8 +21,8 @@
 
 from __future__ import annotations
 
-import os
 import math
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -165,7 +165,7 @@ class RagConfigLoader:
             api_key = api_keys[role]
 
             # api_key 相同的角色共享引擎（如 guardrail 复用 intent）
-            engine_key = api_key or "__shared__"
+            engine_key = api_key
             if engine_key not in engines:
                 engines[engine_key] = impl_cls(
                     InferenceParams(
@@ -204,13 +204,17 @@ class RagConfigLoader:
             return RagConfig(
                 thread_pools=self._load_thread_pools(pipeline.get("thread_pools")),
                 execution_timeout_seconds=int(pipeline["execution_timeout_seconds"]),
-                shared_inference_max_concurrency=int(shared_inference["max_concurrency"]),
+                shared_inference_max_concurrency=int(
+                    shared_inference["max_concurrency"]
+                ),
                 retrieval_max_concurrency=int(retrieval["max_concurrency"]),
                 guardrail_max_concurrency=int(guardrail["max_concurrency"]),
                 guardrail_timeout_seconds=int(guardrail["timeout_seconds"]),
                 inference_timeout_seconds=timeout_seconds,
                 sse_retry_ms=int(rag["transport"]["sse"]["retry_ms"]),
-                roles=self._assemble_roles(self._read_roles(rag), timeout_seconds=timeout_seconds),
+                roles=self._assemble_roles(
+                    self._read_roles(rag), timeout_seconds=timeout_seconds
+                ),
                 locales=self._load_rag_locales(rag.get("locales")),
             )
         except (KeyError, TypeError) as e:
@@ -220,7 +224,7 @@ class RagConfigLoader:
     def _parse_inference_timeout(value: object) -> float:
         """网络超时必须是有限正数，不提供缺省值。"""
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError("rag.transport.inference.timeout_seconds 必须是正数")
+            raise TypeError("rag.transport.inference.timeout_seconds 必须是正数")
         timeout = float(value)
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("rag.transport.inference.timeout_seconds 必须是有限正数")
