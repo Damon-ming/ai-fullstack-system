@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+from concurrent.futures import Executor
 from datetime import UTC, datetime, timedelta
+from functools import partial
 
 from src.com.damon.ming.app.encryption.base_key_store import EncryptionSessionRecord
 from src.com.damon.ming.app.encryption.key_management import DecryptedSessionKey
@@ -72,6 +74,7 @@ class SessionService:
         ttl_seconds: int,
         *,
         key_store: PgKeyStore,
+        db_executor: Executor,
     ) -> None:
         """
         参数：
@@ -88,6 +91,7 @@ class SessionService:
         self._kek = kek
         self._ttl_seconds = ttl_seconds
         self._key_store = key_store
+        self._db_executor = db_executor
 
     def get_public_key_pem(self) -> bytes:
         """RSA 公钥 PEM（分发给客户端）。"""
@@ -167,8 +171,9 @@ class SessionService:
             return None
 
         # 直查 DB（卸载到线程池，不阻塞事件循环）
-        stored = await asyncio.to_thread(
-            self._key_store.get_session, key_id, session_id=session_id
+        stored = await asyncio.get_running_loop().run_in_executor(
+            self._db_executor,
+            partial(self._key_store.get_session, key_id, session_id=session_id),
         )
         if stored is None:
             return None

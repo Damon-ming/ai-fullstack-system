@@ -12,13 +12,6 @@
 
 rag:
   pipeline:                 # 聊天主流程（RAG + 推理）
-    thread_pools:
-      retrieval: 4      # 稠密 + 稀疏检索
-      document: 8       # 文档解析与分割
-      inference: 2      # 推理辅助线程（预留）
-      rerank: 2         # 重排专用池
-      bm25: 1           # 索引重建专用池，单 worker 串行
-
     execution_timeout_seconds: 30  # 检索、上下文构造与主推理预算，含等待并发槽；不含护栏
     shared_inference:
       max_concurrency: 16    # 主推理与摘要/压缩共享的最大并发数

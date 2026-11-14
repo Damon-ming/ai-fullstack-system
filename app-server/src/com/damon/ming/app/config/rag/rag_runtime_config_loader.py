@@ -38,7 +38,6 @@ from src.com.damon.ming.app.config.env import (
     get_inference_server,
 )
 from src.com.damon.ming.app.config.i18n.i18n_config_loader import I18nConfigLoader
-from src.com.damon.ming.app.config.thread import ThreadPoolConfigLoader
 
 # ── 连接参数来源：环境变量（由 docker-compose 注入）────────────────────
 # INFERENCE_GATEWAY_URL: 推理网关地址，如 http://inference-gateway:8080/v1
@@ -69,7 +68,6 @@ class RagConfig:
     """rag 段。"""
 
     execution_timeout_seconds: float  # 检索、上下文构造和主推理预算（秒），不含护栏
-    thread_pools: dict[str, int]
     shared_inference_max_concurrency: int
     retrieval_max_concurrency: int
     guardrail_max_concurrency: int
@@ -203,7 +201,6 @@ class RagConfigLoader:
                 "rag.transport.inference.timeout_seconds",
             )
             return RagConfig(
-                thread_pools=self._load_thread_pools(pipeline.get("thread_pools")),
                 execution_timeout_seconds=self._positive_number(
                     pipeline["execution_timeout_seconds"],
                     "rag.pipeline.execution_timeout_seconds",
@@ -259,16 +256,6 @@ class RagConfigLoader:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{path} 必须是非空字符串")
         return value
-
-    def _load_thread_pools(self, raw: object) -> dict[str, int]:
-        pools = ThreadPoolConfigLoader.parse_pools(raw)
-        required = {"retrieval", "document", "rerank", "bm25"}
-        missing = required - pools.keys()
-        if missing:
-            raise ValueError(
-                f"rag.pipeline.thread_pools 缺少必需线程池：{', '.join(sorted(missing))}"
-            )
-        return pools
 
     def _load_rag_locales(self, locales_raw: Any) -> dict[str, LocaleConfig]:
         if not isinstance(locales_raw, dict) or not locales_raw:

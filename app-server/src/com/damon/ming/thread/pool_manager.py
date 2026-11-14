@@ -52,7 +52,7 @@ logger = pin("thread.pool_manager")
 class ThreadPoolManager:
     """进程级线程池管理器 —— 统一管理所有 AI 子系统线程资源。
 
-    线程池由 rag.pipeline.thread_pools 和可选的通用线程池 YAML 配置驱动，
+    线程池由 app/config/thread/thread-pool-config.yaml 统一配置，
     启动时固化，运行期通过 get_pool(name) 获取。
 
     使用方式：

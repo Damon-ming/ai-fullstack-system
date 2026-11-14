@@ -12,6 +12,7 @@ chat_router 把本轮交付内容喂进来，结束时一次性落库：
 """
 
 import asyncio
+from concurrent.futures import Executor
 from datetime import datetime
 
 from src.com.damon.ming.ai.inference.base_inference import STREAM_TYPE_REASONING
@@ -44,12 +45,14 @@ class ChatTurnRecorder:
         conversation_id: str,
         query: str,
         query_at: datetime,
+        db_executor: Executor,
     ) -> None:
         self._token = token
         self._turn_id = turn_id
         self._conversation_id = conversation_id
         self._query = query
         self._query_at = query_at
+        self._db_executor = db_executor
 
         self._content_parts: list[str] = []
         self._reasoning_parts: list[str] = []
@@ -140,7 +143,7 @@ class ChatTurnRecorder:
         try:
             ok = bool(
                 await asyncio.get_running_loop().run_in_executor(
-                    None, self._persist_sync
+                    self._db_executor, self._persist_sync
                 )
             )
         except Exception:

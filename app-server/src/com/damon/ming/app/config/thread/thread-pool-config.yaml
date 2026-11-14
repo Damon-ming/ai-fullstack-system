@@ -1,5 +1,25 @@
-# app-server/src/com/damon/ming/app/config/thread/thread-pool-config.yaml
-# 通用线程池扩展配置，暂不配置。
-# RAG 线程池已迁到 rag/rag-runtime.yaml 的 rag.pipeline.thread_pools。
-# 后续可在此添加其他命名线程池，名称不能与 RAG 线程池重复。
-{}
+# 线程池资源统一配置。
+# 启动时校验：每组池的 max_workers 总和不超过组上限，所有池总和不超过全局上限。
+thread_pools:
+  max_total_workers: 20
+
+  groups:
+    rag:
+      max_total_workers: 17
+      pools:
+        retrieval:
+          max_workers: 4
+        document:
+          max_workers: 8
+        inference:
+          max_workers: 2
+        rerank:
+          max_workers: 2
+        bm25:
+          max_workers: 1
+
+    database:
+      max_total_workers: 3
+      pools:
+        query:
+          max_workers: 3

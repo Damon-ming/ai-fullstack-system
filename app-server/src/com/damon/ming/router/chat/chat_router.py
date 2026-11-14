@@ -67,6 +67,7 @@ def _create_recorder(request: Request, body) -> ChatTurnRecorder:
         conversation_id=body.conversationId or SseMessageFactory.new_conversation_id(),
         query=body.query,
         query_at=now(),
+        db_executor=request.app.state.ai.pool_mgr.get_pool("database_query"),
     )
 
 

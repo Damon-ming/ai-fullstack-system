@@ -177,13 +177,6 @@ class AppInitializer:
 
         loader = ThreadPoolConfigLoader()
         pool_configs = loader.load()
-        rag_pools = self._loader.load().rag.thread_pools
-        duplicates = pool_configs.keys() & rag_pools.keys()
-        if duplicates:
-            raise ValueError(
-                f"通用与 RAG 线程池配置名称重复：{', '.join(sorted(duplicates))}"
-            )
-        pool_configs.update(rag_pools)
         logger.info("线程池配置已从 YAML 加载: %s", pool_configs)
 
         self.pool_mgr = ThreadPoolManager()
@@ -326,6 +319,7 @@ class AppInitializer:
             kek=kek,
             ttl_seconds=ttl_seconds,
             key_store=key_store,
+            db_executor=self.pool_mgr.get_pool("database_query"),
         )
         self.session_service.initialize()
 
