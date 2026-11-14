@@ -6,7 +6,7 @@
 #                              → 按 api_key 路由到 vllm-{role}
 #
 # api_key 由环境变量注入（由 docker-compose 提供），格式：
-#   INFERENCE_API_KEYS        → JSON 字典，如 {"chat":"ak_pool_001","intent":"ak_pool_002"}
+#   INFERENCE_API_KEYS        → JSON 字典，如 {"inference":"ak_pool_001","intent":"ak_pool_002"}
 #   INFERENCE_API_KEY_{ROLE}  → 单个角色，优先级高于 JSON
 #
 # 由 AppInitializer 持有唯一实例并注入下游（rag_tool 通过参数接收，
@@ -14,10 +14,12 @@
 #   loader = InferenceConfigLoader()
 #   cfg = loader.load()
 #
-#   cfg.chat.common.infer_sem                # chat.common 段
-#   cfg.chat.locales["zh_CN"].system_prompt  # chat.locales 段
-#   cfg.roles["chat"].options["max_tokens"]  # roles 段原始参数
-#   cfg.roles["chat"].engine                 # 该角色绑定的引擎实例
+#   cfg.rag.infer_sem                # rag 段
+#   cfg.rag.locales["zh_CN"].system_prompt  # rag.locales 段
+#   cfg.rag.roles["inference"].options["max_tokens"]  # 角色参数
+#   cfg.rag.roles["inference"].engine                 # 角色引擎
+
+from __future__ import annotations
 
 import os
 from dataclasses import dataclass
@@ -53,20 +55,8 @@ from src.com.damon.ming.app.config.env import (
 
 
 @dataclass(frozen=True)
-class ChatCommonConfig:
-    """chat.common 段 —— 聊天流程并发控制参数。"""
-
-    total_timeout: int  # RAG + 推理总预算（秒）
-    infer_sem: int  # 推理信号量上限（主推理 + 摘要/压缩共享）
-    rag_sem: int  # RAG 检索段信号量上限（反压控制）
-    guardrail_sem: int  # 护栏 LLM 调用信号量上限
-    guardrail_timeout: int  # 护栏检测独立超时（秒），超时 fail-open 放行
-    sse_retry_ms: int  # SSE 断连重连间隔（毫秒），0=禁用
-
-
-@dataclass(frozen=True)
 class LocaleConfig:
-    """chat.locales.{locale} 段 —— 单个 locale 的聊天文本。"""
+    """rag.locales.{locale} 段 —— 单个 locale 的聊天文本。"""
 
     ref_label: str
     query_label: str
@@ -74,16 +64,22 @@ class LocaleConfig:
 
 
 @dataclass(frozen=True)
-class ChatConfig:
-    """chat 段。"""
+class RagConfig:
+    """rag 段。"""
 
-    common: ChatCommonConfig
+    total_timeout: int  # RAG + 推理总预算（秒）
+    infer_sem: int
+    retrieval_sem: int
+    guardrail_sem: int
+    guardrail_timeout: int
+    sse_retry_ms: int
+    roles: dict[str, ModelEntry]
     locales: dict[str, LocaleConfig]
 
 
 @dataclass(frozen=True)
 class ModelEntry:
-    """roles.{role} 段 + 该角色绑定的引擎实例。
+    """rag.roles.{role} 段 + 该角色绑定的引擎实例。
 
     options 是 YAML 中该角色的原始推理参数（temperature/top_p/max_tokens）；
     引擎实例由加载器按环境变量连接参数装配，api_key 相同的角色共享同一实例。
@@ -100,12 +96,10 @@ class ModelEntry:
 class InferenceRuntimeConfig:
     """inference-runtime.yaml 的直接映射。
 
-    chat  —— chat 段（common 并发参数 + locales 文本）
-    roles —— roles 段，每个角色携带 YAML 参数和装配出的引擎实例
+    rag —— rag 段（并发参数、角色引擎和 locales 文本）。
     """
 
-    chat: ChatConfig
-    roles: dict[str, ModelEntry]
+    rag: RagConfig
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -132,7 +126,7 @@ class InferenceConfigLoader:
     def load(self) -> InferenceRuntimeConfig:
         """加载 inference-runtime.yaml 并装配推理引擎。
 
-        chat / roles 参数是 YAML 的直接映射；roles 的引擎实例由环境变量
+        rag 参数是 YAML 的直接映射；rag.roles 的引擎实例由环境变量
         连接参数装配。结果缓存，重复调用直接返回。
         """
         if self._config is not None:
@@ -140,8 +134,7 @@ class InferenceConfigLoader:
 
         raw = self._read_yaml()
         self._config = InferenceRuntimeConfig(
-            chat=self._load_chat(raw),
-            roles=self._assemble_roles(self._read_roles(raw)),
+            rag=self._load_rag(raw),
         )
         return self._config
 
@@ -194,38 +187,32 @@ class InferenceConfigLoader:
 
     # ---- 私有：YAML 段映射 ----------------------------------------------
 
-    def _load_chat(self, raw: dict) -> ChatConfig:
-        chat = raw.get("chat")
-        if not isinstance(chat, dict):
-            raise TypeError(f"运行时配置缺少 chat 段 | dir={self._config_dir}")
+    def _load_rag(self, raw: dict) -> RagConfig:
+        rag = raw.get("rag")
+        if not isinstance(rag, dict):
+            raise TypeError(f"运行时配置缺少 rag 段 | dir={self._config_dir}")
 
-        return ChatConfig(
-            common=self._load_chat_common(chat.get("common")),
-            locales=self._load_chat_locales(chat.get("locales")),
-        )
-
-    def _load_chat_common(self, common_raw: Any) -> ChatCommonConfig:
-        if not isinstance(common_raw, dict):
-            raise TypeError(f"运行时配置缺少 chat.common 段 | dir={self._config_dir}")
         try:
-            pipeline = common_raw["pipeline"]
+            pipeline = rag["pipeline"]
             inference = pipeline["inference"]
-            rag = pipeline["rag"]
-            guardrail = common_raw["guardrail"]
-            return ChatCommonConfig(
+            retrieval = pipeline["retrieval"]
+            guardrail = pipeline["guardrail"]
+            return RagConfig(
                 total_timeout=int(pipeline["total_timeout"]),
                 infer_sem=int(inference["semaphore"]),
-                rag_sem=int(rag["semaphore"]),
+                retrieval_sem=int(retrieval["semaphore"]),
                 guardrail_sem=int(guardrail["semaphore"]),
                 guardrail_timeout=int(guardrail["timeout"]),
-                sse_retry_ms=int(common_raw["sse_retry_ms"]),
+                sse_retry_ms=int(rag["sse_retry_ms"]),
+                roles=self._assemble_roles(self._read_roles(rag)),
+                locales=self._load_rag_locales(rag.get("locales")),
             )
         except (KeyError, TypeError) as e:
-            raise ValueError(f"chat.common 缺少必填字段: {e}") from e
+            raise ValueError(f"rag 缺少必填字段: {e}") from e
 
-    def _load_chat_locales(self, locales_raw: Any) -> dict[str, LocaleConfig]:
+    def _load_rag_locales(self, locales_raw: Any) -> dict[str, LocaleConfig]:
         if not isinstance(locales_raw, dict) or not locales_raw:
-            raise ValueError(f"运行时配置缺少 chat.locales 段 | dir={self._config_dir}")
+            raise ValueError(f"运行时配置缺少 rag.locales 段 | dir={self._config_dir}")
 
         locales: dict[str, LocaleConfig] = {}
         for locale, section in locales_raw.items():
@@ -246,7 +233,7 @@ class InferenceConfigLoader:
     def _read_roles(self, raw: dict) -> dict[str, dict[str, Any]]:
         roles = raw.get("roles")
         if not isinstance(roles, dict) or not roles:
-            raise ValueError(f"运行时配置缺少 roles 段 | dir={self._config_dir}")
+            raise ValueError(f"运行时配置缺少 rag.roles 段 | dir={self._config_dir}")
 
         cleaned: dict[str, dict[str, Any]] = {}
         for role, params in roles.items():

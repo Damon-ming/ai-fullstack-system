@@ -91,7 +91,7 @@ class DbConfigLoader:
             max_overflow=int(merged["max_overflow"]),
             pool_timeout=int(merged["pool_timeout"]),
             pool_recycle=int(merged["pool_recycle"]),
-            echo=self._as_bool(merged.get("echo")),
+            echo=self._as_bool(merged.get("echo", False)),
             engine_kwargs=self._build_engine_kwargs(merged),
         )
 
@@ -102,10 +102,16 @@ class DbConfigLoader:
 
     @staticmethod
     def _as_bool(value: object) -> bool:
-        """把 YAML 布尔值或环境变量字符串解析为 bool。"""
+        """只接受布尔值或 true/false 字符串，配置错误直接抛异常。"""
         if isinstance(value, bool):
             return value
-        return str(value).strip().lower() in ("1", "true", "yes", "on")
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized == "true":
+                return True
+            if normalized == "false":
+                return False
+        raise ValueError("数据库布尔配置必须为 true 或 false，请检查 YAML 或环境变量")
 
     @staticmethod
     def _build_engine_kwargs(raw: dict) -> dict:

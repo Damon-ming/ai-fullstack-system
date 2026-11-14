@@ -22,6 +22,7 @@
 # 当前最小模式：5 个角色 → 3 个 pool
 # TODO: 启用 pool-2 (Qwen2.5-0B) 和 pool-3 (Qwen2.5-1.8B) 后，将 ak_pool_002/003 改回对应 upstream
 routes:
+  # inference 角色（原 chat）：与 app-server 的 INFERENCE_API_KEYS 映射对应
   ak_pool_001:
     upstream: http://vllm-pool-1:8000
     upstream_key: uk_pool_001

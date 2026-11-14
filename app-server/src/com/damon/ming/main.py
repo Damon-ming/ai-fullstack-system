@@ -16,7 +16,7 @@
   INFERENCE_SERVER        推理后端：ollama / vllm / sglang（默认 ollama，连接信息由环境变量注入）
   INFERENCE_GATEWAY_URL   推理网关地址（默认 http://inference-gateway:8080/v1）
   INFERENCE_TIMEOUT       推理超时秒数（默认 180）
-  CHAT_TEMPERATURE        聊天采样温度（环境变量覆盖 inference-runtime.yaml，格式 ROLE_PARAM）【未实现】
+  INFERENCE_TEMPERATURE        聊天采样温度（环境变量覆盖 inference-runtime.yaml，格式 ROLE_PARAM）【未实现】
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 
 【配置文件（YAML）】

@@ -81,11 +81,11 @@ class ChatRuntime:
 
     字段名去掉了与分组名重复的前缀：chat_sem → sem、chat_timeout → timeout，
     与 request_context.py 中 ClientContext.token（而非 client_token）同一约定。
-    rag_sem 保留 rag_ 前缀：与 sem 是两个不同用途的信号量，需要区分。
+    retrieval_sem 标识检索阶段：与 sem 是两个不同用途的信号量，需要区分。
     """
 
     sem: asyncio.Semaphore
-    rag_sem: asyncio.Semaphore
+    retrieval_sem: asyncio.Semaphore
     timeout: int
     retry_ms: int
     locales: dict[str, LocaleConfig]

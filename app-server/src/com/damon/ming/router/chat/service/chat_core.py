@@ -41,8 +41,8 @@ async def _build_prompt_messages(
     """
     chat_cfg = _resolve_locale_text(app_state.chat.locales, get_locale())
 
-    # RAG 检索在推理信号量外执行（自身有线程池保护 + rag_sem 反压）
-    async with app_state.chat.rag_sem:
+    # RAG 检索在推理信号量外执行（自身有线程池保护 + retrieval_sem 反压）
+    async with app_state.chat.retrieval_sem:
         logger.debug("开始执行 RAG 检索")
         ref_content = await app_state.ai.rag_app.query_rag(
             query,

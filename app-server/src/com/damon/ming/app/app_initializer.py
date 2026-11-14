@@ -74,7 +74,7 @@ class AppInitializer:
         self._init_encryption()
         self._init_sign_context()
         self._init_rate_limiter()
-        self._init_chat()  # 必须在 _init_ai 之前：创建 infer_sem 供 RAGContainer 传递
+        self._init_rag()  # 必须在 _init_ai 之前：创建 infer_sem 供 RAGContainer 传递
         self._init_ai()
         self._init_guardrail()
 
@@ -118,7 +118,7 @@ class AppInitializer:
         # Semaphore 在 lifespan 内创建，绑定到正确的事件循环
         app.state.chat = ChatRuntime(
             sem=self.chat_sem,
-            rag_sem=self.rag_sem,
+            retrieval_sem=self.retrieval_sem,
             timeout=self.chat_timeout,
             retry_ms=self.chat_retry_ms,
             locales=self.chat_locales,
@@ -389,32 +389,32 @@ class AppInitializer:
             )
         logger.info("HKDF sign_context 已从配置读出")
 
-    def _init_chat(self) -> None:
-        """聊天配置：从 YAML 读取 Semaphore 参数、超时、多 locale 文本。"""
+    def _init_rag(self) -> None:
+        """RAG 配置：从 YAML 读取 Semaphore 参数、超时、多 locale 文本。"""
         import asyncio
 
         cfg = self._loader.load()
-        common = cfg.chat.common
+        rag = cfg.rag
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
-        self.chat_sem = asyncio.Semaphore(common.infer_sem)
-        self.rag_sem = asyncio.Semaphore(common.rag_sem)
-        self.guardrail_sem = asyncio.Semaphore(common.guardrail_sem)
-        self.chat_timeout = common.total_timeout
-        self.guardrail_timeout = common.guardrail_timeout
-        self.chat_retry_ms = common.sse_retry_ms
+        self.chat_sem = asyncio.Semaphore(rag.infer_sem)
+        self.retrieval_sem = asyncio.Semaphore(rag.retrieval_sem)
+        self.guardrail_sem = asyncio.Semaphore(rag.guardrail_sem)
+        self.chat_timeout = rag.total_timeout
+        self.guardrail_timeout = rag.guardrail_timeout
+        self.chat_retry_ms = rag.sse_retry_ms
         # 多 locale 文本配置：locale → LocaleConfig
-        self.chat_locales = cfg.chat.locales
+        self.chat_locales = cfg.rag.locales
 
         logger.info(
-            "聊天配置初始化完成 | locales=%s | infer_sem=%d | rag_sem=%d | "
+            "RAG 配置初始化完成 | locales=%s | infer_sem=%d | retrieval_sem=%d | "
             "guardrail_sem=%d | guardrail_timeout=%ds | total_timeout=%ds",
             list(self.chat_locales.keys()),
-            common.infer_sem,
-            common.rag_sem,
-            common.guardrail_sem,
-            common.guardrail_timeout,
-            common.total_timeout,
+            rag.infer_sem,
+            rag.retrieval_sem,
+            rag.guardrail_sem,
+            rag.guardrail_timeout,
+            rag.total_timeout,
         )
 
     def _init_ai(self) -> None:
@@ -425,7 +425,7 @@ class AppInitializer:
         )
 
         register_all_inferences()
-        # infer_sem 由 _init_chat() 创建（已在 lifespan 事件循环内），
+        # infer_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
         # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
         # loader 同为注入，保证全进程只有一套推理引擎
         self.rag_app = get_rag_container(
@@ -436,14 +436,14 @@ class AppInitializer:
         )
 
         # 推理引擎已由 self._loader.load() 装配（环境变量连接参数 + YAML roles 段）
-        _chat_entry = self._loader.load().roles["chat"]
-        self.infer_service = _chat_entry.engine
-        self.inference_model_name = _chat_entry.model_name
-        self.inference_options = _chat_entry.options
+        _inference_entry = self._loader.load().rag.roles["inference"]
+        self.infer_service = _inference_entry.engine
+        self.inference_model_name = _inference_entry.model_name
+        self.inference_options = _inference_entry.options
         logger.info(
             "RAG、LLM客户端初始化完成 | model=%s | engine=%s",
             self.inference_model_name,
-            _chat_entry.engine_type,
+            _inference_entry.engine_type,
         )
 
     def _init_guardrail(self) -> None:
@@ -453,7 +453,7 @@ class AppInitializer:
         )
 
         loader = GuardrailConfigLoader()
-        guardrail_engine = self._loader.load().roles["guardrail"].engine
+        guardrail_engine = self._loader.load().rag.roles["guardrail"].engine
         loaded = loader.load_all(inference=guardrail_engine)
         self.guardrail = loaded["engine"]
         logger.info("护栏系统初始化完成 | engine=%s", type(self.guardrail).__name__)

@@ -28,7 +28,7 @@
 │  │  检索(Dense+Sparse+Hybrid) → 重排 → LLM 推理        ││
 │  └─────────────────────────────────────────────────────┘│
 │  线程池: document_pool / retrieval_pool / rerank_pool    │
-│  信号量: infer_sem=16 / rag_sem=3 / guardrail_sem=2     │
+│  信号量: infer_sem=16 / retrieval_sem=3 / guardrail_sem=2 │
 └──────────┬──────────────────┬───────────────────────────┘
            │                  │
            │ HTTP             │ 文件上传 / 知识库管理
@@ -44,7 +44,7 @@
     ┌────┴────┬────────┬────────┬────────┐
     ▼         ▼        ▼        ▼        ▼
  vllm-1    vllm-2   vllm-3   vllm-4   vllm-5
- 7B-chat   0.5B     1.8B     1.5B     4B-guardrail
+ 7B-inference 0.5B  1.8B     1.5B     4B-guardrail
  (意图)   (检索)    (改写)   (摘要)    (护栏)
 ```
 
@@ -336,7 +336,7 @@ max_model_len ≥ system_prompt + labels + max_context_tokens + query + 模板�
 | 参数 | 当前值 | 配置位置 | 作用 |
 |---|---|---|---|
 | `max_model_len` | 2048 | `inference-gateway/config/docker/docker-vllm.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
-| `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/inference/inference-runtime.yaml` → `roles.chat.max_tokens` | 主推理的**输出** token 上限 |
+| `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/inference/inference-runtime.yaml` → `rag.roles.inference.max_tokens` | 主推理的**输出** token 上限 |
 | `max_context_tokens` | 512 | `app-server/src/com/damon/ming/router/chat/chat_router.py` → `MAX_CONTEXT_TOKEN_BUDGET` | RAG 检索上下文的**输入** token 上限（章节拼接 + 全局摘要后的最终值） |
 
 固定开销（zh_CN）：system prompt ≈ 230 token、参考资料/问题标签 ≈ 10 token、聊天模板 ≈ 15 token；query 未设上限。
@@ -378,7 +378,7 @@ python gateway.py
 1. 新建 `inference-gateway/config/docker/docker-{name}.yaml`（容器编排）
 2. `gateway.yaml` 添加路由条目
 3. `.env` 设置 `INFERENCE_API_KEYS` 映射
-4. `inference-runtime.yaml` 添加 roles 参数
+4. `inference-runtime.yaml` 的 `rag.roles` 添加角色参数
 5. `INFERENCE_SERVER={name}` 部署
 
 ## 并发控制模型
@@ -390,7 +390,7 @@ python gateway.py
 | 信号量 | 默认值 | 保护目标 |
 |--------|--------|----------|
 | `infer_sem` | 16 | LLM 推理调用（主推理 + 摘要/压缩共享） |
-| `rag_sem` | 3 | RAG 检索阶段（反压控制） |
+| `retrieval_sem` | 3 | RAG 检索阶段（反压控制） |
 | `guardrail_sem` | 2 | 护栏 LLM 调用（4B 小模型，2 足够） |
 
 信号量在 `lifespan` 内创建，绑定到正确的事件循环。RAG 和推理信号量嵌套使用：RAG 先释放信号量，推理再获取，避免 RAG 等待期间占用推理槽位。
@@ -429,7 +429,7 @@ ThreadPoolManager（进程单例）
 [Phase 1] 护栏检测（独立超时 5s，guardrail_sem=2，超时 fail-open）
    │ 不通过 → 返回护栏拦截
    ▼
-[Phase 2] RAG 检索（rag_sem=3，total_timeout=30s 预算内）
+[Phase 2] RAG 检索（retrieval_sem=3，total_timeout=30s 预算内）
    │
    ├── Dense 检索（pgvector 余弦相似度）
    ├── Sparse 检索（BM25 + jieba 中文分词）

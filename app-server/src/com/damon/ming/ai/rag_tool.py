@@ -148,7 +148,7 @@ class RAGContainer:
         self.vector_store: BaseVectorStore = VectorConfigLoader().load("pgvector")
 
         # 步骤4：初始化章节重构 + 摘要服务
-        _summary_entry = loader.load().roles["summary"]
+        _summary_entry = loader.load().rag.roles["summary"]
         self.section_recon = SectionReconstructor()
         self.summary = SummaryService(
             tokenizer=self.tokenizer,
