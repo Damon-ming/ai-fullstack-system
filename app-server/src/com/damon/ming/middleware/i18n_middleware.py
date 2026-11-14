@@ -1,4 +1,4 @@
-# middleware/i18n_middleware.py
+# app-server/src/com/damon/ming/middleware/i18n_middleware.py
 """
 i18n 中间件 —— 解析 X-Language 请求头，设置当前请求的 locale。
 

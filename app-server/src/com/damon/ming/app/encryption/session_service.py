@@ -2,10 +2,13 @@
 """
 加密会话服务 —— 业务层，协调 RSA 密钥对 + 存储后端 + KEK。
 
+设计：DB 为唯一真源，无内存缓存。每次 get_session 直查 DB，
+保证过期/删除/续签等状态变更即时生效。
+
 职责：
-  - 会话注册：RSA 解密 → 生成 keyId → 内存表 + 原子 DB 替换
-  - 会话查找：内存优先，DB 兜底
-  - 会话清理：按 session_id 清除所有记录
+  - 会话注册：RSA 解密 → 生成 keyId → 原子 DB 替换
+  - 会话查找：直查 DB
+  - 会话清理：DB cleanup_expired 处理
 
 本模块是业务层对加密技术的"适配器"，上层（middleware / router）通过本模块
 操作加密会话，不直接触碰 RSA / 存储后端内部。
@@ -18,7 +21,6 @@
 
 import asyncio
 import secrets
-import threading
 from datetime import UTC, datetime, timedelta
 
 from src.com.damon.ming.app.encryption.base_key_store import StoredSession
@@ -46,6 +48,9 @@ class SessionService:
     组合 RSAKeyPair（纯技术）+ 存储后端（业务）+ KEK（配置注入），
     对外提供完整的加密会话管理。
 
+    设计：DB 为唯一真源，无内存缓存。每次 get_session 直查 DB，
+    保证 DB 的删除/过期/续签/失效等状态变更即时生效。
+
     用法：
         ss = SessionService(rsa_key_pair, kek)
         ss.initialize()                          # 初始化存储后端
@@ -69,10 +74,6 @@ class SessionService:
         self._kek = kek
         self._ttl_seconds = ttl_seconds
         self._key_store = None  # 可选存储后端
-        self._sessions: dict[str, SessionKey] = {}
-        # 内存归属索引：key_id → session_id（业务层 session，用于所有权校验）
-        self._key_to_session: dict[str, str] = {}
-        self._lock = threading.RLock()
 
     def get_public_key_pem(self) -> bytes:
         """RSA 公钥 PEM（分发给客户端）。"""
@@ -94,11 +95,11 @@ class SessionService:
         """注册新 AES 会话并原子替换该 session_id 旧记录。
 
         流程：
-          1. RSA 解密 → 生成 keyId → 内存表写入
+          1. RSA 解密 → 生成 keyId
           2. wrap_key → replace_session(session_id, new_stored)（原子 DELETE + INSERT）
 
         崩溃安全：
-          - 步骤 1 崩溃 → 无影响（内存 + DB 均无新记录）
+          - 步骤 1 崩溃 → 无影响（DB 无新记录）
           - 步骤 2 崩溃 → 事务 rollback，旧记录保留（客户端重试即可）
 
         参数：
@@ -119,63 +120,34 @@ class SessionService:
                 biz_code=ErrorCode.ENCRYPT.INVALID_KEY_FORMAT,
             )
 
-        # 2. 生成 keyId + 内存写入
+        # 2. 生成 keyId
         key_id = secrets.token_urlsafe(24)
         session = SessionKey(
             key_id=key_id,
             aes_key=aes_key,
             ttl_seconds=self._ttl_seconds,
         )
-        with self._lock:
-            self._cleanup_expired_unlocked()
-            # 清理同一 session_id 的旧 key_id（防映射表膨胀 + 确保归属唯一）
-            # 先保存旧 session 引用，DB 失败时可回滚恢复
-            old_keys = [k for k, s in self._key_to_session.items() if s == session_id]
-            old_sessions = {k: self._sessions.pop(k, None) for k in old_keys}
-            for old_key in old_keys:
-                self._key_to_session.pop(old_key, None)
-            self._sessions[key_id] = session
-            self._key_to_session[key_id] = session_id
 
-            # 3. 持久化（锁内操作，失败时回滚内存）
-            # 锁覆盖 DB 事务是故意设计——保证内存状态与 DB 原子一致，
-            # DB 失败可回滚内存到旧 key。RSA 解密（~1-5ms）已在锁外并行，
-            # 锁内仅剩 ~1-2ms 内存 + DB 操作，并发加密会话建立时无瓶颈。
-            if self._key_store is not None:
-                expires_at = datetime.now(tz=UTC) + timedelta(
-                    seconds=session.ttl_seconds
-                )
-                stored = StoredSession(
-                    key_id=key_id,
-                    aes_key_enc=wrap_key(aes_key, self._kek),
-                    session_id=session_id,
-                    created_at=datetime.now(tz=UTC),
-                    expires_at=expires_at,
-                )
-                try:
-                    self._key_store.replace_session(session_id, stored)
-                except Exception as e:
-                    # DB 失败 → 回滚内存：移除新 key，恢复旧 key
-                    self._sessions.pop(key_id, None)
-                    self._key_to_session.pop(key_id, None)
-                    for old_key, old_session in old_sessions.items():
-                        if old_session is not None:
-                            self._sessions[old_key] = old_session
-                            self._key_to_session[old_key] = session_id
-                    logger.error(
-                        "会话持久化失败，已回滚内存 | key_id=%s session_id=%s error=%s",
-                        key_id[:12],
-                        session_id[:8],
-                        e,
-                    )
-                    raise
+        # 3. 持久化（原子替换）
+        if self._key_store is not None:
+            expires_at = datetime.now(tz=UTC) + timedelta(seconds=session.ttl_seconds)
+            stored = StoredSession(
+                key_id=key_id,
+                aes_key_enc=wrap_key(aes_key, self._kek),
+                session_id=session_id,
+                created_at=datetime.now(tz=UTC),
+                expires_at=expires_at,
+            )
+            self._key_store.replace_session(session_id, stored)
 
         return session
 
     async def get_session(
         self, key_id: str, session_id: str | None = None
     ) -> SessionKey | None:
-        """查找会话（缓存 miss 时通过线程池查 DB，不阻塞事件循环）。
+        """查找会话（直查 DB，不走内存缓存）。
+
+        DB 为唯一真源，保证过期/删除/续签等状态变更即时生效。
 
         Args:
             key_id:     加密会话标识
@@ -187,31 +159,11 @@ class SessionService:
             logger.warning("加密会话查找拒绝: 空 session_id | key_id=%s", key_id[:12])
             return None
 
-        # 1. 内存查找（同步，极快，锁内仅 dict 操作）
-        with self._lock:
-            session = self._sessions.get(key_id)
-            if session is not None:
-                if session.is_expired:
-                    del self._sessions[key_id]
-                    self._key_to_session.pop(key_id, None)
-                    return None
-                # 归属校验：检查内存映射（无 owner 记录视为归属未知，一并拒绝）
-                owner = self._key_to_session.get(key_id)
-                if owner != session_id:
-                    logger.warning(
-                        "加密会话归属不匹配 | key_id=%s owner=%s requester=%s",
-                        key_id[:12],
-                        (owner or "<none>")[:8],
-                        session_id[:8],
-                    )
-                    return None
-                session.touch()
-                return session
-
-        # 2. 内存 miss → DB 查找卸载到线程池（不阻塞事件循环）
+        # 无 DB 时无法查找
         if self._key_store is None:
             return None
 
+        # 直查 DB（卸载到线程池，不阻塞事件循环）
         loop = asyncio.get_running_loop()
 
         def _db_lookup() -> StoredSession | None:
@@ -221,7 +173,7 @@ class SessionService:
         if stored is None:
             return None
         if not stored.session_id:
-            logger.warning("加密会话归属信息缺失，拒绝回填 | key_id=%s", key_id[:12])
+            logger.warning("加密会话归属信息缺失 | key_id=%s", key_id[:12])
             return None
 
         try:
@@ -229,40 +181,9 @@ class SessionService:
         except Exception:
             return None
 
-        session = SessionKey(
+        return SessionKey(
             key_id=stored.key_id,
             aes_key=aes_key,
             ttl_seconds=_stored_ttl_seconds(stored),
             created_at=stored.created_at.timestamp(),
         )
-        with self._lock:
-            # 竞态防护：回填前确认该 session 当前没有别的密钥。
-            # 若期间发生过重新注册，旧 key 已被 DB 删除，这里必须丢弃，
-            # 否则已吊销的 key 会在内存复活（内存与 DB 不再一致）。
-            newer = next(
-                (
-                    k
-                    for k, s in self._key_to_session.items()
-                    if s == session_id and k != key_id
-                ),
-                None,
-            )
-            if newer is not None:
-                logger.warning(
-                    "会话已重新注册，丢弃过期回填 | key_id=%s newer=%s",
-                    key_id[:12],
-                    newer[:12],
-                )
-                return None
-            self._sessions[key_id] = session
-            self._key_to_session[key_id] = stored.session_id
-        return session
-
-    # ---- 内部清理 -------------------------------------------------------
-
-    def _cleanup_expired_unlocked(self) -> None:
-        """调用者必须持有 _lock。"""
-        expired = [k for k, v in self._sessions.items() if v.is_expired]
-        for k in expired:
-            del self._sessions[k]
-            self._key_to_session.pop(k, None)

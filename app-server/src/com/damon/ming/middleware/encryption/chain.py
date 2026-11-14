@@ -10,7 +10,7 @@
 链的最后一环是 ResponseEncryptGate，它调用 next_gate() 即到达终端
 （直接调用下游应用）。
 
-新增处理步骤 = 新增一个 EncryptionGate 子类 + 在
+新增处理步骤 = 新增一个 EncryptionGate 子类 +
 build_encryption_chain() 里加一行，不改动其它 gate。
 """
 
@@ -49,12 +49,12 @@ class EncryptionChain:
         self._gates = tuple(gates)
 
     async def run(self, request: Request, call_next: CallNext) -> Response:
+        """完整链：inbound → 下游 → outbound。"""
         ctx = EncryptionContext(request=request, downstream=call_next)
         return await self._advance(0, ctx)
 
     async def _advance(self, index: int, ctx: EncryptionContext) -> Response:
         if index >= len(self._gates):
-            # 终端：所有 gate 都放行 → 调用下游应用
             return await ctx.call_downstream()
         gate = self._gates[index]
         return await gate.handle(ctx, lambda: self._advance(index + 1, ctx))
