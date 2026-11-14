@@ -72,7 +72,7 @@ class GuardrailState:
 
     engine: BaseGuardrail
     sem: asyncio.Semaphore
-    timeout_seconds: int
+    timeout_seconds: float
 
 
 @dataclass
@@ -86,7 +86,7 @@ class ChatRuntime:
 
     sem: asyncio.Semaphore
     retrieval_sem: asyncio.Semaphore
-    execution_timeout_seconds: int
+    execution_timeout_seconds: float
     retry_ms: int
     locales: dict[str, LocaleConfig]
 

@@ -74,7 +74,7 @@ async def check_guardrail_with_timeout(
                 return await _check_guardrail(app_state, query)
     except TimeoutError:
         logger.warning(
-            "护栏检测超时，fail-open 放行 | timeout_seconds=%d",
+            "护栏检测超时，fail-open 放行 | timeout_seconds=%g",
             guardrail_timeout_seconds,
         )
         return None

@@ -415,7 +415,7 @@ class AppInitializer:
 
         logger.info(
             "RAG 配置初始化完成 | locales=%s | shared_inference_max_concurrency=%d | retrieval_max_concurrency=%d | "
-            "guardrail_max_concurrency=%d | guardrail_timeout_seconds=%d | execution_timeout_seconds=%d",
+            "guardrail_max_concurrency=%d | guardrail_timeout_seconds=%g | execution_timeout_seconds=%g",
             list(self.chat_locales.keys()),
             rag.shared_inference_max_concurrency,
             rag.retrieval_max_concurrency,
@@ -460,8 +460,12 @@ class AppInitializer:
         )
 
         loader = GuardrailConfigLoader()
-        guardrail_engine = self._loader.load().rag.roles["guardrail"].engine
-        loaded = loader.load_all(inference=guardrail_engine)
+        guardrail_entry = self._loader.load().rag.roles["guardrail"]
+        loaded = loader.load_all(
+            inference=guardrail_entry.engine,
+            model_name=guardrail_entry.model_name,
+            options=guardrail_entry.options,
+        )
         self.guardrail = loaded["engine"]
         logger.info("护栏系统初始化完成 | engine=%s", type(self.guardrail).__name__)
 

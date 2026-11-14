@@ -28,6 +28,7 @@ services:
     command: >
       --host 0.0.0.0 --port 8000
       --model /models/inference/Qwen2.5-0.5B-Instruct
+      --served-model-name qwen2.5-0.5B-instruct
       --trust-remote-code
       --gpu-memory-utilization 0.3
       --max-model-len 2048
@@ -56,6 +57,7 @@ services:
   #   command: >
   #     --host 0.0.0.0 --port 8000
   #     --model /models/inference/Qwen2.5-0.5B-Instruct
+  #     --served-model-name qwen2.5-0.5B-instruct
   #     --trust-remote-code
   #     --gpu-memory-utilization 0.3
   #     --max-model-len 2048
@@ -83,6 +85,7 @@ services:
   #   command: >
   #     --host 0.0.0.0 --port 8000
   #     --model /models/inference/Qwen2.5-1.8B-Instruct
+  #     --served-model-name qwen2.5-1.8B-instruct
   #     --trust-remote-code
   #     --gpu-memory-utilization 0.4
   #     --max-model-len 4096
@@ -110,6 +113,7 @@ services:
     command: >
       --host 0.0.0.0 --port 8000
       --model /models/inference/Qwen2.5-0.5B-Instruct
+      --served-model-name qwen2.5-0.5B-instruct
       --trust-remote-code
       --gpu-memory-utilization 0.3
       --max-model-len 2048
@@ -137,6 +141,7 @@ services:
     command: >
       --host 0.0.0.0 --port 8000
       --model /models/inference/Qwen2.5-0.5B-Instruct
+      --served-model-name qwen2.5-0.5B-instruct
       --trust-remote-code
       --gpu-memory-utilization 0.3
       --max-model-len 2048

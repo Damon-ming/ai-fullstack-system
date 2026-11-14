@@ -5,7 +5,7 @@
 # 检测不通过时直接返回前端，不再执行后续流程。
 #
 # 护栏引擎复用 INFERENCE_API_KEYS 中 guardrail 角色的引擎，
-# 模型由 gateway 路由决定（api_key → vLLM 实例 → 实例加载的模型）。
+# 模型名称和生成参数由 rag.roles.guardrail 注入，gateway 仅按 api_key 路由到实例。
 # 本文件只配置护栏自身的检测 prompt。
 
 prompt_template: |

@@ -306,6 +306,12 @@ docker compose down
 
 ## 配置说明
 
+`rag-runtime.yaml` 的每个角色使用 `model_name` 指定上游接受的模型名称，
+`options` 保存生成参数。当前短名称为 `qwen2.5-0.5B-instruct`；vLLM 的
+`--served-model-name` 已与其对应。切换 Ollama 时，需要保证 Ollama 中已存在
+同名模型或别名，或将 `model_name` 改成 Ollama 已安装模型的名称。
+网关只按 API key 路由，不会改写请求中的模型名。
+
 所有配置通过 YAML 文件管理，零硬编码：
 
 | 配置 | 路径 | 说明 |
@@ -338,7 +344,7 @@ max_model_len ≥ system_prompt + labels + max_context_tokens + query + 模板�
 | 参数 | 当前值 | 配置位置 | 作用 |
 |---|---|---|---|
 | `max_model_len` | 2048 | `inference-gateway/config/docker/docker-vllm.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
-| `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/rag/rag-runtime.yaml` → `rag.roles.inference.max_tokens` | 主推理的**输出** token 上限 |
+| `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/rag/rag-runtime.yaml` → `rag.roles.inference.options.max_tokens` | 主推理的**输出** token 上限 |
 | `max_context_tokens` | 512 | `app-server/src/com/damon/ming/router/chat/chat_router.py` → `MAX_CONTEXT_TOKEN_BUDGET` | RAG 检索上下文的**输入** token 上限（章节拼接 + 全局摘要后的最终值） |
 
 固定开销（zh_CN）：system prompt ≈ 230 token、参考资料/问题标签 ≈ 10 token、聊天模板 ≈ 15 token；query 未设上限。
@@ -380,7 +386,7 @@ python gateway.py
 1. 新建 `inference-gateway/config/docker/docker-{name}.yaml`（容器编排）
 2. `gateway.yaml` 添加路由条目
 3. `.env` 设置 `INFERENCE_API_KEYS` 映射
-4. `rag-runtime.yaml` 的 `rag.roles` 添加角色参数
+4. `rag-runtime.yaml` 的 `rag.roles` 添加角色的 `model_name` 和 `options` 参数
 5. `INFERENCE_SERVER={name}` 部署
 
 ## 并发控制模型

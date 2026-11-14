@@ -11,7 +11,7 @@ guardrail/ 模块通过 GuardrailParams 数据类接收参数，不感知配置�
 
 用法：
   loader = GuardrailConfigLoader()
-  result = loader.load_all(inference=infer_service)
+  result = loader.load_all(inference=infer_service, model_name=model_name, options=options)
   result["engine"]  # BaseGuardrail
 """
 
@@ -36,11 +36,15 @@ class GuardrailConfigLoader:
             config_path = os.path.join(base_dir, "guardrail-config.yaml")
         self._config_path = config_path
 
-    def load_all(self, inference: BaseInferenceService) -> dict:
+    def load_all(
+        self, inference: BaseInferenceService, *, model_name: str, options: dict
+    ) -> dict:
         """一次性加载护栏配置。
 
         Args:
             inference: 已初始化的推理引擎实例，注入到护栏引擎中复用。
+            model_name: guardrail 角色配置的实际模型名称。
+            options: guardrail 角色配置的生成参数。
 
         Returns:
             {"engine": BaseGuardrail}
@@ -58,7 +62,9 @@ class GuardrailConfigLoader:
 
         # 引擎类型由护栏注册表决定，默认 qwen；如需切换可在注册表扩展
         impl_cls = resolve_guardrail("qwen-guardrail")
-        self._engine = impl_cls(params, inference=inference)
+        self._engine = impl_cls(
+            params, inference=inference, model_name=model_name, options=options
+        )
 
         return {"engine": self._engine}
 

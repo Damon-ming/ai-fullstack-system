@@ -9,8 +9,8 @@
 引擎接口极简：check(query) -> GuardrailResult。
 具体引擎（Qwen / 关键词黑名单等）各自实现检测逻辑。
 
-护栏引擎复用推理引擎（guardrail 角色），模型由 gateway 路由决定
-（api_key → vLLM 实例），配置中不包含模型信息。
+护栏引擎复用推理客户端（guardrail 角色），模型名称和生成参数由角色配置注入，
+gateway 仅负责按 api_key 选择上游实例。
 
 配置见 ai/config/guardrail/guardrail-config.yaml，本模块不感知配置来源。
 
@@ -46,9 +46,7 @@ class GuardrailResult:
 class GuardrailParams:
     """护栏参数（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。
 
-    护栏引擎复用已初始化的推理引擎，模型由 gateway 路由决定
-    （api_key → vLLM 实例 → 实例加载的模型），因此 params 不包含模型信息，
-    只包含护栏自身的检测 prompt。
+    本数据类只包含检测 prompt；推理客户端、模型名称和生成参数单独注入护栏实现。
     """
 
     prompt_template: str

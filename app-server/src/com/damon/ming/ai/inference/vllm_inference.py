@@ -53,7 +53,7 @@ class VLLMInference(BaseInferenceService):
     ) -> str:
         run_opts = _map_options(options)
 
-        # API Gateway 模式下 model 由 gateway 注入，客户端无需指定
+        # 使用角色配置中的上游模型名，网关仅负责路由。
         create_kwargs: dict[str, Any] = {"messages": messages, **run_opts}
         if model_name:
             create_kwargs["model"] = model_name

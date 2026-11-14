@@ -95,9 +95,14 @@ class QwenGuardrail(BaseGuardrail):
         self,
         params: GuardrailParams,
         inference: BaseInferenceService,
+        *,
+        model_name: str,
+        options: dict,
     ):
         super().__init__(params)
         self.inference = inference
+        self.model_name = model_name
+        self.options = dict(options)
 
     async def check(self, query: str) -> GuardrailResult:
         """调用 Qwen 模型检测用户输入。"""
@@ -108,9 +113,10 @@ class QwenGuardrail(BaseGuardrail):
 
         try:
             raw = await self.inference.text_generation(
+                model_name=self.model_name,
                 messages=messages,
                 response_schema=_GuardrailResponse.model_json_schema(),
-                options={"temperature": 0.1},
+                options=dict(self.options),
             )
         except asyncio.CancelledError:
             logger.warning("护栏检测被取消，fail-open 放行")

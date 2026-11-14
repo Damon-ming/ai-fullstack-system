@@ -69,28 +69,38 @@ rag:
   # 完整模式：换大模型后恢复 max_tokens 和 max-model-len
   roles:
     inference:
-      temperature: 0.1
-      top_p: 0.9
-      max_tokens: 1024
+      model_name: qwen2.5-0.5B-instruct
+      options:
+        temperature: 0.1
+        top_p: 0.9
+        max_tokens: 1024
 
     intent:
-      temperature: 0.3
-      top_p: 0.95
-      max_tokens: 256
+      model_name: qwen2.5-0.5B-instruct
+      options:
+        temperature: 0.3
+        top_p: 0.95
+        max_tokens: 256
 
     rewrite:
-      temperature: 0.5
-      top_p: 0.9
-      max_tokens: 256
+      model_name: qwen2.5-0.5B-instruct
+      options:
+        temperature: 0.5
+        top_p: 0.9
+        max_tokens: 256
 
     summary:
-      temperature: 0.1
-      top_p: 0.9
-      max_tokens: 1024
+      model_name: qwen2.5-0.5B-instruct
+      options:
+        temperature: 0.1
+        top_p: 0.9
+        max_tokens: 1024
 
     guardrail:
-      temperature: 0.1
-      top_p: 0.95
-      max_tokens: 256
+      model_name: qwen2.5-0.5B-instruct
+      options:
+        temperature: 0.1
+        top_p: 0.95
+        max_tokens: 256
 
 

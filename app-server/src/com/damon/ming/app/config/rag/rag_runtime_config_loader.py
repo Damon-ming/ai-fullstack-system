@@ -37,6 +37,7 @@ from src.com.damon.ming.app.config.env import (
     get_inference_gateway_url,
     get_inference_server,
 )
+from src.com.damon.ming.app.config.i18n.i18n_config_loader import I18nConfigLoader
 from src.com.damon.ming.app.config.thread import ThreadPoolConfigLoader
 
 # ── 连接参数来源：环境变量（由 docker-compose 注入）────────────────────
@@ -67,12 +68,12 @@ class LocaleConfig:
 class RagConfig:
     """rag 段。"""
 
-    execution_timeout_seconds: int  # 检索、上下文构造和主推理预算（秒），不含护栏
+    execution_timeout_seconds: float  # 检索、上下文构造和主推理预算（秒），不含护栏
     thread_pools: dict[str, int]
     shared_inference_max_concurrency: int
     retrieval_max_concurrency: int
     guardrail_max_concurrency: int
-    guardrail_timeout_seconds: int
+    guardrail_timeout_seconds: float
     inference_timeout_seconds: float  # 推理客户端网络超时，与执行预算独立
     sse_retry_ms: int
     roles: dict[str, ModelEntry]
@@ -161,7 +162,7 @@ class RagConfigLoader:
         engines: dict[str, BaseInferenceService] = {}
         entries: dict[str, ModelEntry] = {}
 
-        for role, options in roles_raw.items():
+        for role, config in roles_raw.items():
             api_key = api_keys[role]
 
             # api_key 相同的角色共享引擎（如 guardrail 复用 intent）
@@ -175,10 +176,10 @@ class RagConfigLoader:
                     )
                 )
 
-            # 网关模式下 model 由 gateway 注入，这里用 role 占位
+            # 角色负责用途，model_name 是上游实际接受的模型名称或服务别名。
             entries[role] = ModelEntry(
-                model_name=role,
-                options=options,
+                model_name=config["model_name"],
+                options=dict(config["options"]),
                 api_key=api_key,
                 engine_type=engine_type,
                 engine=engines[engine_key],
@@ -198,37 +199,67 @@ class RagConfigLoader:
             shared_inference = pipeline["shared_inference"]
             retrieval = pipeline["retrieval"]
             guardrail = pipeline["guardrail"]
-            timeout_seconds = self._parse_inference_timeout(
-                rag["transport"]["inference"]["timeout_seconds"]
+            timeout_seconds = self._positive_number(
+                rag["transport"]["inference"]["timeout_seconds"],
+                "rag.transport.inference.timeout_seconds",
             )
             return RagConfig(
                 thread_pools=self._load_thread_pools(pipeline.get("thread_pools")),
-                execution_timeout_seconds=int(pipeline["execution_timeout_seconds"]),
-                shared_inference_max_concurrency=int(
-                    shared_inference["max_concurrency"]
+                execution_timeout_seconds=self._positive_number(
+                    pipeline["execution_timeout_seconds"],
+                    "rag.pipeline.execution_timeout_seconds",
                 ),
-                retrieval_max_concurrency=int(retrieval["max_concurrency"]),
-                guardrail_max_concurrency=int(guardrail["max_concurrency"]),
-                guardrail_timeout_seconds=int(guardrail["timeout_seconds"]),
+                shared_inference_max_concurrency=self._integer(
+                    shared_inference["max_concurrency"],
+                    "rag.pipeline.shared_inference.max_concurrency",
+                ),
+                retrieval_max_concurrency=self._integer(
+                    retrieval["max_concurrency"],
+                    "rag.pipeline.retrieval.max_concurrency",
+                ),
+                guardrail_max_concurrency=self._integer(
+                    guardrail["max_concurrency"],
+                    "rag.pipeline.guardrail.max_concurrency",
+                ),
+                guardrail_timeout_seconds=self._positive_number(
+                    guardrail["timeout_seconds"],
+                    "rag.pipeline.guardrail.timeout_seconds",
+                ),
                 inference_timeout_seconds=timeout_seconds,
-                sse_retry_ms=int(rag["transport"]["sse"]["retry_ms"]),
+                sse_retry_ms=self._integer(
+                    rag["transport"]["sse"]["retry_ms"],
+                    "rag.transport.sse.retry_ms",
+                    minimum=0,
+                ),
+                locales=self._load_rag_locales(rag.get("locales")),
                 roles=self._assemble_roles(
                     self._read_roles(rag), timeout_seconds=timeout_seconds
                 ),
-                locales=self._load_rag_locales(rag.get("locales")),
             )
-        except (KeyError, TypeError) as e:
+        except KeyError as e:
             raise ValueError(f"rag 缺少必填字段: {e}") from e
 
     @staticmethod
-    def _parse_inference_timeout(value: object) -> float:
-        """网络超时必须是有限正数，不提供缺省值。"""
+    def _positive_number(value: object, path: str) -> float:
+        """超时必须是有限正数，不做字符串或布尔值转换。"""
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("rag.transport.inference.timeout_seconds 必须是正数")
+            raise ValueError(f"{path} 必须是有限正数")
         timeout = float(value)
         if not math.isfinite(timeout) or timeout <= 0:
-            raise ValueError("rag.transport.inference.timeout_seconds 必须是有限正数")
+            raise ValueError(f"{path} 必须是有限正数")
         return timeout
+
+    @staticmethod
+    def _integer(value: object, path: str, *, minimum: int = 1) -> int:
+        if type(value) is not int or value < minimum:
+            raise ValueError(f"{path} 必须是大于等于 {minimum} 的整数")
+        return value
+
+    @staticmethod
+    def _text(value: object, path: str) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{path} 必须是非空字符串")
+        return value
 
     def _load_thread_pools(self, raw: object) -> dict[str, int]:
         pools = ThreadPoolConfigLoader.parse_pools(raw)
@@ -252,12 +283,21 @@ class RagConfigLoader:
                 )
             try:
                 locales[locale] = LocaleConfig(
-                    ref_label=str(section["ref_label"]),
-                    query_label=str(section["query_label"]),
-                    system_prompt=str(section["system_prompt"]),
+                    ref_label=self._text(
+                        section["ref_label"], f"rag.locales.{locale}.ref_label"
+                    ),
+                    query_label=self._text(
+                        section["query_label"], f"rag.locales.{locale}.query_label"
+                    ),
+                    system_prompt=self._text(
+                        section["system_prompt"], f"rag.locales.{locale}.system_prompt"
+                    ),
                 )
             except KeyError as e:
                 raise ValueError(f"locale '{locale}' 缺少必填字段: {e}") from e
+        default_locale = I18nConfigLoader().load().default_locale
+        if default_locale not in locales:
+            raise ValueError(f"rag.locales 缺少系统默认语言：{default_locale}")
         return locales
 
     def _read_roles(self, raw: dict) -> dict[str, dict[str, Any]]:
@@ -269,7 +309,26 @@ class RagConfigLoader:
         for role, params in roles.items():
             if not isinstance(params, dict):
                 raise TypeError(f"角色 '{role}' 配置格式错误 | dir={self._config_dir}")
-            cleaned[role] = dict(params)
+            path = f"rag.roles.{role}"
+            model_name = self._text(params.get("model_name"), f"{path}.model_name")
+            options = params.get("options")
+            if not isinstance(options, dict):
+                raise ValueError(f"{path}.options 必须是键值对")
+            if "max_tokens" in options:
+                self._integer(options["max_tokens"], f"{path}.options.max_tokens")
+            for field, lower, upper in (("temperature", 0, 2), ("top_p", 0, 1)):
+                if field not in options:
+                    continue
+                value = options[field]
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    or not lower <= value <= upper
+                    or (field == "top_p" and value == 0)
+                ):
+                    raise ValueError(f"{path}.options.{field} 超出有效数值范围")
+            cleaned[role] = {"model_name": model_name, "options": dict(options)}
         return cleaned
 
     def _read_yaml(self) -> dict:

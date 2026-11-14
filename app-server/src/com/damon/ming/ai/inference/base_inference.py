@@ -77,7 +77,7 @@ class BaseInferenceService(ABC):
 
         response_schema 用于需要结构化输出的场景（如护栏判定）；
         聊天正文不传，返回纯文本。
-        model_name 可空：API Gateway 模式下由 gateway 自动注入。
+        model_name 由角色配置传入，网关仅路由，不负责注入模型名。
         """
 
     @abstractmethod
@@ -91,7 +91,7 @@ class BaseInferenceService(ABC):
         """流式SSE输出 —— 产出 StreamToken 区分 reasoning / content。
 
         推理走模型原生通道（reasoning_content / thinking），正文为纯文本，
-        不做 JSON 约束。model_name 可空：API Gateway 模式下由 gateway 自动注入。
+        不做 JSON 约束。model_name 由角色配置传入。
         """
 
     @abstractmethod
@@ -133,6 +133,7 @@ class BaseInferenceService(ABC):
             f"直接输出意图名称："
         )
         result = await self.text_generation(
+            model_name=model_name,
             messages=[{"role": "user", "content": prompt}],
             options={"temperature": 0.0},
         )
@@ -180,8 +181,9 @@ class BaseInferenceService(ABC):
                 f"优化检索问句："
             )
         return await self.text_generation(
+            model_name=model_name,
             messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.1},
+            options={"temperature": 0.1, "max_tokens": max_tokens},
         )
 
 
