@@ -5,7 +5,7 @@
 用法：
     from src.com.damon.ming.middleware.rate_limiter import limiter
 
-    @router.post("/send/v1")
+    @router.post("/rag/answer/v1")
     @limiter.limit("10/minute")
     async def chat(request: Request, body: ChatRequest): ...
 

@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/router/rag/service/chat_turn.py
+# app-server/src/com/damon/ming/router/rag/service/rag_turn.py
 """
 一轮对话的落库记录器 —— chat 链路专用。
 
@@ -26,7 +26,7 @@ logger = pin("chat.turn")
 TITLE_MAX_LEN = 40
 
 
-class ChatTurnRecorder:
+class RagTurnRecorder:
     """记录一轮对话的交付内容，结束时一次性落库。
 
     用法：

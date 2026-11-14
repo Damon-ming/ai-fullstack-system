@@ -20,10 +20,9 @@ export const sendChatRoomMessageFn = (
   signal?: AbortSignal,
 ): Promise<ChatRoomApiResponse> => {
   log.debug("send request", {
-    endpoint: "/api/llm/answer/v1",
     queryLength: request.query.length,
   });
-  return dataApi.post("/api/llm/send/v1", request, { signal });
+  return dataApi.post("/api/llm/rag/answer/v1", request, { signal });
 };
 
 /**
@@ -37,7 +36,7 @@ export const streamChatRoomMessage = (
   opts?: SseStreamOptions<ChatSseMessage>,
 ): Promise<SseFinalState> => {
   return netClient.sseStream<ChatSseMessage>(
-    "/api/llm/chat/v1",
+    "/api/llm/rag/stream/v1",
     request,
     callbacks,
     opts,

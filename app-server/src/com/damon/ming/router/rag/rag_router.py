@@ -2,7 +2,7 @@
 """
 chat 链路两个端点 —— 每个端点自包含完整编排。
 
-一轮对话的执行顺序（同步 /send/v1 与流式 /chat/v1 一致）：
+一轮问答的执行顺序（同步 /rag/answer/v1 与流式 /rag/stream/v1 一致）：
     构造本轮上下文 → Phase 0 输入校验 → Phase 1 护栏 → Phase 2 RAG+推理
     → 成功收尾落库 → 返回 / 发 done 事件
 任一环节失败：set_error → 返回失败响应 / 发 error 事件
@@ -10,9 +10,9 @@ finally：清理请求上下文 + 未落库则兜底落库
 
 只把「跨端点复用的业务能力」抽到外部，编排本身留在本文件：
   - preflight.py:   Phase 0/1 的检查能力（各 2 个调用点）
-  - chat_core.py:   Phase 2 的 RAG+推理流程（2 个调用点，原先两份重复实现）
+  - rag_core.py:    Phase 2 的 RAG+推理流程（2 个调用点，原先两份重复实现）
   - failure.py:     失败响应 / SSE error 事件构造（preflight 也要用）
-  - service/chat_turn.py: 本轮内容的累积与落库（chat 自己的业务，字段对应 history_turns 表）
+  - service/rag_turn.py: 本轮内容的累积与落库（字段对应 history_turns 表）
 """
 
 import asyncio
@@ -38,8 +38,8 @@ from src.com.damon.ming.router.rag.preflight import (
     check_input,
 )
 from src.com.damon.ming.router.rag.schemas.bean import ChatRequest
-from src.com.damon.ming.router.rag.service.chat_core import generate_answer
-from src.com.damon.ming.router.rag.service.chat_turn import ChatTurnRecorder
+from src.com.damon.ming.router.rag.service.rag_core import generate_answer
+from src.com.damon.ming.router.rag.service.rag_turn import RagTurnRecorder
 from src.com.damon.ming.router.rag.sse import SseEmitter, SseMessageFactory
 from src.com.damon.ming.thread.pool_manager import RequestScope
 from src.com.damon.ming.utils.time import now
@@ -56,13 +56,13 @@ def _request_token(request: Request) -> str:
     return (client.token if client else "") or ""
 
 
-def _create_recorder(request: Request, body) -> ChatTurnRecorder:
+def _create_recorder(request: Request, body) -> RagTurnRecorder:
     """创建本轮对话的落库记录器（turn_id 自动生成，调用方无需传参）。
 
     conversation_id 由前端指定或新建：拦截轮次也要落库，需要会话归属。
     提问时刻在请求到达即采集，作为全部时延指标的起点。
     """
-    return ChatTurnRecorder(
+    return RagTurnRecorder(
         token=_request_token(request),
         turn_id=f"turn_{uuid.uuid4().hex[:12]}",
         conversation_id=body.conversationId or SseMessageFactory.new_conversation_id(),
@@ -77,9 +77,9 @@ def _blocked_message(blocked, fallback: str) -> str:
     return blocked.data.error_msg if blocked.data else fallback
 
 
-@router.post("/send/v1")
+@router.post("/rag/answer/v1")
 @limiter.limit("10/minute")
-async def chat(request: Request, body: ChatRequest):
+async def answer(request: Request, body: ChatRequest):
     """同步问答 —— 走流式通道缓冲拼接，一次性返回完整回答。"""
     logger.info(
         "同步聊天请求开始 | query_length=%s | reason=%s",
@@ -177,9 +177,9 @@ async def chat(request: Request, body: ChatRequest):
         await recorder.ensure_persisted()
 
 
-@router.post("/chat/v1")
+@router.post("/rag/stream/v1")
 @limiter.limit("10/minute")
-async def chat_stream(request: Request, body: ChatRequest):
+async def stream(request: Request, body: ChatRequest):
     """流式问答接口，SSE流式输出（W3C EventSource 标准格式）"""
     logger.info("流式聊天请求开始 | query_length=%s", len(body.query))
 
@@ -201,7 +201,7 @@ async def stream_chat_generator(
     request: Request,
     body: ChatRequest,
     scope: RequestScope,
-    recorder: ChatTurnRecorder,
+    recorder: RagTurnRecorder,
 ):
     """流式问答 SSE 生成器 —— 编排与同步端点一致，只是交付方式不同。
 

@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/router/rag/service/chat_core.py
+# app-server/src/com/damon/ming/router/rag/service/rag_core.py
 """
 推理核心 —— 同步 / 流式共用的 Phase 2 全流程。
 

@@ -131,7 +131,7 @@ cross-encoder 注意力 O(n²)，滑动窗口保持 `max_seq_len=1024` 最优：
 数据流（修改前，`top_k=None` 走 YAML 默认值 5）：
 
 ```
-chat_router.query_rag()  →  effective_top_k = 5
+rag_router.query_rag()  →  effective_top_k = 5
   → hybrid_retriever.retrieve(top_k=5, dense=10, sparse=10)
       → RRF top_k = 5 × 3 = 15
       → section 去重 → 5

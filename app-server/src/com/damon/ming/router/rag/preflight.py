@@ -2,7 +2,7 @@
 """
 推理前检查 —— 输入校验 + 护栏检测（chat 链路专用）。
 
-从 rag_router 抽出的前置检查，供同步 /send/v1 与流式 /chat/v1 复用：
+从 rag_router 抽出的前置检查，供 /rag/answer/v1 与 /rag/stream/v1 复用：
   - check_input:                  纯本地规则，零 IO，微秒级，拦无效/攻击输入
   - check_guardrail_with_timeout: 护栏 LLM 检测 + 独立超时 + 信号量限流
                                      （超时 fail-open 放行）

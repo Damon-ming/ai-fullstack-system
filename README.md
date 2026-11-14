@@ -279,8 +279,8 @@ docker compose down
 | POST | `/api/account/login/v1` | 登录获取 token |
 | POST | `/api/encryption/key/v1` | 获取 RSA 公钥 |
 | POST | `/api/encryption/session/v1` | 注册 AES 会话 |
-| POST | `/api/chat/send/v1` | 非流式聊天 |
-| POST | `/api/chat/chat/v1` | 流式聊天（SSE） |
+| POST | `/api/llm/rag/answer/v1` | 非流式 RAG 问答 |
+| POST | `/api/llm/rag/stream/v1` | 流式 RAG 问答（SSE） |
 | GET | `/api/history/list/v1` | 历史记录列表 |
 | GET | `/api/history/v1/{id}` | 历史记录详情 |
 | DELETE | `/api/history/v1/{id}` | 删除历史记录 |
@@ -301,6 +301,7 @@ docker compose down
 | 签名防重放 | nonce 缓存（10min TTL，LRU 10000 上限） |
 | 会话绑定 | session_id = (token + device_id)，加密密钥与设备绑定 |
 | 会话密钥存储 | 强制 DB 持久化，每次查询直查 DB，无内存会话密钥缓存；存储不可用时直接报错 |
+| 字段加密密钥 | 数据密钥和盲索引密钥存入 `field_encryption_keys`，启动时加载到进程缓存；当前尚未接入敏感字段读写 |
 | 速率限制 | slowapi 全端点 per-IP 限流 |
 | 输入验证 | 独立护栏模型，超时 fail-open |
 | 数据隔离 | 多用户共享知识库，对话历史按 token 隔离 |
@@ -329,8 +330,7 @@ docker compose down
 | 加密 | `config/encryption/` | RSA 密钥大小、TTL |
 | i18n | `config/i18n/` | 默认语言、支持语言列表 |
 | 上传 | `config/upload/` | 文件类型白名单、大小限制 |
-| RAG 线程池 | `config/rag/rag-runtime.yaml` → `rag.pipeline.thread_pools` | 检索、文档、推理辅助、重排及索引重建线程数 |
-| 通用线程池 | `config/thread/` | 暂为空，预留其他命名线程池配置 |
+| 线程池 | `config/thread/thread-pool-config.yaml` | 集中配置 RAG、数据库等分组的线程池；校验全局和分组 worker 上限 |
 | 推理网络超时 | `config/rag/rag-runtime.yaml` → `rag.transport.inference.timeout_seconds` | 推理客户端网络超时，独立于流水线执行预算 |
 | 网关路由 | `inference-gateway/config/gateway.yaml` | api_key → upstream 映射 |
 
@@ -352,7 +352,7 @@ max_model_len ≥ system_prompt + labels + max_context_tokens + query + 模板�
 |---|---|---|---|
 | `max_model_len` | 2048 | `inference-gateway/config/docker/docker-vllm.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
 | `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/rag/rag-runtime.yaml` → `rag.roles.inference.options.max_tokens` | 主推理的**输出** token 上限 |
-| `max_context_tokens` | 512 | `app-server/src/com/damon/ming/router/chat/chat_router.py` → `MAX_CONTEXT_TOKEN_BUDGET` | RAG 检索上下文的**输入** token 上限（章节拼接 + 全局摘要后的最终值） |
+| `max_context_tokens` | 512 | `app-server/src/com/damon/ming/router/rag/rag_router.py` → `MAX_CONTEXT_TOKEN_BUDGET` | RAG 检索上下文的**输入** token 上限（章节拼接 + 全局摘要后的最终值） |
 
 固定开销（zh_CN）：system prompt ≈ 230 token、参考资料/问题标签 ≈ 10 token、聊天模板 ≈ 15 token；query 未设上限。
 
