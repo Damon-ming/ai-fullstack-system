@@ -4,18 +4,18 @@
 
 chat_router 把本轮交付内容喂进来，结束时一次性落库：
   - 标题口径：用户问题前 40 字符（与历史列表展示一致）
-  - 落库走 run_in_executor，同步 DB I/O 不阻塞事件循环
+  - 落库通过统一线程池入口执行，同步 DB I/O 不阻塞事件循环
   - 异常吞掉返回 bool（落库失败不阻断主流程）
   - attempted 标记：调用方 finally 兜底只写一次
 
 落库字段直接对应 history_turns 表，写入能力由 history 服务提供。
 """
 
-import asyncio
-from concurrent.futures import Executor
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from src.com.damon.ming.ai.inference.base_inference import STREAM_TYPE_REASONING
+from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.history.service.history_service import HistoryService
 from src.com.damon.ming.utils.time import now
@@ -45,7 +45,7 @@ class ChatTurnRecorder:
         conversation_id: str,
         query: str,
         query_at: datetime,
-        db_executor: Executor,
+        db_executor: ThreadPoolExecutor,
     ) -> None:
         self._token = token
         self._turn_id = turn_id
@@ -141,11 +141,7 @@ class ChatTurnRecorder:
             return self.succeeded
         self.attempted = True
         try:
-            ok = bool(
-                await asyncio.get_running_loop().run_in_executor(
-                    self._db_executor, self._persist_sync
-                )
-            )
+            ok = bool(await run_in_pool(self._db_executor, self._persist_sync))
         except Exception:
             logger.exception("轮次落库异常 | conversation_id=%s", self._conversation_id)
             return False

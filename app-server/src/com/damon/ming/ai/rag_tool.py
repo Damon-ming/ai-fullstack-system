@@ -16,7 +16,7 @@ RAG 容器 —— 线程编排层 + 业务入口。
 
 线程模型（executor 注入模式）：
   - RAGContainer 是 ThreadPoolManager 的唯一持有者
-  - 同步 AI 函数通过 loop.run_in_executor(pool, fn, ...) 提交到线程池
+  - 同步 AI 函数通过 app.thread_pools 统一提交入口执行
   - AI 模块（HybridRetriever/SectionReconstructor）通过参数接收 executor 用于内部并行
   - 异步 AI 函数（SummaryService.run_summary）直接调用
 """
@@ -63,7 +63,11 @@ from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
     RagConfigLoader,
 )
-from src.com.damon.ming.app.thread_pools import RagThreadPools
+from src.com.damon.ming.app.thread_pools import (
+    RagThreadPools,
+    run_in_pool,
+    submit_to_pool,
+)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.time import now_iso
@@ -273,13 +277,11 @@ class RAGContainer:
         线程编排层：
           1. 锁外：按扩展名路由到对应数据源加载（IO/CPU 密集，无共享状态访问）
           2. 锁外：embedding 预计算（CPU/GPU 密集，多文件并行，不阻塞事件循环）
-          3. 锁内（threading.Lock + run_in_executor）：去重检查 + 向量写入（线程池，不阻塞事件循环）
+          3. 锁内（threading.Lock + 线程池）：去重检查 + 向量写入（不阻塞事件循环）
           4. 锁外：all_nodes 更新 + BM25 后台重建（异步，不阻塞上传响应）
 
         任一文件向量写入失败 → 抛 RuntimeError，由 upload_service 回滚该文件。
         """
-        loop = asyncio.get_running_loop()
-
         # ── 阶段 1：遍历所有已注册数据源加载文件 ──
         # 各数据源内部自行过滤不匹配的文件类型，返回空列表则跳过
         document_pool = self._thread_pools.document
@@ -287,7 +289,7 @@ class RAGContainer:
         for source_name in list_engines():
             cls = resolve_source(source_name)
             try:
-                docs = await loop.run_in_executor(
+                docs = await run_in_pool(
                     document_pool,
                     cls(self._knowledge_dir).load_specific_files,
                     file_paths,
@@ -326,7 +328,7 @@ class RAGContainer:
             file_sha256 = docs[0].metadata.get("file_sha256", "")
 
             try:
-                nodes = await loop.run_in_executor(
+                nodes = await run_in_pool(
                     document_pool,
                     self.splitter.split,
                     docs,
@@ -342,15 +344,15 @@ class RAGContainer:
         # embedding 不访问共享状态，无需持锁；锁内只做去重 + 写入（毫秒级）
         for key, nodes, file_sha256 in parsed:
             texts = [n.text for n in nodes]
-            embeddings = await loop.run_in_executor(
+            embeddings = await run_in_pool(
                 document_pool, self.embedder.embed_documents, texts
             )
             for node, vec in zip(nodes, embeddings):
                 node.embedding = vec
 
-        # ── 阶段 3：threading.Lock + run_in_executor 原子去重 + 入库 ──
+        # ── 阶段 3：threading.Lock + 线程池原子去重 + 入库 ──
         # threading.Lock 保证去重检查和写入的原子性；
-        # run_in_executor 卸载到线程池，不阻塞事件循环，聊天请求可继续响应。
+        # 统一线程池入口卸载同步任务，不阻塞事件循环，聊天请求可继续响应。
         #
         # 已知限制：锁临界区包含 get_by_metadata（SQLite 读）+ add_documents（SQLite 写），
         # 持锁期间 ~15-110ms，多用户并发上传时在此串行化排队。
@@ -405,7 +407,7 @@ class RAGContainer:
 
             return accepted, new_nodes, failed_shas
 
-        accepted, new_nodes, failed_shas = await loop.run_in_executor(
+        accepted, new_nodes, failed_shas = await run_in_pool(
             document_pool, _locked_ingest
         )
 
@@ -425,10 +427,10 @@ class RAGContainer:
         # bm25_pool 单 worker 串行处理，多任务排队后者覆盖前者，最终一致无冗余 CPU 浪费。
         if new_nodes:
             bm25_pool = self._thread_pools.bm25
-            # 锁内复制快照，避免 run_in_executor 读取时 all_nodes 被并发修改
+            # 锁内复制快照，避免后台重建读取时 all_nodes 被并发修改
             nodes_snapshot = list(self.all_nodes)
             build_args = (nodes_snapshot, len(new_nodes), len(nodes_snapshot))
-            loop.run_in_executor(bm25_pool, self._rebuild_bm25, *build_args)
+            submit_to_pool(bm25_pool, self._rebuild_bm25, *build_args)
             logger.info(
                 f"BM25后台重建已提交 | 新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
             )
@@ -511,7 +513,6 @@ class RAGContainer:
             rerank_top_k,
         )
 
-        loop = asyncio.get_running_loop()
         retrieval_pool = self._thread_pools.retrieval
         rerank_pool = self._thread_pools.rerank
 
@@ -521,7 +522,7 @@ class RAGContainer:
         try:
             # ── 阶段 1: 混合检索（参数全部来自 YAML 配置） ──
             # 传入 cancel_event，使稠密/稀疏检索之间可感知取消信号
-            raw_nodes = await loop.run_in_executor(
+            raw_nodes = await run_in_pool(
                 retrieval_pool,
                 lambda: self.hybrid_retriever.retrieve(
                     query=query,
@@ -551,7 +552,7 @@ class RAGContainer:
             # 长节点由 reranker 内部滑动窗口处理（逐窗口打分取 max），无需预压缩。
             # 使用独立池避免 rerank 长耗时占用 retrieval 线程（与 Stage 1/2 隔离）
             # 传入 cancel_event，使 rerank 内部可在取消信号下提前退出
-            ranked_nodes = await loop.run_in_executor(
+            ranked_nodes = await run_in_pool(
                 rerank_pool,
                 self.reranker.rerank,
                 query,

@@ -10,8 +10,9 @@ from typing import ClassVar
 
 from fastapi import UploadFile
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from src.com.damon.ming.app.tables.upload_tables import upload_records
 from src.com.damon.ming.ai.rag_tool import RAGContainer
+from src.com.damon.ming.app.tables.upload_tables import upload_records
+from src.com.damon.ming.app.thread_pools import run_in_pool, submit_to_pool
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
@@ -114,7 +115,6 @@ class UploadService:
         failed_files: list[dict] = []
         allowed_exts = sorted(upload_config.allowed_types.keys())
         total_uploaded = 0  # 累计已读字节数（总量上限防护）
-        loop = asyncio.get_running_loop()
 
         # 文件数量校验
         if len(file_list) > upload_config.max_files_per_request:
@@ -235,9 +235,7 @@ class UploadService:
 
                 if not cache_hit:
                     # ── 写盘（锁外，线程池，不阻塞事件循环）──
-                    await loop.run_in_executor(
-                        executor, _write_file_sync, file_path, content
-                    )
+                    await run_in_pool(executor, _write_file_sync, file_path, content)
                     written_to_disk = True
 
                     # ── 更新缓存 + 二次检查（锁内，极小临界区）──
@@ -294,7 +292,7 @@ class UploadService:
 
                     # ── 写入审计表（fire-and-forget，不阻塞上传响应）──
                     if db_conn is not None:
-                        loop.run_in_executor(
+                        submit_to_pool(
                             executor,
                             _record_upload_metadata,
                             db_conn,
@@ -415,7 +413,7 @@ def _rollback_file(
 
 
 def _write_file_sync(path: Path, content: bytes) -> None:
-    """同步写盘（在 run_in_executor 中调用，不阻塞事件循环）。
+    """同步写盘（在线程池中调用，不阻塞事件循环）。
 
     原子写入：先写 .tmp → fsync → rename。崩溃时残留 .tmp 不影响正式文件，
     启动扫描会自动跳过。
@@ -446,7 +444,7 @@ def _record_upload_metadata(
     token: str | None,
     device_id: str,
 ) -> None:
-    """同步写入 upload_records 审计表（在 run_in_executor 中调用）。
+    """同步写入 upload_records 审计表（在线程池中调用）。
 
     写入失败记录 error 日志，不影响上传主流程。
     fire-and-forget 场景下任务可能在服务重启时被取消，审计记录可能丢失，

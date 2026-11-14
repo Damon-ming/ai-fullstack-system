@@ -21,15 +21,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import secrets
-from concurrent.futures import Executor
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
-from functools import partial
 
 from src.com.damon.ming.app.encryption.base_key_store import EncryptionSessionRecord
 from src.com.damon.ming.app.encryption.key_management import DecryptedSessionKey
 from src.com.damon.ming.app.encryption.key_store import PgKeyStore
+from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.encryption.constants import AES_KEY_SIZES
 from src.com.damon.ming.encryption.key_store import unwrap_key, wrap_key
 from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
@@ -74,7 +73,7 @@ class SessionService:
         ttl_seconds: int,
         *,
         key_store: PgKeyStore,
-        db_executor: Executor,
+        db_executor: ThreadPoolExecutor,
     ) -> None:
         """
         参数：
@@ -171,9 +170,11 @@ class SessionService:
             return None
 
         # 直查 DB（卸载到线程池，不阻塞事件循环）
-        stored = await asyncio.get_running_loop().run_in_executor(
+        stored = await run_in_pool(
             self._db_executor,
-            partial(self._key_store.get_session, key_id, session_id=session_id),
+            self._key_store.get_session,
+            key_id,
+            session_id=session_id,
         )
         if stored is None:
             return None

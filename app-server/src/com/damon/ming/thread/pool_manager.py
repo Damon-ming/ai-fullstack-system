@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Self
 
 from src.com.damon.ming.log import pin
@@ -95,6 +95,17 @@ class ThreadPoolManager:
 
             self._pool_configs = dict(pool_configs)
             self._pools: dict[str, ThreadPoolExecutor] = {}
+            self._pool_metrics = {
+                name: {
+                    "submitted": 0,
+                    "running": 0,
+                    "completed": 0,
+                    "failed": 0,
+                    "cancelled": 0,
+                }
+                for name in self._pool_configs
+            }
+            self._metrics_lock = threading.Lock()
 
             for name, max_workers in self._pool_configs.items():
                 self._pools[name] = ThreadPoolExecutor(
@@ -155,6 +166,51 @@ class ThreadPoolManager:
 
         raise ValueError(f"线程池 '{name}' 不存在。已注册: {list(self._pools.keys())}")
 
+    def submit(self, pool: ThreadPoolExecutor, func, /, *args, **kwargs) -> Future:
+        """统一提交同步任务并跟踪池级任务指标。"""
+        pool_name = next(
+            (name for name, registered in self._pools.items() if registered is pool),
+            None,
+        )
+        if pool_name is None:
+            raise ValueError("只能向 ThreadPoolManager 管理的线程池提交任务")
+
+        def invoke():
+            with self._metrics_lock:
+                self._pool_metrics[pool_name]["running"] += 1
+            try:
+                return func(*args, **kwargs)
+            finally:
+                with self._metrics_lock:
+                    self._pool_metrics[pool_name]["running"] -= 1
+
+        with self._metrics_lock:
+            self._pool_metrics[pool_name]["submitted"] += 1
+        try:
+            future = pool.submit(invoke)
+        except Exception:
+            with self._metrics_lock:
+                self._pool_metrics[pool_name]["submitted"] -= 1
+            raise
+
+        def record_completion(done: Future) -> None:
+            with self._metrics_lock:
+                if done.cancelled():
+                    self._pool_metrics[pool_name]["cancelled"] += 1
+                elif done.exception() is not None:
+                    self._pool_metrics[pool_name]["failed"] += 1
+                else:
+                    self._pool_metrics[pool_name]["completed"] += 1
+
+        future.add_done_callback(record_completion)
+        return future
+
+    async def run(self, pool: ThreadPoolExecutor, func, /, *args, **kwargs) -> Any:
+        """提交同步任务并异步等待结果。"""
+        import asyncio
+
+        return await asyncio.wrap_future(self.submit(pool, func, *args, **kwargs))
+
     def create_request_scope(self, request_id: str | None = None) -> RequestScope:
         """创建请求级作用域，绑定一个 CancellationToken。
 
@@ -182,5 +238,6 @@ class ThreadPoolManager:
                 "active_threads": len(pool._threads)
                 if hasattr(pool, "_threads")
                 else "n/a",
+                **self._pool_metrics[name],
             }
         return stats

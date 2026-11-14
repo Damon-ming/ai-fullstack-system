@@ -6,11 +6,11 @@
 线程池通过参数注入，本模块只做同步计算。
 """
 
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 
 logger = pin("SectionReconstructor")
@@ -96,7 +96,7 @@ class SectionReconstructor:
 
         通过 vector_store.get_by_metadata_batch 合并为单次 OR 查询，
         将 N 次数据库扫描降为 1 次，显著减少向量查询耗时。
-        executor 由上层 RAGContainer 注入，通过 run_in_executor 提交到集中式线程池。
+        executor 由上层 RAGContainer 注入，通过统一线程池入口提交任务。
         """
         if not section_keys:
             return []
@@ -106,9 +106,8 @@ class SectionReconstructor:
             for file_sha256, section_id in section_keys
         ]
 
-        loop = asyncio.get_running_loop()
         try:
-            all_nodes = await loop.run_in_executor(
+            all_nodes = await run_in_pool(
                 executor,
                 vector_store.get_by_metadata_batch,
                 filters,
