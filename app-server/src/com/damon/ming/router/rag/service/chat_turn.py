@@ -1,8 +1,8 @@
-# app-server/src/com/damon/ming/router/chat/service/chat_turn.py
+# app-server/src/com/damon/ming/router/rag/service/chat_turn.py
 """
 一轮对话的落库记录器 —— chat 链路专用。
 
-chat_router 把本轮交付内容喂进来，结束时一次性落库：
+rag_router 把本轮交付内容喂进来，结束时一次性落库：
   - 标题口径：用户问题前 40 字符（与历史列表展示一致）
   - 落库通过统一线程池入口执行，同步 DB I/O 不阻塞事件循环
   - 异常吞掉返回 bool（落库失败不阻断主流程）

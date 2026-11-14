@@ -1,8 +1,8 @@
-# app-server/src/com/damon/ming/router/chat/service/chat_core.py
+# app-server/src/com/damon/ming/router/rag/service/chat_core.py
 """
 推理核心 —— 同步 / 流式共用的 Phase 2 全流程。
 
-从 chat_router 抽出：两个端点原本各自重复「RAG 检索 → 拼 messages →
+从 rag_router 抽出：两个端点原本各自重复「RAG 检索 → 拼 messages →
 进推理信号量 → 逐 token 拉取」整段，连同 system prompt 纯净性（防模板注入）
 与超时预算口径的约束一起收敛到一处。
 """
@@ -39,10 +39,10 @@ async def _build_prompt_messages(
     user message 中，避免 ref_content 中的模板占位符或恶意内容污染 system prompt。
     消息标签从 YAML 配置读取，与 system prompt 同文件管理。
     """
-    chat_cfg = _resolve_locale_text(app_state.chat.locales, get_locale())
+    chat_cfg = _resolve_locale_text(app_state.rag_runtime.locales, get_locale())
 
     # RAG 检索在推理信号量外执行（自身有线程池保护 + retrieval_sem 反压）
-    async with app_state.chat.retrieval_sem:
+    async with app_state.rag_runtime.retrieval_sem:
         logger.debug("开始执行 RAG 检索")
         ref_content = await app_state.ai.rag_app.query_rag(
             query,
@@ -74,11 +74,11 @@ async def generate_answer(
     CancelledError 不加内层捕获，直接穿透到外层统一处理，
     确保 infer_service 内部 finally 能正确关闭推理流。
     """
-    async with asyncio.timeout(app_state.chat.execution_timeout_seconds):
+    async with asyncio.timeout(app_state.rag_runtime.execution_timeout_seconds):
         prompt_messages = await _build_prompt_messages(
             app_state, query, cancellation_token
         )
-        async with app_state.chat.sem:
+        async with app_state.rag_runtime.sem:
             async for token in app_state.ai.infer_service.stream_generate(
                 model_name=app_state.ai.model_name,
                 messages=prompt_messages,

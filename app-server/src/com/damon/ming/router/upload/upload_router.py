@@ -35,7 +35,7 @@ async def save_files(
     )
 
     # 创建请求级作用域，绑定 CancellationToken
-    scope = request.app.state.ai.pool_mgr.create_request_scope()
+    scope = request.app.state.threads.pool_mgr.create_request_scope()
 
     try:
         # 复用 document 命名池写盘，统一线程资源管理

@@ -90,10 +90,11 @@ class AppInitializer:
         from src.com.damon.ming.app.app_state import (
             AiServices,
             AppConfig,
-            ChatRuntime,
             EncryptionState,
             GuardrailState,
+            RagRuntime,
             Storage,
+            ThreadRuntime,
         )
 
         app.state.config = AppConfig(
@@ -106,8 +107,9 @@ class AppInitializer:
             rag_app=self.rag_app,
             model_name=self.inference_model_name,
             options=self.inference_options,
-            pool_mgr=self.pool_mgr,
         )
+
+        app.state.threads = ThreadRuntime(pool_mgr=self.pool_mgr)
 
         app.state.guardrail = GuardrailState(
             engine=self.guardrail,
@@ -116,7 +118,7 @@ class AppInitializer:
         )
 
         # Semaphore 在 lifespan 内创建，绑定到正确的事件循环
-        app.state.chat = ChatRuntime(
+        app.state.rag_runtime = RagRuntime(
             sem=self.chat_sem,
             retrieval_sem=self.retrieval_sem,
             execution_timeout_seconds=self.execution_timeout_seconds,

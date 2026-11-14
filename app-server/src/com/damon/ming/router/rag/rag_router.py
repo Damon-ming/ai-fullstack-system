@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/router/chat/chat_router.py
+# app-server/src/com/damon/ming/router/rag/rag_router.py
 """
 chat 链路两个端点 —— 每个端点自包含完整编排。
 
@@ -32,15 +32,15 @@ from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
-from src.com.damon.ming.router.chat.failure import chat_error_event, chat_failure
-from src.com.damon.ming.router.chat.preflight import (
+from src.com.damon.ming.router.rag.failure import chat_error_event, chat_failure
+from src.com.damon.ming.router.rag.preflight import (
     check_guardrail_with_timeout,
     check_input,
 )
-from src.com.damon.ming.router.chat.schemas.bean import ChatRequest
-from src.com.damon.ming.router.chat.service.chat_core import generate_answer
-from src.com.damon.ming.router.chat.service.chat_turn import ChatTurnRecorder
-from src.com.damon.ming.router.chat.sse import SseEmitter, SseMessageFactory
+from src.com.damon.ming.router.rag.schemas.bean import ChatRequest
+from src.com.damon.ming.router.rag.service.chat_core import generate_answer
+from src.com.damon.ming.router.rag.service.chat_turn import ChatTurnRecorder
+from src.com.damon.ming.router.rag.sse import SseEmitter, SseMessageFactory
 from src.com.damon.ming.thread.pool_manager import RequestScope
 from src.com.damon.ming.utils.time import now
 from sse_starlette.sse import EventSourceResponse
@@ -89,7 +89,7 @@ async def chat(request: Request, body: ChatRequest):
 
     # ── 本轮对话的上下文 ─────────────────────────────────────────────
     # 请求作用域（含 CancellationToken，finally 统一 cleanup）
-    scope = request.app.state.ai.pool_mgr.create_request_scope()
+    scope = request.app.state.threads.pool_mgr.create_request_scope()
     # 落库记录器：turn_id 由工厂自动生成，conversation_id 供响应回传
     recorder = _create_recorder(request, body)
 
@@ -184,7 +184,7 @@ async def chat_stream(request: Request, body: ChatRequest):
     logger.info("流式聊天请求开始 | query_length=%s", len(body.query))
 
     # 本轮对话的上下文：请求作用域 + 落库记录器（turn_id 由工厂自动生成）
-    scope = request.app.state.ai.pool_mgr.create_request_scope()
+    scope = request.app.state.threads.pool_mgr.create_request_scope()
     recorder = _create_recorder(request, body)
 
     return EventSourceResponse(
@@ -207,7 +207,7 @@ async def stream_chat_generator(
 
     recorder 由外部工厂创建（turn_id 自动生成），本函数只负责编排与交付。
     """
-    emitter = SseEmitter(retry_ms=request.app.state.chat.retry_ms)
+    emitter = SseEmitter(retry_ms=request.app.state.rag_runtime.retry_ms)
     turn_id = recorder.turn_id
     conversation_id = recorder.conversation_id
 

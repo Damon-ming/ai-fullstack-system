@@ -54,7 +54,6 @@ class EncryptionSessionRow:
 _ENCRYPTION_INDEX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_enc_sessions_session_id ON encryption_sessions (session_id)",
     "CREATE INDEX IF NOT EXISTS idx_enc_sessions_expires ON encryption_sessions (expires_at)",
-    "ALTER TABLE field_encryption_keys DROP COLUMN IF EXISTS data_key_id",
 ]
 
 

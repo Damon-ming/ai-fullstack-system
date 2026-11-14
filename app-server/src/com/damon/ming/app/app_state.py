@@ -10,7 +10,8 @@
 
 分组：
   config      配置快照（启动时从 YAML 装载，运行期只读）
-  ai          AI 能力（推理引擎 / RAG / 线程池）
+  ai          AI 能力（推理引擎 / RAG）
+  threads     全局线程池运行时（跨 RAG、数据库等模块共享）
   guardrail   护栏（引擎 + 并发 + 超时）
   chat        聊天链路运行时（并发 / 超时 / 重试 / 多 locale 文案）
   storage     持久化
@@ -51,18 +52,22 @@ class AppConfig:
 
 @dataclass
 class AiServices:
-    """AI 能力 —— 推理引擎 / RAG / 线程池。
+    """AI 能力 —— 推理引擎 / RAG。
 
-    组名取 ai 而非 inference：线程池服务于检索、重排、文档解析等整条 AI
-    链路，"inference" 只涵盖模型推理那一段。与代码库模块名 src/com/damon/ming/ai/
-    保持一致。pool_mgr 归此组：它是 RAGContainer 的线程池持有者，upload 只是
-    借用 document 池做文档解析，并非聊天专属。
+    组名取 ai 而非 inference：AI 能力覆盖完整链路，与代码库模块名
+    src/com/damon/ming/ai/ 保持一致。
     """
 
     infer_service: BaseInferenceService
     rag_app: RAGContainer
     model_name: str
     options: dict
+
+
+@dataclass
+class ThreadRuntime:
+    """进程级线程池管理器，供各业务模块共享。"""
+
     pool_mgr: ThreadPoolManager
 
 
@@ -76,8 +81,8 @@ class GuardrailState:
 
 
 @dataclass
-class ChatRuntime:
-    """聊天链路运行时 —— 并发 / 超时 / 重试 / 多 locale 文案。
+class RagRuntime:
+    """RAG 聊天流程运行时 —— 并发 / 超时 / 重试 / 多 locale 文案。
 
     字段名去掉了与分组名重复的前缀：chat_sem → sem、execution_timeout_seconds 显式标注秒单位，
     与 request_context.py 中 ClientContext.token（而非 client_token）同一约定。

@@ -111,11 +111,6 @@ class SessionRow:
 # ---------------------------------------------------------------------------
 
 _ACCOUNT_INDEX_DDL = [
-    "ALTER TABLE sessions DROP COLUMN IF EXISTS issued_ua_hash",
-    "ALTER TABLE devices DROP COLUMN IF EXISTS platform",
-    "ALTER TABLE devices DROP COLUMN IF EXISTS screen",
-    "ALTER TABLE devices DROP COLUMN IF EXISTS lang",
-    "ALTER TABLE devices DROP COLUMN IF EXISTS tz",
     "CREATE INDEX IF NOT EXISTS idx_sessions_token_device ON sessions (token, device_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (token)",

@@ -1,16 +1,16 @@
-# app-server/src/com/damon/ming/router/chat/failure.py
+# app-server/src/com/damon/ming/router/rag/failure.py
 """
 chat 链路统一失败响应构造。
 
 同步返回体（BaseLLMFailedResponse）与 SSE error 事件共用一套错误码口径，
-把原先散落在 chat_router / preflight 各处的 BaseLLMFailedData 组装收敛到一处。
+把原先散落在 rag_router / preflight 各处的 BaseLLMFailedData 组装收敛到一处。
 """
 
 from src.com.damon.ming.ai.schemas.response import (
     BaseLLMFailedData,
     BaseLLMFailedResponse,
 )
-from src.com.damon.ming.router.chat.sse import SseMessageFactory
+from src.com.damon.ming.router.rag.sse import SseMessageFactory
 
 
 def chat_failure(
