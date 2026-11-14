@@ -8,7 +8,7 @@
 import json
 from abc import ABC, abstractmethod
 
-from src.com.damon.ming.app.encryption.key_management import SessionKey
+from src.com.damon.ming.app.encryption.key_management import DecryptedSessionKey
 from src.com.damon.ming.encryption.v1.crypto_engine import AesGcmEngine
 from src.com.damon.ming.exception import EncryptionError
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -37,7 +37,7 @@ class EncryptStrategy(ABC):
 
     @abstractmethod
     async def apply(
-        self, ctx: EncryptionContext, response: Response, session: SessionKey
+        self, ctx: EncryptionContext, response: Response, session: DecryptedSessionKey
     ) -> Response:
         """返回加密后的响应。失败时抛 EncryptionError（fail-closed，不降级明文）。"""
         raise NotImplementedError
@@ -50,7 +50,7 @@ class JsonEncryptStrategy(EncryptStrategy):
         return is_json_response(response)
 
     async def apply(
-        self, ctx: EncryptionContext, response: Response, session: SessionKey
+        self, ctx: EncryptionContext, response: Response, session: DecryptedSessionKey
     ) -> Response:
         """加密 JSON 响应。
 
@@ -95,6 +95,6 @@ class SseEncryptStrategy(EncryptStrategy):
         return is_event_stream_response(response)
 
     async def apply(
-        self, ctx: EncryptionContext, response: Response, session: SessionKey
+        self, ctx: EncryptionContext, response: Response, session: DecryptedSessionKey
     ) -> Response:
         return encrypt_sse_response(response, session)

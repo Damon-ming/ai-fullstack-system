@@ -312,6 +312,10 @@ class AppInitializer:
 
         # 2. 应用密钥材料生命周期（供字段加解密和盲索引使用）
         #    由使用方（FieldEncryptor）构造时注入，不再另存全局副本
+        # TODO: 接入敏感字段入库加密前，先将数据密钥和盲索引密钥用 KEK 加密持久化，
+        # 保证重启可恢复，避免当前随机初始化导致历史密文无法解密、盲索引失效。
+        # 后续确认加密范围（手机号/昵称/对话内容等），在存储层接入 FieldEncryptor；
+        # 手机号查询及唯一性使用盲索引，并提供历史明文迁移、验证和清除流程。
         self.key_material = KeyMaterial(data_key_id=data_key_id)
         self.key_material.initialize()
 

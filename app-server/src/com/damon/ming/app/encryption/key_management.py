@@ -3,7 +3,7 @@
 应用密钥生命周期管理 —— 业务层。
 
 职责：
-  - SessionKey 数据模型（AES 会话密钥）
+  - DecryptedSessionKey 数据模型（AES 会话密钥）
   - 数据加密密钥版本轮换（用于数据库字段加解密）
   - 盲索引密钥管理
 
@@ -32,7 +32,7 @@ logger = pin("app.encryption.key_management")
 
 
 @dataclass
-class SessionKey:
+class DecryptedSessionKey:
     """已解密的 AES 会话密钥及其有效期、使用时间。"""
 
     key_id: str

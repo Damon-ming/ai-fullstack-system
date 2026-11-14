@@ -26,7 +26,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from src.com.damon.ming.app.encryption.base_key_store import EncryptionSessionRecord
-from src.com.damon.ming.app.encryption.key_management import SessionKey
+from src.com.damon.ming.app.encryption.key_management import DecryptedSessionKey
 from src.com.damon.ming.app.encryption.key_store import PgKeyStore
 from src.com.damon.ming.encryption.constants import AES_KEY_SIZES
 from src.com.damon.ming.encryption.key_store import unwrap_key, wrap_key
@@ -99,7 +99,7 @@ class SessionService:
 
     def register_and_replace(
         self, encrypted_aes_key: bytes, session_id: str
-    ) -> SessionKey:
+    ) -> DecryptedSessionKey:
         """注册新 AES 会话并原子替换该 session_id 旧记录。
 
         流程：
@@ -115,7 +115,7 @@ class SessionService:
           session_id:        业务会话标识
 
         返回：
-          SessionKey（含 key_id）
+          DecryptedSessionKey（含 key_id）
         """
         # 1. RSA 解密
         aes_key = self._rsa.decrypt(encrypted_aes_key)
@@ -130,7 +130,7 @@ class SessionService:
 
         # 2. 生成 keyId
         key_id = secrets.token_urlsafe(24)
-        session = SessionKey(
+        session = DecryptedSessionKey(
             key_id=key_id,
             aes_key=aes_key,
             ttl_seconds=self._ttl_seconds,
@@ -151,7 +151,7 @@ class SessionService:
 
     async def get_session(
         self, key_id: str, session_id: str | None = None
-    ) -> SessionKey | None:
+    ) -> DecryptedSessionKey | None:
         """查找会话（直查 DB，不走内存缓存）。
 
         DB 为唯一真源，保证过期/删除/续签等状态变更即时生效。
@@ -167,12 +167,9 @@ class SessionService:
             return None
 
         # 直查 DB（卸载到线程池，不阻塞事件循环）
-        loop = asyncio.get_running_loop()
-
-        def _db_lookup() -> EncryptionSessionRecord | None:
-            return self._key_store.get_session(key_id, session_id=session_id)
-
-        stored = await loop.run_in_executor(None, _db_lookup)
+        stored = await asyncio.to_thread(
+            self._key_store.get_session, key_id, session_id=session_id
+        )
         if stored is None:
             return None
         if not stored.session_id:
@@ -184,7 +181,7 @@ class SessionService:
         except Exception:
             return None
 
-        return SessionKey(
+        return DecryptedSessionKey(
             key_id=stored.key_id,
             aes_key=aes_key,
             ttl_seconds=_stored_ttl_seconds(stored),

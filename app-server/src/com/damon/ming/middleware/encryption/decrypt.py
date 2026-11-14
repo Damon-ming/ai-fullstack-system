@@ -9,7 +9,7 @@
 import json
 from abc import ABC, abstractmethod
 
-from src.com.damon.ming.app.encryption.key_management import SessionKey
+from src.com.damon.ming.app.encryption.key_management import DecryptedSessionKey
 from src.com.damon.ming.encryption.constants import (
     SIGNATURE_TIMESTAMP_TOLERANCE_MS,
 )
@@ -44,7 +44,7 @@ logger = pin("middleware.encryption")
 _EXCLUDED_FROM_SIGNATURE = {"signature", "timestamp", "nonce"}
 
 
-def _key_id_preview(session: SessionKey) -> str:
+def _key_id_preview(session: DecryptedSessionKey) -> str:
     """日志用的 keyId 摘要（避免完整 keyId 落日志）。"""
     return session.key_id[:12] + "..."
 

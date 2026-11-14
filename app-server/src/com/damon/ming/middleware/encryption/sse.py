@@ -18,7 +18,7 @@
 
 from collections.abc import AsyncIterable, AsyncIterator
 
-from src.com.damon.ming.app.encryption.key_management import SessionKey
+from src.com.damon.ming.app.encryption.key_management import DecryptedSessionKey
 from src.com.damon.ming.encryption.v1.crypto_engine import AesGcmEngine
 from src.com.damon.ming.exception import EncryptionError
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -57,7 +57,7 @@ class _EventBuffer:
         self._data.clear()
         self.size = 0
 
-    def render(self, session: SessionKey) -> bytes:
+    def render(self, session: DecryptedSessionKey) -> bytes:
         """渲染事件：data 行合并为一行密文，其余行原样保留。"""
         if not self._data:
             return b"".join(line + t for line, t in self._lines)
@@ -84,7 +84,7 @@ class _EventBuffer:
 
 async def encrypt_sse_stream(
     source: AsyncIterable[bytes],
-    session: SessionKey,
+    session: DecryptedSessionKey,
     max_event_bytes: int = MAX_EVENT_BYTES,
 ) -> AsyncIterator[bytes]:
     """逐事件加密 SSE 字节流（见模块 docstring 的线格式约定）。"""
@@ -120,7 +120,7 @@ async def encrypt_sse_stream(
         yield event.render(session)
 
 
-def encrypt_sse_response(response: Response, session: SessionKey) -> Response:
+def encrypt_sse_response(response: Response, session: DecryptedSessionKey) -> Response:
     """把 SSE 响应的字节流替换为逐事件加密后的流。
 
     只替换 body_iterator，其余头（content-type / cache-control /
