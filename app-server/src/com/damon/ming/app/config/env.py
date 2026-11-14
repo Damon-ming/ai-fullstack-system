@@ -21,7 +21,6 @@ _VAR_LOG_LEVEL = "LOG_LEVEL"
 _VAR_DB_PREFIX = "DB_"
 _VAR_INFERENCE_SERVER = "INFERENCE_SERVER"
 _VAR_INFERENCE_GATEWAY_URL = "INFERENCE_GATEWAY_URL"
-_VAR_INFERENCE_TIMEOUT = "INFERENCE_TIMEOUT"
 _VAR_INFERENCE_API_KEYS = "INFERENCE_API_KEYS"
 _VAR_INFERENCE_API_KEY_PREFIX = "INFERENCE_API_KEY_"
 
@@ -65,21 +64,28 @@ def get_db_override(field: str) -> str | None:
     return os.environ.get(f"{_VAR_DB_PREFIX}{field.upper()}")
 
 
+def get_required_db_env_values() -> dict[str, str | None]:
+    """读取启动预检所需的数据库变量，保留变量名供调用方报告缺失项。"""
+    return {
+        f"{_VAR_DB_PREFIX}{field.upper()}": get_db_override(field)
+        for field in ("name", "user", "password")
+    }
+
+
 def get_inference_server() -> str:
-    """推理后端类型，默认 ollama。"""
-    return os.environ.get(_VAR_INFERENCE_SERVER, "ollama")
+    """推理后端类型，必填，无默认值。"""
+    value = os.environ.get(_VAR_INFERENCE_SERVER)
+    if not value or not value.strip():
+        raise ValueError(f"环境变量 {_VAR_INFERENCE_SERVER} 未设置或为空")
+    return value
 
 
 def get_inference_gateway_url() -> str:
-    """推理网关地址。"""
-    return os.environ.get(
-        _VAR_INFERENCE_GATEWAY_URL, "http://inference-gateway:8080/v1"
-    )
-
-
-def get_inference_timeout() -> float:
-    """推理超时秒数，默认 180；无效数字直接抛异常。"""
-    return float(os.environ.get(_VAR_INFERENCE_TIMEOUT, "180"))
+    """推理网关地址，必填，无默认值。"""
+    value = os.environ.get(_VAR_INFERENCE_GATEWAY_URL)
+    if not value or not value.strip():
+        raise ValueError(f"环境变量 {_VAR_INFERENCE_GATEWAY_URL} 未设置或为空")
+    return value
 
 
 def get_inference_api_keys() -> dict[str, str]:

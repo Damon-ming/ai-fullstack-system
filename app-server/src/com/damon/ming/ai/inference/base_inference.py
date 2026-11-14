@@ -44,7 +44,7 @@ class InferenceParams:
     """
 
     base_url: str
-    timeout: int
+    timeout: float
     api_key: str
     extra: dict[str, Any] = field(default_factory=dict)
 

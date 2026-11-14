@@ -1,9 +1,7 @@
 # app-server/src/com/damon/ming/precheck/env_precheck.py
 """环境变量启动校验 —— 缺失关键配置时返回错误列表。"""
 
-import os
-
-from src.com.damon.ming.app.config.env import get_master_key
+from src.com.damon.ming.app.config.env import get_master_key, get_required_db_env_values
 from src.com.damon.ming.debug import get_env, is_debug
 from src.com.damon.ming.encryption.constants import MASTER_KEY_MIN_LENGTH
 from src.com.damon.ming.log import pin
@@ -82,8 +80,8 @@ def _check_database() -> list[str]:
     errors = []
 
     # 环境变量预检：缺失时直接指出变量名，不用等到 DbConfigLoader 报错
-    for env_key in ("DB_NAME", "DB_USER", "DB_PASSWORD"):
-        if not os.environ.get(env_key):
+    for env_key, env_value in get_required_db_env_values().items():
+        if not env_value:
             errors.append(f"数据库环境变量 {env_key} 未设置（请检查 .env 文件）")
 
     if errors:

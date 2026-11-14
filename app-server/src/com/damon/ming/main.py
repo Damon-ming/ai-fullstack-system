@@ -9,13 +9,12 @@
 【必须设置】
   MASTER_KEY              加密主密钥（≥32 字符，见 encryption/constants.py）
   INFERENCE_API_KEYS      各角色 api_key 映射 JSON（须覆盖 roles 段全部角色，缺失则启动报错）
+  INFERENCE_SERVER        推理后端：ollama / vllm / sglang，无默认值
+  INFERENCE_GATEWAY_URL   推理网关地址，无默认值
 
 【可选（本地开发用，生产镜像通过 build_info.py 固化）】
   APP_ENV                 环境标志：debug / release（默认 debug）
   LOG_LEVEL               日志级别：DEBUG / INFO / WARNING / ERROR（默认 INFO）
-  INFERENCE_SERVER        推理后端：ollama / vllm / sglang（默认 ollama，连接信息由环境变量注入）
-  INFERENCE_GATEWAY_URL   推理网关地址（默认 http://inference-gateway:8080/v1）
-  INFERENCE_TIMEOUT       推理超时秒数（默认 180）
   INFERENCE_TEMPERATURE        聊天采样温度（环境变量覆盖 rag-runtime.yaml，格式 ROLE_PARAM）【未实现】
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 

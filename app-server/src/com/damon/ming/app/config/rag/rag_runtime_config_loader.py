@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -35,14 +36,12 @@ from src.com.damon.ming.app.config.env import (
     get_inference_api_keys,
     get_inference_gateway_url,
     get_inference_server,
-    get_inference_timeout,
 )
 from src.com.damon.ming.app.config.thread import ThreadPoolConfigLoader
 
 # ── 连接参数来源：环境变量（由 docker-compose 注入）────────────────────
 # INFERENCE_GATEWAY_URL: 推理网关地址，如 http://inference-gateway:8080/v1
 # INFERENCE_SERVER:      引擎类型，如 ollama / vllm / sglang
-# INFERENCE_TIMEOUT:     超时秒数（可选，默认 180）
 # INFERENCE_API_KEYS:    JSON 字典 {role: api_key}（必须覆盖所有角色，否则启动报错）
 # INFERENCE_API_KEY_{ROLE}: 单个角色的 api_key（优先级高于 JSON）
 
@@ -74,6 +73,7 @@ class RagConfig:
     retrieval_max_concurrency: int
     guardrail_max_concurrency: int
     guardrail_timeout_seconds: int
+    inference_timeout_seconds: float  # 推理客户端网络超时，与执行预算独立
     sse_retry_ms: int
     roles: dict[str, ModelEntry]
     locales: dict[str, LocaleConfig]
@@ -143,11 +143,10 @@ class RagConfigLoader:
     # ---- 私有：引擎装配 -------------------------------------------------
 
     def _assemble_roles(
-        self, roles_raw: dict[str, dict[str, Any]]
+        self, roles_raw: dict[str, dict[str, Any]], *, timeout_seconds: float
     ) -> dict[str, ModelEntry]:
         engine_type = get_inference_server()
         base_url = get_inference_gateway_url()
-        timeout = get_inference_timeout()
         api_keys = get_inference_api_keys()
 
         # 所有角色必须有 api_key 配置
@@ -171,7 +170,7 @@ class RagConfigLoader:
                 engines[engine_key] = impl_cls(
                     InferenceParams(
                         base_url=base_url,
-                        timeout=timeout,
+                        timeout=timeout_seconds,
                         api_key=api_key,
                     )
                 )
@@ -199,6 +198,9 @@ class RagConfigLoader:
             shared_inference = pipeline["shared_inference"]
             retrieval = pipeline["retrieval"]
             guardrail = pipeline["guardrail"]
+            timeout_seconds = self._parse_inference_timeout(
+                rag["transport"]["inference"]["timeout_seconds"]
+            )
             return RagConfig(
                 thread_pools=self._load_thread_pools(pipeline.get("thread_pools")),
                 execution_timeout_seconds=int(pipeline["execution_timeout_seconds"]),
@@ -206,12 +208,23 @@ class RagConfigLoader:
                 retrieval_max_concurrency=int(retrieval["max_concurrency"]),
                 guardrail_max_concurrency=int(guardrail["max_concurrency"]),
                 guardrail_timeout_seconds=int(guardrail["timeout_seconds"]),
+                inference_timeout_seconds=timeout_seconds,
                 sse_retry_ms=int(rag["transport"]["sse"]["retry_ms"]),
-                roles=self._assemble_roles(self._read_roles(rag)),
+                roles=self._assemble_roles(self._read_roles(rag), timeout_seconds=timeout_seconds),
                 locales=self._load_rag_locales(rag.get("locales")),
             )
         except (KeyError, TypeError) as e:
             raise ValueError(f"rag 缺少必填字段: {e}") from e
+
+    @staticmethod
+    def _parse_inference_timeout(value: object) -> float:
+        """网络超时必须是有限正数，不提供缺省值。"""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("rag.transport.inference.timeout_seconds 必须是正数")
+        timeout = float(value)
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("rag.transport.inference.timeout_seconds 必须是有限正数")
+        return timeout
 
     def _load_thread_pools(self, raw: object) -> dict[str, int]:
         pools = ThreadPoolConfigLoader.parse_pools(raw)

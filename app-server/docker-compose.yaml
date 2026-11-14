@@ -3,7 +3,7 @@
 #
 # 连接 inference-gateway 的方式：
 #   INFERENCE_SERVER  推理后端类型：ollama / vllm / sglang（决定连接配置）
-#   INFERENCE_GATEWAY_URL 网关地址（默认 http://inference-gateway:8080/v1）
+#   INFERENCE_GATEWAY_URL 网关地址（在本文件中显式注入）
 #
 # 环境变量全部来自根目录 .env，不在此文件重复定义
 

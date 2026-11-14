@@ -318,6 +318,7 @@ docker compose down
 | 上传 | `config/upload/` | 文件类型白名单、大小限制 |
 | RAG 线程池 | `config/rag/rag-runtime.yaml` → `rag.pipeline.thread_pools` | 检索、文档、推理辅助、重排及索引重建线程数 |
 | 通用线程池 | `config/thread/` | 暂为空，预留其他命名线程池配置 |
+| 推理网络超时 | `config/rag/rag-runtime.yaml` → `rag.transport.inference.timeout_seconds` | 推理客户端网络超时，独立于流水线执行预算 |
 | 网关路由 | `inference-gateway/config/gateway.yaml` | api_key → upstream 映射 |
 
 环境变量覆盖：
