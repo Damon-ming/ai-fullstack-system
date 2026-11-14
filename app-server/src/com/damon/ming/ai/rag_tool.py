@@ -63,8 +63,9 @@ from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
     RagConfigLoader,
 )
+from src.com.damon.ming.app.thread_pools import RagThreadPools
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.thread import CancellationToken, ThreadPoolManager
+from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.time import now_iso
 
 logger = pin("ai.rag")
@@ -74,7 +75,7 @@ _rag_instance_lock = threading.Lock()
 
 
 def get_rag_container(
-    pool_mgr: ThreadPoolManager,
+    thread_pools: RagThreadPools,
     infer_sem: asyncio.Semaphore,
     knowledge_dir: str,
     loader: RagConfigLoader,
@@ -82,7 +83,7 @@ def get_rag_container(
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
     Args:
-        pool_mgr: 由 AppInitializer 注入的全局线程池管理器（必填）。
+        thread_pools: 由 AppInitializer 注入的 RAG 命名线程池集合（必填）。
         infer_sem: 推理信号量（与主推理共用，必填）。
         knowledge_dir: 知识库目录绝对路径（由 app.config 注入，必填）。
         loader: 推理配置加载器（由 AppInitializer 注入，必填）。
@@ -92,7 +93,7 @@ def get_rag_container(
         with _rag_instance_lock:
             if _rag_instance is None:
                 _rag_instance = RAGContainer(
-                    pool_mgr=pool_mgr,
+                    thread_pools=thread_pools,
                     infer_sem=infer_sem,
                     knowledge_dir=knowledge_dir,
                     loader=loader,
@@ -104,14 +105,13 @@ def get_rag_container(
 class RAGContainer:
     def __init__(
         self,
-        pool_mgr: ThreadPoolManager | None = None,
+        thread_pools: RagThreadPools,
         infer_sem: asyncio.Semaphore | None = None,
         knowledge_dir: str = "",
         loader: RagConfigLoader | None = None,
     ):
         logger.info("RAG 容器初始化开始")
-        # 线程池管理器：优先使用注入的全局实例，否则回退单例
-        self._pool_mgr = pool_mgr if pool_mgr is not None else ThreadPoolManager()
+        self._thread_pools = thread_pools
         # 推理信号量：所有 LLM 调用（主推理 + 摘要 + 压缩）共享同一上限
         self._infer_sem = infer_sem
         # 知识库目录：由 app.config 注入，不再硬编码，不合法直接抛异常
@@ -279,11 +279,10 @@ class RAGContainer:
         任一文件向量写入失败 → 抛 RuntimeError，由 upload_service 回滚该文件。
         """
         loop = asyncio.get_running_loop()
-        pool_mgr = self._pool_mgr
 
         # ── 阶段 1：遍历所有已注册数据源加载文件 ──
         # 各数据源内部自行过滤不匹配的文件类型，返回空列表则跳过
-        document_pool = pool_mgr.get_pool("document")
+        document_pool = self._thread_pools.document
         all_loaded_docs: list = []
         for source_name in list_engines():
             cls = resolve_source(source_name)
@@ -425,7 +424,7 @@ class RAGContainer:
         # 独立于 retrieval_pool，避免 BM25 重建（CPU 密集）饿死聊天检索线程。
         # bm25_pool 单 worker 串行处理，多任务排队后者覆盖前者，最终一致无冗余 CPU 浪费。
         if new_nodes:
-            bm25_pool = pool_mgr.get_pool("bm25")
+            bm25_pool = self._thread_pools.bm25
             # 锁内复制快照，避免 run_in_executor 读取时 all_nodes 被并发修改
             nodes_snapshot = list(self.all_nodes)
             build_args = (nodes_snapshot, len(new_nodes), len(nodes_snapshot))
@@ -513,9 +512,8 @@ class RAGContainer:
         )
 
         loop = asyncio.get_running_loop()
-        pool_mgr = self._pool_mgr
-        retrieval_pool = pool_mgr.get_pool("retrieval")
-        rerank_pool = pool_mgr.get_pool("rerank")
+        retrieval_pool = self._thread_pools.retrieval
+        rerank_pool = self._thread_pools.rerank
 
         # 协作取消信号：超时或客户端断开时通知线程池中的 rerank 提前退出
         cancel_event = threading.Event()

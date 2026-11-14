@@ -292,6 +292,7 @@ class AppInitializer:
         """加密体系: RSAKeyPair(纯技术)+ KeyMaterial(数据密钥)+ SessionService(业务协调)。"""
         from src.com.damon.ming.app.encryption.key_management import KeyMaterial
         from src.com.damon.ming.app.encryption.session_service import SessionService
+        from src.com.damon.ming.app.thread_pools import get_database_query_pool
         from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
 
         self._enc_config = self._load_encryption_config()
@@ -319,7 +320,7 @@ class AppInitializer:
             kek=kek,
             ttl_seconds=ttl_seconds,
             key_store=key_store,
-            db_executor=self.pool_mgr.get_pool("database_query"),
+            db_executor=get_database_query_pool(),
         )
         self.session_service.initialize()
 
@@ -425,13 +426,14 @@ class AppInitializer:
         from src.com.damon.ming.ai.registry.inference_registry import (
             register_all_inferences,
         )
+        from src.com.damon.ming.app.thread_pools import get_rag_thread_pools
 
         register_all_inferences()
         # infer_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
         # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
         # loader 同为注入，保证全进程只有一套推理引擎
         self.rag_app = get_rag_container(
-            pool_mgr=self.pool_mgr,
+            thread_pools=get_rag_thread_pools(),
             infer_sem=self.chat_sem,
             knowledge_dir=self.system_config.knowledge_dir,
             loader=self._loader,

@@ -2,6 +2,7 @@
 import asyncio
 
 from fastapi import APIRouter, File, Request, UploadFile
+from src.com.damon.ming.app.thread_pools import get_document_pool
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.log import pin
@@ -39,7 +40,7 @@ async def save_files(
     try:
         # 复用 document 命名池写盘，统一线程资源管理
         # 逐文件原子提交：写盘 + 缓存 + 向量库入库，任一步失败则回滚该文件
-        document_pool = request.app.state.ai.pool_mgr.get_pool("document")
+        document_pool = get_document_pool()
         result = await UploadService.batch_save_files(
             file_list=files,
             upload_config=request.app.state.config.upload_config,
