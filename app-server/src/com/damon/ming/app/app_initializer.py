@@ -290,7 +290,7 @@ class AppInitializer:
 
     def _init_encryption(self) -> None:
         """加密体系: RSAKeyPair(纯技术)+ KeyMaterial(数据密钥)+ SessionService(业务协调)。"""
-        from src.com.damon.ming.app.encryption.key_management import KeyMaterial
+        from src.com.damon.ming.app.encryption.key_material import KeyMaterial
         from src.com.damon.ming.app.encryption.session_service import SessionService
         from src.com.damon.ming.app.thread_pools import get_database_query_pool
         from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair

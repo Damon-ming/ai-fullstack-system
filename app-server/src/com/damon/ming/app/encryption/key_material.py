@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/app/encryption/key_management.py
+# app-server/src/com/damon/ming/app/encryption/key_material.py
 """
 应用密钥生命周期管理 —— 业务层。
 
@@ -23,7 +23,7 @@ from src.com.damon.ming.encryption.v1.field_encryptor import KeyProvider
 from src.com.damon.ming.exception import EncryptionError
 from src.com.damon.ming.log import pin
 
-logger = pin("app.encryption.key_management")
+logger = pin("app.encryption.key_material")
 
 
 # ---------------------------------------------------------------------------

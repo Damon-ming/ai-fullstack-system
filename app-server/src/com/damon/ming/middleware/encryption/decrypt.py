@@ -9,7 +9,7 @@
 import json
 from abc import ABC, abstractmethod
 
-from src.com.damon.ming.app.encryption.key_management import DecryptedSessionKey
+from src.com.damon.ming.app.encryption.key_material import DecryptedSessionKey
 from src.com.damon.ming.encryption.constants import (
     SIGNATURE_TIMESTAMP_TOLERANCE_MS,
 )

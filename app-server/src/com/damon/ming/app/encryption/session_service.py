@@ -26,7 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 from src.com.damon.ming.app.encryption.base_key_store import EncryptionSessionRecord
-from src.com.damon.ming.app.encryption.key_management import DecryptedSessionKey
+from src.com.damon.ming.app.encryption.key_material import DecryptedSessionKey
 from src.com.damon.ming.app.encryption.key_store import PgKeyStore
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.encryption.constants import AES_KEY_SIZES
