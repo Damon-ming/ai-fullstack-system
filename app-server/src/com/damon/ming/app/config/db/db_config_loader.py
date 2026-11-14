@@ -18,6 +18,7 @@ db 模块通过 DbConfig 数据类接收参数，不感知配置来源。
 import os
 
 from src.com.damon.ming.app.config._yaml import load_yaml
+from src.com.damon.ming.app.config.env import get_db_override
 
 
 class DbConfigLoader:
@@ -61,11 +62,11 @@ class DbConfigLoader:
         # 合并：环境变量 > YAML（环境变量名 = DB_ + 字段名大写）
         merged = dict(raw)
         for key in self.KEYS:
-            env_value = os.environ.get(f"DB_{key.upper()}")
+            env_value = get_db_override(key)
             if env_value is not None:
                 merged[key] = env_value
         for key in self.BOOL_KEYS:
-            env_value = os.environ.get(f"DB_{key.upper()}")
+            env_value = get_db_override(key)
             if env_value is not None:
                 merged[key] = env_value
 

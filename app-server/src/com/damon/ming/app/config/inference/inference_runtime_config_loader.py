@@ -19,7 +19,6 @@
 #   cfg.roles["chat"].options["max_tokens"]  # roles 段原始参数
 #   cfg.roles["chat"].engine                 # 该角色绑定的引擎实例
 
-import json
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -30,6 +29,12 @@ from src.com.damon.ming.ai.inference.base_inference import (
     InferenceParams,
 )
 from src.com.damon.ming.app.config._yaml import load_yaml
+from src.com.damon.ming.app.config.env import (
+    get_inference_api_keys,
+    get_inference_gateway_url,
+    get_inference_server,
+    get_inference_timeout,
+)
 
 # ── 连接参数来源：环境变量（由 docker-compose 注入）────────────────────
 # INFERENCE_GATEWAY_URL: 推理网关地址，如 http://inference-gateway:8080/v1
@@ -104,40 +109,6 @@ class InferenceRuntimeConfig:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 环境变量解析
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def _resolve_api_keys() -> dict[str, str]:
-    """解析各角色的 api_key。
-
-    来源（优先级从高到低）：
-      1. INFERENCE_API_KEY_{ROLE} 环境变量（单个角色）
-      2. INFERENCE_API_KEYS JSON 环境变量（批量）
-
-    未配置的角色不兜底，由 load() 报错。
-    """
-    keys: dict[str, str] = {}
-
-    # 批量 JSON
-    json_str = os.environ.get("INFERENCE_API_KEYS", "")
-    if json_str:
-        try:
-            keys.update(json.loads(json_str))
-        except json.JSONDecodeError:
-            pass
-
-    # 单个角色（覆盖 JSON + 拾取未在 JSON 中声明的角色）
-    for env_key, env_val in os.environ.items():
-        prefix = "INFERENCE_API_KEY_"
-        if env_key.startswith(prefix) and env_val:
-            role = env_key[len(prefix) :].lower()
-            keys[role] = env_val
-
-    return keys
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # 加载器
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -179,12 +150,10 @@ class InferenceConfigLoader:
     def _assemble_roles(
         self, roles_raw: dict[str, dict[str, Any]]
     ) -> dict[str, ModelEntry]:
-        engine_type = os.environ.get("INFERENCE_SERVER", "ollama")
-        base_url = os.environ.get(
-            "INFERENCE_GATEWAY_URL", "http://inference-gateway:8080/v1"
-        )
-        timeout = float(os.environ.get("INFERENCE_TIMEOUT", "180"))
-        api_keys = _resolve_api_keys()
+        engine_type = get_inference_server()
+        base_url = get_inference_gateway_url()
+        timeout = get_inference_timeout()
+        api_keys = get_inference_api_keys()
 
         # 所有角色必须有 api_key 配置
         missing_roles = [r for r in roles_raw if r not in api_keys]

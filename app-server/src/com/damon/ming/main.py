@@ -24,8 +24,8 @@
   app/config/encryption/encryption-config.yaml  加密业务配置（RSA 密钥大小、会话 TTL、sign_context 等，由 app 层注入 encryption 模块）
 
 【环境变量读取入口】
-  裸变量（无 YAML 归属）集中在 app/config/env.py 定义和读取，新增变量请加到该模块。
-  DB_* / INFERENCE_* 等带 YAML 归属的变量仍在各自 loader 中读取。
+  环境变量统一在 app/config/env.py 定义和读取，新增变量请加到该模块。
+  各 loader 通过 getter 取值，负责与 YAML 合并及业务校验。
 
 【构建时注入（生产环境）】
   src/com/damon/ming/debug/build_info.py  由 Dockerfile/CI 在镜像构建时生成
