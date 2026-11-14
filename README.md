@@ -479,7 +479,6 @@ ThreadPoolManager（进程单例）
   │  { encryptedAesKey, session_id }  │
   │                                   ├── RSA 解密 → AES 密钥
   │                                   ├── 生成 key_id
-  │                                   ├── 内存表 + DB 原子写入
   │                                   └── 撤销同一 session_id 旧密钥
   │←──── { keyId, expiresIn } ────────┤
   │                                   │

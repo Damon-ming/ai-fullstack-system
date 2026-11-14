@@ -26,7 +26,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from src.com.damon.ming.app.encryption.base_key_store import StoredSession
+from src.com.damon.ming.app.encryption.base_key_store import EncryptionSessionRecord
 from src.com.damon.ming.encryption.constants import AES_KEY_SIZES
 from src.com.damon.ming.encryption.key_store import unwrap_key, wrap_key
 from src.com.damon.ming.encryption.v1.key_management import SessionKey
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from src.com.damon.ming.app.encryption.key_store import PgKeyStore
 
 
-def _stored_ttl_seconds(stored: StoredSession) -> int:
+def _stored_ttl_seconds(stored: EncryptionSessionRecord) -> int:
     """从持久化记录还原会话有效期（秒）。
 
     写入时 expires_at - created_at 就是当轮的 ttl_seconds，
@@ -141,7 +141,7 @@ class SessionService:
 
         # 3. 持久化（原子替换）
         expires_at = datetime.now(tz=UTC) + timedelta(seconds=session.ttl_seconds)
-        stored = StoredSession(
+        stored = EncryptionSessionRecord(
             key_id=key_id,
             aes_key_enc=wrap_key(aes_key, self._kek),
             session_id=session_id,
@@ -172,7 +172,7 @@ class SessionService:
         # 直查 DB（卸载到线程池，不阻塞事件循环）
         loop = asyncio.get_running_loop()
 
-        def _db_lookup() -> StoredSession | None:
+        def _db_lookup() -> EncryptionSessionRecord | None:
             return self._key_store.get_session(key_id, session_id=session_id)
 
         stored = await loop.run_in_executor(None, _db_lookup)

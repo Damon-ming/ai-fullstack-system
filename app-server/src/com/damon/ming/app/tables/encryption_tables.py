@@ -3,7 +3,7 @@
 加密体系表定义 —— encryption_sessions。
 
 提供：
-  - encryption_sessions: Table 对象
+  - encryption_sessions_table: Table 对象
   - EncryptionSessionRow: 查询结果 dataclass
   - create_encryption_tables(db_conn): 建表 + 加密体系索引
 """
@@ -18,7 +18,7 @@ from src.com.damon.ming.app.tables.base import metadata
 # encryption_sessions 表
 # ---------------------------------------------------------------------------
 
-encryption_sessions = Table(
+encryption_sessions_table = Table(
     "encryption_sessions",
     metadata,
     Column("key_id", String(64), primary_key=True),
