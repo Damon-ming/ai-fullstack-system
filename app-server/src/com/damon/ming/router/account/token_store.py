@@ -213,10 +213,6 @@ def register_device(
     device_id: str,
     ua_hash: str,
     raw_ua: str = "",
-    platform: str = "",
-    screen: str = "",
-    lang: str = "",
-    tz: str = "",
 ) -> None:
     """注册一台设备。设备身份独立存在，不归属任何用户。
 
@@ -226,10 +222,6 @@ def register_device(
         device_id=device_id,
         ua_hash=ua_hash,
         raw_ua=raw_ua,
-        platform=platform,
-        screen=screen,
-        lang=lang,
-        tz=tz,
         created_at=now(),
     )
     _db().execute(
@@ -237,15 +229,9 @@ def register_device(
             index_elements=[devices.c.device_id],
             set_={
                 column: statement.excluded[column.name]
-                for column in (
-                    devices.c.ua_hash,
-                    devices.c.raw_ua,
-                    devices.c.platform,
-                    devices.c.screen,
-                    devices.c.lang,
-                    devices.c.tz,
-                )
+                for column in (devices.c.ua_hash, devices.c.raw_ua)
             },
+            where=devices.c.ua_hash != statement.excluded.ua_hash,
         ),
         commit=True,
     )
@@ -262,10 +248,6 @@ def get_device(device_id: str) -> DeviceRow | None:
         device_id=row.device_id,
         ua_hash=row.ua_hash,
         raw_ua=row.raw_ua or "",
-        platform=row.platform or "",
-        screen=row.screen or "",
-        lang=row.lang or "",
-        tz=row.tz or "",
         created_at=row.created_at,
     )
 
@@ -303,7 +285,7 @@ def remove_device(device_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
+def create_session(token: str, device_id: str) -> str:
     """为 (token, device_id) 创建一个新会话。
 
     同一组合的旧会话立即过期（确保每个 token+device 只有一条活跃会话）。
@@ -337,7 +319,6 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
                 session_id=session_id,
                 token=token,
                 device_id=device_id,
-                issued_ua_hash=ua_hash,
                 created_at=current,
                 expires_at=expires_at,
             )
@@ -375,7 +356,7 @@ def get_active_session(token: str, device_id: str) -> SessionRow | None:
     return _session_row(row)
 
 
-def create_or_refresh_session(token: str, device_id: str, ua_hash: str = "") -> str:
+def create_or_refresh_session(token: str, device_id: str) -> str:
     """创建新会话并原子过期该 (token, device_id) 的所有旧会话。
 
     每次登录都返回新 session_id，消除 get-then-create 的 TOCTOU 窗口。
@@ -409,7 +390,6 @@ def create_or_refresh_session(token: str, device_id: str, ua_hash: str = "") -> 
                 session_id=session_id,
                 token=token,
                 device_id=device_id,
-                issued_ua_hash=ua_hash,
                 created_at=current,
                 expires_at=expires_at,
             )
@@ -509,10 +489,6 @@ def get_all_devices() -> list[DeviceRow]:
             device_id=r.device_id,
             ua_hash=r.ua_hash,
             raw_ua=r.raw_ua or "",
-            platform=r.platform or "",
-            screen=r.screen or "",
-            lang=r.lang or "",
-            tz=r.tz or "",
             created_at=r.created_at,
         )
         for r in (rows or [])
@@ -566,7 +542,6 @@ def _session_row(row) -> SessionRow | None:
         session_id=row.session_id,
         token=row.token,
         device_id=row.device_id,
-        issued_ua_hash=row.issued_ua_hash or "",
         created_at=row.created_at,
         expires_at=row.expires_at,
     )

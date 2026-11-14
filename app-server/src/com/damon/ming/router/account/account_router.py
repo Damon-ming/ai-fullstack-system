@@ -89,14 +89,10 @@ async def login(body: LoginRequest, request: Request):
             device_id=device_id,
             ua_hash=ua_hash,
             raw_ua=ua_profile.raw_ua,
-            platform=ua_profile.platform,
-            screen=ua_profile.screen,
-            lang=ua_profile.lang,
-            tz=ua_profile.tz,
         )
 
     # 4. 创建/刷新会话（原子操作：过期旧会话 + 插入新会话）
-    session_id = create_or_refresh_session(user_token, device_id, ua_hash)
+    session_id = create_or_refresh_session(user_token, device_id)
 
     # 5. SECURITY: 登录成功，刷新 token 滚动 TTL（P1-7 修复）
     refresh_token_ttl(user_token)

@@ -60,10 +60,6 @@ devices = Table(
     Column("device_id", String(64), primary_key=True),
     Column("ua_hash", String(64), nullable=False),
     Column("raw_ua", Text, nullable=False, server_default=""),
-    Column("platform", String(32), nullable=False, server_default=""),
-    Column("screen", String(16), nullable=False, server_default=""),
-    Column("lang", String(16), nullable=False, server_default=""),
-    Column("tz", String(32), nullable=False, server_default=""),
     Column(
         "created_at",
         DateTime(timezone=True),
@@ -78,10 +74,6 @@ class DeviceRow:
     device_id: str
     ua_hash: str
     raw_ua: str = ""
-    platform: str = ""
-    screen: str = ""
-    lang: str = ""
-    tz: str = ""
     created_at: datetime | None = None
 
 
@@ -95,7 +87,6 @@ sessions = Table(
     Column("session_id", String(64), primary_key=True),
     Column("token", String(64), nullable=False),
     Column("device_id", String(64), nullable=False),
-    Column("issued_ua_hash", String(64), nullable=False, server_default=""),
     Column(
         "created_at",
         DateTime(timezone=True),
@@ -111,7 +102,6 @@ class SessionRow:
     session_id: str
     token: str
     device_id: str
-    issued_ua_hash: str = ""
     created_at: datetime | None = None
     expires_at: datetime | None = None
 
@@ -121,6 +111,11 @@ class SessionRow:
 # ---------------------------------------------------------------------------
 
 _ACCOUNT_INDEX_DDL = [
+    "ALTER TABLE sessions DROP COLUMN IF EXISTS issued_ua_hash",
+    "ALTER TABLE devices DROP COLUMN IF EXISTS platform",
+    "ALTER TABLE devices DROP COLUMN IF EXISTS screen",
+    "ALTER TABLE devices DROP COLUMN IF EXISTS lang",
+    "ALTER TABLE devices DROP COLUMN IF EXISTS tz",
     "CREATE INDEX IF NOT EXISTS idx_sessions_token_device ON sessions (token, device_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (token)",

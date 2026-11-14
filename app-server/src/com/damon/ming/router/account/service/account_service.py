@@ -5,7 +5,7 @@
 只暴露其他模块真正需要的最小访问单元，不把 users / devices / sessions
 的表结构与行对象（UserRow / DeviceRow / SessionRow）交给调用方：
   - is_token_valid(token)        token 是否有效（滚动 TTL + 绝对 TTL）
-  - get_session_info(session_id) 会话归属 token + 签发时 UA 指纹
+  - get_session_info(session_id) 会话归属 token
   - get_phone_by_token(token)    token → 手机号
   - get_file_uploader_map()      文件路径 → 上传者昵称
 
@@ -22,14 +22,13 @@ logger = pin("account.service")
 
 @dataclass(frozen=True)
 class SessionInfo:
-    """会话投影 —— 跨模块只暴露这两个字段。
+    """会话投影 —— 跨模块只暴露 token。
 
     SessionRow 还有 session_id / device_id / created_at / expires_at，
     调用方不需要，就不给。
     """
 
     token: str
-    ua_hash: str = ""
 
 
 class AccountService:
@@ -42,14 +41,14 @@ class AccountService:
 
     @staticmethod
     def get_session_info(session_id: str) -> SessionInfo | None:
-        """查询有效会话的归属 token 与签发时 UA 指纹。
+        """查询有效会话的归属 token。
 
         会话不存在或已过期时返回 None。
         """
         session = token_store.get_session(session_id)
         if session is None:
             return None
-        return SessionInfo(token=session.token, ua_hash=session.issued_ua_hash)
+        return SessionInfo(token=session.token)
 
     @staticmethod
     def get_phone_by_token(token: str) -> str | None:
