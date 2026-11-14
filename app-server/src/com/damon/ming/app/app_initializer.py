@@ -280,12 +280,13 @@ class AppInitializer:
     def _create_tables(self) -> None:
         """创建全部业务表(account / encryption / history / upload)。"""
         try:
-            from src.com.damon.ming.router.tables import create_all_tables
+            from src.com.damon.ming.app.tables import create_all_tables
 
             create_all_tables(self.db_conn)
             logger.info("业务表创建完成")
         except Exception as e:
-            logger.warning("业务表创建失败: %s", e)
+            logger.exception("业务表创建失败，启动终止: %s", e)
+            raise
 
     def _init_rate_limiter(self) -> None:
         """速率限制器: slowapi 封装, per-IP 限流。"""
@@ -364,7 +365,6 @@ class AppInitializer:
             kek_info = self._enc_config.kek_info.encode("utf-8")
 
             store = PgKeyStore(self.db_conn)
-            store.initialize()
             # MASTER_KEY 由业务层读取并注入，encryption 模块不感知配置来源
             master_key = get_master_key()
             kek = derive_kek(

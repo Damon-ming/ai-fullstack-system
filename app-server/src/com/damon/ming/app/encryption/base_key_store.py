@@ -58,11 +58,6 @@ class BaseKeyStore(ABC):
     """
 
     @abstractmethod
-    def initialize(self) -> None:
-        """初始化存储后端（建表、建索引等）。"""
-        ...
-
-    @abstractmethod
     def save_session(self, session: StoredSession) -> None:
         """保存或更新一条会话记录。key_id 冲突时覆盖。"""
         ...

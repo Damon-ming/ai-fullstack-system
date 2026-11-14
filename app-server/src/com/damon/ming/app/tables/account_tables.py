@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/router/tables/account/tables.py
+# app-server/src/com/damon/ming/app/tables/account_tables.py
 """
 账号体系表定义 —— users / devices / sessions。
 
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, String, Table, Text
-from src.com.damon.ming.router.tables.base import _NOW, metadata
+from src.com.damon.ming.app.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
 # users 表

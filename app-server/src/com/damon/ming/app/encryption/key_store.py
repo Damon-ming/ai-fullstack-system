@@ -6,13 +6,15 @@
 因为存储实现属于业务层，不属于路由层。
 
 关联：
-  devices 表由 router/tables/account/ 管理，本模块不再重复建表。
+  devices 表由 app/tables/account_tables.py 管理，本模块不再重复建表。
   encryption_sessions 通过 session_id 与 sessions 表关联。
 
-表定义统一在 router/tables/（本模块用裸 SQL 访问，不导入其 Table 对象）。
+表定义统一在 app/tables/，本模块使用 SQLAlchemy Core 复用表对象。
 """
 
-from sqlalchemy import text
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from src.com.damon.ming.app.tables.encryption_tables import encryption_sessions
 from src.com.damon.ming.app.encryption.base_key_store import (
     BaseKeyStore,
     StoredSession,
@@ -22,7 +24,7 @@ from src.com.damon.ming.db.db_connection import DbConnection
 
 
 class PgKeyStore(BaseKeyStore):
-    """密钥存储后端（基于 SQLAlchemy，支持多数据库后端）。
+    """密钥存储后端（SQLAlchemy Core，UPSERT 使用 PostgreSQL 方言）。
 
     在 BaseKeyStore 纯 key_id 接口之上，扩展了会话维度索引（业务需求）。
 
@@ -31,7 +33,6 @@ class PgKeyStore(BaseKeyStore):
         db_conn = DbConnection(db_config)
         db_conn.initialize()
         store = PgKeyStore(db_conn)
-        store.initialize()
     """
 
     def __init__(self, db_connection: DbConnection) -> None:
@@ -44,13 +45,6 @@ class PgKeyStore(BaseKeyStore):
         db_conn.initialize()
         return PgKeyStore(db_conn)
 
-    def initialize(self) -> None:
-        """建表 + 建索引（幂等）。
-
-        DDL 在 router/tables/ 的 create_all_tables() 中统一管理，
-        此处无需重复执行。
-        """
-
     def save_session(self, session: StoredSession, session_id: str = "") -> None:
         """保存会话记录。session_id 为业务层扩展字段，一步写入。
 
@@ -61,22 +55,26 @@ class PgKeyStore(BaseKeyStore):
             保留本方法仅供历史兼容，新代码不应调用。
         """
         with self._db.transaction() as conn:
+            statement = pg_insert(encryption_sessions).values(
+                key_id=session.key_id,
+                aes_key_enc=session.aes_key_enc,
+                session_id=session_id,
+                created_at=session.created_at,
+                expires_at=session.expires_at,
+            )
             conn.execute(
-                text(
-                    "INSERT INTO encryption_sessions "
-                    "(key_id, aes_key_enc, session_id, created_at, expires_at) "
-                    "VALUES (:kid, :enc, :sid, :cat, :eat) "
-                    "ON CONFLICT (key_id) DO UPDATE SET "
-                    "aes_key_enc = EXCLUDED.aes_key_enc, session_id = EXCLUDED.session_id, "
-                    "created_at = EXCLUDED.created_at, expires_at = EXCLUDED.expires_at"
-                ),
-                {
-                    "kid": session.key_id,
-                    "enc": session.aes_key_enc,
-                    "sid": session_id,
-                    "cat": session.created_at,
-                    "eat": session.expires_at,
-                },
+                statement.on_conflict_do_update(
+                    index_elements=[encryption_sessions.c.key_id],
+                    set_={
+                        column: statement.excluded[column.name]
+                        for column in (
+                            encryption_sessions.c.aes_key_enc,
+                            encryption_sessions.c.session_id,
+                            encryption_sessions.c.created_at,
+                            encryption_sessions.c.expires_at,
+                        )
+                    },
+                )
             )
 
     def replace_session(
@@ -95,23 +93,19 @@ class PgKeyStore(BaseKeyStore):
         """
         with self._db.transaction() as conn:
             conn.execute(
-                text("DELETE FROM encryption_sessions WHERE session_id = :sid"),
-                {"sid": session_id},
+                encryption_sessions.delete().where(
+                    encryption_sessions.c.session_id == session_id
+                )
             )
             if new_stored is not None:
                 conn.execute(
-                    text(
-                        "INSERT INTO encryption_sessions "
-                        "(key_id, aes_key_enc, session_id, created_at, expires_at) "
-                        "VALUES (:kid, :enc, :sid, :cat, :eat)"
-                    ),
-                    {
-                        "kid": new_stored.key_id,
-                        "enc": new_stored.aes_key_enc,
-                        "sid": session_id,
-                        "cat": new_stored.created_at,
-                        "eat": new_stored.expires_at,
-                    },
+                    encryption_sessions.insert().values(
+                        key_id=new_stored.key_id,
+                        aes_key_enc=new_stored.aes_key_enc,
+                        session_id=session_id,
+                        created_at=new_stored.created_at,
+                        expires_at=new_stored.expires_at,
+                    )
                 )
 
     def get_session(
@@ -122,13 +116,11 @@ class PgKeyStore(BaseKeyStore):
             return None
         with self._db.engine.connect() as conn:
             result = conn.execute(
-                text(
-                    "SELECT key_id, aes_key_enc, session_id, created_at, expires_at "
-                    "FROM encryption_sessions "
-                    "WHERE key_id = :kid AND expires_at > NOW() "
-                    "AND session_id = :sid"
-                ),
-                {"kid": key_id, "sid": session_id},
+                select(encryption_sessions).where(
+                    encryption_sessions.c.key_id == key_id,
+                    encryption_sessions.c.expires_at > func.now(),
+                    encryption_sessions.c.session_id == session_id,
+                )
             )
             row = result.fetchone()
         if row is None:
@@ -145,18 +137,21 @@ class PgKeyStore(BaseKeyStore):
         """按 key_id 删除单条加密记录。"""
         with self._db.transaction() as conn:
             conn.execute(
-                text("DELETE FROM encryption_sessions WHERE key_id = :kid"),
-                {"kid": key_id},
+                encryption_sessions.delete().where(
+                    encryption_sessions.c.key_id == key_id
+                )
             )
 
     def cleanup_expired(self) -> int:
         with self._db.transaction() as conn:
             result = conn.execute(
-                text("DELETE FROM encryption_sessions WHERE expires_at <= NOW()")
+                encryption_sessions.delete().where(
+                    encryption_sessions.c.expires_at <= func.now()
+                )
             )
             return result.rowcount
 
     def count(self) -> int:
         with self._db.engine.connect() as conn:
-            result = conn.execute(text("SELECT COUNT(*) FROM encryption_sessions"))
+            result = conn.execute(select(func.count()).select_from(encryption_sessions))
             return result.scalar() or 0

@@ -13,8 +13,8 @@
   (token, device_id) ──1:1── session_id  （每次 token 签发产生一个会话）
 
 存储：全部通过共享连接池持久化，服务重启后数据不丢失。
-简单 CRUD 用 SQLAlchemy Core API（router/tables.py），
-复杂语句（ON CONFLICT、事务内多步）仍用 raw SQL。
+CRUD 使用 SQLAlchemy Core 复用 app/tables 的表定义，
+UPSERT 使用 PostgreSQL 方言，行锁与多步写入保留在同一事务中。
 """
 
 import hashlib
@@ -22,10 +22,9 @@ import secrets
 import uuid
 from datetime import timedelta
 
-from sqlalchemy import text
-from src.com.damon.ming.db import get_default_db
-from src.com.damon.ming.log import pin
-from src.com.damon.ming.router.tables.account import (
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from src.com.damon.ming.app.tables.account_tables import (
     DeviceRow,
     SessionRow,
     UserRow,
@@ -33,6 +32,9 @@ from src.com.damon.ming.router.tables.account import (
     sessions,
     users,
 )
+from src.com.damon.ming.app.tables.upload_tables import upload_records
+from src.com.damon.ming.db import get_default_db
+from src.com.damon.ming.log import pin
 from src.com.damon.ming.utils.time import now
 
 logger = pin("account.store")
@@ -88,8 +90,8 @@ def is_token_valid(token: str) -> bool:
         result = conn.execute(
             users.select().where(
                 users.c.token == token,
-                users.c.expires_at > text("NOW()"),
-                users.c.hard_expires_at > text("NOW()"),
+                users.c.expires_at > func.now(),
+                users.c.hard_expires_at > func.now(),
             )
         )
         return result.fetchone() is not None
@@ -105,10 +107,16 @@ def bind_token(phone: str, token: str) -> str:
     返回最终生效的 token（自己或竞争者的）。
     """
     _db().execute(
-        "INSERT INTO users (token, phone, name, created_at, expires_at, hard_expires_at) "
-        "VALUES (%s, %s, '', %s, NOW() + INTERVAL '30 days', NOW() + INTERVAL '90 days') "
-        "ON CONFLICT (phone) DO NOTHING",
-        (token, phone, now()),
+        pg_insert(users)
+        .values(
+            token=token,
+            phone=phone,
+            name="",
+            created_at=now(),
+            expires_at=func.now() + TOKEN_TTL,
+            hard_expires_at=func.now() + TOKEN_HARD_TTL,
+        )
+        .on_conflict_do_nothing(index_elements=[users.c.phone]),
         commit=True,
     )
 
@@ -156,10 +164,17 @@ def login_or_register(phone: str, password: str) -> tuple[str, bool]:
     password_hash = _hash_password(password)
     default_name = _generate_default_name()
     _db().execute(
-        "INSERT INTO users (token, phone, password, name, created_at, expires_at, hard_expires_at) "
-        "VALUES (%s, %s, %s, %s, %s, NOW() + INTERVAL '30 days', NOW() + INTERVAL '90 days') "
-        "ON CONFLICT (phone) DO NOTHING",
-        (new_token, phone, password_hash, default_name, now()),
+        pg_insert(users)
+        .values(
+            token=new_token,
+            phone=phone,
+            password=password_hash,
+            name=default_name,
+            created_at=now(),
+            expires_at=func.now() + TOKEN_TTL,
+            hard_expires_at=func.now() + TOKEN_HARD_TTL,
+        )
+        .on_conflict_do_nothing(index_elements=[users.c.phone]),
         commit=True,
     )
     existing_token = get_token_by_phone(phone)
@@ -207,14 +222,31 @@ def register_device(
 
     如果 device_id 已存在，更新 UA 信息（UPSERT）。
     """
+    statement = pg_insert(devices).values(
+        device_id=device_id,
+        ua_hash=ua_hash,
+        raw_ua=raw_ua,
+        platform=platform,
+        screen=screen,
+        lang=lang,
+        tz=tz,
+        created_at=now(),
+    )
     _db().execute(
-        "INSERT INTO devices (device_id, ua_hash, raw_ua, platform, screen, lang, tz, created_at) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
-        "ON CONFLICT (device_id) DO UPDATE SET "
-        "ua_hash = EXCLUDED.ua_hash, raw_ua = EXCLUDED.raw_ua, "
-        "platform = EXCLUDED.platform, screen = EXCLUDED.screen, "
-        "lang = EXCLUDED.lang, tz = EXCLUDED.tz",
-        (device_id, ua_hash, raw_ua, platform, screen, lang, tz, now()),
+        statement.on_conflict_do_update(
+            index_elements=[devices.c.device_id],
+            set_={
+                column: statement.excluded[column.name]
+                for column in (
+                    devices.c.ua_hash,
+                    devices.c.raw_ua,
+                    devices.c.platform,
+                    devices.c.screen,
+                    devices.c.lang,
+                    devices.c.tz,
+                )
+            },
+        ),
         commit=True,
     )
 
@@ -256,10 +288,12 @@ def remove_device(device_id: str) -> None:
     current = now()
     with _db().transaction() as conn:
         conn.execute(
-            text(
-                "UPDATE sessions SET expires_at = :now WHERE device_id = :did AND expires_at > :now"
-            ),
-            {"now": current, "did": device_id},
+            sessions.update()
+            .where(
+                sessions.c.device_id == device_id,
+                sessions.c.expires_at > current,
+            )
+            .values(expires_at=current)
         )
         conn.execute(devices.delete().where(devices.c.device_id == device_id))
 
@@ -283,15 +317,19 @@ def create_session(token: str, device_id: str, ua_hash: str = "") -> str:
     with _db().transaction() as conn:
         # 锁住 device 行，串行化同一设备的并发登录，防止新 session 被并发 UPDATE 过期
         conn.execute(
-            text("SELECT device_id FROM devices WHERE device_id = :did FOR UPDATE"),
-            {"did": device_id},
+            select(devices.c.device_id)
+            .where(devices.c.device_id == device_id)
+            .with_for_update()
         )
         # 过期旧会话
         conn.execute(
-            text(
-                "UPDATE sessions SET expires_at = :now WHERE token = :tok AND device_id = :did AND expires_at > :now"
-            ),
-            {"now": current, "tok": token, "did": device_id},
+            sessions.update()
+            .where(
+                sessions.c.token == token,
+                sessions.c.device_id == device_id,
+                sessions.c.expires_at > current,
+            )
+            .values(expires_at=current)
         )
         # 插入新会话
         conn.execute(
@@ -351,16 +389,19 @@ def create_or_refresh_session(token: str, device_id: str, ua_hash: str = "") -> 
     with _db().transaction() as conn:
         # 锁住 device 行，串行化同一设备的并发登录，防止新 session 被并发 UPDATE 过期
         conn.execute(
-            text("SELECT device_id FROM devices WHERE device_id = :did FOR UPDATE"),
-            {"did": device_id},
+            select(devices.c.device_id)
+            .where(devices.c.device_id == device_id)
+            .with_for_update()
         )
         # 过期该 (token, device_id) 的所有旧会话
         conn.execute(
-            text(
-                "UPDATE sessions SET expires_at = :now "
-                "WHERE token = :tok AND device_id = :did AND expires_at > :now"
-            ),
-            {"now": current, "tok": token, "did": device_id},
+            sessions.update()
+            .where(
+                sessions.c.token == token,
+                sessions.c.device_id == device_id,
+                sessions.c.expires_at > current,
+            )
+            .values(expires_at=current)
         )
         # 插入新会话
         conn.execute(
@@ -391,8 +432,9 @@ def refresh_token_ttl(token: str) -> None:
       is_token_valid 改为查 tokens 表。
     """
     _db().execute(
-        "UPDATE users SET expires_at = NOW() + INTERVAL '30 days' WHERE token = :tok",
-        {"tok": token},
+        users.update()
+        .where(users.c.token == token)
+        .values(expires_at=func.now() + TOKEN_TTL),
         commit=True,
     )
 
@@ -402,10 +444,12 @@ def revoke_sessions_by_token(token: str) -> int:
     current = now()
     with _db().transaction() as conn:
         result = conn.execute(
-            text(
-                "UPDATE sessions SET expires_at = :now WHERE token = :tok AND expires_at > :now"
-            ),
-            {"now": current, "tok": token},
+            sessions.update()
+            .where(
+                sessions.c.token == token,
+                sessions.c.expires_at > current,
+            )
+            .values(expires_at=current)
         )
         return result.rowcount
 
@@ -415,10 +459,12 @@ def revoke_sessions_by_device(device_id: str) -> int:
     current = now()
     with _db().transaction() as conn:
         result = conn.execute(
-            text(
-                "UPDATE sessions SET expires_at = :now WHERE device_id = :did AND expires_at > :now"
-            ),
-            {"now": current, "did": device_id},
+            sessions.update()
+            .where(
+                sessions.c.device_id == device_id,
+                sessions.c.expires_at > current,
+            )
+            .values(expires_at=current)
         )
         return result.rowcount
 
@@ -437,9 +483,11 @@ def get_file_uploader_map() -> dict[str, str]:
     try:
         with _db().engine.connect() as conn:
             rows = conn.execute(
-                "SELECT ur.file_path, u.name "
-                "FROM upload_records ur "
-                "LEFT JOIN users u ON ur.token = u.token"
+                select(upload_records.c.file_path, users.c.name).select_from(
+                    upload_records.outerjoin(
+                        users, upload_records.c.token == users.c.token
+                    )
+                )
             ).fetchall()
         return {row[0]: (row[1] or "") for row in rows}
     except Exception:
@@ -484,12 +532,17 @@ def get_stats() -> dict:
     """获取统计信息。"""
     current = now()
     with _db().engine.connect() as conn:
-        users_count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0
-        devices_count = conn.execute(text("SELECT COUNT(*) FROM devices")).scalar() or 0
+        users_count = (
+            conn.execute(select(func.count()).select_from(users)).scalar() or 0
+        )
+        devices_count = (
+            conn.execute(select(func.count()).select_from(devices)).scalar() or 0
+        )
         sessions_count = (
             conn.execute(
-                text("SELECT COUNT(*) FROM sessions WHERE expires_at > :now"),
-                {"now": current},
+                select(func.count())
+                .select_from(sessions)
+                .where(sessions.c.expires_at > current)
             ).scalar()
             or 0
         )

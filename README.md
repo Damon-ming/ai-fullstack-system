@@ -78,12 +78,13 @@ ai-fullstack-system/
 │       │   └── rag_tool.py      # RAGContainer 主入口
 │       ├── app/                 # 应用配置 + 初始化
 │       │   ├── config/          # YAML 配置加载器
+│       │   ├── tables/          # 全部业务表、索引、共享 metadata 和统一建表入口
+│       │   ├── encryption/      # 加密会话业务与 DB 密钥存储，无会话密钥缓存
 │       │   └── app_initializer.py
 │       ├── db/                  # 数据库连接池
-│       ├── encryption/          # 加密体系
-│       │   ├── globals.py       # 全局密钥注入
-│       │   ├── v1/              # 纯加密原语（AES/RSA/HMAC）
-│       │   └── session_service.py
+│       ├── encryption/          # 可独立移植的加密原语和 KEK 工具
+│       │   ├── v1/              # AES/RSA/HMAC、字段加解密
+│       │   └── key_store/       # KEK 派生及会话密钥加解密工具
 │       ├── exception/           # 统一错误码
 │       ├── i18n/                # 多语言模块
 │       ├── middleware/          # 中间件（加密/限流）
@@ -304,6 +305,11 @@ docker compose down
 | 输入验证 | 独立护栏模型，超时 fail-open |
 | 数据隔离 | 多用户共享知识库，对话历史按 token 隔离 |
 | 审计日志 | 上传操作记录到 upload_records 表 |
+
+账号、加密会话、历史记录及上传审计的读写使用 SQLAlchemy Core，复用
+`app/tables` 中的表定义；UPSERT 保留 PostgreSQL 方言，事务与行锁由存储层显式管理。
+向量检索及建表迁移继续使用专用 SQL。上传审计表的 `created_at` 列由启动建表流程
+幂等补齐，已有记录的补列默认时间为迁移执行时的数据库时间。
 
 ## 配置说明
 

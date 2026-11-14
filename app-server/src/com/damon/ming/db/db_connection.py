@@ -14,6 +14,7 @@
 import time
 
 from sqlalchemy import text
+from sqlalchemy.sql import Executable
 from src.com.damon.ming.db.db_config import DbConfig
 from src.com.damon.ming.exception import DatabaseError
 from src.com.damon.ming.log import pin
@@ -80,28 +81,28 @@ class DbConnection:
 
     def execute(
         self,
-        sql: str,
+        sql: str | Executable,
         params: tuple | dict | None = None,
         *,
         commit: bool = True,
         fetch: bool = False,
         retry: int | None = None,
-    ) -> list[tuple] | None:
-        """执行单条 SQL。
+    ) -> list[tuple] | int | None:
+        """执行 SQL 字符串或 SQLAlchemy Core 语句，保留统一重试和连接释放。
 
         支持原生 SQL 任意语法（如 pgvector 的 ::vector、<=> 操作符），
         SQLAlchemy 的 text() 会将其原样下发到数据库。
         对 %s 占位符自动转换，业务层无需修改 SQL。
 
         参数：
-          sql:    SQL 语句（参数化，用 %s 或 :param 占位）
-          params: 参数元组/列表或字典
+          sql:    SQL 字符串（%s 或 :param 占位）或 SQLAlchemy Core 可执行语句
+          params: 原生 SQL 支持元组/列表/字典，Core 语句使用字典或内部绑定值
           commit: 是否自动 commit（SELECT 用 False，INSERT/UPDATE 用 True）
           fetch:  是否返回查询结果（SELECT 用 True）
           retry:  连接失败时的重试次数（省略则用 DbConfig.retry_count）
 
         返回：
-          fetch=True 时返回行列表（tuple 列表），否则返回 None
+          fetch=True 时返回 tuple 行列表，否则返回驱动提供的影响行数
         """
         if self._engine is None:
             from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -115,13 +116,13 @@ class DbConnection:
         backoff = self._config.backoff_seconds
 
         # 转换 %s 占位符为 SQLAlchemy 命名参数
-        converted_sql, converted_params = _convert_placeholders(sql, params)
+        statement, converted_params = _prepare_statement(sql, params)
 
         last_error = None
         for attempt in range(retry):
             try:
                 with self._engine.connect() as conn:
-                    result = conn.execute(text(converted_sql), converted_params or {})
+                    result = conn.execute(statement, converted_params or {})
                     if commit:
                         conn.commit()
                     if fetch:
@@ -142,7 +143,7 @@ class DbConnection:
 
     def execute_many(
         self,
-        sql: str,
+        sql: str | Executable,
         params_list: list[tuple | dict],
         *,
         commit: bool = True,
@@ -165,10 +166,8 @@ class DbConnection:
             try:
                 with self._engine.connect() as conn:
                     for params in params_list:
-                        converted_sql, converted_params = _convert_placeholders(
-                            sql, params
-                        )
-                        conn.execute(text(converted_sql), converted_params or {})
+                        statement, converted_params = _prepare_statement(sql, params)
+                        conn.execute(statement, converted_params or {})
                     if commit:
                         conn.commit()
                     return
@@ -271,12 +270,12 @@ def set_default_db(db: DbConnection) -> None:
     _default_db = db
 
 
-def query(sql: str, params: tuple | dict | None = None) -> list[tuple]:
+def query(sql: str | Executable, params: tuple | dict | None = None) -> list[tuple]:
     """用默认连接执行查询，返回结果列表。"""
     return get_default_db().execute(sql, params, commit=False, fetch=True)
 
 
-def execute(sql: str, params: tuple | dict | None = None) -> None:
+def execute(sql: str | Executable, params: tuple | dict | None = None) -> None:
     """用默认连接执行写操作。"""
     get_default_db().execute(sql, params, commit=True, fetch=False)
 
@@ -284,6 +283,20 @@ def execute(sql: str, params: tuple | dict | None = None) -> None:
 # ---------------------------------------------------------------------------
 # 内部工具
 # ---------------------------------------------------------------------------
+
+
+def _prepare_statement(
+    sql: str | Executable, params: tuple | dict | None
+) -> tuple[Executable, dict | None]:
+    """原生 SQL 保留占位符转换；Core 语句直接执行，外部参数必须为字典。"""
+    if isinstance(sql, str):
+        converted_sql, converted_params = _convert_placeholders(sql, params)
+        return text(converted_sql), converted_params
+    if not isinstance(sql, Executable):
+        raise TypeError("sql 必须是 SQL 字符串或 SQLAlchemy 可执行语句")
+    if params is not None and not isinstance(params, dict):
+        raise TypeError("SQLAlchemy Core 语句参数必须是字典")
+    return sql, params
 
 
 def _convert_placeholders(

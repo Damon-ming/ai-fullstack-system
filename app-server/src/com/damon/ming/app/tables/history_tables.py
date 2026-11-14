@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/router/tables/history/tables.py
+# app-server/src/com/damon/ming/app/tables/history_tables.py
 """
 对话历史表定义 —— history_conversations（会话）+ history_turns（轮次）。
 
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, String, Table, Text
-from src.com.damon.ming.router.tables.base import _NOW, metadata
+from src.com.damon.ming.app.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
 # history_conversations 表 —— 会话（线程）
@@ -103,8 +103,10 @@ _HISTORY_DDL = [
     # 复合索引：同时服务 WHERE token = ? 的过滤与 ORDER BY updated_at DESC 的排序，
     # 取代原两个单列索引 idx_history_token / idx_history_updated
     # （项目内没有单独按 updated_at 过滤/排序的查询，单列索引在此场景用不上）
-    "CREATE INDEX IF NOT EXISTS idx_history_token_updated "
-    "ON history_conversations (token, updated_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_history_token_updated "
+        "ON history_conversations (token, updated_at DESC)"
+    ),
     # 清理被复合索引取代的单列索引（幂等：新库上不存在则跳过）
     "DROP INDEX IF EXISTS idx_history_token",
     "DROP INDEX IF EXISTS idx_history_updated",

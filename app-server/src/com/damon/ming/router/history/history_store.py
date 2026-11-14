@@ -15,14 +15,17 @@
 import time
 from datetime import datetime
 
-from sqlalchemy import text
-from src.com.damon.ming.db import get_default_db
-from src.com.damon.ming.log import pin
-from src.com.damon.ming.router.tables.history import (
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from src.com.damon.ming.app.tables.history_tables import (
     HistoryConversationRow,
     HistoryDetailRow,
     HistoryTurnRow,
+    history_conversations,
+    history_turns,
 )
+from src.com.damon.ming.db import get_default_db
+from src.com.damon.ming.log import pin
 
 logger = pin("history.store")
 
@@ -82,20 +85,20 @@ def list_history(
     offset = (page - 1) * page_size
 
     count_rows = _db().execute(
-        "SELECT COUNT(*) FROM history_conversations WHERE token = :token",
-        {"token": token},
+        select(func.count())
+        .select_from(history_conversations)
+        .where(history_conversations.c.token == token),
         commit=False,
         fetch=True,
     )
     total = count_rows[0][0] if count_rows else 0
 
     rows = _db().execute(
-        "SELECT id, token, title, created_at, updated_at "
-        "FROM history_conversations "
-        "WHERE token = :token "
-        "ORDER BY updated_at DESC "
-        "LIMIT :limit OFFSET :offset",
-        {"token": token, "limit": page_size, "offset": offset},
+        select(history_conversations)
+        .where(history_conversations.c.token == token)
+        .order_by(history_conversations.c.updated_at.desc())
+        .limit(page_size)
+        .offset(offset),
         commit=False,
         fetch=True,
     )
@@ -127,12 +130,10 @@ def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
 
     def _read(conn) -> HistoryDetailRow | None:
         c = conn.execute(
-            text(
-                "SELECT id, token, title, created_at, updated_at "
-                "FROM history_conversations "
-                "WHERE id = :id AND token = :token"
-            ),
-            {"id": conversation_id, "token": token},
+            select(history_conversations).where(
+                history_conversations.c.id == conversation_id,
+                history_conversations.c.token == token,
+            )
         ).fetchone()
         if c is None:
             return None
@@ -145,14 +146,9 @@ def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
         )
 
         turn_rows = conn.execute(
-            text(
-                "SELECT turn_id, conversation_id, query, reasoning, content, error_msg, "
-                "query_at, first_token_at, reasoning_done_at, answered_at "
-                "FROM history_turns "
-                "WHERE conversation_id = :cid "
-                "ORDER BY query_at ASC, turn_id ASC"
-            ),
-            {"cid": conversation_id},
+            select(history_turns)
+            .where(history_turns.c.conversation_id == conversation_id)
+            .order_by(history_turns.c.query_at.asc(), history_turns.c.turn_id.asc())
         ).fetchall()
         turns = [
             HistoryTurnRow(
@@ -221,20 +217,21 @@ def append_turn(
     for attempt in range(max(retry, 1)):
         try:
             with db.transaction() as conn:
+                statement = pg_insert(history_conversations).values(
+                    id=conversation_id,
+                    token=token,
+                    title=title,
+                    created_at=answered_at,
+                    updated_at=answered_at,
+                )
                 rows = conn.execute(
-                    text(
-                        "INSERT INTO history_conversations (id, token, title, created_at, updated_at) "
-                        "VALUES (:id, :token, :title, :answered_at, :answered_at) "
-                        "ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at "
-                        "WHERE history_conversations.token = EXCLUDED.token "
-                        "RETURNING id"
-                    ),
-                    {
-                        "id": conversation_id,
-                        "token": token,
-                        "title": title,
-                        "answered_at": answered_at,
-                    },
+                    statement.on_conflict_do_update(
+                        index_elements=[history_conversations.c.id],
+                        set_={
+                            history_conversations.c.updated_at: statement.excluded.updated_at
+                        },
+                        where=history_conversations.c.token == statement.excluded.token,
+                    ).returning(history_conversations.c.id)
                 ).fetchall()
                 if not rows:
                     logger.warning(
@@ -244,27 +241,20 @@ def append_turn(
                     return ""
 
                 conn.execute(
-                    text(
-                        "INSERT INTO history_turns "
-                        "(turn_id, conversation_id, query, reasoning, content, error_msg, "
-                        " query_at, first_token_at, reasoning_done_at, answered_at) "
-                        "VALUES (:turn_id, :conversation_id, :query, :reasoning, :content, "
-                        " :error_msg, :query_at, :first_token_at, :reasoning_done_at, "
-                        " :answered_at) "
-                        "ON CONFLICT (turn_id) DO NOTHING"
-                    ),
-                    {
-                        "turn_id": turn_id,
-                        "conversation_id": conversation_id,
-                        "query": query,
-                        "reasoning": reasoning or None,
-                        "content": content,
-                        "error_msg": error_msg or None,
-                        "query_at": query_at,
-                        "first_token_at": first_token_at,
-                        "reasoning_done_at": reasoning_done_at,
-                        "answered_at": answered_at,
-                    },
+                    pg_insert(history_turns)
+                    .values(
+                        turn_id=turn_id,
+                        conversation_id=conversation_id,
+                        query=query,
+                        reasoning=reasoning or None,
+                        content=content,
+                        error_msg=error_msg or None,
+                        query_at=query_at,
+                        first_token_at=first_token_at,
+                        reasoning_done_at=reasoning_done_at,
+                        answered_at=answered_at,
+                    )
+                    .on_conflict_do_nothing(index_elements=[history_turns.c.turn_id])
                 )
             logger.info(
                 "轮次已写入 | conversation_id=%s | turn_id=%s | reasoning=%s",
@@ -308,22 +298,25 @@ def delete_history(conversation_id: str, token: str) -> bool:
 
     def _delete(conn) -> bool:
         rows = conn.execute(
-            text(
-                "SELECT id FROM history_conversations WHERE id = :id AND token = :token"
-            ),
-            {"id": conversation_id, "token": token},
+            select(history_conversations.c.id).where(
+                history_conversations.c.id == conversation_id,
+                history_conversations.c.token == token,
+            )
         ).fetchall()
         if not rows:
             return False
 
         # turns 与 conversations 之间是逻辑外键，需显式级联
         conn.execute(
-            text("DELETE FROM history_turns WHERE conversation_id = :cid"),
-            {"cid": conversation_id},
+            history_turns.delete().where(
+                history_turns.c.conversation_id == conversation_id
+            )
         )
         conn.execute(
-            text("DELETE FROM history_conversations WHERE id = :id AND token = :token"),
-            {"id": conversation_id, "token": token},
+            history_conversations.delete().where(
+                history_conversations.c.id == conversation_id,
+                history_conversations.c.token == token,
+            )
         )
         return True
 

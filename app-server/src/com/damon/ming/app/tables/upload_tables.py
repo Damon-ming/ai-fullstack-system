@@ -1,4 +1,4 @@
-# router/tables/upload/tables.py
+# app-server/src/com/damon/ming/app/tables/upload_tables.py
 """
 上传文件审计表 —— upload_records。
 
@@ -7,8 +7,8 @@
 向量库按 file_sha256 去重，审计表按 file_uid 记录每次上传。
 """
 
-from sqlalchemy import Column, String, Table
-from src.com.damon.ming.router.tables.base import metadata
+from sqlalchemy import Column, DateTime, String, Table
+from src.com.damon.ming.app.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
 # upload_records 表
@@ -23,6 +23,7 @@ upload_records = Table(
     Column("file_size", String(20), nullable=False, default="0"),
     Column("token", String(64), nullable=True),
     Column("device_id", String(64), nullable=False, server_default=""),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=_NOW),
 )
 
 _UPLOAD_INDEX_DDL = [
@@ -30,9 +31,17 @@ _UPLOAD_INDEX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_upload_token ON upload_records (token)",
 ]
 
+_UPLOAD_MIGRATION_DDL = [
+    # 审计写入已包含 created_at，为已有数据库补齐该列。
+    (
+        "ALTER TABLE upload_records ADD COLUMN IF NOT EXISTS created_at "
+        "TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+    ),
+]
+
 
 def create_upload_tables(db_conn) -> None:
     """创建上传审计表 + 索引（幂等）。"""
     metadata.create_all(db_conn.engine)
-    for ddl in _UPLOAD_INDEX_DDL:
+    for ddl in _UPLOAD_MIGRATION_DDL + _UPLOAD_INDEX_DDL:
         db_conn.execute(ddl, commit=True)

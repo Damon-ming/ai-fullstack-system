@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/router/tables/encryption/tables.py
+# app-server/src/com/damon/ming/app/tables/encryption_tables.py
 """
 加密体系表定义 —— encryption_sessions。
 
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, String, Table, Text
-from src.com.damon.ming.router.tables.base import metadata
+from src.com.damon.ming.app.tables.base import metadata
 
 # ---------------------------------------------------------------------------
 # encryption_sessions 表

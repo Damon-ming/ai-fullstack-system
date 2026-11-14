@@ -59,7 +59,7 @@ class SessionService:
 
     用法：
         ss = SessionService(rsa_key_pair, kek, ttl_seconds, key_store=store)
-        ss.initialize()                          # 初始化 DB 存储后端
+        ss.initialize()                          # 清理 DB 中过期会话
 
         # 注册会话（原子替换）
         session = ss.register_and_replace(encrypted_aes_key, session_id)
@@ -97,8 +97,7 @@ class SessionService:
         return self._rsa.get_public_key_pem()
 
     def initialize(self) -> None:
-        """初始化存储后端。应用启动时调用一次。"""
-        self._key_store.initialize()
+        """清理 DB 中过期会话。应用启动时调用一次。"""
         self._key_store.cleanup_expired()
 
     def register_and_replace(

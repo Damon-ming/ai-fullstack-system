@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import ClassVar
 
 from fastapi import UploadFile
-from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from src.com.damon.ming.app.tables.upload_tables import upload_records
 from src.com.damon.ming.ai.rag_tool import RAGContainer
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
@@ -455,21 +456,17 @@ def _record_upload_metadata(
 
     try:
         db_conn.execute(
-            text(
-                "INSERT INTO upload_records "
-                "(file_uid, file_sha256, file_path, file_size, token, device_id, created_at) "
-                "VALUES (:uid, :sha, :path, :size, :token, :device, :cat) "
-                "ON CONFLICT (file_uid) DO NOTHING"
-            ),
-            {
-                "uid": file_uid,
-                "sha": file_sha256,
-                "path": file_path,
-                "size": str(file_size),
-                "token": token[:64] if token else None,
-                "device": device_id[:64] if device_id else "",
-                "cat": datetime.now(tz=UTC),
-            },
+            pg_insert(upload_records)
+            .values(
+                file_uid=file_uid,
+                file_sha256=file_sha256,
+                file_path=file_path,
+                file_size=str(file_size),
+                token=token[:64] if token else None,
+                device_id=device_id[:64] if device_id else "",
+                created_at=datetime.now(tz=UTC),
+            )
+            .on_conflict_do_nothing(index_elements=[upload_records.c.file_uid]),
             commit=True,
         )
     except Exception as e:
