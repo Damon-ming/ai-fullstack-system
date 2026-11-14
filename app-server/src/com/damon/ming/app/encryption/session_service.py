@@ -24,19 +24,16 @@ from __future__ import annotations
 import asyncio
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 
 from src.com.damon.ming.app.encryption.base_key_store import EncryptionSessionRecord
+from src.com.damon.ming.app.encryption.key_management import SessionKey
+from src.com.damon.ming.app.encryption.key_store import PgKeyStore
 from src.com.damon.ming.encryption.constants import AES_KEY_SIZES
 from src.com.damon.ming.encryption.key_store import unwrap_key, wrap_key
-from src.com.damon.ming.encryption.v1.key_management import SessionKey
 from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
 from src.com.damon.ming.log import pin
 
 logger = pin("app.encryption.session_service")
-
-if TYPE_CHECKING:
-    from src.com.damon.ming.app.encryption.key_store import PgKeyStore
 
 
 def _stored_ttl_seconds(stored: EncryptionSessionRecord) -> int:

@@ -5,7 +5,6 @@
 提供：
   - AES-256-GCM 对称加密（crypto_engine.AesGcmEngine）
   - 统一加密入口（crypto_engine.CryptoEngine，按 CipherSuite 分发）
-  - 密钥材料管理（key_management.KeyMaterial，含数据密钥 + 盲索引密钥）
   - RSA 密钥对生成（rsa_key_pair.RSAKeyPair）
   - HMAC-SHA256 请求签名（signature）
   - 加密套件枚举（cipher_suite.CipherSuite）
@@ -16,6 +15,7 @@
   - 配置加载 → 见 app/config/encryption/encryption_config_loader.py
   - 会话存储后端 → 见 app/encryption/（base_key_store / key_store）
   - 会话业务协调 → 见 app/encryption/session_service.py
+  - 会话密钥模型与应用密钥生命周期 → 见 app/encryption/key_management.py
   - 中间件 → 见 middleware/encryption_middleware.py
   - 路由 → 见 router/encryption/encryption_router.py
 """
@@ -28,9 +28,8 @@ from src.com.damon.ming.encryption.v1 import (
     CryptoEngine,
     EncryptedPayload,
     FieldEncryptor,
-    KeyMaterial,
+    KeyProvider,
     RSAKeyPair,
-    SessionKey,
     verify_signature,
 )
 
@@ -42,8 +41,7 @@ __all__ = [
     "CryptoEngine",
     "EncryptedPayload",
     "FieldEncryptor",
-    "KeyMaterial",
+    "KeyProvider",
     "RSAKeyPair",
-    "SessionKey",
     "verify_signature",
 ]

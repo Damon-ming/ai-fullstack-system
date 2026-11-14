@@ -79,7 +79,7 @@ ai-fullstack-system/
 │       ├── app/                 # 应用配置 + 初始化
 │       │   ├── config/          # YAML 配置加载器
 │       │   ├── tables/          # 全部业务表、索引、共享 metadata 和统一建表入口
-│       │   ├── encryption/      # 加密会话业务与 DB 密钥存储，无会话密钥缓存
+│       │   ├── encryption/      # 会话、应用密钥生命周期与 DB 存储，无会话密钥缓存
 │       │   └── app_initializer.py
 │       ├── db/                  # 数据库连接池
 │       ├── encryption/          # 可独立移植的加密原语和 KEK 工具

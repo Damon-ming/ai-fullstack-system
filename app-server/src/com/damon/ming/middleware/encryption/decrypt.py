@@ -9,6 +9,7 @@
 import json
 from abc import ABC, abstractmethod
 
+from src.com.damon.ming.app.encryption.key_management import SessionKey
 from src.com.damon.ming.encryption.constants import (
     SIGNATURE_TIMESTAMP_TOLERANCE_MS,
 )
@@ -16,7 +17,6 @@ from src.com.damon.ming.encryption.v1.crypto_engine import (
     AesGcmEngine,
     EncryptedPayload,
 )
-from src.com.damon.ming.encryption.v1.key_management import SessionKey
 from src.com.damon.ming.encryption.v1.signature import (
     derive_signing_key,
     verify_signature,

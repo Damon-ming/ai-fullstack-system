@@ -8,8 +8,8 @@
 import json
 from abc import ABC, abstractmethod
 
+from src.com.damon.ming.app.encryption.key_management import SessionKey
 from src.com.damon.ming.encryption.v1.crypto_engine import AesGcmEngine
-from src.com.damon.ming.encryption.v1.key_management import SessionKey
 from src.com.damon.ming.exception import EncryptionError
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin

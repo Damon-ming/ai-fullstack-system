@@ -1,6 +1,6 @@
-# app-server/src/com/damon/ming/encryption/v1/key_management.py
+# app-server/src/com/damon/ming/app/encryption/key_management.py
 """
-密钥材料管理 —— 纯技术层。
+应用密钥生命周期管理 —— 业务层。
 
 职责：
   - SessionKey 数据模型（AES 会话密钥）
@@ -8,7 +8,8 @@
   - 盲索引密钥管理
 
 不包含 RSA 密钥对（已独立到 rsa_key_pair.py）。
-不包含会话存储（已迁移到 app/encryption/session_service.py）。
+会话注册与 DB 存储由同目录 session_service.py 和 key_store.py 协调。
+底层随机数生成和加解密仍复用 encryption/ 中的技术能力。
 """
 
 import secrets
@@ -18,10 +19,11 @@ from dataclasses import dataclass, field
 
 from src.com.damon.ming.encryption.constants import INDEX_KEY_SIZE
 from src.com.damon.ming.encryption.v1.crypto_engine import AesGcmEngine
+from src.com.damon.ming.encryption.v1.field_encryptor import KeyProvider
 from src.com.damon.ming.exception import EncryptionError
 from src.com.damon.ming.log import pin
 
-logger = pin("encryption.key_management")
+logger = pin("app.encryption.key_management")
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +33,7 @@ logger = pin("encryption.key_management")
 
 @dataclass
 class SessionKey:
-    """一条已注册的 AES 会话密钥（纯数据，无业务字段）。"""
+    """已解密的 AES 会话密钥及其有效期、使用时间。"""
 
     key_id: str
     aes_key: bytes  # 原始 AES-256 密钥（32 字节）
@@ -52,7 +54,7 @@ class SessionKey:
 # ---------------------------------------------------------------------------
 
 
-class KeyMaterial:
+class KeyMaterial(KeyProvider):
     """数据加密密钥 + 盲索引密钥的管理器。
 
     数据密钥：用于数据库字段加解密，支持版本轮换（新写入用新版本，旧数据用旧密钥解密）。

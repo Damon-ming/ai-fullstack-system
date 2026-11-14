@@ -26,11 +26,12 @@
     # 查询
     db.query(User).filter(User.phone_idx == fe.blind_index("13800000000"))
 
-密钥材料（KeyMaterial）由使用方构造并注入，本模块不持有全局状态。
+密钥提供者由使用方构造并注入，本模块不依赖业务层的密钥管理实现。
 """
 
 import base64
 import struct
+from abc import ABC, abstractmethod
 
 from src.com.damon.ming.encryption.constants import (
     AES_NONCE_SIZE,
@@ -41,7 +42,16 @@ from src.com.damon.ming.encryption.v1.crypto_engine import (
     CryptoEngine,
     EncryptedPayload,
 )
-from src.com.damon.ming.encryption.v1.key_management import KeyMaterial
+
+
+class KeyProvider(ABC):
+    """密钥提供者抽象接口，实现类必须显式继承并实现全部抽象方法。"""
+
+    @abstractmethod
+    def get_data_key(self, key_id: str = "") -> bytes: ...
+
+    @abstractmethod
+    def get_index_key(self) -> bytes: ...
 
 
 def _pack_ciphertext(key_id: str, nonce: bytes, ciphertext: bytes) -> str:
@@ -103,14 +113,16 @@ def _unpack_ciphertext(packed_b64: str) -> tuple[str, bytes, bytes]:
 
 class FieldEncryptor:
     """
-    数据库字段加解密器（实例类，构造时注入 KeyMaterial）。
+    数据库字段加解密器（构造时注入满足 KeyProvider 接口的对象）。
 
     与 AesGcmEngine 的区别：
       - AesGcmEngine 返回结构化 EncryptedPayload，适合网络传输
       - FieldEncryptor 返回单个 base64 字符串，适合存入数据库单列
     """
 
-    def __init__(self, key_material: KeyMaterial) -> None:
+    def __init__(self, key_material: KeyProvider) -> None:
+        if not isinstance(key_material, KeyProvider):
+            raise TypeError("key_material 必须是 KeyProvider 的实现实例")
         self._key_material = key_material
 
     def encrypt(
@@ -128,7 +140,7 @@ class FieldEncryptor:
         参数：
           plaintext:  待加密明文
           suite:       加密套件（默认随机 nonce，最安全）
-          key:         AES-256 密钥（32 字节），为 None 时从注入的 KeyMaterial 取
+          key:         AES-256 密钥（32 字节），为 None 时从注入的密钥提供者取
           key_id:      密钥标识（写入密文，解密时用于取对应密钥）
           index_key:   盲索引密钥（可选，传则同时返回索引）
 
@@ -166,7 +178,7 @@ class FieldEncryptor:
         参数：
           packed_b64: FieldEncryptor.encrypt 返回的密文
           suite:       加密套件（需与加密时一致）
-          key_map:      key_id → key 的映射（为 None 时从注入的 KeyMaterial 取）
+          key_map:      key_id → key 的映射（为 None 时从注入的密钥提供者取）
 
         返回：
           解密后的明文字符串。
