@@ -91,8 +91,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_SESSION)),
                 ).model_dump(),
             )
-        session = AccountService.get_session_info(client.session_id)
-        if session is None:
+        session_owner = AccountService.get_session_owner(client.session_id)
+        if session_owner is None:
             logger.warning(
                 "认证失败: 无效会话 | path=%s phone_prefix=%s session_id=%s",
                 request.url.path,
@@ -106,13 +106,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     data=BaseBizFailedData(error_msg=t(I18nKey.AUTH_INVALID_SESSION)),
                 ).model_dump(),
             )
-        if session.token != client.token:
+        if session_owner.token != client.token:
             logger.warning(
                 "认证失败: 会话归属不匹配 | path=%s token_phone=%s session_token_phone=%s",
                 request.url.path,
                 phone[:3] + "***" if phone else "unknown",
-                AccountService.get_phone_by_token(session.token)[:3] + "***"
-                if session.token
+                AccountService.get_phone_by_token(session_owner.token)[:3] + "***"
+                if session_owner.token
                 else "unknown",
             )
             return JSONResponse(
