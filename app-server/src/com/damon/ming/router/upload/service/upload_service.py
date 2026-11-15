@@ -2,7 +2,6 @@
 import asyncio
 import os
 import threading
-import uuid
 from collections import OrderedDict
 from pathlib import Path
 from typing import ClassVar
@@ -19,6 +18,7 @@ from src.com.damon.ming.security.digest import sha256_file, sha256_hex
 from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.file_stat import file_creation_time
 from src.com.damon.ming.utils.time import now_iso
+from src.com.damon.ming.utils.uuid import generate_uuid_hex
 
 logger = pin("upload.service")
 
@@ -209,7 +209,7 @@ class UploadService:
             )
 
             # ── 直接处理该文件：写盘 → 缓存 → 入库（content 处理后离开作用域释放）──
-            file_uid = uuid.uuid4().hex
+            file_uid = generate_uuid_hex()
             file_sha256 = sha256_hex(content)
 
             # 构建存储路径: UUID_原始文件名.扩展名

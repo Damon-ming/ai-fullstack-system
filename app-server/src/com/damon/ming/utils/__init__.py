@@ -10,5 +10,6 @@ ming.utils —— 通用工具模块。
 """
 
 from src.com.damon.ming.utils.file_stat import file_creation_time, file_size
+from src.com.damon.ming.utils.uuid import generate_uuid, generate_uuid_hex
 
-__all__ = ["file_creation_time", "file_size"]
+__all__ = ["file_creation_time", "file_size", "generate_uuid", "generate_uuid_hex"]

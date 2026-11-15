@@ -38,13 +38,13 @@
 from __future__ import annotations
 
 import threading
-import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Self
 
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread.cancellation import CancellationToken
 from src.com.damon.ming.thread.request_scope import RequestScope
+from src.com.damon.ming.utils.uuid import generate_uuid_hex
 
 logger = pin("thread.pool_manager")
 
@@ -220,7 +220,7 @@ class ThreadPoolManager:
         Returns:
             RequestScope 实例。
         """
-        req_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
+        req_id = request_id or f"req-{generate_uuid_hex()[:12]}"
         cancellation_token = CancellationToken(token_id=f"{req_id}-tok")
         scope = RequestScope(request_id=req_id, cancellation_token=cancellation_token)
         logger.debug("请求作用域已创建 | request_id=%s", req_id)

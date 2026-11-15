@@ -16,7 +16,6 @@ finally：清理请求上下文 + 未落库则兜底落库
 """
 
 import asyncio
-import uuid
 
 from fastapi import APIRouter, Request
 from src.com.damon.ming.ai.inference.base_inference import STREAM_TYPE_REASONING
@@ -43,6 +42,7 @@ from src.com.damon.ming.router.rag.service.rag_turn import RagTurnRecorder
 from src.com.damon.ming.router.rag.sse import SseEmitter, SseMessageFactory
 from src.com.damon.ming.thread.pool_manager import RequestScope
 from src.com.damon.ming.utils.time import now
+from src.com.damon.ming.utils.uuid import generate_uuid_hex
 from sse_starlette.sse import EventSourceResponse
 
 logger = pin("chat.router")
@@ -64,7 +64,7 @@ def _create_recorder(request: Request, body) -> RagTurnRecorder:
     """
     return RagTurnRecorder(
         token=_request_token(request),
-        turn_id=f"turn_{uuid.uuid4().hex[:12]}",
+        turn_id=f"turn_{generate_uuid_hex()[:12]}",
         conversation_id=body.conversationId or SseMessageFactory.new_conversation_id(),
         query=body.query,
         query_at=now(),

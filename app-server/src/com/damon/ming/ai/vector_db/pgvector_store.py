@@ -28,7 +28,6 @@ PGVector 向量存储实现 —— PostgreSQL + pgvector 扩展。
 import json
 import re
 import threading
-import uuid
 from collections import OrderedDict
 from typing import Any
 
@@ -40,6 +39,7 @@ from src.com.damon.ming.ai.vector_db.base_vector_db import (
     VectorStoreParams,
 )
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.utils.uuid import generate_uuid
 
 # 标识符白名单：仅允许字母、数字、下划线，防止 SQL 注入
 _IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -189,7 +189,7 @@ class PGVectorStore(BaseVectorStore):
         ids = []
         rows = []
         for node in nodes:
-            node_id = node.node_id or str(uuid.uuid4())
+            node_id = node.node_id or generate_uuid()
             if node.embedding and len(node.embedding) != expected_dim:
                 raise ValueError(
                     f"向量维度不匹配: 期望 {expected_dim}, "

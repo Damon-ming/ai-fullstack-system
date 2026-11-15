@@ -18,13 +18,11 @@ UPSERT 使用 PostgreSQL 方言，行锁与多步写入保留在同一事务中�
 """
 
 import secrets
-import uuid
 from datetime import timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from src.com.damon.ming.app.tables.account_tables import (
-    DeviceRow,
     SessionRow,
     UserRow,
     devices,
@@ -40,6 +38,7 @@ from src.com.damon.ming.security import (
     verify_password,
 )
 from src.com.damon.ming.utils.time import now
+from src.com.damon.ming.utils.uuid import generate_uuid
 
 logger = pin("account.store")
 
@@ -72,30 +71,10 @@ def _db():
 # ---------------------------------------------------------------------------
 
 
-def get_token_by_phone(phone: str) -> str | None:
-    """根据手机号查询已签发的 token。"""
-    with _db().engine.connect() as conn:
-        result = conn.execute(
-            users.select()
-            .with_only_columns(users.c.token)
-            .where(users.c.phone == phone)
-        )
-        row = result.fetchone()
-    return row.token if row else None
-
-
 def _get_user_by_phone(phone: str):
     with _db().engine.connect() as conn:
         result = conn.execute(users.select().where(users.c.phone == phone))
         return result.fetchone()
-
-
-def _require_token_by_phone(phone: str) -> str:
-    """要求手机号已绑定 token；用于写入后验证绑定结果。"""
-    token = get_token_by_phone(phone)
-    if token is None:
-        raise DatabaseError("用户写入后未能查询到对应 token")
-    return token
 
 
 def get_phone_by_token(token: str) -> str | None:
@@ -117,33 +96,6 @@ def is_token_valid(token: str) -> bool:
             )
         )
         return result.fetchone() is not None
-
-
-def bind_token(phone: str, token: str) -> str:
-    """绑定 phone → token 映射，写入初始 TTL。
-
-    采用 INSERT 优先策略：先尝试插入，phone 冲突时 DO NOTHING，
-    然后查出当前绑定的 token 返回。并发场景下竞争失败方不会 500，
-    而是返回竞争者已插入的 token。
-
-    返回最终生效的 token（自己或竞争者的）。
-    """
-    _db().execute(
-        pg_insert(users)
-        .values(
-            token=token,
-            phone=phone,
-            name="",
-            created_at=now(),
-            expires_at=func.now() + TOKEN_TTL,
-            hard_expires_at=func.now() + TOKEN_HARD_TTL,
-        )
-        .on_conflict_do_nothing(index_elements=[users.c.phone]),
-        commit=True,
-    )
-
-    # 无论自己是否插入成功，都返回数据库中当前绑定的 token
-    return _require_token_by_phone(phone)
 
 
 def _verify_user_password(row, password: str) -> None:
@@ -258,94 +210,9 @@ def register_device(
     )
 
 
-def get_device(device_id: str) -> DeviceRow | None:
-    """查询设备记录。"""
-    with _db().engine.connect() as conn:
-        result = conn.execute(devices.select().where(devices.c.device_id == device_id))
-        row = result.fetchone()
-    if row is None:
-        return None
-    return DeviceRow(
-        device_id=row.device_id,
-        ua_hash=row.ua_hash,
-        raw_ua=row.raw_ua or "",
-        created_at=row.created_at,
-    )
-
-
-def is_device_registered(device_id: str) -> bool:
-    """检查设备是否已注册。"""
-    with _db().engine.connect() as conn:
-        result = conn.execute(devices.select().where(devices.c.device_id == device_id))
-        return result.fetchone() is not None
-
-
-def remove_device(device_id: str) -> None:
-    """删除设备记录（同时逻辑过期该设备的所有会话）。
-
-    已知限制：本函数未锁 device 行，与 create_or_refresh_session 并发时
-    可能产生孤儿 session（新 session 的 device_id 指向已删除的设备）。
-    当前影响：remove_device 为管理/调试操作，正常业务不会与登录并发；
-    孤儿 session 由 expires_at 到期自动清理。待后续必要时加 SELECT FOR UPDATE。
-    """
-    current = now()
-    with _db().transaction() as conn:
-        conn.execute(
-            sessions.update()
-            .where(
-                sessions.c.device_id == device_id,
-                sessions.c.expires_at > current,
-            )
-            .values(expires_at=current)
-        )
-        conn.execute(devices.delete().where(devices.c.device_id == device_id))
-
-
 # ---------------------------------------------------------------------------
 # 会话（session_id → SessionRow）
 # ---------------------------------------------------------------------------
-
-
-def create_session(token: str, device_id: str) -> str:
-    """为 (token, device_id) 创建一个新会话。
-
-    同一组合的旧会话立即过期（确保每个 token+device 只有一条活跃会话）。
-    通过 SELECT ... FOR UPDATE 锁住 device 行串行化同一设备的并发登录。
-    返回新 session_id。
-    """
-    current = now()
-    session_id = str(uuid.uuid4())
-    expires_at = current + SESSION_TTL
-
-    with _db().transaction() as conn:
-        # 锁住 device 行，串行化同一设备的并发登录，防止新 session 被并发 UPDATE 过期
-        conn.execute(
-            select(devices.c.device_id)
-            .where(devices.c.device_id == device_id)
-            .with_for_update()
-        )
-        # 过期旧会话
-        conn.execute(
-            sessions.update()
-            .where(
-                sessions.c.token == token,
-                sessions.c.device_id == device_id,
-                sessions.c.expires_at > current,
-            )
-            .values(expires_at=current)
-        )
-        # 插入新会话
-        conn.execute(
-            sessions.insert().values(
-                session_id=session_id,
-                token=token,
-                device_id=device_id,
-                created_at=current,
-                expires_at=expires_at,
-            )
-        )
-
-    return session_id
 
 
 def get_session(session_id: str) -> SessionRow | None:
@@ -362,21 +229,6 @@ def get_session(session_id: str) -> SessionRow | None:
     return _session_row(row)
 
 
-def get_active_session(token: str, device_id: str) -> SessionRow | None:
-    """查询某 (token, device_id) 的活跃会话。"""
-    current = now()
-    with _db().engine.connect() as conn:
-        result = conn.execute(
-            sessions.select().where(
-                sessions.c.token == token,
-                sessions.c.device_id == device_id,
-                sessions.c.expires_at > current,
-            )
-        )
-        row = result.fetchone()
-    return _session_row(row)
-
-
 def create_or_refresh_session(token: str, device_id: str) -> str:
     """创建新会话并原子过期该 (token, device_id) 的所有旧会话。
 
@@ -385,7 +237,7 @@ def create_or_refresh_session(token: str, device_id: str) -> str:
     确保最终只有一条活跃 session。
     """
     current = now()
-    session_id = str(uuid.uuid4())
+    session_id = generate_uuid()
     expires_at = current + SESSION_TTL
 
     with _db().transaction() as conn:
@@ -440,36 +292,6 @@ def refresh_token_ttl(token: str) -> None:
     )
 
 
-def revoke_sessions_by_token(token: str) -> int:
-    """注销某 token 的所有会话。返回注销数量。"""
-    current = now()
-    with _db().transaction() as conn:
-        result = conn.execute(
-            sessions.update()
-            .where(
-                sessions.c.token == token,
-                sessions.c.expires_at > current,
-            )
-            .values(expires_at=current)
-        )
-        return result.rowcount
-
-
-def revoke_sessions_by_device(device_id: str) -> int:
-    """注销某设备的所有会话。返回注销数量。"""
-    current = now()
-    with _db().transaction() as conn:
-        result = conn.execute(
-            sessions.update()
-            .where(
-                sessions.c.device_id == device_id,
-                sessions.c.expires_at > current,
-            )
-            .values(expires_at=current)
-        )
-        return result.rowcount
-
-
 # ---------------------------------------------------------------------------
 # 跨模块查询 —— 供其他模块调用，不暴露表结构
 # ---------------------------------------------------------------------------
@@ -493,61 +315,6 @@ def get_file_uploader_map() -> dict[str, str]:
         return {row[0]: (row[1] or "") for row in rows}
     except Exception:
         return {}
-
-
-# ---------------------------------------------------------------------------
-# 调试 / 管理
-# ---------------------------------------------------------------------------
-
-
-def get_all_devices() -> list[DeviceRow]:
-    """获取所有设备记录副本（调试用）。"""
-    with _db().engine.connect() as conn:
-        result = conn.execute(devices.select())
-        rows = result.fetchall()
-    return [
-        DeviceRow(
-            device_id=r.device_id,
-            ua_hash=r.ua_hash,
-            raw_ua=r.raw_ua or "",
-            created_at=r.created_at,
-        )
-        for r in (rows or [])
-    ]
-
-
-def get_all_sessions() -> list[SessionRow]:
-    """获取所有有效会话副本（调试用）。"""
-    current = now()
-    with _db().engine.connect() as conn:
-        result = conn.execute(sessions.select().where(sessions.c.expires_at > current))
-        rows = result.fetchall()
-    return [_session_row(r) for r in (rows or [])]
-
-
-def get_stats() -> dict:
-    """获取统计信息。"""
-    current = now()
-    with _db().engine.connect() as conn:
-        users_count = (
-            conn.execute(select(func.count()).select_from(users)).scalar() or 0
-        )
-        devices_count = (
-            conn.execute(select(func.count()).select_from(devices)).scalar() or 0
-        )
-        sessions_count = (
-            conn.execute(
-                select(func.count())
-                .select_from(sessions)
-                .where(sessions.c.expires_at > current)
-            ).scalar()
-            or 0
-        )
-    return {
-        "users": users_count,
-        "devices": devices_count,
-        "sessions": sessions_count,
-    }
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,6 @@ SSE 业务消息工厂 —— 统一构造 StreamMessage 并序列化。
 """
 
 import json
-import uuid
 from datetime import datetime
 
 from src.com.damon.ming.ai.schemas.response import (
@@ -21,6 +20,7 @@ from src.com.damon.ming.ai.schemas.response import (
 )
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.utils.time import to_unix_timestamp, unix_timestamp
+from src.com.damon.ming.utils.uuid import generate_uuid_hex
 
 
 class SseMessageFactory:
@@ -33,7 +33,7 @@ class SseMessageFactory:
         该 id 同时作为 history_conversations 表主键，跨轮次稳定，
         由 start 事件下发，客户端后续轮次原样回传。
         """
-        return f"conv_{uuid.uuid4().hex[:8]}"
+        return f"conv_{generate_uuid_hex()[:8]}"
 
     @staticmethod
     def get_start_data(

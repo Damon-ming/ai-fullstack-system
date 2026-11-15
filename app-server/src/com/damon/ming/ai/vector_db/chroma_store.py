@@ -1,7 +1,6 @@
 # app-server/src/com/damon/ming/ai/vector_db/chroma_store.py
 
 import threading
-import uuid
 from collections import OrderedDict
 from typing import Any
 
@@ -12,6 +11,7 @@ from src.com.damon.ming.ai.vector_db.base_vector_db import (
     VectorStoreParams,
 )
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.utils.uuid import generate_uuid
 
 
 @register_engine("chroma")
@@ -106,7 +106,7 @@ class ChromaDBStore(BaseVectorStore):
         metadatas = []
 
         for node in nodes:
-            node_id = node.node_id or str(uuid.uuid4())
+            node_id = node.node_id or generate_uuid()
             if (
                 node.embedding
                 and len(node.embedding) != self.params.embedding_dimension
