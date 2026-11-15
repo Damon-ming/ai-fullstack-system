@@ -50,7 +50,7 @@ class SummaryService:
         self.inference = inference
         self.summary_model = summary_model
         self.summary_options = summary_options or {}
-        # 摘要/压缩 LLM 调用共享推理信号量（与主推理共用 infer_sem）
+        # 摘要/压缩 LLM 调用共享 RAG 推理信号量（与主推理共用）
         # inject 模式——由 AppInitializer 创建后赋值，不穿透 RAGContainer 构造参数
         self._sem = semaphore
 

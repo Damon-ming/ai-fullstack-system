@@ -38,13 +38,11 @@ import sys
 
 import uvicorn
 from fastapi import FastAPI
-from slowapi.errors import RateLimitExceeded
 from src.com.damon.ming.app import AppInitializer, create_lifespan
+from src.com.damon.ming.app.exception_setup import register_app_exception_handlers
 from src.com.damon.ming.debug import is_debug
-from src.com.damon.ming.exception import register_exception_handler
 from src.com.damon.ming.log import init_logging, pin
 from src.com.damon.ming.middleware import register_middlewares
-from src.com.damon.ming.middleware.rate_limiter import rate_limit_handler
 from src.com.damon.ming.precheck import run_precheck
 from src.com.damon.ming.router.account import account_router
 from src.com.damon.ming.router.encryption import encryption_router
@@ -87,9 +85,6 @@ app = FastAPI(
 )
 
 
-# ---- 速率限制（per-IP，slowapi）--------------------------------------
-app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
-
 # ---- 中间件注册 --------------------------------------------------------
 # inbound:  CORS → Encryption → Auth → I18n → Context → 路由
 # outbound: 路由 → Context → I18n → Auth → Encryption → CORS
@@ -106,7 +101,7 @@ app.include_router(rag_router.router)
 logger.info("应用路由初始化完成")
 
 # ---- 全局异常处理器 ---------------------------------------------------
-register_exception_handler(app)
+register_app_exception_handlers(app)
 
 # ── 存活探针（/ping /health 绕过所有中间件，供 Docker 探测）─────────
 from src.com.damon.ming.middleware.health import wrap_health_app

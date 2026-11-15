@@ -74,7 +74,7 @@ class AppInitializer:
         self._init_encryption()
         self._init_sign_context()
         self._init_rate_limiter()
-        self._init_rag()  # 必须在 _init_ai 之前：创建 infer_sem 供 RAGContainer 传递
+        self._init_rag()  # 必须在 _init_ai 之前：创建 rag_sem 供 RAGContainer 传递
         self._init_ai()
         self._init_guardrail()
 
@@ -119,11 +119,11 @@ class AppInitializer:
 
         # Semaphore 在 lifespan 内创建，绑定到正确的事件循环
         app.state.rag_runtime = RagRuntime(
-            sem=self.chat_sem,
+            sem=self.rag_sem,
             retrieval_sem=self.retrieval_sem,
             execution_timeout_seconds=self.execution_timeout_seconds,
             retry_ms=self.chat_retry_ms,
-            locales=self.chat_locales,
+            locales=self.rag_locales,
         )
 
         app.state.storage = Storage(db_conn=self.db_conn)
@@ -397,19 +397,19 @@ class AppInitializer:
         rag = cfg.rag
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
-        self.chat_sem = asyncio.Semaphore(rag.shared_inference_max_concurrency)
+        self.rag_sem = asyncio.Semaphore(rag.shared_inference_max_concurrency)
         self.retrieval_sem = asyncio.Semaphore(rag.retrieval_max_concurrency)
         self.guardrail_sem = asyncio.Semaphore(rag.guardrail_max_concurrency)
         self.execution_timeout_seconds = rag.execution_timeout_seconds
         self.guardrail_timeout_seconds = rag.guardrail_timeout_seconds
         self.chat_retry_ms = rag.sse_retry_ms
         # 多 locale 文本配置：locale → LocaleConfig
-        self.chat_locales = cfg.rag.locales
+        self.rag_locales = cfg.rag.locales
 
         logger.info(
             "RAG 配置初始化完成 | locales=%s | shared_inference_max_concurrency=%d | retrieval_max_concurrency=%d | "
             "guardrail_max_concurrency=%d | guardrail_timeout_seconds=%g | execution_timeout_seconds=%g",
-            list(self.chat_locales.keys()),
+            list(self.rag_locales.keys()),
             rag.shared_inference_max_concurrency,
             rag.retrieval_max_concurrency,
             rag.guardrail_max_concurrency,
@@ -426,12 +426,12 @@ class AppInitializer:
         from src.com.damon.ming.app.thread_pools import get_rag_thread_pools
 
         register_all_inferences()
-        # infer_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
+        # rag_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
         # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
         # loader 同为注入，保证全进程只有一套推理引擎
         self.rag_app = get_rag_container(
             thread_pools=get_rag_thread_pools(),
-            infer_sem=self.chat_sem,
+            rag_sem=self.rag_sem,
             knowledge_dir=self.system_config.knowledge_dir,
             loader=self._loader,
         )

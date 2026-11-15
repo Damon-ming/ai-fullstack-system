@@ -235,7 +235,7 @@ class ThreadPoolManager:
         for name, pool in self._pools.items():
             stats["pools"][name] = {
                 "max_workers": pool._max_workers,
-                "active_threads": len(pool._threads)
+                "worker_threads": len(pool._threads)
                 if hasattr(pool, "_threads")
                 else "n/a",
                 **self._pool_metrics[name],

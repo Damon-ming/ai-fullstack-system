@@ -80,7 +80,7 @@ _rag_instance_lock = threading.Lock()
 
 def get_rag_container(
     thread_pools: RagThreadPools,
-    infer_sem: asyncio.Semaphore,
+    rag_sem: asyncio.Semaphore,
     knowledge_dir: str,
     loader: RagConfigLoader,
 ):
@@ -88,7 +88,7 @@ def get_rag_container(
 
     Args:
         thread_pools: 由 AppInitializer 注入的 RAG 命名线程池集合（必填）。
-        infer_sem: 推理信号量（与主推理共用，必填）。
+        rag_sem: RAG 流程共享的推理并发信号量（必填）。
         knowledge_dir: 知识库目录绝对路径（由 app.config 注入，必填）。
         loader: 推理配置加载器（由 AppInitializer 注入，必填）。
     """
@@ -98,7 +98,7 @@ def get_rag_container(
             if _rag_instance is None:
                 _rag_instance = RAGContainer(
                     thread_pools=thread_pools,
-                    infer_sem=infer_sem,
+                    rag_sem=rag_sem,
                     knowledge_dir=knowledge_dir,
                     loader=loader,
                 )
@@ -110,14 +110,14 @@ class RAGContainer:
     def __init__(
         self,
         thread_pools: RagThreadPools,
-        infer_sem: asyncio.Semaphore | None = None,
+        rag_sem: asyncio.Semaphore,
         knowledge_dir: str = "",
         loader: RagConfigLoader | None = None,
     ):
         logger.info("RAG 容器初始化开始")
         self._thread_pools = thread_pools
         # 推理信号量：所有 LLM 调用（主推理 + 摘要 + 压缩）共享同一上限
-        self._infer_sem = infer_sem
+        self._rag_sem = rag_sem
         # 知识库目录：由 app.config 注入，不再硬编码，不合法直接抛异常
         if not knowledge_dir:
             raise ValueError("RAGContainer 初始化失败：knowledge_dir 不能为空")
@@ -159,7 +159,7 @@ class RAGContainer:
             inference=_summary_entry.engine,
             summary_model=_summary_entry.model_name,
             summary_options=_summary_entry.options,
-            semaphore=self._infer_sem,
+            semaphore=self._rag_sem,
         )
 
         # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）

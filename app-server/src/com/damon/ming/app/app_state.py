@@ -84,7 +84,7 @@ class GuardrailState:
 class RagRuntime:
     """RAG 聊天流程运行时 —— 并发 / 超时 / 重试 / 多 locale 文案。
 
-    字段名去掉了与分组名重复的前缀：chat_sem → sem、execution_timeout_seconds 显式标注秒单位，
+    字段名去掉了与分组名重复的前缀：rag_sem → sem、execution_timeout_seconds 显式标注秒单位，
     与 request_context.py 中 ClientContext.token（而非 client_token）同一约定。
     retrieval_sem 标识检索阶段：与 sem 是两个不同用途的信号量，需要区分。
     """

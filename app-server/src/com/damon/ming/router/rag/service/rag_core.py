@@ -25,9 +25,9 @@ logger = pin("chat.core")
 MAX_CONTEXT_TOKEN_BUDGET = 512
 
 
-def _resolve_locale_text(chat_locales: dict, locale: str):
+def _resolve_locale_text(rag_locales: dict, locale: str):
     """按请求 locale 取文本配置，缺省回退 i18n 配置的 default_locale。"""
-    return chat_locales.get(locale) or chat_locales[get_default_locale()]
+    return rag_locales.get(locale) or rag_locales[get_default_locale()]
 
 
 async def _build_prompt_messages(
