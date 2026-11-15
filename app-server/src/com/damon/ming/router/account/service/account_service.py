@@ -7,7 +7,6 @@
   - is_token_valid(token)        token 是否有效（滚动 TTL + 绝对 TTL）
   - get_session_owner(session_id) 会话归属 token
   - get_phone_by_token(token)    token → 手机号
-  - get_file_uploader_map()      文件路径 → 上传者昵称
 
 account_router 自己仍直接使用 token_store（模块内访问不走本层）。
 """
@@ -54,8 +53,3 @@ class AccountService:
     def get_phone_by_token(token: str) -> str | None:
         """token → 手机号。"""
         return token_store.get_phone_by_token(token)
-
-    @staticmethod
-    def get_file_uploader_map() -> dict[str, str]:
-        """文件路径 → 上传者昵称（知识库展示用）。"""
-        return token_store.get_file_uploader_map()

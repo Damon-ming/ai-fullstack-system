@@ -29,7 +29,6 @@ from src.com.damon.ming.app.tables.account_tables import (
     sessions,
     users,
 )
-from src.com.damon.ming.app.tables.upload_tables import upload_records
 from src.com.damon.ming.db import get_default_db
 from src.com.damon.ming.exception import DatabaseError
 from src.com.damon.ming.log import pin
@@ -290,31 +289,6 @@ def refresh_token_ttl(token: str) -> None:
         .values(expires_at=func.now() + TOKEN_TTL),
         commit=True,
     )
-
-
-# ---------------------------------------------------------------------------
-# 跨模块查询 —— 供其他模块调用，不暴露表结构
-# ---------------------------------------------------------------------------
-
-
-def get_file_uploader_map() -> dict[str, str]:
-    """查询所有文件的上传者昵称，返回 {file_path: uploader_name}。
-
-    供知识库等模块调用，调用方无需感知 upload_records / users 表结构。
-    """
-
-    try:
-        with _db().engine.connect() as conn:
-            rows = conn.execute(
-                select(upload_records.c.file_path, users.c.name).select_from(
-                    upload_records.outerjoin(
-                        users, upload_records.c.token == users.c.token
-                    )
-                )
-            ).fetchall()
-        return {row[0]: (row[1] or "") for row in rows}
-    except Exception:
-        return {}
 
 
 # ---------------------------------------------------------------------------
