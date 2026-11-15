@@ -19,7 +19,6 @@ PPTX 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负�
 page 语义：每张幻灯片 = 一"页"，page_index 按幻灯片顺序递增。
 """
 
-import hashlib
 import os
 import threading
 from pathlib import Path
@@ -30,6 +29,7 @@ from src.com.damon.ming.ai.config.source.source_config_loader import SourceConfi
 from src.com.damon.ming.ai.source import register_engine
 from src.com.damon.ming.ai.source.base import BaseDataSource
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.security.digest import sha256_file
 
 logger = pin("LocalPptxDataSource")
 
@@ -99,12 +99,7 @@ class LocalPptxDataSource(BaseDataSource):
 
     @staticmethod
     def _get_file_sha256(file_path: str) -> str:
-        hash_sha256 = hashlib.sha256()
-        buffer_size = 8192
-        with open(file_path, "rb") as f:
-            while chunk := f.read(buffer_size):
-                hash_sha256.update(chunk)
-        return hash_sha256.hexdigest()
+        return sha256_file(file_path)
 
     @staticmethod
     def _extract_text_from_shapes(shapes) -> list[str]:

@@ -18,7 +18,6 @@ DOC/DOCX 数据源 —— 纯同步实现，线程编排由上层 RAGContainer �
 page 语义：按 page break 分页，超大段落二次切分后 page_index 递增。
 """
 
-import hashlib
 import os
 import re
 import threading
@@ -31,6 +30,7 @@ from src.com.damon.ming.ai.config.source.source_config_loader import SourceConfi
 from src.com.damon.ming.ai.source import register_engine
 from src.com.damon.ming.ai.source.base import BaseDataSource
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.security.digest import sha256_file
 
 logger = pin("LocalDocDataSource")
 
@@ -92,12 +92,7 @@ class LocalDocDataSource(BaseDataSource):
 
     @staticmethod
     def _get_file_sha256(file_path: str) -> str:
-        hash_sha256 = hashlib.sha256()
-        buffer_size = 8192
-        with open(file_path, "rb") as f:
-            while chunk := f.read(buffer_size):
-                hash_sha256.update(chunk)
-        return hash_sha256.hexdigest()
+        return sha256_file(file_path)
 
     def _extract_paragraphs(
         self, doc: DocxDocumentType

@@ -1,6 +1,5 @@
 # app-server/src/com/damon/ming/ai/embedding/ollama.py
 
-import hashlib
 import threading
 from collections import OrderedDict
 
@@ -10,6 +9,7 @@ from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
     EmbeddingParams,
 )
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.security.digest import sha256_hex
 
 logger = pin("OllamaEmbedding")
 
@@ -95,7 +95,7 @@ class OllamaEmbedding(BaseEmbeddingService):
     def _embed_with_prefix(self, text: str, prefix: str) -> list[float]:
         """带前缀的编码（缓存 key 使用加前缀后的文本）。"""
         prefixed = prefix + text
-        cache_key = hashlib.sha256(prefixed.encode("utf-8")).hexdigest()[:32]
+        cache_key = sha256_hex(prefixed)[:32]
 
         with self._cache_lock:
             if cache_key in self._cache:

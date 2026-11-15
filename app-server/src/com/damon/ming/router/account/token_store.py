@@ -17,7 +17,6 @@ CRUD 使用 SQLAlchemy Core 复用 app/tables 的表定义，
 UPSERT 使用 PostgreSQL 方言，行锁与多步写入保留在同一事务中。
 """
 
-import hashlib
 import secrets
 import uuid
 from datetime import timedelta
@@ -34,7 +33,12 @@ from src.com.damon.ming.app.tables.account_tables import (
 )
 from src.com.damon.ming.app.tables.upload_tables import upload_records
 from src.com.damon.ming.db import get_default_db
+from src.com.damon.ming.exception import DatabaseError
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.security import (
+    hash_password,
+    verify_password,
+)
 from src.com.damon.ming.utils.time import now
 
 logger = pin("account.store")
@@ -71,9 +75,27 @@ def _db():
 def get_token_by_phone(phone: str) -> str | None:
     """根据手机号查询已签发的 token。"""
     with _db().engine.connect() as conn:
-        result = conn.execute(users.select().where(users.c.phone == phone))
+        result = conn.execute(
+            users.select()
+            .with_only_columns(users.c.token)
+            .where(users.c.phone == phone)
+        )
         row = result.fetchone()
     return row.token if row else None
+
+
+def _get_user_by_phone(phone: str):
+    with _db().engine.connect() as conn:
+        result = conn.execute(users.select().where(users.c.phone == phone))
+        return result.fetchone()
+
+
+def _require_token_by_phone(phone: str) -> str:
+    """要求手机号已绑定 token；用于写入后验证绑定结果。"""
+    token = get_token_by_phone(phone)
+    if token is None:
+        raise DatabaseError("用户写入后未能查询到对应 token")
+    return token
 
 
 def get_phone_by_token(token: str) -> str | None:
@@ -121,13 +143,13 @@ def bind_token(phone: str, token: str) -> str:
     )
 
     # 无论自己是否插入成功，都返回数据库中当前绑定的 token
-    existing = get_token_by_phone(phone)
-    return existing or token
+    return _require_token_by_phone(phone)
 
 
-def _hash_password(password: str) -> str:
-    """SHA-256 密码哈希（简单实现，生产环境建议 bcrypt）。"""
-    return hashlib.sha256(password.encode()).hexdigest()
+def _verify_user_password(row, password: str) -> None:
+    """验证用户密码。"""
+    if not verify_password(password, row.password):
+        raise ValueError("PHONE_PASSWORD_MISMATCH")
 
 
 def _generate_default_name() -> str:
@@ -140,30 +162,19 @@ def login_or_register(phone: str, password: str) -> tuple[str, bool]:
 
     流程：
       1. phone 已注册 → 验 password → 对则返回 (token, False)，错则抛 ValueError
-      2. phone 未注册 → 自动注册 → 返回 (token, True)
+      2. phone 未注册且插入成功 → 返回 (新 token, True)
+      3. 并发请求先插入同一 phone → 校验已有账号密码后返回 (token, False)
     """
-    existing_token = get_token_by_phone(phone)
-
-    if existing_token:
-        # 已有用户 → 验证密码
-        password_hash = _hash_password(password)
-        with _db().engine.connect() as conn:
-            result = conn.execute(
-                users.select().where(
-                    users.c.phone == phone,
-                    users.c.password == password_hash,
-                )
-            )
-            row = result.fetchone()
-        if not row:
-            raise ValueError("PHONE_PASSWORD_MISMATCH")
-        return existing_token, False
+    existing_user = _get_user_by_phone(phone)
+    if existing_user is not None:
+        _verify_user_password(existing_user, password)
+        return existing_user.token, False
 
     # 新用户 → 自动注册（生成随机默认昵称）
     new_token = secrets.token_hex(32)
-    password_hash = _hash_password(password)
+    password_hash = hash_password(password)
     default_name = _generate_default_name()
-    _db().execute(
+    inserted_rows = _db().execute(
         pg_insert(users)
         .values(
             token=new_token,
@@ -177,8 +188,18 @@ def login_or_register(phone: str, password: str) -> tuple[str, bool]:
         .on_conflict_do_nothing(index_elements=[users.c.phone]),
         commit=True,
     )
-    existing_token = get_token_by_phone(phone)
-    return existing_token or new_token, True
+    if inserted_rows == 1:
+        return new_token, True
+    if inserted_rows != 0:
+        raise DatabaseError("无法确认用户注册写入结果")
+
+    # 并发请求可能已先为该手机号创建账号；冲突方必须验证密码，
+    # 不能把竞争者的 token 当作本次注册成功结果返回。
+    row = _get_user_by_phone(phone)
+    if row is None:
+        raise DatabaseError("用户注册冲突后未能查询到手机号记录")
+    _verify_user_password(row, password)
+    return row.token, False
 
 
 # ---------------------------------------------------------------------------

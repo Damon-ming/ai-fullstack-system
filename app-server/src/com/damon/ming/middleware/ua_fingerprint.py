@@ -13,9 +13,10 @@ UA 指纹工具 —— 从浏览器环境摘要计算设备唯一标识。
   - UA 比对允许部分字段变化（如版本号升级），不要求完全一致
 """
 
-import hashlib
 import re
 from typing import NamedTuple
+
+from src.com.damon.ming.security.digest import sha256_hex
 
 # ---------------------------------------------------------------------------
 # 数据模型
@@ -98,7 +99,7 @@ def compute_device_id(profile: UAProfile) -> str:
         profile.screen,
     ]
     fingerprint_input = "||".join(components)
-    return hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest()[:32]
+    return sha256_hex(fingerprint_input)[:32]
 
 
 def compute_ua_hash(profile: UAProfile) -> str:
@@ -110,7 +111,7 @@ def compute_ua_hash(profile: UAProfile) -> str:
     """
     # UAProfile 是 NamedTuple，直接遍历全部字段（与前端 encodeClientUA 同口径）
     fingerprint_input = "|".join(profile)
-    return hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest()
+    return sha256_hex(fingerprint_input)
 
 
 # ---------------------------------------------------------------------------

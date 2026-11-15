@@ -1,6 +1,5 @@
 # app-server/src/com/damon/ming/upload/service/upload_service.py
 import asyncio
-import hashlib
 import os
 import threading
 import uuid
@@ -16,6 +15,7 @@ from src.com.damon.ming.app.thread_pools import run_in_pool, submit_to_pool
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.security.digest import sha256_file, sha256_hex
 from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.file_stat import file_creation_time
 from src.com.damon.ming.utils.time import now_iso
@@ -74,7 +74,7 @@ class UploadService:
                 p.unlink(missing_ok=True)
                 tmp_cleaned += 1
                 continue
-            sha = _file_sha256(p)
+            sha = sha256_file(p)
             cache[sha] = p
             # 启动扫描也受 LRU 上限约束，避免超大知识库启动时内存爆炸
             if len(cache) > sha_cache_max:
@@ -210,7 +210,7 @@ class UploadService:
 
             # ── 直接处理该文件：写盘 → 缓存 → 入库（content 处理后离开作用域释放）──
             file_uid = uuid.uuid4().hex
-            file_sha256 = hashlib.sha256(content).hexdigest()
+            file_sha256 = sha256_hex(content)
 
             # 构建存储路径: UUID_原始文件名.扩展名
             # 原始文件名去除路径分隔符防止路径遍历
@@ -424,15 +424,6 @@ def _write_file_sync(path: Path, content: bytes) -> None:
         f.flush()
         os.fsync(f.fileno())
     os.rename(tmp_path, path)
-
-
-def _file_sha256(path: Path) -> str:
-    """读取磁盘文件，分块计算sha256哈希"""
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _record_upload_metadata(

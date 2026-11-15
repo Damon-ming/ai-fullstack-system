@@ -21,7 +21,6 @@ HTML 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负�
 page 语义：整个 HTML 文件为一页，超大正文按 pre_chunk 切分后 page_index 递增。
 """
 
-import hashlib
 import os
 import threading
 from pathlib import Path
@@ -32,14 +31,26 @@ from src.com.damon.ming.ai.config.source.source_config_loader import SourceConfi
 from src.com.damon.ming.ai.source import register_engine
 from src.com.damon.ming.ai.source.base import BaseDataSource
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.security.digest import sha256_file
 
 logger = pin("LocalHtmlDataSource")
 
 # 非内容标签：解析时直接移除
-_NON_CONTENT_TAGS = frozenset([
-    "script", "style", "noscript", "iframe", "svg", "canvas",
-    "nav", "footer", "header", "aside", "menu",
-])
+_NON_CONTENT_TAGS = frozenset(
+    [
+        "script",
+        "style",
+        "noscript",
+        "iframe",
+        "svg",
+        "canvas",
+        "nav",
+        "footer",
+        "header",
+        "aside",
+        "menu",
+    ]
+)
 
 # 正文容器选择器（按优先级）
 _CONTENT_SELECTORS = [
@@ -80,16 +91,24 @@ class LocalHtmlDataSource(BaseDataSource):
 
         cfg = SourceConfigLoader().load()
         self._encoding_fallbacks = (
-            encoding_fallbacks if encoding_fallbacks is not None else cfg.html_source.encoding_fallbacks
+            encoding_fallbacks
+            if encoding_fallbacks is not None
+            else cfg.html_source.encoding_fallbacks
         )
         self._pre_chunk_config = (
-            pre_chunk_config if pre_chunk_config is not None else cfg.html_source.pre_chunk
+            pre_chunk_config
+            if pre_chunk_config is not None
+            else cfg.html_source.pre_chunk
         )
         self._include_links = (
-            include_links if include_links is not None else cfg.html_source.include_links
+            include_links
+            if include_links is not None
+            else cfg.html_source.include_links
         )
         self._include_tables = (
-            include_tables if include_tables is not None else cfg.html_source.include_tables
+            include_tables
+            if include_tables is not None
+            else cfg.html_source.include_tables
         )
 
         # 实例级别锁
@@ -111,12 +130,7 @@ class LocalHtmlDataSource(BaseDataSource):
 
     @staticmethod
     def _get_file_sha256(file_path: str) -> str:
-        hash_sha256 = hashlib.sha256()
-        buffer_size = 8192
-        with open(file_path, "rb") as f:
-            while chunk := f.read(buffer_size):
-                hash_sha256.update(chunk)
-        return hash_sha256.hexdigest()
+        return sha256_file(file_path)
 
     def _read_html_file(self, file_path: str) -> str:
         """读取 HTML 文件，按编码链尝试。"""
@@ -250,10 +264,23 @@ class LocalHtmlDataSource(BaseDataSource):
             if child.name in ("div", "section", "span"):
                 # 如果该元素没有块级子元素，取其文本
                 has_block_child = any(
-                    isinstance(c, Tag) and c.name in (
-                        "p", "div", "section", "ul", "ol", "table",
-                        "h1", "h2", "h3", "h4", "h5", "h6",
-                        "article", "main",
+                    isinstance(c, Tag)
+                    and c.name
+                    in (
+                        "p",
+                        "div",
+                        "section",
+                        "ul",
+                        "ol",
+                        "table",
+                        "h1",
+                        "h2",
+                        "h3",
+                        "h4",
+                        "h5",
+                        "h6",
+                        "article",
+                        "main",
                     )
                     for c in child.children
                 )

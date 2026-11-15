@@ -55,6 +55,7 @@ psycopg2-binary==2.9.13
 
 # ── Security / Encryption ────────────────────────────────────
 cryptography==44.0.1
+argon2-cffi==25.1.0
 
 # ── Rate Limiting ─────────────────────────────────────────────
 slowapi==0.1.10

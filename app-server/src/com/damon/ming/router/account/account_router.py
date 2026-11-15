@@ -23,6 +23,10 @@ GET 无 body 可加密需放行，POST 有 body 必须加密，同一前缀无�
 """
 
 from fastapi import APIRouter, Request
+from src.com.damon.ming.app.thread_pools import (
+    get_database_query_pool,
+    run_in_pool,
+)
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
@@ -68,7 +72,12 @@ async def login(body: LoginRequest, request: Request):
     """
     # 1. 登录或自动注册
     try:
-        user_token, is_new = login_or_register(body.phone, body.password)
+        user_token, is_new = await run_in_pool(
+            get_database_query_pool(),
+            login_or_register,
+            body.phone,
+            body.password,
+        )
     except ValueError as e:
         if str(e) == "PHONE_PASSWORD_MISMATCH":
             return BaseFailedResponse(
@@ -151,7 +160,9 @@ async def update_profile(body: ProfileResponseData, request: Request):
     name = body.name.strip()[:64]
     update_user_name(client.token, name)
 
-    logger.info("用户资料已更新 | token_prefix=%s name=%s", client.token[:8] + "...", name)
+    logger.info(
+        "用户资料已更新 | token_prefix=%s name=%s", client.token[:8] + "...", name
+    )
 
     return BaseSuccessResponse(
         code=ErrorCode.OK,
