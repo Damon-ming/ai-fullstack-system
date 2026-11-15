@@ -88,7 +88,6 @@ class AppInitializer:
         slowapi 框架硬编码读写该键。
         """
         from src.com.damon.ming.app.app_state import (
-            AiServices,
             AppConfig,
             EncryptionState,
             GuardrailState,
@@ -100,13 +99,6 @@ class AppInitializer:
         app.state.config = AppConfig(
             system_config=self.system_config,
             upload_config=self.upload_config,
-        )
-
-        app.state.ai = AiServices(
-            infer_service=self.infer_service,
-            rag_app=self.rag_app,
-            model_name=self.inference_model_name,
-            options=self.inference_options,
         )
 
         app.state.threads = ThreadRuntime(pool_mgr=self.pool_mgr)
@@ -124,6 +116,10 @@ class AppInitializer:
             execution_timeout_seconds=self.execution_timeout_seconds,
             retry_ms=self.chat_retry_ms,
             locales=self.rag_locales,
+            rag_app=self.rag_app,
+            infer_service=self.infer_service,
+            infer_model_name=self.inference_model_name,
+            infer_options=self.inference_options,
         )
 
         app.state.storage = Storage(db_conn=self.db_conn)
@@ -420,12 +416,8 @@ class AppInitializer:
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""
         from src.com.damon.ming.ai.rag_tool import get_rag_container
-        from src.com.damon.ming.ai.registry.inference_registry import (
-            register_all_inferences,
-        )
         from src.com.damon.ming.app.thread_pools import get_rag_thread_pools
 
-        register_all_inferences()
         # rag_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
         # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
         # loader 同为注入，保证全进程只有一套推理引擎

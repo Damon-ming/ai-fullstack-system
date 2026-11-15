@@ -44,7 +44,7 @@ async def save_files(
         result = await UploadService.batch_save_files(
             file_list=files,
             upload_config=request.app.state.config.upload_config,
-            rag_app=request.app.state.ai.rag_app,
+            rag_app=request.app.state.rag_runtime.rag_app,
             cancellation_token=scope.cancellation_token,
             executor=document_pool,
             token=request.state.client.token,

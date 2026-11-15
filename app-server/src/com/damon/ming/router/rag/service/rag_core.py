@@ -44,7 +44,7 @@ async def _build_prompt_messages(
     # RAG 检索在推理信号量外执行（自身有线程池保护 + retrieval_sem 反压）
     async with app_state.rag_runtime.retrieval_sem:
         logger.debug("开始执行 RAG 检索")
-        ref_content = await app_state.ai.rag_app.query_rag(
+        ref_content = await app_state.rag_runtime.rag_app.query_rag(
             query,
             max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
             cancellation_token=cancellation_token,
@@ -79,10 +79,10 @@ async def generate_answer(
             app_state, query, cancellation_token
         )
         async with app_state.rag_runtime.sem:
-            async for token in app_state.ai.infer_service.stream_generate(
-                model_name=app_state.ai.model_name,
+            async for token in app_state.rag_runtime.infer_service.stream_generate(
+                model_name=app_state.rag_runtime.infer_model_name,
                 messages=prompt_messages,
                 reason=reason,
-                options=dict(app_state.ai.options),
+                options=dict(app_state.rag_runtime.infer_options),
             ):
                 yield token

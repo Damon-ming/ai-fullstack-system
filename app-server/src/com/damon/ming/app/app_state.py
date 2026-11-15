@@ -10,7 +10,7 @@
 
 分组：
   config      配置快照（启动时从 YAML 装载，运行期只读）
-  ai          AI 能力（推理引擎 / RAG）
+  rag_runtime RAG 流程运行时（RAG 容器 / 推理服务 / 并发配置）
   threads     全局线程池运行时（跨 RAG、数据库等模块共享）
   guardrail   护栏（引擎 + 并发 + 超时）
   chat        聊天链路运行时（并发 / 超时 / 重试 / 多 locale 文案）
@@ -51,20 +51,6 @@ class AppConfig:
 
 
 @dataclass
-class AiServices:
-    """AI 能力 —— 推理引擎 / RAG。
-
-    组名取 ai 而非 inference：AI 能力覆盖完整链路，与代码库模块名
-    src/com/damon/ming/ai/ 保持一致。
-    """
-
-    infer_service: BaseInferenceService
-    rag_app: RAGContainer
-    model_name: str
-    options: dict
-
-
-@dataclass
 class ThreadRuntime:
     """进程级线程池管理器，供各业务模块共享。"""
 
@@ -82,7 +68,7 @@ class GuardrailState:
 
 @dataclass
 class RagRuntime:
-    """RAG 聊天流程运行时 —— 并发 / 超时 / 重试 / 多 locale 文案。
+    """RAG 流程运行时 —— RAG 容器、推理服务及流程配置。
 
     字段名去掉了与分组名重复的前缀：rag_sem → sem、execution_timeout_seconds 显式标注秒单位，
     与 request_context.py 中 ClientContext.token（而非 client_token）同一约定。
@@ -94,6 +80,10 @@ class RagRuntime:
     execution_timeout_seconds: float
     retry_ms: int
     locales: dict[str, LocaleConfig]
+    rag_app: RAGContainer
+    infer_service: BaseInferenceService
+    infer_model_name: str
+    infer_options: dict
 
 
 @dataclass
