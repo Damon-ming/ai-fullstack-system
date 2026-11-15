@@ -53,8 +53,15 @@ include:
 # OOM killer 可能误杀 postgres / app-server。
 # 上公网 / 多租户前加 deploy.resources.limits（按实际使用量调校，vLLM 需预留 KV cache 空间）。
 
-# 共享网络：所有服务通过容器名互相发现
+# ai-network 供后端与数据库、推理服务通信；proxy-network 仅连接 Nginx 与后端。
+# 后端同时加入两个网络，前端容器无法直接访问数据库或推理服务。
 networks:
   ai-network:
     name: ai-network
     driver: bridge
+  proxy-network:
+    name: ai-proxy-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${PROXY_NETWORK_SUBNET:-172.30.20.0/24}

@@ -5,11 +5,13 @@
 其他模块一律通过 getter 取用，避免同一变量名散落到多处后难以查找。
 
 职责边界：
-  - 只读取，不做业务校验（MASTER_KEY 长度校验由 precheck 负责）
+  - 读取环境变量并做必要的基础格式解析；业务校验仍由对应模块负责
+    （MASTER_KEY 长度校验由 precheck 负责）
   - 密钥类（MASTER_KEY）用 getter 而非模块级常量，避免被广泛 import 后泄漏
   - DB_* / INFERENCE_* 也由本模块读取，YAML 合并和业务校验仍由各 loader 负责
 """
 
+import ipaddress
 import json
 import os
 
@@ -23,6 +25,7 @@ _VAR_INFERENCE_SERVER = "INFERENCE_SERVER"
 _VAR_INFERENCE_GATEWAY_URL = "INFERENCE_GATEWAY_URL"
 _VAR_INFERENCE_API_KEYS = "INFERENCE_API_KEYS"
 _VAR_INFERENCE_API_KEY_PREFIX = "INFERENCE_API_KEY_"
+_VAR_TRUSTED_PROXY_CIDRS = "TRUSTED_PROXY_CIDRS"
 
 # APP_ENV 取值
 ENV_DEBUG = "debug"
@@ -57,6 +60,21 @@ def get_log_level() -> str:
     默认 INFO，已归一化为大写。未知值由调用方（log 模块）回退处理。
     """
     return os.environ.get(_VAR_LOG_LEVEL, DEFAULT_LOG_LEVEL).upper()
+
+
+def get_trusted_proxy_networks() -> tuple[
+    ipaddress.IPv4Network | ipaddress.IPv6Network, ...
+]:
+    """可信反向代理网段，逗号分隔；未设置时仅信任本机回环地址。"""
+    raw = os.environ.get(_VAR_TRUSTED_PROXY_CIDRS, "127.0.0.1/32,::1/128")
+    values = [value.strip() for value in raw.split(",") if value.strip()]
+    if not values:
+        raise ValueError(f"环境变量 {_VAR_TRUSTED_PROXY_CIDRS} 不能为空")
+
+    networks = tuple(ipaddress.ip_network(value, strict=False) for value in values)
+    if any(network.prefixlen == 0 for network in networks):
+        raise ValueError(f"环境变量 {_VAR_TRUSTED_PROXY_CIDRS} 不允许配置全地址网段")
+    return networks
 
 
 def get_db_override(field: str) -> str | None:

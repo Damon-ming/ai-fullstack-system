@@ -16,10 +16,13 @@
 支持扩展：切换 Redis 存储只需修改 storage_uri，业务代码零改动。
 """
 
+import ipaddress
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
+from src.com.damon.ming.app.config.env import get_trusted_proxy_networks
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
@@ -29,34 +32,31 @@ from src.com.damon.ming.schemas.response import BaseBizFailedData, BaseFailedRes
 logger = pin("rate_limiter")
 
 
-# 可信反向代理 IP 列表。仅当直连对端 IP 在此列表中时才解析 X-Forwarded-For，
-# 否则使用 TCP peer IP 作为限流键，避免不可信客户端伪造转发头绕过限流。
-# 当前根目录 Compose 将 Nginx（web-app）和 app-server 部署为不同容器，
-# Nginx 通过 Docker 网络中的 app-server:8000 转发；app-server 看到的 peer IP
-# 是 web-app 容器 IP，不是 127.0.0.1。当前配置因此无法按真实客户端 IP 限流，
-# 请求会共用 web-app 容器 IP 对应的限流配额。
-#
-# TODO: 配置并信任 web-app 容器的固定 IP，然后将该地址加入 TRUSTED_PROXIES。
-# 仅信任实际反向代理地址；不要信任整个 Docker 网段或 0.0.0.0/0、::/0，
-# 否则同网络中的其他容器或外部客户端可能伪造 X-Forwarded-For。
-# 在完成此项前，限流仍生效，但限流粒度是代理容器而非客户端 IP。
-TRUSTED_PROXIES: set[str] = {"127.0.0.1"}
+# 仅信任专用代理网络内的请求来源。Compose 中该网络只连接 web-app 与 app-server；
+# Nginx 覆盖 X-Forwarded-For 后，才从该头读取客户端 IP。
+TRUSTED_PROXY_NETWORKS = get_trusted_proxy_networks()
 
 
 def _rate_limit_key(request: Request) -> str:
     """获取客户端真实 IP 用于限流。
 
-    仅在可信反向代理后方时解析 X-Forwarded-For(取最左侧原始客户端 IP),
-    否则直接使用 TCP peer IP,避免客户端伪造 header 绕过限流配额。
+    仅当 TCP peer 属于可信代理网段时才读取 X-Forwarded-For；否则使用 peer IP。
     """
     peer_ip = request.client.host if request.client else "unknown"
-    if peer_ip in TRUSTED_PROXIES:
+    try:
+        peer_address = ipaddress.ip_address(peer_ip)
+    except ValueError:
+        return peer_ip
+
+    if any(peer_address in network for network in TRUSTED_PROXY_NETWORKS):
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            # 格式: "client, proxy1, proxy2" — 最左侧是原始客户端
-            client_ip = forwarded.split(",")[0].strip()
-            if client_ip:
-                return client_ip
+            # Nginx 设置为 $remote_addr，因此该值只包含代理实际看到的客户端 IP。
+            client_ip = forwarded.strip()
+            try:
+                return str(ipaddress.ip_address(client_ip))
+            except ValueError:
+                pass
 
     return peer_ip
 
@@ -64,7 +64,7 @@ def _rate_limit_key(request: Request) -> str:
 # per-IP 限流（默认内存存储，多实例部署时切换为 Redis）
 # 注意：NAT 环境（公司/校园网）下多用户共享同一公网 IP 会共享限流配额。
 # per-user 限流需认证后执行，当前部署规模小 IP 限流足够，优先级 P3。
-# TODO: 多 worker 部署时切换为 Redis 存储，确保全局限流一致
+# TODO: 多 worker 或多 app-server 副本部署时切换为 Redis 存储，确保全局限流一致
 #  依赖: pip install redis
 #  配置: storage_uri="redis://localhost:6379"
 #  优先级: P2，单实例部署内存模式即可
@@ -76,7 +76,7 @@ limiter = Limiter(
 
 
 # 429 响应处理器
-async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+async def rate_limit_handler(request: Request, _exc: RateLimitExceeded):
     logger.warning(
         "速率限制触发 | client=%s | path=%s",
         request.client.host if request.client else "unknown",

@@ -35,4 +35,4 @@ services:
     ports:
       - "80:80"
     networks:
-      - ai-network
+      - proxy-network

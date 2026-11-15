@@ -60,6 +60,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - MASTER_KEY=${MASTER_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-https://your-production-domain.com}
+      - TRUSTED_PROXY_CIDRS=${PROXY_NETWORK_SUBNET:-172.30.20.0/24}
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ping')"]
       interval: 10s
@@ -73,6 +74,7 @@ services:
         max-file: "3"
     networks:
       - ai-network
+      - proxy-network
     depends_on:
       postgres:
         condition: service_healthy
