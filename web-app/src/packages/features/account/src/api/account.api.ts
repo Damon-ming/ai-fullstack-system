@@ -5,8 +5,8 @@
  * 职责：
  *   - 网络请求（login / fetchProfile / updateProfile）：返回原始 DataApiResponse，
  *     不解包、不转换、不做业务判断
- *   - 存储原语 re-export：getSessionContext / setSessionContext /
- *     clearSessionContext / setDeviceId / clearEncryptionSession ——
+ *   - 存储原语 re-export：getStoredToken / setStoredToken /
+ *     clearStoredToken / clearEncryptionSession ——
  *     直接透传 biz-common-storage，不附加任何逻辑
  *
  * 不做：
@@ -21,7 +21,7 @@ import { createLogger } from "@ming/core-log";
 
 import type {
   LoginRequest,
-  DeviceTokenResponse,
+  LoginResponse,
   ProfileRequest,
   ProfileResponse,
 } from "./types";
@@ -33,10 +33,9 @@ const log = createLogger("account/api");
 // ---------------------------------------------------------------------------
 
 export {
-  getSessionContext,
-  setSessionContext,
-  clearSessionContext,
-  setDeviceId,
+  getStoredToken,
+  setStoredToken,
+  clearStoredToken,
   clearEncryptionSession,
 } from "@ming/biz-common-storage";
 
@@ -47,9 +46,14 @@ export {
 /** 登录（手机号未注册时自动注册）。 */
 export async function login(
   body: LoginRequest,
-): Promise<DataApiResponse<DeviceTokenResponse>> {
+): Promise<DataApiResponse<LoginResponse>> {
   log.debug("登录请求", { phone: body.phone.slice(0, 3) + "***" });
-  return dataApi.post<DeviceTokenResponse>("/api/account/login/v1", body);
+  return dataApi.post<LoginResponse>("/api/account/login/v1", body);
+}
+
+/** 撤销当前设备的服务端会话。 */
+export async function logout(): Promise<DataApiResponse<Record<string, never>>> {
+  return dataApi.post<Record<string, never>>("/api/account/logout/v1");
 }
 
 /** 获取当前用户昵称。 */

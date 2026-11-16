@@ -95,6 +95,7 @@ const _Encryption = {
 const _Auth = {
   MISSING_TOKEN: _build(1, Business.AUTH),                 // 200003001 缺少认证 Token
   INVALID_TOKEN: _build(2, Business.AUTH),                 // 200003002 Token 无效/过期
+  INVALID_SESSION: _build(4, Business.AUTH),               // 200003004 设备会话无效
 } as const;
 
 const _Chat = {

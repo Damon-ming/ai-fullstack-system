@@ -15,6 +15,8 @@
     "hint": "Info is saved in this browser only.",
     "displayName": "Display name",
     "cancel": "Cancel",
-    "save": "Save"
+    "save": "Save",
+    "logout": "Sign out",
+    "logoutError": "Could not sign out. Please try again."
   }
 }

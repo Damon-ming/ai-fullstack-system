@@ -2,18 +2,18 @@
 // API 层导出 —— 纯透传：存储原语 + 网络请求
 export {
   login,
+  logout,
   fetchProfile,
   updateProfile,
-  getSessionContext,
-  setSessionContext,
-  clearSessionContext,
-  setDeviceId,
+  getStoredToken,
+  setStoredToken,
+  clearStoredToken,
   clearEncryptionSession,
 } from "./account.api";
 export type {
   AccountProfile,
   LoginRequest,
-  DeviceTokenResponse,
+  LoginResponse,
   ProfileRequest,
   ProfileResponse,
 } from "./types";

@@ -1,17 +1,11 @@
 // src/packages/biz-common/storage/src/index.ts
 
-// 认证态（设备 ID + 会话上下文 token/session_id）
+// 认证态（单个设备会话 token）
 export {
-  getDeviceId,
-  setDeviceId,
-  clearDeviceId,
-  getSessionContext,
-  setSessionContext,
-  clearSessionContext,
-  getToken,
-  getSessionId,
+  getStoredToken,
+  setStoredToken,
+  clearStoredToken,
 } from "./auth-store";
-export type { SessionContext } from "./auth-store";
 
 // 加密会话（密钥交换后由 bootstrap 写入，加密拦截器读取）
 export {

@@ -9,7 +9,8 @@
     "./biz/upload-state": "./src/biz/upload-state.ts",
     "./biz/search-state": "./src/biz/search-state.ts",
     "./biz/history-state": "./src/biz/history-state.ts",
-    "./biz/account-state": "./src/biz/account-state.ts"
+    "./biz/account-state": "./src/biz/account-state.ts",
+    "./biz/auth-state": "./src/biz/auth-state.ts"
   },
   "dependencies": {
     "zustand": "^5.0.3"

@@ -9,7 +9,7 @@ import { useTranslation } from "@ming/i18n";
  */
 export function AccountDialog() {
   const { t } = useTranslation("account");
-  const { open, draftName, setDraftName, closeDialog, save } =
+  const { open, draftName, setDraftName, closeDialog, save, logout, logoutError } =
     useAccountDialogHook();
 
   if (!open) return null;
@@ -39,21 +39,31 @@ export function AccountDialog() {
             className="mt-2 block w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-gray-700 outline-0 focus:border-blue-400 focus:bg-white"
           />
         </label>
-        <div className="mt-5 flex justify-end gap-3">
+        {logoutError && <p className="mt-4 text-sm text-red-600">{logoutError}</p>}
+        <div className="mt-5 flex justify-between gap-3">
           <button
             type="button"
-            onClick={closeDialog}
-            className="rounded-xl bg-gray-100 px-5 py-2 text-gray-500 transition hover:bg-gray-200"
+            onClick={() => void logout()}
+            className="rounded-xl px-4 py-2 text-red-600 transition hover:bg-red-50"
           >
-            {t("dialog.cancel")}
+            {t("dialog.logout")}
           </button>
-          <button
-            type="button"
-            onClick={save}
-            className="rounded-xl bg-blue-600 px-5 py-2 font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
-          >
-            {t("dialog.save")}
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={closeDialog}
+              className="rounded-xl bg-gray-100 px-5 py-2 text-gray-500 transition hover:bg-gray-200"
+            >
+              {t("dialog.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              className="rounded-xl bg-blue-600 px-5 py-2 font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+            >
+              {t("dialog.save")}
+            </button>
+          </div>
         </div>
       </section>
     </div>

@@ -9,6 +9,7 @@
     "./locales/zh.json": "./src/locales/zh.json"
   },
   "dependencies": {
+    "@ming/biz-common-net-api": "workspace:*",
     "@ming/biz-common-storage": "workspace:*",
     "@ming/core-log": "workspace:*",
     "@ming/data-layer": "workspace:*",

@@ -179,6 +179,9 @@ importers:
 
   src/packages/features/account:
     dependencies:
+      '@ming/biz-common-net-api':
+        specifier: workspace:*
+        version: link:../../biz-common/net-api
       '@ming/biz-common-storage':
         specifier: workspace:*
         version: link:../../biz-common/storage

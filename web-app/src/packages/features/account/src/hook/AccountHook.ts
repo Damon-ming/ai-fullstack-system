@@ -14,10 +14,9 @@ import {
   login as loginApi,
   fetchProfile,
   updateProfile,
-  getSessionContext,
-  setSessionContext,
-  clearSessionContext,
-  setDeviceId,
+  getStoredToken,
+  setStoredToken,
+  clearStoredToken,
   clearEncryptionSession,
 } from "../api";
 import type { LoginRequest } from "../api";
@@ -95,8 +94,8 @@ export function validateLoginForm(
 export async function login(
   request: LoginRequest,
 ): Promise<{ token: string; isNew: boolean }> {
-  const existing = getSessionContext();
-  if (existing?.token) return { token: existing.token, isNew: false };
+  const existing = getStoredToken();
+  if (existing) return { token: existing, isNew: false };
 
   const res = await loginApi(request);
 
@@ -104,18 +103,9 @@ export async function login(
     throw new Error("登录失败: 服务端未返回有效 token");
   }
 
-  if (res.data.device_id) {
-    setDeviceId(res.data.device_id);
-  }
-
-  setSessionContext({
-    token: res.data.token,
-    sessionId: res.data.session_id,
-  });
+  setStoredToken(res.data.token);
 
   log.info("登录完成", {
-    device_id: res.data.device_id?.slice(0, 12) + "...",
-    session_id: res.data.session_id?.slice(0, 8) + "...",
     is_new: res.data.is_new,
   });
 
@@ -123,13 +113,13 @@ export async function login(
 }
 
 /** 重新登录（清除缓存后重新登录）。 */
-export async function refreshDeviceToken(
+export async function reloginWithPassword(
   request: LoginRequest,
 ): Promise<string> {
   // 必须同时清加密会话：登录端点在服务端白名单里（明文放行），
   // 残留的会话会让登录请求被加密 → 服务端按明文解析失败。
   clearEncryptionSession();
-  clearSessionContext();
+  clearStoredToken();
   const result = await login(request);
   return result.token;
 }

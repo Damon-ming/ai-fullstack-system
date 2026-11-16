@@ -59,7 +59,11 @@ async def register_session(
     request: Request,
     encrypted_aes_key: Annotated[
         str,
-        Body(alias="encryptedAesKey", description="RSA-OAEP 加密的 AES 密钥 (base64)"),
+        Body(
+            embed=True,
+            alias="encryptedAesKey",
+            description="RSA-OAEP 加密的 AES 密钥 (base64)",
+        ),
     ],
 ):
     """

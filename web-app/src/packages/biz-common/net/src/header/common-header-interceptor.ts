@@ -7,24 +7,16 @@
  *   - X-Client-Env   : 运行环境（debug / release）
  *   - X-Client-Type  : 客户端类型编码
  *   - X-Client-UA    : 浏览器环境摘要
- *   - X-Device-ID    : 设备标识（独立存储，设备生命周期）
- *   - X-Session-ID   : 会话标识（从会话上下文读取）
  *   - X-Language     : 当前语言偏好（服务端据此下发对应 locale 的词条）
- *   - Cookie         : 设备认证 token（从会话上下文读取，有则注入）
+ *   - Authorization  : Bearer 设备会话 token（有登录态时注入）
  */
 
 import type { NormalizedRequest } from "@ming/core-network";
 import { collectClientUA, encodeClientUA } from "@ming/core-util";
-import {
-  getSessionContext,
-  getDeviceId,
-  getToken,
-} from "@ming/biz-common-storage";
+import { getStoredToken } from "@ming/biz-common-storage";
 import { envCode, clientTypeCode } from "@ming/biz-common-debug";
 import { VERSION } from "../../../../../version";
 import { getLanguage } from "./language-getter";
-
-const TOKEN_COOKIE_NAME = "device_auth_token";
 
 export function createCommonHeaderInterceptor() {
   const clientUA = encodeClientUA(collectClientUA());
@@ -44,21 +36,9 @@ export function createCommonHeaderInterceptor() {
       // 通过 setter 注入读取，避免 biz-common/net 直接依赖 @ming/i18n
       headers["X-Language"] = getLanguage();
 
-      // device_id：独立存储，设备生命周期（登出后仍存在）
-      const deviceId = getDeviceId();
-      if (deviceId) {
-        headers["X-Device-ID"] = deviceId;
-      }
-
-      // session_id：会话上下文，跟随登录状态
-      const ctx = getSessionContext();
-      if (ctx?.sessionId) {
-        headers["X-Session-ID"] = ctx.sessionId;
-      }
-
       // token：设备认证令牌，以 Authorization Bearer 方式传输
       // SECURITY: 不使用 Cookie 头，避免 HttpOnly/Secure/SameSite 安全属性问题
-      const token = getToken();
+      const token = getStoredToken();
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }

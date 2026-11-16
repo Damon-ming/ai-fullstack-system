@@ -1,6 +1,10 @@
 // account/src/hook/useAccountDialogHook.ts
 import { useAccountStore } from "@ming/store/biz/account-state";
 import { useAccount } from "./AccountHook";
+import { logout as logoutApi } from "../api";
+import { invalidateLocalSession } from "./session-lifecycle";
+import { useState } from "react";
+import { useTranslation } from "@ming/i18n";
 
 /**
  * 账户资料编辑弹窗 —— 订阅 store 中的弹窗状态，编排保存流程。
@@ -14,11 +18,24 @@ export function useAccountDialogHook() {
   const setDraftName = useAccountStore((s) => s.setDraftName);
   const closeDialog = useAccountStore((s) => s.closeDialog);
   const { update } = useAccount();
+  const { t } = useTranslation("account");
+  const [logoutError, setLogoutError] = useState("");
 
   const save = () => {
     void update(draftName);
     closeDialog();
   };
 
-  return { open, draftName, setDraftName, closeDialog, save };
+  const logout = async () => {
+    setLogoutError("");
+    try {
+      await logoutApi();
+      invalidateLocalSession();
+      closeDialog();
+    } catch {
+      setLogoutError(t("dialog.logoutError"));
+    }
+  };
+
+  return { open, draftName, setDraftName, closeDialog, save, logout, logoutError };
 }

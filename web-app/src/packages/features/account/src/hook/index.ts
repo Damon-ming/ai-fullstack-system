@@ -1,6 +1,6 @@
 export {
   login,
-  refreshDeviceToken,
+  reloginWithPassword,
   useAccount,
   useLoginPageHook,
   validatePhone,
@@ -8,6 +8,8 @@ export {
   validateLoginForm,
 } from "./AccountHook";
 export { useAccountDialogHook } from "./useAccountDialogHook";
+export { createAuthInterceptors } from "./auth-interceptors";
+export { invalidateLocalSession } from "./session-lifecycle";
 export type {
   ValidationResult,
   LoginStatus,

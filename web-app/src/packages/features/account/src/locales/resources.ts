@@ -16,5 +16,7 @@ export interface AccountResources {
     displayName: string;
     cancel: string;
     save: string;
+    logout: string;
+    logoutError: string;
   };
 }
