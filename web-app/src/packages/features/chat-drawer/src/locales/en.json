@@ -19,6 +19,8 @@
   },
   "history": {
     "title": "Recent Chats",
+    "pinned": "Pinned",
+    "pin": "Pin conversation",
     "delete": "Delete",
     "loading": "Loading",
     "empty": "No chat history"

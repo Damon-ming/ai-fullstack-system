@@ -1,23 +1,30 @@
+# app-server/src/com/damon/ming/router/history/history_router.py
 """
 对话历史路由 —— 历史记录 CRUD + 分页。
 
 接口：
   GET    /api/history/list/v1          分页获取会话列表
-  GET    /api/history/v1/{conversation_id}  获取单个会话详情（含全部轮次）
+  GET    /api/history/v1/{conversation_id}  获取单个会话详情（轮次游标分页）
   DELETE /api/history/v1/{conversation_id}  删除会话及其轮次
 
 所有接口从 request.state.client.user_id 获取用户身份，数据按 user_id 隔离。
 响应 data 直接承载业务负载（列表返回数组、详情返回对象），与前端解包口径一致。
 """
 
-from fastapi import APIRouter, Path, Query, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
-from src.com.damon.ming.router.history.schemas.bean import HistoryFailedData
+from src.com.damon.ming.router.history.history_store import (
+    InvalidHistoryCursor,
+    PinHistoryResult,
+)
+from src.com.damon.ming.router.history.schemas.bean import (
+    HistoryFailedData,
+)
 from src.com.damon.ming.router.history.service.history_service import HistoryService
 from src.com.damon.ming.schemas.response import BaseFailedResponse, BaseSuccessResponse
 
@@ -40,16 +47,16 @@ def _user_id(request: Request) -> int:
 @limiter.limit("30/minute")
 def list_history(
     request: Request,
-    page: int = Query(1, ge=1, description="页码（从1开始）"),
-    pageSize: int = Query(20, ge=1, le=100, description="每页条数"),
+    limit: int = Query(20, ge=1, le=100, description="每页会话数"),
+    cursor: str | None = Query(None, description="上一页返回的游标"),
 ):
-    """分页获取当前用户的会话列表（按 updated_at 倒序，不含轮次正文）。"""
+    """游标分页获取当前用户的会话列表（按更新时间倒序）。"""
     user_id = _user_id(request)
     try:
-        items = HistoryService.list_history(
-            user_id=user_id, page=page, page_size=pageSize
-        )
+        items = HistoryService.list_history(user_id=user_id, limit=limit, cursor=cursor)
         return BaseSuccessResponse(code=ErrorCode.OK, data=items)
+    except InvalidHistoryCursor as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("历史记录列表查询失败")
         fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
@@ -68,12 +75,17 @@ def list_history(
 def get_history(
     request: Request,
     conversation_id: str = Path(..., description="会话 ID"),
+    limit: int = Query(50, ge=1, le=100, description="每页轮数"),
+    cursor: str | None = Query(None, description="上一页返回的游标"),
 ):
-    """获取单个会话详情（含全部轮次）。"""
+    """获取单个会话详情的一页轮次；不传 cursor 时从最早轮次开始。"""
     user_id = _user_id(request)
     try:
         detail = HistoryService.get_history(
-            conversation_id=conversation_id, user_id=user_id
+            conversation_id=conversation_id,
+            user_id=user_id,
+            limit=limit,
+            cursor=cursor,
         )
         if detail is None:
             return BaseFailedResponse(
@@ -81,6 +93,8 @@ def get_history(
                 data=HistoryFailedData(error_msg=t(I18nKey.HISTORY_NOT_FOUND)),
             )
         return BaseSuccessResponse(code=ErrorCode.OK, data=detail)
+    except InvalidHistoryCursor as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("历史记录详情查询失败")
         fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
@@ -92,6 +106,39 @@ def get_history(
 # ---------------------------------------------------------------------------
 # 删除
 # ---------------------------------------------------------------------------
+
+
+@router.post("/v1/{conversation_id}/pin", response_model=None)
+@limiter.limit("30/minute")
+def pin_history(
+    request: Request,
+    conversation_id: str = Path(..., description="会话 ID"),
+):
+    """置顶当前用户的会话；每个用户最多置顶 30 个。"""
+    try:
+        result = HistoryService.pin_history(
+            conversation_id=conversation_id,
+            user_id=_user_id(request),
+        )
+        if result == PinHistoryResult.NOT_FOUND:
+            return BaseFailedResponse(
+                code=ErrorCode.HISTORY.NOT_FOUND,
+                data=HistoryFailedData(error_msg=t(I18nKey.HISTORY_NOT_FOUND)),
+            )
+        if result == PinHistoryResult.LIMIT_REACHED:
+            raise HTTPException(status_code=409, detail="最多置顶 30 个会话")
+        return BaseSuccessResponse(
+            code=ErrorCode.OK,
+            data={"conversationId": conversation_id, "isPinned": True},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("历史会话置顶状态更新失败")
+        fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
+        return BaseFailedResponse(
+            code=ErrorCode.SYSTEM.DATABASE_FAILURE, data=fail_data
+        )
 
 
 @router.delete("/v1/{conversation_id}", response_model=None)

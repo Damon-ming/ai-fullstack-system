@@ -22,20 +22,24 @@ const log = createLogger("history/api");
 // ---------------------------------------------------------------------------
 
 export async function fetchList(
-  page: number = 1,
-  pageSize: number = 20,
-): Promise<DataApiResponse<unknown[]>> {
-  log.debug("fetch history list", { page, pageSize });
-  return dataApi.get<unknown[]>("/api/history/list/v1", {
-    params: { page, pageSize },
+  cursor?: string,
+  limit: number = 20,
+): Promise<DataApiResponse<unknown>> {
+  log.debug("fetch history list", { cursor, limit });
+  return dataApi.get<unknown>("/api/history/list/v1", {
+    params: { limit, ...(cursor ? { cursor } : {}) },
   });
 }
 
 export async function fetchTurns(
   id: string,
+  cursor?: string,
+  limit: number = 50,
 ): Promise<DataApiResponse<unknown>> {
-  log.debug("fetch history turns", { id });
-  return dataApi.get<unknown>(`/api/history/v1/${id}`);
+  log.debug("fetch history turns", { id, cursor, limit });
+  return dataApi.get<unknown>(`/api/history/v1/${id}`, {
+    params: { limit, ...(cursor ? { cursor } : {}) },
+  });
 }
 
 export async function removeFromServer(
@@ -43,6 +47,12 @@ export async function removeFromServer(
 ): Promise<DataApiResponse<void>> {
   log.debug("remove history", { id });
   return dataApi.delete<void>(`/api/history/v1/${id}`);
+}
+
+export async function pinOnServer(
+  id: string,
+): Promise<DataApiResponse<unknown>> {
+  return dataApi.post<unknown>(`/api/history/v1/${id}/pin`);
 }
 
 // ---------------------------------------------------------------------------
@@ -53,4 +63,5 @@ export const historyStore = {
   list: fetchList,
   turns: fetchTurns,
   remove: removeFromServer,
+  pin: pinOnServer,
 };

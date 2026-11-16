@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/router/history/history_store.py
 """
 对话历史 存储层。
 
@@ -14,9 +15,11 @@
 
 import time
 from datetime import datetime
+from enum import Enum
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from src.com.damon.ming.app.tables.account_tables import users
 from src.com.damon.ming.app.tables.history_tables import (
     HistoryConversationRow,
     HistoryDetailRow,
@@ -26,8 +29,63 @@ from src.com.damon.ming.app.tables.history_tables import (
 )
 from src.com.damon.ming.db import get_default_db
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.utils.cursor_codec import (
+    CursorCodecError,
+    decode_cursor_payload,
+    encode_cursor_payload,
+)
 
 logger = pin("history.store")
+MAX_PINNED_CONVERSATIONS = 30
+
+
+class InvalidHistoryCursor(ValueError):
+    """历史记录分页游标格式错误。"""
+
+
+class PinHistoryResult(str, Enum):
+    """置顶会话操作结果。"""
+
+    PINNED = "pinned"
+    ALREADY_PINNED = "already_pinned"
+    LIMIT_REACHED = "limit_reached"
+    NOT_FOUND = "not_found"
+
+
+def _encode_cursor(query_at: datetime, turn_id: str) -> str:
+    return encode_cursor_payload(
+        {"queryAt": query_at.isoformat(), "turnId": turn_id}
+    )
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, str]:
+    try:
+        value = decode_cursor_payload(cursor)
+        query_at = datetime.fromisoformat(value["queryAt"])
+        turn_id = value["turnId"]
+        if not isinstance(turn_id, str) or not turn_id:
+            raise ValueError
+        return query_at, turn_id
+    except (CursorCodecError, ValueError, KeyError, TypeError) as exc:
+        raise InvalidHistoryCursor("分页游标无效") from exc
+
+
+def _encode_list_cursor(updated_at: datetime, conversation_id: str) -> str:
+    return encode_cursor_payload(
+        {"updatedAt": updated_at.isoformat(), "conversationId": conversation_id}
+    )
+
+
+def _decode_list_cursor(cursor: str) -> tuple[datetime, str]:
+    try:
+        value = decode_cursor_payload(cursor)
+        updated_at = datetime.fromisoformat(value["updatedAt"])
+        conversation_id = value["conversationId"]
+        if not isinstance(conversation_id, str) or not conversation_id:
+            raise ValueError
+        return updated_at, conversation_id
+    except (CursorCodecError, ValueError, KeyError, TypeError) as exc:
+        raise InvalidHistoryCursor("分页游标无效") from exc
 
 
 def _db():
@@ -75,45 +133,70 @@ def _run_transaction(operation, *, description: str):
 
 def list_history(
     user_id: int,
-    page: int = 1,
-    page_size: int = 20,
-) -> tuple[list[HistoryConversationRow], int]:
-    """分页查询会话列表（不含轮次正文），按 updated_at 倒序。
-
-    返回 (items, total)。
-    """
-    offset = (page - 1) * page_size
-
-    count_rows = _db().execute(
-        select(func.count())
-        .select_from(history_conversations)
-        .where(history_conversations.c.user_id == user_id),
-        commit=False,
-        fetch=True,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> tuple[
+    list[HistoryConversationRow], list[HistoryConversationRow], bool, str | None
+]:
+    """置顶会话全部返回；普通会话按 updated_at/id 倒序游标分页。"""
+    cursor_values = _decode_list_cursor(cursor) if cursor else None
+    base = select(history_conversations).where(
+        history_conversations.c.user_id == user_id
     )
-    total = count_rows[0][0] if count_rows else 0
-
-    rows = _db().execute(
-        select(history_conversations)
-        .where(history_conversations.c.user_id == user_id)
-        .order_by(history_conversations.c.updated_at.desc())
-        .limit(page_size)
-        .offset(offset),
-        commit=False,
-        fetch=True,
-    )
-
-    items = [
-        HistoryConversationRow(
-            id=r[0],
-            user_id=r[1],
-            title=r[2],
-            created_at=r[3],
-            updated_at=r[4],
+    pinned_rows = _db().execute(
+        base.where(history_conversations.c.is_pinned.is_(True))
+        .order_by(
+            history_conversations.c.updated_at.desc(),
+            history_conversations.c.id.desc(),
         )
-        for r in (rows or [])
-    ]
-    return items, total
+        .limit(MAX_PINNED_CONVERSATIONS),
+        commit=False,
+        fetch=True,
+    )
+    query = base.where(history_conversations.c.is_pinned.is_(False))
+    if cursor_values:
+        cursor_at, cursor_id = cursor_values
+        query = query.where(
+            or_(
+                history_conversations.c.updated_at < cursor_at,
+                and_(
+                    history_conversations.c.updated_at == cursor_at,
+                    history_conversations.c.id < cursor_id,
+                ),
+            )
+        )
+    rows = _db().execute(
+        query.order_by(
+            history_conversations.c.updated_at.desc(),
+            history_conversations.c.id.desc(),
+        ).limit(limit + 1),
+        commit=False,
+        fetch=True,
+    )
+    has_more = len(rows or []) > limit
+    rows = (rows or [])[:limit]
+
+    def _to_rows(values, is_pinned: bool) -> list[HistoryConversationRow]:
+        return [
+            HistoryConversationRow(
+                id=r[0],
+                user_id=r[1],
+                title=r[2],
+                is_pinned=is_pinned,
+                created_at=r[4],
+                updated_at=r[5],
+            )
+            for r in values
+        ]
+
+    pinned_items = _to_rows(pinned_rows or [], True)
+    items = _to_rows(rows, False)
+    next_cursor = (
+        _encode_list_cursor(items[-1].updated_at, items[-1].id)
+        if has_more and items
+        else None
+    )
+    return pinned_items, items, has_more, next_cursor
 
 
 # ---------------------------------------------------------------------------
@@ -121,12 +204,19 @@ def list_history(
 # ---------------------------------------------------------------------------
 
 
-def get_history(conversation_id: str, user_id: int) -> HistoryDetailRow | None:
-    """查询单个会话详情（含全部轮次，按提问时间升序）。
+def get_history(
+    conversation_id: str,
+    user_id: int,
+    limit: int = 50,
+    cursor: str | None = None,
+) -> HistoryDetailRow | None:
+    """查询单个会话详情的一页轮次，按提问时间升序。
 
     会话头与轮次在同一事务内读取：中途不会被并发删除 / 写入插队，
     避免出现「会话已删、轮次还在」或反之的撕裂视图。
     """
+
+    cursor_values = _decode_cursor(cursor) if cursor else None
 
     def _read(conn) -> HistoryDetailRow | None:
         c = conn.execute(
@@ -141,15 +231,32 @@ def get_history(conversation_id: str, user_id: int) -> HistoryDetailRow | None:
             id=c[0],
             user_id=c[1],
             title=c[2],
-            created_at=c[3],
-            updated_at=c[4],
+            is_pinned=c[3],
+            created_at=c[4],
+            updated_at=c[5],
         )
 
-        turn_rows = conn.execute(
-            select(history_turns)
-            .where(history_turns.c.conversation_id == conversation_id)
-            .order_by(history_turns.c.query_at.asc(), history_turns.c.turn_id.asc())
+        turn_query = select(history_turns).where(
+            history_turns.c.conversation_id == conversation_id
+        )
+        if cursor_values:
+            cursor_at, cursor_turn_id = cursor_values
+            turn_query = turn_query.where(
+                or_(
+                    history_turns.c.query_at > cursor_at,
+                    and_(
+                        history_turns.c.query_at == cursor_at,
+                        history_turns.c.turn_id > cursor_turn_id,
+                    ),
+                )
+            )
+        page_rows = conn.execute(
+            turn_query.order_by(
+                history_turns.c.query_at.asc(), history_turns.c.turn_id.asc()
+            ).limit(limit + 1)
         ).fetchall()
+        has_more = len(page_rows) > limit
+        turn_rows = page_rows[:limit]
         turns = [
             HistoryTurnRow(
                 turn_id=r[0],
@@ -165,7 +272,17 @@ def get_history(conversation_id: str, user_id: int) -> HistoryDetailRow | None:
             )
             for r in (turn_rows or [])
         ]
-        return HistoryDetailRow(conversation=conversation, turns=turns)
+        next_cursor = (
+            _encode_cursor(turn_rows[-1][6], turn_rows[-1][0])
+            if has_more and turn_rows
+            else None
+        )
+        return HistoryDetailRow(
+            conversation=conversation,
+            turns=turns,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     return _run_transaction(_read, description=f"历史详情读取 | id={conversation_id}")
 
@@ -327,3 +444,45 @@ def delete_history(conversation_id: str, user_id: int) -> bool:
     if deleted:
         logger.info("历史会话已删除 | id=%s", conversation_id)
     return deleted
+
+
+def pin_history(conversation_id: str, user_id: int) -> PinHistoryResult:
+    """置顶一个会话并返回操作结果。"""
+
+    def _pin(conn) -> PinHistoryResult:
+        # 同一用户的置顶操作串行化，确保并发请求也不会突破上限。
+        conn.execute(
+            select(users.c.user_id).where(users.c.user_id == user_id).with_for_update()
+        ).fetchone()
+        row = conn.execute(
+            select(history_conversations.c.is_pinned)
+            .where(
+                history_conversations.c.id == conversation_id,
+                history_conversations.c.user_id == user_id,
+            )
+            .with_for_update()
+        ).fetchone()
+        if row is None:
+            return PinHistoryResult.NOT_FOUND
+        if row[0]:
+            return PinHistoryResult.ALREADY_PINNED
+
+        pinned_count = conn.execute(
+            select(func.count())
+            .select_from(history_conversations)
+            .where(
+                history_conversations.c.user_id == user_id,
+                history_conversations.c.is_pinned.is_(True),
+            )
+        ).scalar_one()
+        if pinned_count >= MAX_PINNED_CONVERSATIONS:
+            return PinHistoryResult.LIMIT_REACHED
+
+        conn.execute(
+            history_conversations.update()
+            .where(history_conversations.c.id == conversation_id)
+            .values(is_pinned=True)
+        )
+        return PinHistoryResult.PINNED
+
+    return _run_transaction(_pin, description=f"会话置顶 | id={conversation_id}")

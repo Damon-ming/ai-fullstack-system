@@ -12,7 +12,7 @@ import type {
   InfiniteData,
 } from "@ming/data-layer";
 import { queryFactory, useInfiniteQuery } from "@ming/data-layer";
-import { fetchList, removeFromServer } from "./history.api";
+import { fetchList, pinOnServer, removeFromServer } from "./history.api";
 
 // ---------------------------------------------------------------------------
 // 缓存 key
@@ -30,20 +30,22 @@ export const HISTORY_PAGE_SIZE = 20;
 /** 列表无限滚动查询 —— 30s 内不重新拉取 */
 export const useHistoryListInfiniteQuery = () =>
   useInfiniteQuery<
-    DataApiResponse<unknown[]>,
+    DataApiResponse<unknown>,
     DataLayerError,
-    InfiniteData<DataApiResponse<unknown[]>>,
+    InfiniteData<DataApiResponse<unknown>>,
     typeof HISTORY_LIST_KEY,
-    number
+    string | null
   >({
     queryKey: HISTORY_LIST_KEY,
-    queryFn: ({ pageParam }) => fetchList(pageParam, HISTORY_PAGE_SIZE),
-    initialPageParam: 1,
-    // 满页说明可能还有下一页；不足一页即到底
-    getNextPageParam: (lastPage, _allPages, _lastPageParam, allPageParams) =>
-      (lastPage.data ?? []).length === HISTORY_PAGE_SIZE
-        ? (allPageParams.at(-1) ?? 1) + 1
-        : undefined,
+    queryFn: ({ pageParam }) =>
+      fetchList(pageParam ?? undefined, HISTORY_PAGE_SIZE),
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => {
+      const data = lastPage.data as
+        | { hasMore?: boolean; nextCursor?: string | null }
+        | undefined;
+      return data?.hasMore && data.nextCursor ? data.nextCursor : undefined;
+    },
     staleTime: 30 * 1000,
   });
 
@@ -52,3 +54,10 @@ export const useRemoveHistoryMutation = queryFactory.createMutationHook<
   void,
   string
 >(removeFromServer, { invalidateKeys: [HISTORY_LIST_KEY] });
+
+export const usePinHistoryMutation = queryFactory.createMutationHook<
+  unknown,
+  string
+>(pinOnServer, {
+  invalidateKeys: [HISTORY_LIST_KEY],
+});

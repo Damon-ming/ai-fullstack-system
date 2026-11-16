@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/router/history/service/history_service.py
 """
 对话历史 业务逻辑层。
 
@@ -11,8 +12,10 @@ from datetime import datetime
 
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.history import history_store
+from src.com.damon.ming.router.history.history_store import PinHistoryResult
 from src.com.damon.ming.router.history.schemas.bean import (
     HistoryDetailData,
+    HistoryListData,
     HistoryListItem,
     HistoryTurnItem,
 )
@@ -41,6 +44,7 @@ def _conv_to_list_item(row) -> HistoryListItem:
     return HistoryListItem(
         conversationId=row.id,
         title=row.title,
+        isPinned=row.is_pinned,
         createdAt=iso_format(row.created_at),
         updatedAt=iso_format(row.updated_at),
     )
@@ -52,9 +56,12 @@ def _detail_to_data(row) -> HistoryDetailData:
     return HistoryDetailData(
         conversationId=conv.id,
         title=conv.title,
+        isPinned=conv.is_pinned,
         createdAt=iso_format(conv.created_at),
         updatedAt=iso_format(conv.updated_at),
         turns=[_turn_to_item(t) for t in row.turns],
+        hasMore=row.has_more,
+        nextCursor=row.next_cursor,
     )
 
 
@@ -64,20 +71,29 @@ class HistoryService:
     @staticmethod
     def list_history(
         user_id: int,
-        page: int,
-        page_size: int,
-    ) -> list[HistoryListItem]:
-        """分页获取会话列表（不含轮次正文）。"""
-        rows, _total = history_store.list_history(user_id, page, page_size)
-        return [_conv_to_list_item(r) for r in rows]
+        limit: int,
+        cursor: str | None = None,
+    ) -> HistoryListData:
+        """游标分页获取会话列表（不含轮次正文）。"""
+        pinned_rows, rows, has_more, next_cursor = history_store.list_history(
+            user_id, limit, cursor
+        )
+        return HistoryListData(
+            pinned=[_conv_to_list_item(row) for row in pinned_rows],
+            items=[_conv_to_list_item(row) for row in rows],
+            hasMore=has_more,
+            nextCursor=next_cursor,
+        )
 
     @staticmethod
     def get_history(
         conversation_id: str,
         user_id: int,
+        limit: int,
+        cursor: str | None = None,
     ) -> HistoryDetailData | None:
-        """获取单个会话详情（含全部轮次）。"""
-        row = history_store.get_history(conversation_id, user_id)
+        """获取单个会话详情的一页轮次。"""
+        row = history_store.get_history(conversation_id, user_id, limit, cursor)
         return _detail_to_data(row) if row else None
 
     @staticmethod
@@ -87,6 +103,13 @@ class HistoryService:
     ) -> bool:
         """删除会话及其全部轮次。"""
         return history_store.delete_history(conversation_id, user_id)
+
+    @staticmethod
+    def pin_history(
+        conversation_id: str, user_id: int
+    ) -> PinHistoryResult:
+        """置顶一个会话；每个用户最多 30 个。"""
+        return history_store.pin_history(conversation_id, user_id)
 
     @staticmethod
     def save_turn(

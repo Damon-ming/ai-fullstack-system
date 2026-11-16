@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/router/history/schemas/bean.py
 from pydantic import BaseModel, Field
 from src.com.damon.ming.schemas.response import BaseBizFailedData
 
@@ -27,14 +28,26 @@ class HistoryListItem(BaseModel):
 
     conversationId: str = Field(..., description="会话唯一标识")
     title: str = Field(..., description="对话标题")
+    isPinned: bool = Field(False, description="是否置顶")
     createdAt: str = Field("", description="创建时间 ISO8601")
     updatedAt: str = Field("", description="更新时间 ISO8601")
 
 
+class HistoryListData(BaseModel):
+    """置顶会话全量列表及普通会话的一页。"""
+
+    pinned: list[HistoryListItem] = Field(default_factory=list)
+    items: list[HistoryListItem] = Field(default_factory=list)
+    hasMore: bool = False
+    nextCursor: str | None = None
+
+
 class HistoryDetailData(HistoryListItem):
-    """会话详情（含全部轮次，按提问时间升序）"""
+    """会话详情（当前页轮次，按提问时间升序）"""
 
     turns: list[HistoryTurnItem] = Field(default_factory=list, description="轮次列表")
+    hasMore: bool = Field(False, description="是否还有后续轮次")
+    nextCursor: str | None = Field(None, description="获取下一页轮次的游标")
 
 
 # ================= 2. 失败数据 =================

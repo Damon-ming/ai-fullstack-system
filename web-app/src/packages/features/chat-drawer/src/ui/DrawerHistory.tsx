@@ -11,6 +11,7 @@ export const DrawerHistory: React.FC = () => {
     activeConversationId,
     loading,
     selectChat,
+    pin,
     hasMore,
     loadMore,
     isLoadingMore,
@@ -58,21 +59,44 @@ export const DrawerHistory: React.FC = () => {
         {groups.map((group) => (
           <React.Fragment key={group.label}>
             <div className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              {group.label}
+              {group.isPinnedGroup ? t("history.pinned") : group.label}
             </div>
             {group.items.map((item) => (
-              <button
+              <div
                 key={item.conversationId}
-                type="button"
-                onClick={() => selectChat(item.conversationId)}
-                className={`flex h-9 w-full items-center rounded-lg px-3 text-sm text-left transition ${
+                className={`flex h-9 w-full items-center rounded-lg text-sm transition ${
                   activeConversationId === item.conversationId
                     ? "bg-blue-50 font-medium text-blue-700"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
-                <span className="truncate">{item.title}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => selectChat(item.conversationId)}
+                  className="h-full min-w-0 flex-1 truncate px-3 text-left"
+                >
+                  {item.title}
+                </button>
+                {item.isPinned ? (
+                  <span
+                    title={t("history.pinned")}
+                    aria-label={t("history.pinned")}
+                    className="px-2"
+                  >
+                    📌
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    title={t("history.pin")}
+                    aria-label={t("history.pin")}
+                    onClick={() => pin(item.conversationId)}
+                    className="h-full px-2 text-gray-400 hover:text-blue-600"
+                  >
+                    📌
+                  </button>
+                )}
+              </div>
             ))}
           </React.Fragment>
         ))}

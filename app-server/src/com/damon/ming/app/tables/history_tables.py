@@ -16,7 +16,16 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, String, Table, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    String,
+    Table,
+    Text,
+)
 from src.com.damon.ming.app.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
@@ -29,6 +38,7 @@ history_conversations = Table(
     Column("id", String(64), primary_key=True),
     Column("user_id", BigInteger, ForeignKey("users.user_id"), nullable=False),
     Column("title", String(200), nullable=False),
+    Column("is_pinned", Boolean, nullable=False, server_default="false"),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=_NOW),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=_NOW),
 )
@@ -41,6 +51,7 @@ class HistoryConversationRow:
     title: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    is_pinned: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +104,8 @@ class HistoryDetailRow:
 
     conversation: HistoryConversationRow
     turns: list[HistoryTurnRow]
+    has_more: bool = False
+    next_cursor: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -100,20 +113,15 @@ class HistoryDetailRow:
 # ---------------------------------------------------------------------------
 
 _HISTORY_DDL = [
-    # 复合索引：同时服务 WHERE token = ? 的过滤与 ORDER BY updated_at DESC 的排序，
-    # 取代原两个单列索引 idx_history_token / idx_history_updated
-    # （项目内没有单独按 updated_at 过滤/排序的查询，单列索引在此场景用不上）
+    # 会话列表游标：按用户过滤，并按 updated_at/id 倒序扫描。
     (
-        "CREATE INDEX IF NOT EXISTS idx_history_user_updated "
-        "ON history_conversations (user_id, updated_at DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_history_user_pin_updated_id "
+        "ON history_conversations (user_id, is_pinned DESC, updated_at DESC, id DESC)"
     ),
-    # 清理被复合索引取代的单列索引（幂等：新库上不存在则跳过）
-    "DROP INDEX IF EXISTS idx_history_token",
-    "DROP INDEX IF EXISTS idx_history_updated",
-    "CREATE INDEX IF NOT EXISTS idx_history_turns_conversation ON history_turns (conversation_id)",
-    "CREATE INDEX IF NOT EXISTS idx_history_turns_query_at ON history_turns (query_at)",
-    # 增量列：已存在的库表补 error_msg（幂等）
-    "ALTER TABLE history_turns ADD COLUMN IF NOT EXISTS error_msg TEXT",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_history_turns_conversation_query_turn "
+        "ON history_turns (conversation_id, query_at, turn_id)"
+    ),
 ]
 
 

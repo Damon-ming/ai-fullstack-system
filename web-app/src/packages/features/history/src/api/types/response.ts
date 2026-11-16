@@ -20,5 +20,6 @@ export interface HistoryItem {
   createdAt: string;
   /** 更新时间 ISO8601（列表按此倒序分组） */
   updatedAt: string;
+  isPinned: boolean;
   turns?: HistoryTurn[];
 }

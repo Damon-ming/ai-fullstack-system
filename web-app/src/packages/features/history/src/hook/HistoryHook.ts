@@ -7,10 +7,14 @@ import {
   removeFromServer,
   useHistoryListInfiniteQuery,
   useRemoveHistoryMutation,
+  usePinHistoryMutation,
 } from "../api";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
 import { createLogger } from "@ming/core-log";
-import { useChatMessageStore, useChatUiStore } from "@ming/store/biz/chat-state";
+import {
+  useChatMessageStore,
+  useChatUiStore,
+} from "@ming/store/biz/chat-state";
 import { useHistoryStore } from "@ming/store/biz/history-state";
 import type { HistoryChatMessage } from "./types";
 
@@ -27,7 +31,10 @@ interface HistoryApiRecord {
   title?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
+  isPinned?: unknown;
   turns?: unknown;
+  hasMore?: unknown;
+  nextCursor?: unknown;
 }
 interface HistoryTurnRecord {
   turnId?: unknown;
@@ -70,6 +77,7 @@ function parseListRecord(item: unknown): HistoryItem {
     title: String(obj.title ?? ""),
     createdAt: String(obj.createdAt ?? ""),
     updatedAt: String(obj.updatedAt ?? ""),
+    isPinned: Boolean(obj.isPinned),
     turns: [],
   };
 }
@@ -96,9 +104,18 @@ function parseTurns(raw: unknown): HistoryTurn[] {
 
 async function fetchAndUnpackTurns(id: string): Promise<HistoryTurn[]> {
   try {
-    const res = await fetchTurns(id);
-    const detail = unpackDetail(res) as { turns?: unknown } | undefined;
-    return parseTurns(detail?.turns);
+    const turns: HistoryTurn[] = [];
+    let cursor: string | undefined;
+    do {
+      const res = await fetchTurns(id, cursor);
+      const detail = unpackDetail(res) as HistoryApiRecord | undefined;
+      turns.push(...parseTurns(detail?.turns));
+      cursor =
+        detail?.hasMore && typeof detail.nextCursor === "string"
+          ? detail.nextCursor
+          : undefined;
+    } while (cursor);
+    return turns;
   } catch (e) {
     // 拉取失败按空会话处理：调用方仍需切换视图，不能静默保留旧会话内容
     log.error("fetch turns failed", e);
@@ -161,16 +178,22 @@ export function useHistory() {
   const infiniteQuery = useHistoryListInfiniteQuery();
   const pages = infiniteQuery.data?.pages;
 
-  // 累积所有已加载页（后端按 updated_at 倒序分页）
+  // 累积所有已加载页（后端按 updated_at/id 倒序游标分页）
   const list = useMemo(
     () =>
-      (pages ?? [])
-        .flatMap((page) => (page.data ?? []) as unknown[])
-        .map(parseListRecord),
+      [
+        ...((pages?.[0]?.data as { pinned?: unknown[] } | undefined)?.pinned ??
+          []),
+        ...(pages ?? []).flatMap((page) => {
+          const data = page.data as { items?: unknown[] } | undefined;
+          return data?.items ?? [];
+        }),
+      ].map(parseListRecord),
     [pages],
   );
 
   const removeMutation = useRemoveHistoryMutation();
+  const pinMutation = usePinHistoryMutation();
 
   const remove = useCallback(
     (id: string) => {
@@ -179,17 +202,34 @@ export function useHistory() {
     [removeMutation],
   );
 
+  const pin = useCallback(
+    (id: string) => {
+      pinMutation.mutate(id);
+    },
+    [pinMutation],
+  );
+
   const groups = useMemo(() => {
-    const grouped = new Map<string, typeof list>();
-    // 与服务端列表口径一致：按 updatedAt 倒序分组
+    const grouped = new Map<
+      string,
+      { label: string; isPinnedGroup: boolean; items: typeof list }
+    >();
+    // 置顶会话固定在顶部，其余按更新时间倒序
     const sorted = [...list].sort(
-      (a, b) => parseTimestamp(b.updatedAt) - parseTimestamp(a.updatedAt),
+      (a, b) =>
+        Number(b.isPinned) - Number(a.isPinned) ||
+        parseTimestamp(b.updatedAt) - parseTimestamp(a.updatedAt),
     );
     for (const item of sorted) {
-      const label = getHistoryGroupLabel(parseTimestamp(item.updatedAt));
-      grouped.set(label, [...(grouped.get(label) || []), item]);
+      const isPinnedGroup = item.isPinned;
+      const label = isPinnedGroup
+        ? ""
+        : getHistoryGroupLabel(parseTimestamp(item.updatedAt));
+      const key = isPinnedGroup ? "pinned" : `date:${label}`;
+      const group = grouped.get(key) ?? { label, isPinnedGroup, items: [] };
+      grouped.set(key, { ...group, items: [...group.items, item] });
     }
-    return [...grouped.entries()].map(([label, items]) => ({ label, items }));
+    return [...grouped.values()];
   }, [list]);
 
   const refresh = useCallback(
@@ -218,14 +258,26 @@ export function useHistory() {
    */
   const loadAll = useCallback(async (): Promise<HistoryItem[]> => {
     const all: HistoryItem[] = [];
-    const pageSize = 100;
-    // 上限 100 页（10000 条）防御异常情况下无限循环
-    for (let page = 1; page <= 100; page += 1) {
-      const res = await fetchList(page, pageSize);
-      const items = ((res.data ?? []) as unknown[]).map(parseListRecord);
+    const limit = 100;
+    let cursor: string | undefined;
+    const seenCursors = new Set<string>();
+    do {
+      const res = await fetchList(cursor, limit);
+      const data = res.data as
+        | {
+            pinned?: unknown[];
+            items?: unknown[];
+            hasMore?: boolean;
+            nextCursor?: string;
+          }
+        | undefined;
+      if (!cursor) all.push(...(data?.pinned ?? []).map(parseListRecord));
+      const items = (data?.items ?? []).map(parseListRecord);
       all.push(...items);
-      if (items.length < pageSize) break;
-    }
+      cursor = data?.hasMore && data.nextCursor ? data.nextCursor : undefined;
+      if (cursor && seenCursors.has(cursor)) break;
+      if (cursor) seenCursors.add(cursor);
+    } while (cursor);
     return all;
   }, []);
 
@@ -238,6 +290,7 @@ export function useHistory() {
     loadMore,
     loadAll,
     remove,
+    pin,
     /** 重新拉取历史列表（服务端新建会话后刷新抽屉用） */
     refresh,
   };
@@ -254,7 +307,9 @@ export function useSelectConversation() {
   const abortStream = useChatMessageStore((s) => s.abortStream);
   const setMessages = useChatMessageStore((s) => s.setMessages);
   const resetSession = useChatUiStore((s) => s.resetSession);
-  const setActiveConversationId = useHistoryStore((s) => s.setActiveConversationId);
+  const setActiveConversationId = useHistoryStore(
+    (s) => s.setActiveConversationId,
+  );
 
   return useCallback(
     async (conversationId: string) => {
