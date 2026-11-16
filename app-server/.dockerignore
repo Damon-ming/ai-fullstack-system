@@ -27,5 +27,5 @@ venv/
 *.md
 
 # ── 运行时数据（通过 volume 挂载，不打入镜像）──────────
-knowledges/
+knowledge/
 chroma/

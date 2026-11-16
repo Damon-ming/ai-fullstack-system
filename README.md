@@ -172,7 +172,7 @@ ${DATA_DIR}/                          # 默认 /root/damon
 │       ├── Qwen2.5-1.5B-Instruct/
 │       └── Qwen3Guard-Gen-4B/
 ├── chroma/                           # Chroma 向量缓存
-├── knowledges/                       # 上传知识库文件
+├── knowledge/                       # 上传知识库文件
 └── logs/
     └── app-server/                   # 后端运行日志
 ```

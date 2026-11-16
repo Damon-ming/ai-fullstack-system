@@ -2,7 +2,7 @@
 """
 版本信息 —— 单一版本源 + CI 构建元信息。
 
-产品版本真值唯一来源：../pyproject.toml（与 Dockerfile 同级）
+产品版本真值唯一来源：当前工作目录下唯一的 TOML 文件
 构建信息由 CI 打包时写入 _build_info.py，本地开发环境自动兜底。
 
 使用方式：
@@ -24,16 +24,13 @@ from pathlib import Path
 
 
 def _get_product_version() -> str:
-    # 文件位置：src/com/damon/ming/version.py → 上五级 = 项目根目录（app-server/）
-    #   version.py → ming/ → damon/ → com/ → src/ → app-server/
-    pyproject_path = (
-        Path(__file__).resolve().parent.parent.parent.parent.parent / "pyproject.toml"
-    )
-    if pyproject_path.exists():
+    # 项目约定从根目录启动，且当前目录只有一个 TOML 配置文件。
+    toml_files = sorted(Path.cwd().glob("*.toml"))
+    if toml_files:
         try:
             import tomllib  # Python 3.11+ 标准库
 
-            with open(pyproject_path, "rb") as f:
+            with open(toml_files[0], "rb") as f:
                 data = tomllib.load(f)
                 return data["project"]["version"]
         except (KeyError, ImportError, OSError):

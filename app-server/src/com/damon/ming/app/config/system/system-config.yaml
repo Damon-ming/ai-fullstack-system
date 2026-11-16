@@ -3,7 +3,7 @@
 # 各模块从 app.state.config.system_config 读取，不再自行硬编码路径。
 
 # 知识库目录（绝对路径，与 docker-compose volume 挂载一致）
-knowledge_dir: "/app-server/knowledges"
+knowledge_dir: "/app-server/knowledge"
 
 # 加密豁免白名单 —— 命中前缀的请求明文放行（不加密请求体、不加密响应体）。
 #

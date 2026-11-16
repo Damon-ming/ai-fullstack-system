@@ -45,7 +45,7 @@ def _build_tree(
 
     Args:
         node_path: 当前节点的绝对路径。
-        rel_base: 计算相对路径的基准目录（KNOWLEDGES_DIR）。
+        rel_base: 计算相对路径的基准目录（KNOWLEDGE_DIR）。
         uploader_map: 文件路径 → 上传者昵称映射（由 account 模块提供）。
 
     Returns:
