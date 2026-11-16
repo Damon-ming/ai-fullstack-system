@@ -630,7 +630,7 @@ app → features → data-layer(可选) → biz-common / store / i18n → core
 - **biz-common** 是项目所有公共业务逻辑的封装模块
 - **data-layer** 是可选中间层：提供 TanStack Query 的 queryFactory 和 DataApiResponse 统一解包。需要 Query 缓存/解包的模块走 data-layer，不需要的（如 encryption）直接走 biz-common-net-api
 - **features 之间通过 api/ 层互相依赖**，不能直接 import 其他 feature 的具体实现
-- **biz-common、i18n、store 同级的模块之间不能互相依赖**
+- **biz-common 内部同级子模块可以按职责单向依赖**，例如 `net → storage`；biz-common 与 i18n、store 之间仍保持模块边界
 - **data-layer → biz-common/net-api** 是唯一的跨组例外：data-layer 的职责是对 netClient 进行 Query 解包封装，因此依赖 `@ming/biz-common-net-api` 获取 `netClient` 和 `BizResult` 类型。这是组合关系，非业务耦合
 - 所有网络调用必须走 **biz-common/net-api** 或 **data-layer**（app、features 均适用）
 - **除网络模块外，app 和 features 可以直接调用 biz-common 和 core 模块**

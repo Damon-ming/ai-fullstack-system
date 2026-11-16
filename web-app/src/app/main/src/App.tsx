@@ -2,13 +2,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { DataProvider } from "@ming/data-layer";
 import { ChatPage } from "@ming/feature-chat-api";
-import { LoginPage } from "@ming/feature-account-api";
-import { useAuthStore } from "@ming/store/biz/auth-state";
 import {
-  getStoredToken,
-  clearStoredToken,
-  clearEncryptionSession,
-} from "@ming/biz-common-storage";
+  LoginPage,
+  invalidateLocalSession,
+  useSessionInvalidation,
+} from "@ming/feature-account-api";
+import { getStoredToken } from "@ming/biz-common-storage";
 import { createLogger } from "@ming/core-log";
 import { ensureEncryptionSession } from "./bootstrap";
 
@@ -18,16 +17,12 @@ type AppView = "loading" | "login" | "chat";
 
 export const App: React.FC = () => {
   const [view, setView] = useState<AppView>("loading");
-  const sessionInvalidationVersion = useAuthStore((state) => state.sessionInvalidationVersion);
+  useSessionInvalidation(useCallback(() => setView("login"), []));
 
   useEffect(() => {
     // 启动后检查已有会话：有 token → chat，无 → login
     setView(getStoredToken() ? "chat" : "login");
   }, []);
-
-  useEffect(() => {
-    if (sessionInvalidationVersion > 0 && !getStoredToken()) setView("login");
-  }, [sessionInvalidationVersion]);
 
   /**
    * 登录成功 → 建立加密会话 → 进入主界面。
@@ -41,9 +36,7 @@ export const App: React.FC = () => {
       await ensureEncryptionSession();
     } catch (e) {
       log.error("加密会话建立失败", e);
-      clearStoredToken();
-      clearEncryptionSession();
-      setView("login");
+      invalidateLocalSession();
       return;
     }
     setView("chat");

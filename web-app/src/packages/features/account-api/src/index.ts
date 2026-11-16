@@ -6,6 +6,8 @@ export {
   login,
   reloginWithPassword,
   createAuthInterceptors,
+  invalidateLocalSession,
+  useSessionInvalidation,
   validatePhone,
   validatePassword,
   validateLoginForm,

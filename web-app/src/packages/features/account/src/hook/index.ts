@@ -9,7 +9,7 @@ export {
 } from "./AccountHook";
 export { useAccountDialogHook } from "./useAccountDialogHook";
 export { createAuthInterceptors } from "./auth-interceptors";
-export { invalidateLocalSession } from "./session-lifecycle";
+export { invalidateLocalSession, useSessionInvalidation } from "./session-lifecycle";
 export type {
   ValidationResult,
   LoginStatus,
