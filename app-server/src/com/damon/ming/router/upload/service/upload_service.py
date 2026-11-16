@@ -93,7 +93,7 @@ class UploadService:
         rag_app: RAGContainer,
         cancellation_token: CancellationToken | None = None,
         executor=None,
-        token: str | None = None,
+        user_id: int | None = None,
         device_id: str = "",
         db_conn=None,
     ) -> dict:
@@ -200,8 +200,8 @@ class UploadService:
                 )
 
             logger.info(
-                "收到用户上传文件 | token=%s | device=%s | filename=%s | size=%s | type=%s",
-                token[:8] if token else "anon",
+                "收到用户上传文件 | user_id=%s | device=%s | filename=%s | size=%s | type=%s",
+                user_id if user_id is not None else "anon",
                 device_id[:8] if device_id else "-",
                 repr(file_name),
                 len(content),
@@ -300,7 +300,7 @@ class UploadService:
                             file_sha256,
                             str(disk_path.resolve()),
                             len(content),
-                            token,
+                            user_id,
                             device_id,
                         )
 
@@ -432,7 +432,7 @@ def _record_upload_metadata(
     file_sha256: str,
     file_path: str,
     file_size: int,
-    token: str | None,
+    user_id: int | None,
     device_id: str,
 ) -> None:
     """同步写入 upload_records 审计表（在线程池中调用）。
@@ -451,7 +451,7 @@ def _record_upload_metadata(
                 file_sha256=file_sha256,
                 file_path=file_path,
                 file_size=str(file_size),
-                token=token[:64] if token else None,
+                user_id=user_id,
                 device_id=device_id[:64] if device_id else "",
                 created_at=datetime.now(tz=UTC),
             )

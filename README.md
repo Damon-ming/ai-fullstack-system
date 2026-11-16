@@ -277,7 +277,8 @@ docker compose down
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/account/login/v1` | 登录获取 token |
-| POST | `/api/encryption/key/v1` | 获取 RSA 公钥 |
+| POST | `/api/account/logout/v1` | 撤销当前设备的 token |
+| GET | `/api/encryption/key/v1` | 获取 RSA 公钥 |
 | POST | `/api/encryption/session/v1` | 注册 AES 会话 |
 | POST | `/api/llm/rag/answer/v1` | 非流式 RAG 问答 |
 | POST | `/api/llm/rag/stream/v1` | 流式 RAG 问答（SSE） |
@@ -287,30 +288,88 @@ docker compose down
 | GET | `/api/knowledge/tree/v1` | 知识库目录树 |
 | POST | `/api/files/upload/v1` | 文件上传 |
 
-所有加密请求需携带：
+受保护请求需携带：
 - `Authorization: Bearer <token>`
-- `X-Encrypt-Version: <supported-version>`
-- `X-Session-ID: <session_id>`
-- `X-Timestamp`, `X-Nonce`, `X-Signature`
+- `X-Client-UA: <UA>|<lang>|<platform>|<screen>|<timezone>`
+
+不在加密白名单中的请求还需按加密协议提交密文、版本及签名字段；详见下文。
 
 ## 安全设计
 
 | 层面 | 实现 |
 |------|------|
-| 传输加密 | RSA-OAEP-2048 + AES-256-GCM + HMAC-SHA256 |
+| 应用层加密 | RSA-OAEP 密钥交换（debug 2048 / release 4096）+ AES-GCM + HMAC-SHA256 |
 | 签名防重放 | nonce 缓存（10min TTL，LRU 10000 上限） |
-| 会话绑定 | session_id = (token + device_id)，加密密钥与设备绑定 |
+| 会话绑定 | 每次登录生成内部 session_id；token 摘要与 UA 设备指纹共同定位会话，加密密钥绑定内部 session_id |
 | 会话密钥存储 | 强制 DB 持久化，每次查询直查 DB，无内存会话密钥缓存；存储不可用时直接报错 |
 | 字段加密密钥 | 数据密钥和盲索引密钥存入 `field_encryption_keys`，启动时加载到进程缓存；当前尚未接入敏感字段读写 |
 | 速率限制 | slowapi 全端点 per-IP 限流 |
 | 输入验证 | 独立护栏模型，超时 fail-open |
-| 数据隔离 | 多用户共享知识库，对话历史按 token 隔离 |
+| 数据隔离 | 多用户共享知识库，对话历史按稳定的 user_id 隔离 |
 | 审计日志 | 上传操作记录到 upload_records 表 |
 
 账号、加密会话、历史记录及上传审计的读写使用 SQLAlchemy Core，复用
 `app/tables` 中的表定义；UPSERT 保留 PostgreSQL 方言，事务与行锁由存储层显式管理。
 向量检索及建表迁移继续使用专用 SQL。上传审计表的 `created_at` 列由启动建表流程
 幂等补齐，已有记录的补列默认时间为迁移执行时的数据库时间。
+
+## 认证与请求校验链
+
+本文记录当前服务端实现。账号支持多设备登录：`users.user_id` 是 PostgreSQL 自增的 `BIGINT` 主键，每次设备登录产生独立的内部 `session_id` 和一个客户端会话 `token`。客户端不接收 `user_id`、`session_id` 或 `device_id`。自增 ID 可直观看出账号创建顺序；序列可能有空号，准确用户量应查询 `SELECT COUNT(*) FROM users`。
+
+### 登录与会话建立
+
+1. `POST /api/account/login/v1` 是公开接口。请求需带手机号、密码及 `X-Client-UA`；后者至少要有原始 UA、平台和屏幕信息。已有账号使用 Argon2id 校验密码，未注册手机号自动注册。
+2. 服务端从 `X-Client-UA` 的浏览器核心标识、平台、屏幕尺寸计算 `device_id`。它是设备指纹，不是客户端需要保存的凭据。语言、时区和浏览器版本不参与此指纹。
+3. 服务端为本次登录创建内部 `session_id`，生成随机 `token`，在 `sessions` 表仅保存 token 的 SHA-256 摘要。会话的初始闲置期限为 7 天。同一用户、同一 `device_id` 再次登录时，旧会话过期；不同设备的会话独立。
+4. 响应只下发 `token` 和 `is_new`。客户端后续通过 `Authorization: Bearer <token>` 发送凭据，并继续上报 `X-Client-UA`。没有 access/refresh 双 token，也没有刷新接口。
+
+### 每次受保护请求
+
+请求进入顺序为 **Context → I18n → Auth → Encryption → 路由**；响应反向返回。`/ping` 和 `/health` 在中间件栈外短路。
+
+认证关卡按以下顺序执行；任一关失败即返回 401，不进入后续关卡：
+
+```text
+Authorization: Bearer <token> 是否存在
+    ↓
+X-Client-UA 是否包含有效的 UA、平台、屏幕信息
+    ↓
+服务端从 X-Client-UA 计算 device_id
+    ↓
+计算 SHA-256(token)，查 sessions 是否同时满足：
+    token 摘要匹配 → device_id 匹配 → expires_at > 当前时间
+    ↓
+原子续期：expires_at = 当前时间 + 7 天
+    ↓
+取出 user_id 和内部 session_id，进入加密处理链及业务路由
+```
+
+`device_id` 是服务端计算的值，客户端不提交它；`user_id` 和 `session_id` 也是服务端从会话中读取，并非另外两项客户端凭据。登录和 RSA 公钥接口是认证公开路径，不走这条链。
+
+1. `ContextMiddleware` 解析 Bearer token、`X-Client-UA` 和加密协议头，放入本次请求的 `request.state`。
+2. `AuthMiddleware` 对公开路径 `/api/account/login/v1`、`/api/encryption/key/v1` 放行。其他路径必须带 token，且 `X-Client-UA` 必须能计算设备指纹。
+3. 服务端计算 `sha256_hex(token)`，在 `sessions` 中匹配 **token 摘要 + 本次设备指纹 + 未过期的会话**。三者必须同时成立。匹配成功的同一数据库操作把 `expires_at` 更新为当前时间加 7 天；匹配失败返回 401，且不会续期。客户端系统时间不参与服务端过期判断。
+4. 匹配成功后，服务端从会话得到 `user_id` 和内部 `session_id`，写入当前请求的 `client` 上下文。业务表用 `user_id` 关联数据；加密会话用内部 `session_id` 校验归属。二者均不是客户端额外提供的身份凭据。
+5. 认证通过后才进入加密处理链。即使后续业务或加密处理失败，认证成功时完成的 7 天续期已经提交。连续 7 天没有通过认证的请求，再次访问时会得到 401，需重新登录。当前没有 90 天绝对过期限制。
+
+### 加密处理链
+
+**认证白名单与加密白名单是两回事。**加密白名单在 `system-config.yaml` 中按路径前缀匹配；例如 `/api/encryption` 下的公钥接口和 AES 会话注册接口都明文放行，但后者仍须通过 token 认证。资料读取、历史接口、退出接口等也在加密白名单中，仍按各自的认证规则处理。
+
+对于不在加密白名单内的请求：
+
+1. release 模式要求客户端开启加密；随后校验加密版本和签名版本。debug 模式在未开启加密时允许明文放行。
+2. 客户端可先获取 RSA 公钥，再把自己生成的 AES 密钥用 RSA-OAEP 加密，提交到 `POST /api/encryption/session/v1`。RSA 用于**建立 AES 会话**，不在每次业务请求中执行。AES 会话绑定服务端内部 `session_id`，注册新密钥时替换该会话的旧密钥。
+3. 对加密的 JSON 或 FormData 请求，服务端根据 `keyId` 和内部 `session_id` 查找有效 AES 会话，使用 AES-GCM 解密，验证从 AES 密钥派生的 HMAC-SHA256 请求签名及时间戳，再检查 nonce 是否重复。nonce 缓存为进程内缓存。通过后将请求交给路由；JSON 和 SSE 响应按相应策略加密。
+
+AES、RSA、HMAC 是加密协议的不同环节，**不是每个接口都执行的三道额外登录校验**。加密白名单接口不走上述解密验签链。
+
+### 退出与边界
+
+`POST /api/account/logout/v1` 需要有效 token，服务端将当前内部会话过期；该设备的 token 随即失效。其他设备会话不受影响。
+
+UA 指纹来自客户端提供的信息。SHA-256 让摘要难以直接反推，但浏览器、平台和屏幕尺寸可被猜测或模仿；因此设备指纹只能辅助限制明显不一致的请求，**不能证明请求一定来自原设备**。若 token 与相同 UA 信息一起泄露，仍可能发生冒用。当前实现没有设备私钥签名或按 IP 强绑定。
 
 ## 配置说明
 
@@ -475,8 +534,8 @@ ThreadPoolManager（进程单例）
   │  生成 AES-256 密钥                 │
   │  RSA-OAEP 加密 AES 密钥            │
   │                                   │
-  ├── POST /api/encryption/session ──→│
-  │  { encryptedAesKey, session_id }  │
+  ├── POST /api/encryption/session/v1 →│
+  │  { encryptedAesKey } + Bearer token│
   │                                   ├── RSA 解密 → AES 密钥
   │                                   ├── 生成 key_id
   │                                   └── 撤销同一 session_id 旧密钥
@@ -492,10 +551,9 @@ ThreadPoolManager（进程单例）
 ```
 签名内容 = 解密后的 body (排除 signature/timestamp/nonce)
 签名密钥 = HKDF(session.aes_key, sign_context)
-签名头：
-  X-Timestamp: 当前时间戳（5min 有效期）
-  X-Nonce:     随机 nonce（10min LRU 去重）
-  X-Signature: HMAC-SHA256(params, signing_key)
+JSON 加密请求：signature / timestamp / nonce 位于解密后的 body。
+FormData 加密请求：signature / timestamp / nonce 位于表单字段。
+timestamp 容差为 ±5 分钟；nonce 由进程内缓存去重约 10 分钟。
 ```
 
 ### 错误码体系

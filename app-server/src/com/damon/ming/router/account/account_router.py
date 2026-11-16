@@ -3,16 +3,15 @@
 Account 路由 —— 用户登录 / Token 签发 / 资料管理
 
 职责：
-  - 为客户端签发身份 token（绑定手机号，模拟阶段用随机 phone）
-  - 服务端根据 UA 计算 device_id，与 token 一起下发
-  - 创建 session_id（token + device_id 的唯一会话标识）
-  - 同一手机号再次请求返回已有 token（幂等）
-  - 同一 (token, device_id) 组合复用同一 session_id
+  - 为每台设备签发一个会话 token
+  - 服务端根据 UA 计算并保存设备指纹
+  - 内部 session_id 用于关联加密会话，不下发客户端
+  - 内部用户 ID 稳定，客户端凭据按设备独立
   - 用户资料读取与修改（昵称）
 
 用法：
   POST /api/account/login/v1     body: { "phone": "+8613800138000", "password": "Abc123_45" }
-    → { "token": "xxx", "device_id": "dev_sha256abc...", "session_id": "uuid...", "is_new": false }
+    → { "token": "...", "is_new": false }
   GET  /api/account/profile/get/v1
     → { "name": "Murphy" }
   POST /api/account/profile/update/v1   body: { "name": "NewName" }
@@ -40,11 +39,11 @@ from src.com.damon.ming.router.account.schemas.bean import (
     TokenResponseData,
 )
 from src.com.damon.ming.router.account.token_store import (
-    create_or_refresh_session,
+    create_session,
     get_user_profile,
     login_or_register,
-    refresh_token_ttl,
     register_device,
+    revoke_session,
     update_user_name,
 )
 from src.com.damon.ming.schemas.response import (
@@ -68,11 +67,24 @@ async def login(body: LoginRequest, request: Request):
       1. phone 已注册 → 验 password → 对则登录，错则返回 200004002
       2. phone 未注册 → 自动注册 + 登录
       3. 解析 X-Client-UA → 计算 device_id → 注册设备
-      4. 创建 session → 返回 token + device_id + session_id + is_new
+      4. 创建 session → 返回 token + is_new
     """
+    # 登录必须具有可复算的设备指纹，否则后续请求无法完成设备校验。
+    ua_profile = request.state.ctx.ua_profile
+    if (
+        ua_profile is None
+        or not ua_profile.raw_ua
+        or not ua_profile.platform
+        or not ua_profile.screen
+    ):
+        return BaseFailedResponse(
+            code=ErrorCode.VALIDATION.PARAM_FORMAT,
+            data=BaseBizFailedData(error_msg="缺少有效的 X-Client-UA 设备信息"),
+        )
+
     # 1. 登录或自动注册
     try:
-        user_token, is_new = await run_in_pool(
+        user_id, is_new = await run_in_pool(
             get_database_query_pool(),
             login_or_register,
             body.phone,
@@ -87,43 +99,44 @@ async def login(body: LoginRequest, request: Request):
         raise
 
     # 2. 从 ctx 获取 UA → 计算设备指纹
-    ctx = request.state.ctx
-    ua_profile = ctx.ua_profile
-    device_id = compute_device_id(ua_profile) if ua_profile else ""
+    device_id = compute_device_id(ua_profile)
     ua_hash = compute_ua_hash(ua_profile)
 
     # 3. 注册设备（设备身份独立，不绑定 phone）
-    if device_id and ua_profile:
-        register_device(
-            device_id=device_id,
-            ua_hash=ua_hash,
-            raw_ua=ua_profile.raw_ua,
-        )
+    register_device(
+        device_id=device_id,
+        ua_hash=ua_hash,
+        raw_ua=ua_profile.raw_ua,
+    )
 
-    # 4. 创建/刷新会话（原子操作：过期旧会话 + 插入新会话）
-    session_id = create_or_refresh_session(user_token, device_id)
-
-    # 5. SECURITY: 登录成功，刷新 token 滚动 TTL（P1-7 修复）
-    refresh_token_ttl(user_token)
+    # 4. 创建会话（原子操作：过期该设备旧会话 + 插入新会话）
+    token = create_session(user_id, device_id)
 
     action = "注册+登录" if is_new else "登录"
     logger.info(
-        "%s完成 | phone=%s device_id=%s session_id=%s",
+        "%s完成 | phone=%s device_id=%s",
         action,
         _mask_phone(body.phone),
         device_id[:12] + "..." if device_id else "",
-        session_id[:8] + "...",
     )
 
     return BaseSuccessResponse(
         code=ErrorCode.OK,
         data=TokenResponseData(
-            token=user_token,
-            device_id=device_id,
-            session_id=session_id,
+            token=token,
             is_new=is_new,
         ),
     )
+
+
+@router.post("/logout/v1", response_model=BaseSuccessResponse[dict])
+@limiter.limit("20/minute")
+async def logout(request: Request):
+    """退出当前设备，立即撤销其会话 token。"""
+    await run_in_pool(
+        get_database_query_pool(), revoke_session, request.state.client.session_id
+    )
+    return BaseSuccessResponse(code=ErrorCode.OK, data={})
 
 
 @router.get("/profile/get/v1", response_model=BaseSuccessResponse[ProfileResponseData])
@@ -136,7 +149,7 @@ async def get_profile(request: Request):
     路径独立于 update：GET 无 body，命中加密白名单明文放行。
     """
     client = request.state.client
-    user = get_user_profile(client.token)
+    user = get_user_profile(client.user_id)
     name = user.name if user else ""
 
     return BaseSuccessResponse(
@@ -158,11 +171,9 @@ async def update_profile(body: ProfileResponseData, request: Request):
     """
     client = request.state.client
     name = body.name.strip()[:64]
-    update_user_name(client.token, name)
+    update_user_name(client.user_id, name)
 
-    logger.info(
-        "用户资料已更新 | token_prefix=%s name=%s", client.token[:8] + "...", name
-    )
+    logger.info("用户资料已更新 | user_id=%s name=%s", client.user_id, name)
 
     return BaseSuccessResponse(
         code=ErrorCode.OK,

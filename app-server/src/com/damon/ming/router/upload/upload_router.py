@@ -47,7 +47,7 @@ async def save_files(
             rag_app=request.app.state.rag_runtime.rag_app,
             cancellation_token=scope.cancellation_token,
             executor=document_pool,
-            token=request.state.client.token,
+            user_id=request.state.client.user_id,
             device_id=request.state.client.device_id,
             db_conn=request.app.state.storage.db_conn,
         )

@@ -19,6 +19,7 @@ knowledge_dir: "/app-server/knowledges"
 whitelist:
   - /api/encryption                # key/v1（GET）+ session/v1（POST）
   - /api/account/login/v1          # 登录（加密会话尚未建立）
+  - /api/account/logout/v1         # 当前设备退出（无请求体）
   - /api/account/profile/get/v1    # 资料读取（GET，无 body）
   - /api/history                   # list + detail(GET/DELETE)，均无 body
   - /api/knowledge/tree/v1         # 知识库树（GET，无 body）

@@ -38,9 +38,7 @@ class LoginRequest(BaseModel):
 class TokenResponseData(BaseModel):
     """Token 响应数据。"""
 
-    token: str = Field(..., description="服务端生成的用户身份令牌")
-    device_id: str = Field(..., description="服务端根据 UA 计算的设备唯一标识")
-    session_id: str = Field(..., description="本次 token + device 组合的会话标识")
+    token: str = Field(..., description="该设备的登录凭据，连续 7 天未使用则失效")
     is_new: bool = Field(
         False, description="本次是否为新注册用户（false = 已有用户登录）"
     )

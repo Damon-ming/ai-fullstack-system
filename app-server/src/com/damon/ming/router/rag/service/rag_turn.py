@@ -40,14 +40,14 @@ class RagTurnRecorder:
 
     def __init__(
         self,
-        token: str,
+        user_id: int,
         turn_id: str,
         conversation_id: str,
         query: str,
         query_at: datetime,
         db_executor: ThreadPoolExecutor,
     ) -> None:
-        self._token = token
+        self._user_id = user_id
         self._turn_id = turn_id
         self._conversation_id = conversation_id
         self._query = query
@@ -167,7 +167,7 @@ class RagTurnRecorder:
         """同步落库（在线程池中执行）。"""
         return bool(
             HistoryService.save_turn(
-                token=self._token,
+                user_id=self._user_id,
                 turn_id=self._turn_id,
                 conversation_id=self._conversation_id,
                 title=self._query[:TITLE_MAX_LEN],

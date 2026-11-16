@@ -7,12 +7,13 @@
   POST /api/encryption/session/v1    → 注册 AES 会话（客户端传来 RSA 加密的 AES 密钥）
 
 安全加固：
-  - session 注册要求有效 token + session_id（由 AuthMiddleware 统一校验）
+  - session 注册要求有效 token；内部 session_id 由 AuthMiddleware 查出
   - 注册时把 session_id 绑定到加密会话
   - 注册前撤销该 session_id 的旧加密会话（防止僵尸密钥）
 """
 
 import base64
+from typing import Annotated
 
 from fastapi import APIRouter, Body, Request
 from src.com.damon.ming.exception import EncryptionError
@@ -56,9 +57,10 @@ async def get_public_key(request: Request):
 @limiter.limit("10/minute")
 async def register_session(
     request: Request,
-    encrypted_aes_key: str = Body(
-        ..., alias="encryptedAesKey", description="RSA-OAEP 加密的 AES 密钥 (base64)"
-    ),
+    encrypted_aes_key: Annotated[
+        str,
+        Body(alias="encryptedAesKey", description="RSA-OAEP 加密的 AES 密钥 (base64)"),
+    ],
 ):
     """
     注册 AES 会话。
@@ -66,9 +68,9 @@ async def register_session(
     客户端生成 AES-256 密钥 → 用 RSA 公钥加密 → 发送到这里。
     服务端用 RSA 私钥解密，存储会话，返回 keyId。
 
-    安全要求（token / session_id 由 AuthMiddleware 统一校验）：
+    安全要求（token 由 AuthMiddleware 校验）：
       - 请求需携带有效 token
-      - X-Session-ID header 必须存在且有效（session 属于该 token）
+      - 内部 session_id 从已认证 token 对应的设备会话取得
       - 会话将绑定到该 session_id，注册前撤销该 session 的旧密钥
     """
     client = request.state.client

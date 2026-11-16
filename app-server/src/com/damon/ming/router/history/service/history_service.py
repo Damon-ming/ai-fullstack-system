@@ -63,34 +63,34 @@ class HistoryService:
 
     @staticmethod
     def list_history(
-        token: str,
+        user_id: int,
         page: int,
         page_size: int,
     ) -> list[HistoryListItem]:
         """分页获取会话列表（不含轮次正文）。"""
-        rows, _total = history_store.list_history(token, page, page_size)
+        rows, _total = history_store.list_history(user_id, page, page_size)
         return [_conv_to_list_item(r) for r in rows]
 
     @staticmethod
     def get_history(
         conversation_id: str,
-        token: str,
+        user_id: int,
     ) -> HistoryDetailData | None:
         """获取单个会话详情（含全部轮次）。"""
-        row = history_store.get_history(conversation_id, token)
+        row = history_store.get_history(conversation_id, user_id)
         return _detail_to_data(row) if row else None
 
     @staticmethod
     def delete_history(
         conversation_id: str,
-        token: str,
+        user_id: int,
     ) -> bool:
         """删除会话及其全部轮次。"""
-        return history_store.delete_history(conversation_id, token)
+        return history_store.delete_history(conversation_id, user_id)
 
     @staticmethod
     def save_turn(
-        token: str,
+        user_id: int,
         turn_id: str,
         conversation_id: str,
         title: str,
@@ -107,10 +107,10 @@ class HistoryService:
 
         本服务是会话数据的唯一写入方，不依赖客户端回传整段对话。
         turn_id 由调用方生成，需全局唯一。
-        返回实际会话 id；会话不属于当前 token 时为空串。
+        返回实际会话 id；会话不属于当前 user_id 时为空串。
         """
         return history_store.append_turn(
-            token=token,
+            user_id=user_id,
             turn_id=turn_id,
             conversation_id=conversation_id,
             title=title.strip(),

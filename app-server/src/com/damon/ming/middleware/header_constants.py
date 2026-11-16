@@ -21,12 +21,6 @@ CLIENT_ENV = "x-client-env"
 # 客户端类型头（0 = 浏览器，1 = 移动端）
 CLIENT_TYPE = "x-client-type"
 
-# 设备 ID 头（服务端下发给客户端，客户端回传用于校验）
-DEVICE_ID = "x-device-id"
-
-# 会话 ID 头（标识 token + device 的唯一组合）
-SESSION_ID = "x-session-id"
-
 # 客户端 UA 头（浏览器环境摘要）
 CLIENT_UA = "x-client-ua"
 

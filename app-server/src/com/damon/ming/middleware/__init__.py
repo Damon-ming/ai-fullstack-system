@@ -37,17 +37,17 @@ def register_middlewares(app: FastAPI) -> None:
     Starlette 的 add_middleware 是 insert(0)：后注册的在外层（先执行 inbound）。
 
     本函数按「执行顺序倒序」注册，实际执行顺序为：
-      inbound:  CORS → Context → I18n → Encryption → Auth → 路由
-      outbound: 路由 → Auth → Encryption → I18n → Context → CORS
+      inbound:  CORS → Context → I18n → Auth → Encryption → 路由
+      outbound: 路由 → Encryption → Auth → I18n → Context → CORS
     """
     # ---- 按执行顺序倒序注册 ----------------------------------------
-    # 1. 认证中间件（所有环境启用，最内层业务中间件）
-    app.add_middleware(AuthMiddleware)
-    logger.info("认证中间件已启用")
-
-    # 2. 加密中间件（inbound 解密 + outbound 加密）
+    # 1. 加密中间件（需要认证层先填入内部 session_id）
     app.add_middleware(EncryptionMiddleware)
     logger.info("加密中间件已启用")
+
+    # 2. 认证中间件（所有环境启用）
+    app.add_middleware(AuthMiddleware)
+    logger.info("认证中间件已启用")
 
     # 3. i18n 语言协商；须在加密和认证前设置 locale
     app.add_middleware(I18nMiddleware)

@@ -3,15 +3,12 @@
 账号体系 业务逻辑层 —— 跨模块调用入口。
 
 只暴露其他模块真正需要的最小访问单元，不把 users / devices / sessions
-的表结构与行对象（UserRow / DeviceRow / SessionRow）交给调用方：
-  - is_token_valid(token)        token 是否有效（滚动 TTL + 绝对 TTL）
-  - get_session_owner(session_id) 会话归属 token
-  - get_phone_by_token(token)    token → 手机号
+的表结构与行对象交给调用方：
+  - authenticate_token(token, device_id) 校验并续期设备会话
+  - get_phone_by_user_id(user_id) 内部用户 ID → 手机号
 
 account_router 自己仍直接使用 token_store（模块内访问不走本层）。
 """
-
-from dataclasses import dataclass
 
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.account import token_store
@@ -19,37 +16,14 @@ from src.com.damon.ming.router.account import token_store
 logger = pin("account.service")
 
 
-@dataclass(frozen=True)
-class SessionOwner:
-    """会话归属投影 —— 跨模块只暴露所属 token。
-
-    SessionRow 还有 session_id / device_id / created_at / expires_at，
-    调用方不需要，就不给。
-    """
-
-    token: str
-
-
 class AccountService:
     """账号体系业务逻辑（供 account 以外的模块调用）。"""
 
     @staticmethod
-    def is_token_valid(token: str) -> bool:
-        """token 是否存在且未过期。"""
-        return token_store.is_token_valid(token)
+    def authenticate_token(token: str, device_id: str) -> tuple[int, str] | None:
+        return token_store.authenticate_token(token, device_id)
 
     @staticmethod
-    def get_session_owner(session_id: str) -> SessionOwner | None:
-        """查询有效会话的归属 token。
-
-        会话不存在或已过期时返回 None。
-        """
-        session = token_store.get_session(session_id)
-        if session is None:
-            return None
-        return SessionOwner(token=session.token)
-
-    @staticmethod
-    def get_phone_by_token(token: str) -> str | None:
-        """token → 手机号。"""
-        return token_store.get_phone_by_token(token)
+    def get_phone_by_user_id(user_id: int) -> str | None:
+        """user_id → 手机号。"""
+        return token_store.get_phone_by_user_id(user_id)

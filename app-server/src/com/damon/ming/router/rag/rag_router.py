@@ -50,10 +50,9 @@ logger = pin("chat.router")
 router = APIRouter(prefix="/api/llm", tags=["聊天模块"])
 
 
-def _request_token(request: Request) -> str:
-    """从请求上下文获取当前用户 token（与 history 模块口径一致）。"""
-    client = getattr(request.state, "client", None)
-    return (client.token if client else "") or ""
+def _request_user_id(request: Request) -> int:
+    """从请求上下文获取当前用户 ID。"""
+    return request.state.client.user_id
 
 
 def _create_recorder(request: Request, body) -> RagTurnRecorder:
@@ -63,7 +62,7 @@ def _create_recorder(request: Request, body) -> RagTurnRecorder:
     提问时刻在请求到达即采集，作为全部时延指标的起点。
     """
     return RagTurnRecorder(
-        token=_request_token(request),
+        user_id=_request_user_id(request),
         turn_id=f"turn_{generate_uuid_hex()[:12]}",
         conversation_id=body.conversationId or SseMessageFactory.new_conversation_id(),
         query=body.query,

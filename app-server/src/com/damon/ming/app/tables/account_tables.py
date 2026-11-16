@@ -4,14 +4,23 @@
 
 提供：
   - users / devices / sessions: Table 对象
-  - UserRow / DeviceRow / SessionRow: 查询结果 dataclass
+  - UserRow / DeviceRow: 查询结果 dataclass
   - create_account_tables(db_conn): 建表 + 账号体系索引
 """
 
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, String, Table, Text
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    DateTime,
+    ForeignKey,
+    Identity,
+    String,
+    Table,
+    Text,
+)
 from src.com.damon.ming.app.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
@@ -21,7 +30,7 @@ from src.com.damon.ming.app.tables.base import _NOW, metadata
 users = Table(
     "users",
     metadata,
-    Column("token", String(64), primary_key=True),
+    Column("user_id", BigInteger, Identity(start=1), primary_key=True),
     Column("phone", String(32), nullable=False, unique=True),
     Column("password", String(128), nullable=False, server_default=""),
     Column("name", String(64), nullable=False, server_default=""),
@@ -31,23 +40,16 @@ users = Table(
         nullable=False,
         server_default=_NOW,
     ),
-    # SECURITY: token TTL（P1-7 修复）
-    # expires_at — 滚动过期：30 天不活跃则失效
-    # hard_expires_at — 绝对过期：90 天强制重新登录
-    Column("expires_at", DateTime(timezone=True), nullable=False),
-    Column("hard_expires_at", DateTime(timezone=True), nullable=False),
 )
 
 
 @dataclass(frozen=True)
 class UserRow:
-    token: str
+    user_id: int
     phone: str
     password: str = ""
     name: str = ""
     created_at: datetime | None = None
-    expires_at: datetime | None = None
-    hard_expires_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +87,7 @@ sessions = Table(
     "sessions",
     metadata,
     Column("session_id", String(64), primary_key=True),
-    Column("token", String(64), nullable=False),
+    Column("user_id", BigInteger, ForeignKey("users.user_id"), nullable=False),
     Column("device_id", String(64), nullable=False),
     Column(
         "created_at",
@@ -94,16 +96,9 @@ sessions = Table(
         server_default=_NOW,
     ),
     Column("expires_at", DateTime(timezone=True), nullable=False),
+    # 保存随机会话 token 的 SHA-256 摘要，原文只在登录时返回客户端。
+    Column("token", String(64), nullable=False, unique=True),
 )
-
-
-@dataclass(frozen=True)
-class SessionRow:
-    session_id: str
-    token: str
-    device_id: str
-    created_at: datetime | None = None
-    expires_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -111,9 +106,9 @@ class SessionRow:
 # ---------------------------------------------------------------------------
 
 _ACCOUNT_INDEX_DDL = [
-    "CREATE INDEX IF NOT EXISTS idx_sessions_token_device ON sessions (token, device_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sessions_user_device ON sessions (user_id, device_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at)",
-    "CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (token)",
+    "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_device ON sessions (device_id)",
 ]
 

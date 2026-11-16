@@ -16,7 +16,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, String, Table, Text
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, String, Table, Text
 from src.com.damon.ming.app.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
@@ -27,7 +27,7 @@ history_conversations = Table(
     "history_conversations",
     metadata,
     Column("id", String(64), primary_key=True),
-    Column("token", String(64), nullable=False),
+    Column("user_id", BigInteger, ForeignKey("users.user_id"), nullable=False),
     Column("title", String(200), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=_NOW),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=_NOW),
@@ -37,7 +37,7 @@ history_conversations = Table(
 @dataclass(frozen=True)
 class HistoryConversationRow:
     id: str
-    token: str
+    user_id: int
     title: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -104,8 +104,8 @@ _HISTORY_DDL = [
     # 取代原两个单列索引 idx_history_token / idx_history_updated
     # （项目内没有单独按 updated_at 过滤/排序的查询，单列索引在此场景用不上）
     (
-        "CREATE INDEX IF NOT EXISTS idx_history_token_updated "
-        "ON history_conversations (token, updated_at DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_history_user_updated "
+        "ON history_conversations (user_id, updated_at DESC)"
     ),
     # 清理被复合索引取代的单列索引（幂等：新库上不存在则跳过）
     "DROP INDEX IF EXISTS idx_history_token",

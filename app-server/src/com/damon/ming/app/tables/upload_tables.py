@@ -7,7 +7,7 @@
 向量库按 file_sha256 去重，审计表按 file_uid 记录每次上传。
 """
 
-from sqlalchemy import Column, DateTime, String, Table
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, String, Table
 from src.com.damon.ming.app.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
@@ -21,14 +21,14 @@ upload_records = Table(
     Column("file_sha256", String(64), nullable=False),
     Column("file_path", String(512), nullable=False),
     Column("file_size", String(20), nullable=False, default="0"),
-    Column("token", String(64), nullable=True),
+    Column("user_id", BigInteger, ForeignKey("users.user_id"), nullable=True),
     Column("device_id", String(64), nullable=False, server_default=""),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=_NOW),
 )
 
 _UPLOAD_INDEX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_upload_sha ON upload_records (file_sha256)",
-    "CREATE INDEX IF NOT EXISTS idx_upload_token ON upload_records (token)",
+    "CREATE INDEX IF NOT EXISTS idx_upload_user ON upload_records (user_id)",
 ]
 
 _UPLOAD_MIGRATION_DDL = [

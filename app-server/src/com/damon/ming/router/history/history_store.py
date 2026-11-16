@@ -3,7 +3,7 @@
 
 职责：
   - 会话（history_conversations）与轮次（history_turns）的 CRUD
-  - 按 token 隔离，不同用户互不干扰
+  - 按 user_id 隔离，不同用户互不干扰
   - 分页列表查询（不含轮次正文，按 updated_at 倒序）
   - 详情查询（会话 + 轮次列表，按 query_at 升序）
   - 写入（append_turn：轮次纯 INSERT，无读改写竞态）
@@ -74,7 +74,7 @@ def _run_transaction(operation, *, description: str):
 
 
 def list_history(
-    token: str,
+    user_id: int,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[HistoryConversationRow], int]:
@@ -87,7 +87,7 @@ def list_history(
     count_rows = _db().execute(
         select(func.count())
         .select_from(history_conversations)
-        .where(history_conversations.c.token == token),
+        .where(history_conversations.c.user_id == user_id),
         commit=False,
         fetch=True,
     )
@@ -95,7 +95,7 @@ def list_history(
 
     rows = _db().execute(
         select(history_conversations)
-        .where(history_conversations.c.token == token)
+        .where(history_conversations.c.user_id == user_id)
         .order_by(history_conversations.c.updated_at.desc())
         .limit(page_size)
         .offset(offset),
@@ -106,7 +106,7 @@ def list_history(
     items = [
         HistoryConversationRow(
             id=r[0],
-            token=r[1],
+            user_id=r[1],
             title=r[2],
             created_at=r[3],
             updated_at=r[4],
@@ -121,7 +121,7 @@ def list_history(
 # ---------------------------------------------------------------------------
 
 
-def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
+def get_history(conversation_id: str, user_id: int) -> HistoryDetailRow | None:
     """查询单个会话详情（含全部轮次，按提问时间升序）。
 
     会话头与轮次在同一事务内读取：中途不会被并发删除 / 写入插队，
@@ -132,14 +132,14 @@ def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
         c = conn.execute(
             select(history_conversations).where(
                 history_conversations.c.id == conversation_id,
-                history_conversations.c.token == token,
+                history_conversations.c.user_id == user_id,
             )
         ).fetchone()
         if c is None:
             return None
         conversation = HistoryConversationRow(
             id=c[0],
-            token=c[1],
+            user_id=c[1],
             title=c[2],
             created_at=c[3],
             updated_at=c[4],
@@ -176,7 +176,7 @@ def get_history(conversation_id: str, token: str) -> HistoryDetailRow | None:
 
 
 def append_turn(
-    token: str,
+    user_id: int,
     turn_id: str,
     conversation_id: str,
     title: str,
@@ -194,7 +194,7 @@ def append_turn(
     本模块是会话数据的唯一写入方：
       - 会话不存在 → 按 conversation_id 新建
       - 会话已存在 → 仅刷新 updated_at
-    会话必须属于当前 token，否则整轮写入被拒绝。
+    会话必须属于当前 user_id，否则整轮写入被拒绝。
 
     turn_id 由调用方生成，需全局唯一。
 
@@ -219,7 +219,7 @@ def append_turn(
             with db.transaction() as conn:
                 statement = pg_insert(history_conversations).values(
                     id=conversation_id,
-                    token=token,
+                    user_id=user_id,
                     title=title,
                     created_at=answered_at,
                     updated_at=answered_at,
@@ -230,7 +230,8 @@ def append_turn(
                         set_={
                             history_conversations.c.updated_at: statement.excluded.updated_at
                         },
-                        where=history_conversations.c.token == statement.excluded.token,
+                        where=history_conversations.c.user_id
+                        == statement.excluded.user_id,
                     ).returning(history_conversations.c.id)
                 ).fetchall()
                 if not rows:
@@ -289,7 +290,7 @@ def append_turn(
 # ---------------------------------------------------------------------------
 
 
-def delete_history(conversation_id: str, token: str) -> bool:
+def delete_history(conversation_id: str, user_id: int) -> bool:
     """删除会话及其全部轮次。返回是否实际删除（False = 不存在或无权限）。
 
     存在性校验与两条 DELETE 在同一事务内提交：要么全删，要么全不删，
@@ -300,7 +301,7 @@ def delete_history(conversation_id: str, token: str) -> bool:
         rows = conn.execute(
             select(history_conversations.c.id).where(
                 history_conversations.c.id == conversation_id,
-                history_conversations.c.token == token,
+                history_conversations.c.user_id == user_id,
             )
         ).fetchall()
         if not rows:
@@ -315,7 +316,7 @@ def delete_history(conversation_id: str, token: str) -> bool:
         conn.execute(
             history_conversations.delete().where(
                 history_conversations.c.id == conversation_id,
-                history_conversations.c.token == token,
+                history_conversations.c.user_id == user_id,
             )
         )
         return True

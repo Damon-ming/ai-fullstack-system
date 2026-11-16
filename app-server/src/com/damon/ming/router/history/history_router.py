@@ -6,7 +6,7 @@
   GET    /api/history/v1/{conversation_id}  获取单个会话详情（含全部轮次）
   DELETE /api/history/v1/{conversation_id}  删除会话及其轮次
 
-所有接口从 request.state.client.token 获取用户身份，数据按 token 隔离。
+所有接口从 request.state.client.user_id 获取用户身份，数据按 user_id 隔离。
 响应 data 直接承载业务负载（列表返回数组、详情返回对象），与前端解包口径一致。
 """
 
@@ -26,9 +26,9 @@ logger = pin("history.router")
 router = APIRouter(prefix="/api/history", tags=["对话历史"])
 
 
-def _token(request: Request) -> str:
-    """从请求上下文获取当前用户 token。"""
-    return getattr(request.state, "client", None) and request.state.client.token or ""
+def _user_id(request: Request) -> int:
+    """从请求上下文获取当前用户 user_id。"""
+    return request.state.client.user_id
 
 
 # ---------------------------------------------------------------------------
@@ -44,9 +44,11 @@ def list_history(
     pageSize: int = Query(20, ge=1, le=100, description="每页条数"),
 ):
     """分页获取当前用户的会话列表（按 updated_at 倒序，不含轮次正文）。"""
-    token = _token(request)
+    user_id = _user_id(request)
     try:
-        items = HistoryService.list_history(token=token, page=page, page_size=pageSize)
+        items = HistoryService.list_history(
+            user_id=user_id, page=page, page_size=pageSize
+        )
         return BaseSuccessResponse(code=ErrorCode.OK, data=items)
     except Exception as e:
         logger.exception("历史记录列表查询失败")
@@ -68,10 +70,10 @@ def get_history(
     conversation_id: str = Path(..., description="会话 ID"),
 ):
     """获取单个会话详情（含全部轮次）。"""
-    token = _token(request)
+    user_id = _user_id(request)
     try:
         detail = HistoryService.get_history(
-            conversation_id=conversation_id, token=token
+            conversation_id=conversation_id, user_id=user_id
         )
         if detail is None:
             return BaseFailedResponse(
@@ -99,10 +101,10 @@ def delete_history(
     conversation_id: str = Path(..., description="会话 ID"),
 ):
     """删除会话及其全部轮次。"""
-    token = _token(request)
+    user_id = _user_id(request)
     try:
         deleted = HistoryService.delete_history(
-            conversation_id=conversation_id, token=token
+            conversation_id=conversation_id, user_id=user_id
         )
         if not deleted:
             return BaseFailedResponse(

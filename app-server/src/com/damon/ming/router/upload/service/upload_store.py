@@ -13,7 +13,7 @@ def get_file_uploader_map() -> dict[str, str]:
             rows = conn.execute(
                 select(upload_records.c.file_path, users.c.name).select_from(
                     upload_records.outerjoin(
-                        users, upload_records.c.token == users.c.token
+                        users, upload_records.c.user_id == users.c.user_id
                     )
                 )
             ).fetchall()

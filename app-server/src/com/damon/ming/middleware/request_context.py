@@ -8,29 +8,24 @@
   - 新增头部字段只需在此处扩展 + 在 ContextMiddleware 中解析一次
   - 按语义分三组挂在 request.state 上：
       ctx        请求环境与通用头（UA / 版本 / 环境 / 类型 / 语言 / Content-Type）
-      client     客户端身份（token / session_id / device_id）
+      client     客户端身份（token / user_id / 内部 session_id / 服务端设备指纹）
       encryption 客户端声明的加密协议开关与版本
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from starlette.requests import Request
 
 from src.com.damon.ming.middleware.header_constants import (
     APP_VERSION,
     CLIENT_ENV,
     CLIENT_TYPE,
     CLIENT_UA,
-    DEVICE_ID,
     ENCRYPT_ENABLED,
     ENCRYPT_VERSION,
     LANGUAGE,
-    SESSION_ID,
     SIGNATURE_VERSION,
 )
 from src.com.damon.ming.middleware.ua_fingerprint import UAProfile, parse_ua_header
+from starlette.requests import Request
 
 
 @dataclass
@@ -40,17 +35,18 @@ class ClientContext:
 
     使用方式：
         client = request.state.client
-        if client.token: ...
+        if client.user_id: ...
     """
 
     # ---- 认证 ----
     token: str | None = None
+    user_id: int | None = None  # AuthMiddleware 验证后填入
 
-    # ---- 会话（token + device 的唯一组合）----
-    session_id: str = ""
+    # ---- 设备登录会话 ----
+    session_id: str = ""  # AuthMiddleware 从 token 查询后填入
 
     # ---- 设备 ----
-    device_id: str = ""
+    device_id: str = ""  # AuthMiddleware 从 X-Client-UA 计算后填入
 
 
 @dataclass
@@ -92,17 +88,13 @@ class RequestContext:
     language: str = ""  # X-Language 原始值（如 "zh-CN,en;q=0.9"），协商由 i18n 模块负责
 
 
-def build_client_context(request: "Request") -> ClientContext:
-    """解析客户端身份（token / session_id / device_id）。"""
+def build_client_context(request: Request) -> ClientContext:
+    """解析客户端 token；设备指纹由认证层计算。"""
     headers = request.headers
-    return ClientContext(
-        token=_extract_token(headers),
-        session_id=headers.get(SESSION_ID, ""),
-        device_id=headers.get(DEVICE_ID, ""),
-    )
+    return ClientContext(token=_extract_token(headers))
 
 
-def build_encryption_context(request: "Request") -> EncryptionContext:
+def build_encryption_context(request: Request) -> EncryptionContext:
     """解析加密协议相关的头部（开关 + 版本）。"""
     headers = request.headers
     return EncryptionContext(
@@ -112,7 +104,7 @@ def build_encryption_context(request: "Request") -> EncryptionContext:
     )
 
 
-def build_request_context(request: "Request") -> RequestContext:
+def build_request_context(request: Request) -> RequestContext:
     """解析请求环境与通用头部（UA / 版本 / 环境 / 类型 / 语言 / Content-Type）。"""
     headers = request.headers
 
@@ -143,7 +135,7 @@ def build_request_context(request: "Request") -> RequestContext:
 
 
 def _extract_token(headers) -> str | None:
-    """从 Authorization Bearer 头中提取 device_auth_token。
+    """从 Authorization Bearer 头中提取设备会话 token。
 
     SECURITY: 仅支持 Authorization Bearer，不支持 Cookie 通道。
     消除双通道认证的 CSRF 攻击面和死代码风险（P1-2 修复）。
