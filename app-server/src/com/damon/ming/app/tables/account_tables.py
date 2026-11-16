@@ -31,7 +31,9 @@ users = Table(
     "users",
     metadata,
     Column("user_id", BigInteger, Identity(start=1), primary_key=True),
-    Column("phone", String(32), nullable=False, unique=True),
+    # phone 保存 FieldEncryptor 密文；phone_idx 用于等值查找和唯一约束。
+    Column("phone", String(256), nullable=False),
+    Column("phone_idx", String(64), nullable=False, unique=True),
     Column("password", String(128), nullable=False, server_default=""),
     Column("name", String(64), nullable=False, server_default=""),
     Column(

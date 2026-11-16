@@ -22,6 +22,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from src.com.damon.ming.app.encryption.field_encryption import get_field_encryptor
 from src.com.damon.ming.app.tables.account_tables import (
     UserRow,
     devices,
@@ -67,7 +68,9 @@ def _login_existing_user(phone: str, password: str) -> int | None:
     """验证密码并返回稳定的内部用户标识。"""
     with _db().transaction() as conn:
         row = conn.execute(
-            users.select().where(users.c.phone == phone).with_for_update()
+            users.select()
+            .where(users.c.phone_idx == get_field_encryptor().blind_index(phone))
+            .with_for_update()
         ).fetchone()
         if row is None:
             return None
@@ -81,7 +84,7 @@ def get_phone_by_user_id(user_id: int) -> str | None:
     with _db().engine.connect() as conn:
         result = conn.execute(users.select().where(users.c.user_id == user_id))
         row = result.fetchone()
-    return row.phone if row else None
+    return get_field_encryptor().decrypt(row.phone) if row else None
 
 
 def _verify_user_password(row, password: str) -> None:
@@ -114,12 +117,13 @@ def login_or_register(phone: str, password: str) -> tuple[int, bool]:
         inserted = conn.execute(
             pg_insert(users)
             .values(
-                phone=phone,
+                phone=get_field_encryptor().encrypt(phone),
+                phone_idx=get_field_encryptor().blind_index(phone),
                 password=password_hash,
                 name=default_name,
                 created_at=now(),
             )
-            .on_conflict_do_nothing(index_elements=[users.c.phone])
+            .on_conflict_do_nothing(index_elements=[users.c.phone_idx])
             .returning(users.c.user_id)
         ).fetchone()
     if inserted is not None:
@@ -143,7 +147,11 @@ def get_user_profile(user_id: int) -> UserRow | None:
     with _db().engine.connect() as conn:
         result = conn.execute(users.select().where(users.c.user_id == user_id))
         row = result.fetchone()
-    return UserRow(**row._mapping) if row else None
+    if row is None:
+        return None
+    values = dict(row._mapping)
+    values["phone"] = get_field_encryptor().decrypt(values["phone"])
+    return UserRow(**values)
 
 
 def update_user_name(user_id: int, name: str) -> bool:
@@ -173,7 +181,7 @@ def register_device(
     statement = pg_insert(devices).values(
         device_id=device_id,
         ua_hash=ua_hash,
-        raw_ua=raw_ua,
+        raw_ua=get_field_encryptor().encrypt(raw_ua),
         created_at=now(),
     )
     _db().execute(

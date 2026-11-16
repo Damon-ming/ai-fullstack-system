@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from src.com.damon.ming.app.config.upload.upload_config_loader import UploadConfig
     from src.com.damon.ming.app.encryption.session_service import SessionService
     from src.com.damon.ming.db.db_connection import DbConnection
+    from src.com.damon.ming.encryption.v1.field_encryptor import FieldEncryptor
     from src.com.damon.ming.thread.pool_manager import ThreadPoolManager
 
 
@@ -98,4 +99,5 @@ class EncryptionState:
     """加密。"""
 
     session_service: SessionService
+    field_encryptor: FieldEncryptor
     sign_context: bytes

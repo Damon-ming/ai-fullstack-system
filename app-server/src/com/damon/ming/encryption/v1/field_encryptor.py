@@ -113,9 +113,6 @@ class FieldEncryptor:
         self,
         plaintext: str,
         suite: CipherSuite = CipherSuite.DATABASE_AES_GCM,
-        *,
-        key: bytes | None = None,
-        index_key: bytes | None = None,
     ) -> str:
         """
         加密数据库字段，返回可直接存入 VARCHAR 列的 base64 字符串。
@@ -123,14 +120,10 @@ class FieldEncryptor:
         参数：
           plaintext:  待加密明文
           suite:       加密套件（默认随机 nonce，最安全）
-          key:         AES-256 密钥（32 字节），为 None 时从注入的密钥提供者取
-          index_key:   盲索引密钥（可选，传则同时返回索引）
-
         返回：
           密文字符串。
         """
-        if key is None:
-            key = self._key_material.get_data_key()
+        key = self._key_material.get_data_key()
 
         plaintext_bytes = plaintext.encode("utf-8")
 
@@ -173,7 +166,7 @@ class FieldEncryptor:
         plaintext_bytes = CryptoEngine.decrypt(payload, key, suite)
         return plaintext_bytes.decode("utf-8")
 
-    def blind_index(self, value: str, index_key: bytes | None = None) -> str:
+    def blind_index(self, value: str) -> str:
         """
         生成盲索引 token。
 
@@ -184,7 +177,4 @@ class FieldEncryptor:
           # 查询时
           db.query(User).filter(User.email_idx == fe.blind_index("foo@example.com"))
         """
-        if index_key is None:
-            index_key = self._key_material.get_index_key()
-
-        return CryptoEngine.blind_index(value, index_key)
+        return CryptoEngine.blind_index(value, self._key_material.get_index_key())

@@ -42,6 +42,7 @@ class AppInitializer:
         self.db_conn = None
         self.rsa_key_pair = None
         self.key_material = None
+        self.field_encryptor = None
         self.sign_context: bytes = b""
         self.session_service = None
         self.limiter = None
@@ -123,9 +124,9 @@ class AppInitializer:
         )
 
         app.state.storage = Storage(db_conn=self.db_conn)
-
         app.state.encryption = EncryptionState(
             session_service=self.session_service,
+            field_encryptor=self.field_encryptor,
             sign_context=self.sign_context,
         )
 
@@ -288,6 +289,9 @@ class AppInitializer:
 
     def _init_encryption(self) -> None:
         """加密体系: RSAKeyPair(纯技术)+ KeyMaterial(数据密钥)+ SessionService(业务协调)。"""
+        from src.com.damon.ming.app.encryption.field_encryption import (
+            initialize_field_encryptor,
+        )
         from src.com.damon.ming.app.encryption.field_key_material import KeyMaterial
         from src.com.damon.ming.app.encryption.field_key_store import PgFieldKeyStore
         from src.com.damon.ming.app.encryption.session_service import SessionService
@@ -305,6 +309,7 @@ class AppInitializer:
         # 2. 字段加密密钥从数据库读取并缓存；首次启动时在 DB 创建密钥记录
         self.key_material = KeyMaterial(PgFieldKeyStore(self.db_conn))
         self.key_material.initialize()
+        self.field_encryptor = initialize_field_encryptor(self.key_material)
 
         # 3. 会话服务（RSA + 必填 DB 存储，无会话密钥缓存）
         ttl_seconds = self._enc_config.session_ttl_seconds
