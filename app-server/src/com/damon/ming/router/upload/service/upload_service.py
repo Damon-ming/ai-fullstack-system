@@ -155,96 +155,104 @@ class UploadService:
             file_uid = generate_uuid_hex()
             file_sha256 = sha256_hex(content)
 
-            file_path = UploadFileStore.build_file_path(file_uid, file_name, suffix)
-            stored_file: StoredUploadFile | None = None
+            async with UploadFileStore.lock_content(file_sha256, suffix):
+                stored_file: StoredUploadFile | None = None
+                ingest_started = False
 
-            try:
-                stored_file = await UploadFileStore.store_content(
-                    file_path,
-                    file_sha256,
-                    content,
-                    executor,
-                )
-
-                # ── 阶段2：逐文件入库向量库（携带 file_uid 写入 chunk metadata）──
-                index_result = rag_app.ingest_files(
-                    [str(stored_file.get_disk_path().resolve())],
-                    cancellation_token=cancellation_token,
-                    file_uid=file_uid,
-                    disk_file_at=stored_file.get_disk_file_at(),
-                    file_name=file_name,
-                )
-
-                # ── 阶段3：确认入库结果 ──
-                indexed_shas = {item["file_sha256"] for item in index_result["indexed"]}
-                skipped_shas = {item["file_sha256"] for item in index_result["skipped"]}
-
-                if file_sha256 in indexed_shas:
-                    # 真正入库成功
-                    success_files.append(
-                        {
-                            "filename": file_name,
-                            "file_uid": file_uid,
-                        }
-                    )
-
-                    # ── 写入审计表（fire-and-forget，不阻塞上传响应）──
-                    submit_to_pool(
-                        executor,
-                        record_upload_metadata,
+                try:
+                    file_path = UploadFileStore.build_file_path(
                         file_uid,
+                        file_name,
+                        suffix,
+                    )
+                    stored_file = await UploadFileStore.store_content(
+                        file_path,
                         file_sha256,
-                        str(stored_file.get_disk_path().resolve()),
-                        len(content),
-                        user_id,
-                        device_id,
+                        suffix,
+                        content,
+                        executor,
                     )
 
-                elif file_sha256 in skipped_shas:
-                    # 重复文件（内容已存在，跳过入库）
-                    duplicate_files.append(
-                        {
-                            "filename": file_name,
-                        }
+                    # ── 阶段2：逐文件入库向量库（携带 file_uid 写入 chunk metadata）──
+                    ingest_started = True
+                    index_result = await rag_app.ingest_files(
+                        [str(stored_file.get_disk_path().resolve())],
+                        cancellation_token=cancellation_token,
+                        file_uid=file_uid,
+                        disk_file_at=stored_file.get_disk_file_at(),
+                        file_name=file_name,
                     )
 
-                    logger.info(
-                        "文件上传成功 | filename=%s | sha=%s",
+                    # ── 阶段3：确认入库结果 ──
+                    indexed_shas = {item["file_sha256"] for item in index_result["indexed"]}
+                    skipped_shas = {item["file_sha256"] for item in index_result["skipped"]}
+
+                    if file_sha256 in indexed_shas:
+                        # 真正入库成功
+                        success_files.append(
+                            {
+                                "filename": file_name,
+                                "file_uid": file_uid,
+                            }
+                        )
+
+                        # ── 写入审计表（fire-and-forget，不阻塞上传响应）──
+                        submit_to_pool(
+                            executor,
+                            record_upload_metadata,
+                            file_uid,
+                            file_sha256,
+                            str(stored_file.get_disk_path().resolve()),
+                            len(content),
+                            user_id,
+                            device_id,
+                        )
+
+                    elif file_sha256 in skipped_shas:
+                        # 重复文件（内容已存在，跳过入库）
+                        duplicate_files.append(
+                            {
+                                "filename": file_name,
+                            }
+                        )
+
+                        logger.info(
+                            "文件上传成功 | filename=%s | sha=%s",
+                            file_name,
+                            file_sha256[:16],
+                        )
+                    else:
+                        # 入库结果中没有这个文件 → 视为失败
+                        raise RuntimeError(t(I18nKey.UPLOAD_VECTOR_DB_ERROR))
+
+                except asyncio.CancelledError:
+                    # 客户端取消：回滚并继续
+                    _rollback_file(
+                        file_sha256,
+                        file_uid,
+                        rag_app if ingest_started else None,
+                        stored_file,
+                    )
+                    failed_files.append(
+                        {"filename": file_name, "error": "上传被客户端取消"}
+                    )
+                    raise
+
+                except Exception as e:
+                    # 任一步失败：回滚该文件的磁盘 + 缓存 + 向量库
+                    _rollback_file(
+                        file_sha256,
+                        file_uid,
+                        rag_app if ingest_started else None,
+                        stored_file,
+                    )
+                    logger.warning(
+                        "文件上传失败已回滚 | filename=%s | sha=%s | error=%s",
                         file_name,
                         file_sha256[:16],
+                        e,
                     )
-                else:
-                    # 入库结果中没有这个文件 → 视为失败
-                    raise RuntimeError(t(I18nKey.UPLOAD_VECTOR_DB_ERROR))
-
-            except asyncio.CancelledError:
-                # 客户端取消：回滚并继续
-                _rollback_file(
-                    file_sha256,
-                    file_uid,
-                    rag_app,
-                    stored_file,
-                )
-                failed_files.append(
-                    {"filename": file_name, "error": "上传被客户端取消"}
-                )
-                raise
-
-            except Exception as e:
-                # 任一步失败：回滚该文件的磁盘 + 缓存 + 向量库
-                _rollback_file(
-                    file_sha256,
-                    file_uid,
-                    rag_app,
-                    stored_file,
-                )
-                logger.warning(
-                    "文件上传失败已回滚 | filename=%s | sha=%s | error=%s",
-                    file_name,
-                    file_sha256[:16],
-                    e,
-                )
-                failed_files.append({"filename": file_name, "error": str(e)})
+                    failed_files.append({"filename": file_name, "error": str(e)})
 
         logger.info(
             "批量上传完成 | 总计=%d | 成功=%d | 失败=%d",
@@ -262,7 +270,7 @@ class UploadService:
 def _rollback_file(
     file_sha256: str,
     file_uid: str,
-    rag_app: RAGContainer,
+    rag_app: RAGContainer | None,
     stored_file: StoredUploadFile | None,
 ):
     """回滚单个文件的向量库 / 磁盘 / 缓存，保持三库一致。
@@ -289,4 +297,4 @@ def _rollback_file(
 
     # 2. 删磁盘文件并清理 SHA 缓存
     if stored_file is not None:
-        UploadFileStore.rollback_storage(stored_file, file_sha256)
+        UploadFileStore.rollback_storage(stored_file)

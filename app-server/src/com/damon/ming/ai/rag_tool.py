@@ -212,30 +212,42 @@ class RAGContainer:
         if bm25_nodes:
             self.bm25_index.build(bm25_nodes)
 
-        # upload 先写盘再入库，两步之间没有事务：抛异常会被 _rollback_file
-        # 回滚，但进程死亡（OOM / 重启 / 断电）不会，留下"磁盘有、向量库没有"
-        # 的孤儿文件。下面以磁盘为准补录——磁盘是用户意图，向量库是派生索引。
-        # 空库走全量建库（首次）；非空库只对缺失文件做 embedding，
-        # 正常重启开销为一次聚合查询，不会全量重算。
-        # chunk_id 由 file_sha256 + chunk 文本哈希确定性生成，补录走
-        # ON CONFLICT (id) DO NOTHING，幂等不撞主键。
-        if bm25_nodes and self.vector_store.count() == 0:
-            self._index_nodes(bm25_nodes, rebuild_bm25=False)
-        elif bm25_nodes:
+        # 磁盘是原始文件来源，向量库是可重建索引。上传跨文件系统和数据库
+        # 没有原子事务；启动时按磁盘内容补录缺失索引，并清理没有源文件的索引。
+        vector_count = self.vector_store.count()
+        if vector_count == 0:
+            if bm25_nodes:
+                self._index_nodes(bm25_nodes, rebuild_bm25=False)
+        else:
             db_shas = self.vector_store.get_all_file_shas()
             if db_shas is None:
                 logger.warning("向量库 file_sha256 查询失败，跳过启动对账")
             elif not db_shas:
-                # 向量库非空却查不到任何 file_sha256（旧版本数据）。
-                # 空集会把所有磁盘文件判成缺失 → 每次启动全量重算，故跳过。
+                # 旧版本向量数据没有 file_sha256 元数据，无法安全判断缺失或孤儿。
                 logger.warning("向量库无 file_sha256 元数据，跳过启动对账")
             else:
-                # file_sha256 为空的节点无法对账，跳过（否则每次启动都会重算）
+                disk_shas = {
+                    node.metadata["file_sha256"]
+                    for node in bm25_nodes
+                    if node.metadata.get("file_sha256")
+                }
+                orphan_shas = db_shas - disk_shas
+                for file_sha256 in orphan_shas:
+                    deleted = self.vector_store.delete_by_metadata(
+                        {"file_sha256": file_sha256}
+                    )
+                    logger.info(
+                        "启动对账：清理磁盘无源文件的向量索引 | sha=%s | chunks=%d",
+                        file_sha256[:16],
+                        deleted,
+                    )
+
+                # file_sha256 为空的节点无法对账，跳过。
                 missing = [
-                    n
-                    for n in bm25_nodes
-                    if n.metadata.get("file_sha256")
-                    and n.metadata["file_sha256"] not in db_shas
+                    node
+                    for node in bm25_nodes
+                    if node.metadata.get("file_sha256")
+                    and node.metadata["file_sha256"] not in db_shas
                 ]
                 if missing:
                     logger.warning(
@@ -268,6 +280,7 @@ class RAGContainer:
     async def ingest_files(
         self,
         file_paths: list[str],
+        cancellation_token: CancellationToken | None = None,
         file_uid: str = "",
         disk_file_at: str = "",
         file_name: str = "",
@@ -282,6 +295,9 @@ class RAGContainer:
 
         任一文件向量写入失败 → 抛 RuntimeError，由 upload_service 回滚该文件。
         """
+        if cancellation_token is not None:
+            cancellation_token.register_task(asyncio.current_task())
+
         # ── 阶段 1：遍历所有已注册数据源加载文件 ──
         # 各数据源内部自行过滤不匹配的文件类型，返回空列表则跳过
         document_pool = self._thread_pools.document
