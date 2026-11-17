@@ -8,14 +8,13 @@ RAG 容器 —— 线程编排层 + 业务入口。
   - 取消由 asyncio.CancelledError 穿透所有 await 层，无需手动检查
   - AI 模块本身不感知线程/取消
 
-取消策略：
+检索取消策略：
   - CancellationToken.register_task() 使 token.cancel() 直接取消当前 asyncio 协程
   - 任意 await 点立即抛出 CancelledError，外层 catch 后 re-raise
   - 中断时直接抛弃内存中的中间数据（clones、压缩结果等），不做任何保存/恢复
   - 不碰 vector_db 中的原始数据
 
 线程模型（executor 注入模式）：
-  - RAGContainer 是 ThreadPoolManager 的唯一持有者
   - 同步 AI 函数通过 app.thread_pools 统一提交入口执行
   - AI 模块（HybridRetriever/SectionReconstructor）通过参数接收 executor 用于内部并行
   - 异步 AI 函数（SummaryService.run_summary）直接调用
@@ -24,8 +23,8 @@ RAG 容器 —— 线程编排层 + 业务入口。
 import asyncio
 import threading
 from pathlib import Path
+from typing import cast
 
-from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.config.embedding.embedding_config_loader import (
     EmbeddingConfigLoader,
 )
@@ -44,6 +43,8 @@ from src.com.damon.ming.ai.config.tokenizer.tokenizer_config_loader import (
 from src.com.damon.ming.ai.config.vector.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
+from src.com.damon.ming.ai.knowledge_bootstrap import bootstrap_knowledge_index
+from src.com.damon.ming.ai.knowledge_ingest import KnowledgeIngestService
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.registry.source_registry import register_all_sources
@@ -55,22 +56,19 @@ from src.com.damon.ming.ai.retriever.base_retriever import (
 )
 from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.retriever.hybrid_retriever import HybridRetriever
-from src.com.damon.ming.ai.source import list_engines, resolve_source
 from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
 from src.com.damon.ming.ai.summary import SummaryService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
-from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
     RagConfigLoader,
 )
 from src.com.damon.ming.app.thread_pools import (
     RagThreadPools,
     run_in_pool,
-    submit_to_pool,
 )
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import CancellationToken
-from src.com.damon.ming.utils.time import now_iso
 
 logger = pin("ai.rag")
 
@@ -121,7 +119,7 @@ class RAGContainer:
         # 知识库目录：由 app.config 注入，不再硬编码，不合法直接抛异常
         if not knowledge_dir:
             raise ValueError("RAGContainer 初始化失败：knowledge_dir 不能为空")
-        self._knowledge_dir = Path(knowledge_dir)
+        knowledge_path = Path(knowledge_dir)
         # 推理配置加载器：由 AppInitializer 注入（全进程唯一实例）
         if loader is None:
             raise ValueError("RAGContainer 初始化失败：loader 不能为空")
@@ -130,9 +128,6 @@ class RAGContainer:
         register_all_tokenizers()
         register_all_embeddings()
         register_all_sources()
-
-        # 全局缓存全部分块节点，避免每次上传全量解析PDF
-        self.all_nodes = []
 
         # 步骤1.5：全量加载所有分词器（启动时一次性加载，避免响应延迟）
         _tokenizers = TokenizerConfigLoader().load_all()
@@ -149,7 +144,7 @@ class RAGContainer:
         self.embedders = _embedders
 
         # 步骤3：初始化向量库
-        self.vector_store: BaseVectorStore = VectorConfigLoader().load("pgvector")
+        self.vector_store = cast(PGVectorStore, VectorConfigLoader().load("pgvector"))
 
         # 步骤4：初始化章节重构 + 摘要服务
         _summary_entry = loader.load().rag.roles["summary"]
@@ -177,7 +172,6 @@ class RAGContainer:
 
         # 步骤8：初始化稀疏BM25索引（启动时预加载所有节点构建）
         self.bm25_index = BM25Index(tokenizer=self.word_tokenizer.tokenize)
-        self._knowledge_lock = threading.Lock()
         self.sparse_retriever = SparseRetriever(bm25_index=self.bm25_index)
 
         # 步骤9：混合检索器（稠密+稀疏RRF融合，参数来自 YAML）
@@ -200,82 +194,23 @@ class RAGContainer:
             chunk_overlap=self.splitter_config.chunk_overlap,
         )
 
-        # 首次启动自动建立知识库（动态加载所有已注册数据源）
-        all_startup_docs: list = []
-        for _name in list_engines():
-            cls = resolve_source(_name)
-            docs = cls(self._knowledge_dir).load_documents()
-            all_startup_docs.extend(docs)
-        bm25_nodes = self.splitter.split(all_startup_docs)
-        self.all_nodes = bm25_nodes
-
-        if bm25_nodes:
-            self.bm25_index.build(bm25_nodes)
-
-        # 磁盘是原始文件来源，向量库是可重建索引。上传跨文件系统和数据库
-        # 没有原子事务；启动时按磁盘内容补录缺失索引，并清理没有源文件的索引。
-        vector_count = self.vector_store.count()
-        if vector_count == 0:
-            if bm25_nodes:
-                self._index_nodes(bm25_nodes, rebuild_bm25=False)
-        else:
-            db_shas = self.vector_store.get_all_file_shas()
-            if db_shas is None:
-                logger.warning("向量库 file_sha256 查询失败，跳过启动对账")
-            elif not db_shas:
-                # 旧版本向量数据没有 file_sha256 元数据，无法安全判断缺失或孤儿。
-                logger.warning("向量库无 file_sha256 元数据，跳过启动对账")
-            else:
-                disk_shas = {
-                    node.metadata["file_sha256"]
-                    for node in bm25_nodes
-                    if node.metadata.get("file_sha256")
-                }
-                orphan_shas = db_shas - disk_shas
-                for file_sha256 in orphan_shas:
-                    deleted = self.vector_store.delete_by_metadata(
-                        {"file_sha256": file_sha256}
-                    )
-                    logger.info(
-                        "启动对账：清理磁盘无源文件的向量索引 | sha=%s | chunks=%d",
-                        file_sha256[:16],
-                        deleted,
-                    )
-
-                # file_sha256 为空的节点无法对账，跳过。
-                missing = [
-                    node
-                    for node in bm25_nodes
-                    if node.metadata.get("file_sha256")
-                    and node.metadata["file_sha256"] not in db_shas
-                ]
-                if missing:
-                    logger.warning(
-                        "启动对账：%d 个磁盘文件未入向量库，自动补录",
-                        len(missing),
-                    )
-                    self._index_nodes(missing, rebuild_bm25=False)
-
+        initial_nodes = bootstrap_knowledge_index(
+            knowledge_dir=knowledge_path,
+            splitter=self.splitter,
+            bm25_index=self.bm25_index,
+            embedder=self.embedder,
+            vector_store=self.vector_store,
+        )
+        self._knowledge_ingest = KnowledgeIngestService(
+            knowledge_dir=knowledge_path,
+            thread_pools=thread_pools,
+            splitter=self.splitter,
+            embedder=self.embedder,
+            vector_store=self.vector_store,
+            bm25_index=self.bm25_index,
+            initial_nodes=initial_nodes,
+        )
         logger.info("RAG 容器初始化完成")
-
-    def _index_nodes(self, all_nodes, rebuild_bm25: bool = True) -> list[str]:
-        """向量入库的唯一入口；调用方应确保节点已按 file_sha256 去重。"""
-        if not all_nodes:
-            return []
-        # 批量向量化
-        texts = [n.text for n in all_nodes]
-        embeddings = self.embedder.embed_documents(texts)
-        for node, vec in zip(all_nodes, embeddings):
-            node.embedding = vec
-
-        # 写入向量库
-        node_ids = self.vector_store.add_documents(all_nodes)
-        # 刷新BM25
-        if rebuild_bm25:
-            self.bm25_index.build(all_nodes)
-        return node_ids
-
-    # ── ingest_files：上传线程编排 ────────────────────────────────────
 
     async def ingest_files(
         self,
@@ -285,173 +220,14 @@ class RAGContainer:
         disk_file_at: str = "",
         file_name: str = "",
     ) -> dict:
-        """增量处理上传文件（支持 PDF / TXT / MD）。
-
-        线程编排层：
-          1. 锁外：按扩展名路由到对应数据源加载（IO/CPU 密集，无共享状态访问）
-          2. 锁外：embedding 预计算（CPU/GPU 密集，多文件并行，不阻塞事件循环）
-          3. 锁内（threading.Lock + 线程池）：去重检查 + 向量写入（不阻塞事件循环）
-          4. 锁外：all_nodes 更新 + BM25 后台重建（异步，不阻塞上传响应）
-
-        任一文件向量写入失败 → 抛 RuntimeError，由 upload_service 回滚该文件。
-        """
-        if cancellation_token is not None:
-            cancellation_token.register_task(asyncio.current_task())
-
-        # ── 阶段 1：遍历所有已注册数据源加载文件 ──
-        # 各数据源内部自行过滤不匹配的文件类型，返回空列表则跳过
-        document_pool = self._thread_pools.document
-        all_loaded_docs: list = []
-        for source_name in list_engines():
-            cls = resolve_source(source_name)
-            try:
-                docs = await run_in_pool(
-                    document_pool,
-                    cls(self._knowledge_dir).load_specific_files,
-                    file_paths,
-                )
-                all_loaded_docs.extend(docs)
-            except asyncio.CancelledError:
-                logger.warning(f"ingest_files | {source_name} 加载阶段被取消")
-                raise
-
-        # 构建 path -> docs 的映射
-        path_to_docs: dict[str, list] = {}
-        for d in all_loaded_docs:
-            fp = d.metadata["file_path"]
-            path_to_docs.setdefault(fp, []).append(d)
-
-        # ── 阶段 2：锁外文档分割（splitter 自身线程安全，无共享状态访问）──
-        # 收集结果后统一在锁内做去重和入库，避免并发上传重复索引同一文件
-        parsed: list[tuple[str, list, str]] = []  # (key, docs, file_sha256)
-        skipped: list[dict] = []
-
-        for file_path in file_paths:
-            p = Path(file_path).resolve()
-            key = str(p)
-            docs = path_to_docs.get(key, [])
-            if not docs:
-                logger.error(f"无法解析文件: {p.name}")
-                skipped.append(
-                    {
-                        "file_sha256": None,
-                        "file_path": key,
-                        "reason": "parse_failed",
-                    }
-                )
-                continue
-
-            file_sha256 = docs[0].metadata.get("file_sha256", "")
-
-            try:
-                nodes = await run_in_pool(
-                    document_pool,
-                    self.splitter.split,
-                    docs,
-                )
-            except asyncio.CancelledError:
-                logger.warning("ingest_files | 文档分割阶段被取消")
-                raise
-
-            if nodes:
-                parsed.append((key, nodes, file_sha256))
-
-        # ── 阶段 2.5：锁外预计算 embedding（CPU/GPU 密集，多文件并行不阻塞事件循环）──
-        # embedding 不访问共享状态，无需持锁；锁内只做去重 + 写入（毫秒级）
-        for key, nodes, file_sha256 in parsed:
-            texts = [n.text for n in nodes]
-            embeddings = await run_in_pool(
-                document_pool, self.embedder.embed_documents, texts
-            )
-            for node, vec in zip(nodes, embeddings):
-                node.embedding = vec
-
-        # ── 阶段 3：threading.Lock + 线程池原子去重 + 入库 ──
-        # threading.Lock 保证去重检查和写入的原子性；
-        # 统一线程池入口卸载同步任务，不阻塞事件循环，聊天请求可继续响应。
-        #
-        # 已知限制：锁临界区包含 get_by_metadata（SQLite 读）+ add_documents（SQLite 写），
-        # 持锁期间 ~15-110ms，多用户并发上传时在此串行化排队。
-        # 串行化是正确性必需的（防 check-then-act 去重击穿），不可去掉。
-        # 锁内 I/O 耗时主要来自 pgvector 查询（应用层可接受），当前可接受。
-        # 若未来并发上传成为瓶颈（>20 用户同时上传），可考虑内存 Set 缩小临界区，
-        # 但需处理 Set 与 pgvector 的同步及崩溃恢复，复杂度较高。
-        def _locked_ingest() -> tuple[list[dict], list[TextNode], list[str]]:
-            """持 threading.Lock 执行 pgvector 去重 + 写入。"""
-            accepted: list[dict] = []
-            new_nodes: list[TextNode] = []
-            failed_shas: list[str] = []
-
-            with self._knowledge_lock:
-                for key, nodes, file_sha256 in parsed:
-                    # get_by_metadata 查询失败时返回 []（异常被底层吞掉），
-                    # 无法区分"查询失败"和"文件不存在"。pgvector 查询异常极罕见，
-                    # 若出现极端情况会导致去重被击穿产生重复 chunk（非数据丢失，仅检索冗余）。
-                    # 暂不区分处理，保持代码简洁；如 pgvector 频繁异常可在此加单次重试。
-                    existing = self.vector_store.get_by_metadata(
-                        {"file_sha256": file_sha256}
-                    )
-                    if existing:
-                        skipped.append(
-                            {"file_sha256": file_sha256, "reason": "already_indexed"}
-                        )
-                        continue
-
-                    # 注入 chunk metadata：file_uid + 时间戳 + 原始文件名
-                    indexed_at = now_iso()
-                    for node in nodes:
-                        if file_uid:
-                            node.metadata["file_uid"] = file_uid
-                        if file_name:
-                            node.metadata["file_name"] = file_name
-                        node.metadata["disk_file_at"] = disk_file_at
-                        node.metadata["indexed_at"] = indexed_at
-
-                    try:
-                        self.vector_store.add_documents(nodes)
-                    except Exception as e:
-                        logger.warning(
-                            "向量库入库失败 | file_sha256=%s | error=%s",
-                            file_sha256[:16],
-                            e,
-                        )
-                        failed_shas.append(file_sha256)
-                        continue
-
-                    accepted.append({"file_sha256": file_sha256, "chunks": len(nodes)})
-                    new_nodes.extend(nodes)
-
-            return accepted, new_nodes, failed_shas
-
-        accepted, new_nodes, failed_shas = await run_in_pool(
-            document_pool, _locked_ingest
+        """将上传文件交给知识库入库服务处理。"""
+        return await self._knowledge_ingest.ingest_files(
+            file_paths,
+            cancellation_token=cancellation_token,
+            file_uid=file_uid,
+            disk_file_at=disk_file_at,
+            file_name=file_name,
         )
-
-        # 锁外：更新内存节点列表（纯内存操作，无需持锁）
-        if new_nodes:
-            self.all_nodes.extend(new_nodes)
-
-        if failed_shas:
-            # 告知 upload_service 回滚失败文件的磁盘和缓存，保持三库一致
-            raise RuntimeError(f"向量库入库失败，需回滚文件数: {len(failed_shas)}")
-
-        # ── BM25 重建（锁外，独立线程池异步，不阻塞上传响应且不与检索争线程）──
-        # BM25Okapi 不支持增量添加，仍需全量重建。
-        # 提交到 bm25 专用线程池后上传立即返回，重建期间 chat 稀疏检索使用旧索引（优雅降级）。
-        # BM25Index.build 内部 _build_lock 保证读写安全（锁外构建 + 锁内原子替换）。
-        # 独立于 retrieval_pool，避免 BM25 重建（CPU 密集）饿死聊天检索线程。
-        # bm25_pool 单 worker 串行处理，多任务排队后者覆盖前者，最终一致无冗余 CPU 浪费。
-        if new_nodes:
-            bm25_pool = self._thread_pools.bm25
-            # 锁内复制快照，避免后台重建读取时 all_nodes 被并发修改
-            nodes_snapshot = list(self.all_nodes)
-            build_args = (nodes_snapshot, len(new_nodes), len(nodes_snapshot))
-            submit_to_pool(bm25_pool, self._rebuild_bm25, *build_args)
-            logger.info(
-                f"BM25后台重建已提交 | 新增{len(new_nodes)}个节点，总节点数：{len(self.all_nodes)}"
-            )
-
-        return {"indexed": accepted, "skipped": skipped}
 
     def delete_by_uid(self, file_uid: str) -> int:
         """按 file_uid 删除向量库中的 chunk（上传回滚用）。
@@ -460,18 +236,6 @@ class RAGContainer:
         返回删除的 chunk 数量，未匹配返回 0。
         """
         return self.vector_store.delete_by_metadata({"file_uid": file_uid})
-
-    def _rebuild_bm25(self, all_nodes: list, new_count: int, total_count: int) -> None:
-        """后台线程中重建 BM25 索引（CPU 密集，不阻塞事件循环）。
-
-        BM25Index.build 内部使用 _build_lock 的锁外构建 + 锁内原子替换模式，
-        并发查询的 get_scores / get_top_k 不受影响（读到旧索引或新索引均为一致状态）。
-        多个重建任务并发时后者覆盖前者，最终一致，无数据损坏。
-        """
-        self.bm25_index.build(all_nodes)
-        logger.info(
-            f"BM25后台重建完成 | 新增{new_count}个节点，总节点数：{total_count}"
-        )
 
     # ── query_rag：检索线程编排 ────────────────────────────────────────
 
@@ -492,7 +256,7 @@ class RAGContainer:
           6. 取消由 asyncio.CancelledError 统一处理——任何 await 点立即中断
 
         Executor 注入模式：
-          - RAGContainer 是 ThreadPoolManager 的唯一使用者
+          - 检索流程使用注入的检索和重排线程池
           - AI 模块通过参数接收 executor，不创建/不持有线程池
           - 取消时 CancelledError 穿透所有 await 层，无需手动检查
 
