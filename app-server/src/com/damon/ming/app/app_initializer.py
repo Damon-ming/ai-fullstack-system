@@ -240,14 +240,14 @@ class AppInitializer:
             logger.warning("异常类型注册失败: %s", e)
 
     def _init_upload_service(self) -> None:
-        """上传服务：设置知识库目录 + 初始化 SHA 缓存（逐文件同步入库，无需后台任务）。"""
-        from src.com.damon.ming.router.upload.service.upload_service import (
-            UploadService,
+        """上传文件存储：设置知识库目录并初始化 SHA 缓存。"""
+        from src.com.damon.ming.router.upload.service.upload_file_store import (
+            UploadFileStore,
         )
 
-        UploadService.set_knowledge_dir(self.system_config.knowledge_dir)
-        UploadService.init_sha_cache(sha_cache_max=self.upload_config.sha_cache_max)
-        logger.info("上传服务初始化完成（逐文件同步入库模式）")
+        UploadFileStore.set_knowledge_dir(self.system_config.knowledge_dir)
+        UploadFileStore.init_sha_cache(sha_cache_max=self.upload_config.sha_cache_max)
+        logger.info("上传文件存储初始化完成")
 
     def _init_database(self) -> None:
         """数据库连接池：仅从 YAML 配置文件加载。
