@@ -124,6 +124,12 @@ class RagTurnRecorder:
         """提问时刻（请求到达即采集），与落库字段、start 事件下发的是同一时刻。"""
         return self._query_at
 
+    @property
+    def answered_at(self) -> datetime:
+        """回答完成时刻；persist 前初始化，并与落库字段保持一致。"""
+        assert self._answered_at is not None
+        return self._answered_at
+
     # ---- 落库 -----------------------------------------------------------
 
     async def persist(self) -> bool:
@@ -140,6 +146,7 @@ class RagTurnRecorder:
         if self.attempted:
             return self.succeeded
         self.attempted = True
+        self._answered_at = self._answered_at or now()
         try:
             ok = bool(await run_in_pool(self._db_executor, self._persist_sync))
         except Exception:
@@ -177,7 +184,7 @@ class RagTurnRecorder:
                 query_at=self._query_at,
                 first_token_at=self._first_token_at,
                 reasoning_done_at=self._reasoning_done_at,
-                answered_at=self._answered_at or now(),
+                answered_at=self.answered_at,
                 error_msg=self._error_msg,
             )
         )

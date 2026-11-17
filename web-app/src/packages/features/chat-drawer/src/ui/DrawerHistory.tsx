@@ -11,6 +11,10 @@ export const DrawerHistory: React.FC = () => {
     activeConversationId,
     loading,
     selectChat,
+    deleteConfirmationId,
+    requestDeleteHistory,
+    cancelDeleteHistory,
+    confirmDeleteHistory,
     pin,
     unpin,
     hasMore,
@@ -65,7 +69,7 @@ export const DrawerHistory: React.FC = () => {
             {group.items.map((item) => (
               <div
                 key={item.conversationId}
-                className={`flex h-9 w-full items-center rounded-lg text-sm transition ${
+                className={`group flex h-9 w-full items-center rounded-lg text-sm transition ${
                   activeConversationId === item.conversationId
                     ? "bg-blue-50 font-medium text-blue-700"
                     : "text-gray-600 hover:bg-gray-100"
@@ -99,6 +103,15 @@ export const DrawerHistory: React.FC = () => {
                     📌
                   </button>
                 )}
+                <button
+                  type="button"
+                  title={t("history.delete")}
+                  aria-label={t("history.delete")}
+                  onClick={() => requestDeleteHistory(item.conversationId)}
+                  className="h-full px-2 text-gray-400 opacity-0 transition-opacity hover:text-red-600 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+                >
+                  🗑️
+                </button>
               </div>
             ))}
           </React.Fragment>
@@ -107,6 +120,51 @@ export const DrawerHistory: React.FC = () => {
       {isLoadingMore && (
         <div className="py-2 text-center text-xs text-gray-400">
           {t("history.loading")}
+        </div>
+      )}
+      {deleteConfirmationId && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm"
+          onClick={cancelDeleteHistory}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="history-delete-title"
+            aria-describedby="history-delete-message"
+            className="mx-4 w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2
+              id="history-delete-title"
+              className="text-lg font-semibold text-gray-800"
+            >
+              {t("history.deleteConfirmTitle")}
+            </h2>
+            <p
+              id="history-delete-message"
+              className="mt-2 text-sm text-gray-500"
+            >
+              {t("history.deleteConfirmMessage")}
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                autoFocus
+                onClick={cancelDeleteHistory}
+                className="rounded-xl bg-gray-100 px-5 py-2 text-gray-600 transition hover:bg-gray-200"
+              >
+                {t("history.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteHistory}
+                className="rounded-xl bg-red-600 px-5 py-2 font-semibold text-white transition hover:bg-red-700"
+              >
+                {t("history.confirmDelete")}
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </div>

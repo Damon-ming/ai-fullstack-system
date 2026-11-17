@@ -74,11 +74,11 @@ class SseMessageFactory:
         return json.dumps(msg.model_dump(mode="json"), ensure_ascii=False)
 
     @staticmethod
-    def done() -> str:
-        """构造 done 事件消息 —— 流结束"""
+    def done(answered_at: datetime) -> str:
+        """构造 done 事件消息，并携带与落库一致的回答完成时间。"""
         msg = StreamMessage[ChatDoneData](
             code=ErrorCode.OK,
-            data=ChatDoneData(),
+            data=ChatDoneData(answeredAt=to_unix_timestamp(answered_at)),
         )
         return json.dumps(msg.model_dump(mode="json"), ensure_ascii=False)
 

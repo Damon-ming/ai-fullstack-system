@@ -23,6 +23,10 @@
     "pin": "置顶对话",
     "unpin": "取消置顶",
     "delete": "删除记录",
+    "deleteConfirmTitle": "删除对话",
+    "deleteConfirmMessage": "确定删除这条历史对话吗？删除后无法恢复。",
+    "cancel": "取消",
+    "confirmDelete": "删除",
     "loading": "加载中",
     "empty": "暂无对话记录"
   },

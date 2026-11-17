@@ -23,6 +23,10 @@
     "pin": "Pin conversation",
     "unpin": "Unpin conversation",
     "delete": "Delete",
+    "deleteConfirmTitle": "Delete conversation",
+    "deleteConfirmMessage": "Delete this conversation? This action cannot be undone.",
+    "cancel": "Cancel",
+    "confirmDelete": "Delete",
     "loading": "Loading",
     "empty": "No chat history"
   },

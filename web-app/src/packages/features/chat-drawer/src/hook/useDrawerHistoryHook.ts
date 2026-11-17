@@ -1,4 +1,5 @@
 // web-app/src/packages/features/chat-drawer/src/hook/useDrawerHistoryHook.ts
+import { useState } from "react";
 import { useHistory, useSelectConversation } from "@ming/feature-history-api";
 import { useHistoryStore } from "@ming/store/biz/history-state";
 
@@ -7,6 +8,9 @@ export function useDrawerHistoryHook() {
   const setActiveConversationId = useHistoryStore(
     (s) => s.setActiveConversationId,
   );
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState<
+    string | null
+  >(null);
   const {
     list,
     groups,
@@ -27,6 +31,20 @@ export function useDrawerHistoryHook() {
     if (activeConversationId === id) setActiveConversationId(null);
   };
 
+  const requestDeleteHistory = (id: string) => {
+    setDeleteConfirmationId(id);
+  };
+
+  const cancelDeleteHistory = () => {
+    setDeleteConfirmationId(null);
+  };
+
+  const confirmDeleteHistory = () => {
+    if (!deleteConfirmationId) return;
+    deleteHistory(deleteConfirmationId);
+    setDeleteConfirmationId(null);
+  };
+
   return {
     list,
     groups,
@@ -34,6 +52,10 @@ export function useDrawerHistoryHook() {
     loading,
     selectChat,
     deleteHistory,
+    deleteConfirmationId,
+    requestDeleteHistory,
+    cancelDeleteHistory,
+    confirmDeleteHistory,
     pin,
     unpin,
     hasMore,

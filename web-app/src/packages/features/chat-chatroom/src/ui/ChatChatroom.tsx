@@ -215,16 +215,15 @@ export const ChatChatroom: React.FC = () => {
                 >
                   <MessageBody message={message} setMessages={setMessages} />
                 </div>
-                {/* 助手消息元信息：提问时刻（与历史记录 queryAt 同一时刻） */}
-                {message.role === "assistant" &&
-                  message.queryAt &&
-                  !message.pending && (
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-400">
-                      <span className="rounded-md bg-gray-50 px-2 py-1">
-                        {formatMessageTime(message.queryAt)}
-                      </span>
-                    </div>
-                  )}
+                {message.timestamp !== undefined && !message.pending && (
+                  <div
+                    className={`mt-1 text-xs text-gray-400 ${
+                      message.role === "user" ? "text-right" : "text-left"
+                    }`}
+                  >
+                    {formatMessageTime(message.timestamp)}
+                  </div>
+                )}
                 {/* 复制按钮：AI右下，User左下 */}
                 <button
                   type="button"

@@ -41,7 +41,7 @@ from src.com.damon.ming.router.rag.service.rag_core import generate_answer
 from src.com.damon.ming.router.rag.service.rag_turn import RagTurnRecorder
 from src.com.damon.ming.router.rag.sse import SseEmitter, SseMessageFactory
 from src.com.damon.ming.thread.pool_manager import RequestScope
-from src.com.damon.ming.utils.time import now
+from src.com.damon.ming.utils.time import now, to_unix_timestamp
 from src.com.damon.ming.utils.uuid import generate_uuid_hex
 from sse_starlette.sse import EventSourceResponse
 
@@ -149,6 +149,8 @@ async def answer(request: Request, body: ChatRequest):
                     "content": recorder.content,
                     "reasoning": recorder.reasoning,
                     "conversationId": recorder.conversation_id,
+                    "queryAt": to_unix_timestamp(recorder.query_at),
+                    "answeredAt": to_unix_timestamp(recorder.answered_at),
                 }
             ),
         )
@@ -233,7 +235,7 @@ async def stream_chat_generator(
                 "delta",
                 SseMessageFactory.delta(ChatDeltaData(content=msg)),
             )
-            yield emitter.emit("done", SseMessageFactory.done())
+            yield emitter.emit("done", SseMessageFactory.done(recorder.answered_at))
             return
 
         # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
@@ -246,7 +248,7 @@ async def stream_chat_generator(
                 "delta",
                 SseMessageFactory.delta(ChatDeltaData(content=msg)),
             )
-            yield emitter.emit("done", SseMessageFactory.done())
+            yield emitter.emit("done", SseMessageFactory.done(recorder.answered_at))
             return
 
         # ── Phase 2: RAG + 推理（超时预算覆盖整段，见 generate_answer） ──
@@ -282,7 +284,7 @@ async def stream_chat_generator(
             return
 
         # ── done 事件（结束包） ──
-        yield emitter.emit("done", SseMessageFactory.done())
+        yield emitter.emit("done", SseMessageFactory.done(recorder.answered_at))
         logger.info("流式聊天请求完成 | lastEventId=%s", emitter.last_event_id)
 
     except TimeoutError:

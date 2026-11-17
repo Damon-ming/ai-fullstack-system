@@ -22,6 +22,10 @@ export interface ChatDrawerResources {
     pin: string;
     unpin: string;
     delete: string;
+    deleteConfirmTitle: string;
+    deleteConfirmMessage: string;
+    cancel: string;
+    confirmDelete: string;
     loading: string;
     empty: string;
   };

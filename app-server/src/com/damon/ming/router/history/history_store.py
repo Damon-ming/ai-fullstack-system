@@ -347,6 +347,9 @@ def delete_history(conversation_id: str, user_id: int) -> bool:
     不会出现「轮次已删、会话还在」的中间态。
     """
 
+    # TODO(history): 轮次需在生成开始时落库并记录 processing/completed/error 状态；
+    # 删除时在会话锁内检查是否存在任意 processing 轮次，避免与进行中的追加竞态。
+
     def _delete(conn) -> bool:
         rows = conn.execute(
             select(history_conversations.c.id).where(

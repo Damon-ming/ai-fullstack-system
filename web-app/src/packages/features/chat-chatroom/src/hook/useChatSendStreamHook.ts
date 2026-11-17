@@ -1,7 +1,7 @@
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { useHistoryStore } from "@ming/store/biz/history-state";
 import { streamChatRoomMessage, ClientErrorCode } from "../api";
-import type { ChatRoomRequest, ChatStartData } from "../api";
+import type { ChatDoneData, ChatRoomRequest, ChatStartData } from "../api";
 import { useTranslation } from "@ming/i18n";
 import { createLogger } from "@ming/core-log";
 
@@ -61,6 +61,7 @@ export function useChatSendStreamHook() {
     log.debug("sendStream started", { queryLength: query.length });
     const userMsgId = `user-${Date.now()}`;
     const assistantMsgId = `assistant-${Date.now()}`;
+    const clientQueryAt = Math.floor(Date.now() / 1000);
     // 占位文案：服务端尚未交付正文时展示，流结束后按实际交付情况清理
     const placeholder = t("reasoning");
 
@@ -113,16 +114,19 @@ export function useChatSendStreamHook() {
                 setActiveConversationId(startData.conversationId);
               }
               setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMsgId
+                prev.map((msg) => {
+                  if (msg.id === userMsgId) {
+                    return { ...msg, timestamp: startData.queryAt };
+                  }
+                  return msg.id === assistantMsgId
                     ? {
                         ...msg,
                         turnId: startData.turnId,
                         conversationId: startData.conversationId,
                         queryAt: startData.queryAt,
                       }
-                    : msg,
-                ),
+                    : msg;
+                }),
               );
             } else if (eventType === "reasoning") {
               // 推理过程分片 —— 累加到 reasoning 字段，不干扰正文
@@ -177,6 +181,14 @@ export function useChatSendStreamHook() {
               }
             } else if (eventType === "done") {
               streamFinished = true;
+              const doneData = payload.data as ChatDoneData;
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMsgId
+                    ? { ...msg, timestamp: doneData.answeredAt }
+                    : msg,
+                ),
+              );
             }
             // 注：SSE error 事件由解析层路由到 onError，不会进入 onMessage
           },
@@ -235,6 +247,17 @@ export function useChatSendStreamHook() {
       // 无条件刷新历史列表：落库可能发生在 done 之前（done 丢失时），
       // 只有向服务端对齐才能保证抽屉内容与 DB 一致
       markTurnSaved();
+      const updatedAt = Math.floor(Date.now() / 1000);
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id === userMsgId && msg.timestamp === undefined) {
+            return { ...msg, timestamp: clientQueryAt };
+          }
+          return msg.id === assistantMsgId && msg.timestamp === undefined
+            ? { ...msg, timestamp: updatedAt }
+            : msg;
+        }),
+      );
       // 空气泡清理：与 DB 落库口径一致（content || reasoning || error_msg），
       // 未交付任何内容时移除占位消息；pending 标记代替占位文案字符串比较
       setMessages((prev) =>

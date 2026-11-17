@@ -33,4 +33,6 @@ export interface ChatMessage {
   conversationId?: string;
   /** 提问时刻（Unix 秒），与历史记录 queryAt 同一时刻 */
   queryAt?: number;
+  /** 消息时间（Unix 秒）：用户消息为提问时间，助手消息为最后更新时间 */
+  timestamp?: number;
 }

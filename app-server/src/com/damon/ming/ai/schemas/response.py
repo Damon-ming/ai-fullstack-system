@@ -66,6 +66,8 @@ class ChatDeltaData(BaseModel):
 
 # 空结束数据
 class ChatDoneData(BaseModel):
+    answeredAt: int = Field(..., description="回答完成时间戳 (Unix 秒)")
+
     # `extra="ignore"`：允许传入模型定义之外的字段，静默忽略。
     # 未来 done 事件可能携带 summary / usage 等扩展信息，避免兼容性问题。
     class Config:

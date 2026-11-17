@@ -7,6 +7,10 @@ export interface ChatRoomResult {
   reasoning?: string;
   /** 会话 id；新会话由服务端生成，客户端回填后用于后续轮次追加 */
   conversationId?: string;
+  /** 提问时间戳（Unix 秒，与历史记录一致） */
+  queryAt: number;
+  /** 回答完成时间戳（Unix 秒，与历史记录一致） */
+  answeredAt: number;
 }
 /** 后端 data 层：data 字段包裹 LLM 返回值（与 BaseLLMSuccessData 结构对齐） */
 export interface ChatRoomSyncData {
@@ -29,6 +33,11 @@ export interface ChatStartData {
   conversationId: string;
   /** 提问时刻（Unix 秒） */
   queryAt: number;
+}
+
+/** SSE done 事件携带与数据库一致的回答完成时间 */
+export interface ChatDoneData {
+  answeredAt: number;
 }
 
 /**
@@ -54,6 +63,7 @@ export interface ChatSseMessage {
   code: number;
   data:
     | ChatStartData
+    | ChatDoneData
     | ChatDeltaData
     | ChatSseErrorData
     | Record<string, never>;

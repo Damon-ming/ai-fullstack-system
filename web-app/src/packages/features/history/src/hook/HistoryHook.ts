@@ -148,6 +148,7 @@ export function turnsToChatMessages(
       id: `${turn.turnId}_q`,
       content: turn.query,
       role: "user",
+      timestamp: parseQueryAt(turn.queryAt),
     });
     // 空气泡清理：服务端未交付任何内容（无正文 / 推理 / 异常提示）时不展示助手消息
     if (turn.content || turn.reasoning || turn.errorMsg) {
@@ -159,6 +160,7 @@ export function turnsToChatMessages(
         errorMsg: turn.errorMsg || undefined,
         turnId: turn.turnId,
         queryAt: parseQueryAt(turn.queryAt),
+        timestamp: parseQueryAt(turn.answeredAt),
         // 历史轮次已是终态：标题用「推理过程」，折叠口径与流式正文开始时一致
         isReasoning: false,
         reasoningCollapsed: true,

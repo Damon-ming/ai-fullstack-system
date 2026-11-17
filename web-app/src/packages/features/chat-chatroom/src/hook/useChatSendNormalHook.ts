@@ -1,3 +1,4 @@
+// web-app/src/packages/features/chat-chatroom/src/hook/useChatSendNormalHook.ts
 import { useChatMessageStore } from "@ming/store/biz/chat-state";
 import { useHistoryStore } from "@ming/store/biz/history-state";
 import { sendChatRoomMessageFn, ErrorCode } from "../api";
@@ -43,6 +44,7 @@ export function useChatSendNormalHook() {
 
     const userMsgId = `user-${Date.now()}`;
     const assistantMsgId = `assistant-${Date.now()}`;
+    const clientQueryAt = Math.floor(Date.now() / 1000);
     // 占位文案：服务端尚未交付正文时展示，结束后按实际交付情况清理
     const placeholder = t("reasoning");
 
@@ -77,17 +79,21 @@ export function useChatSendNormalHook() {
           setActiveConversationId(result.conversationId);
         }
         setMessages((items) =>
-          items.map((msg) =>
-            msg.id === assistantMsgId
+          items.map((msg) => {
+            if (msg.id === userMsgId) {
+              return { ...msg, timestamp: result.queryAt };
+            }
+            return msg.id === assistantMsgId
               ? {
                   ...msg,
                   content: result.content,
                   // 推理文本随正文一并下发；为空则不写，避免空气泡清理误判
                   reasoning: result.reasoning || undefined,
+                  timestamp: result.answeredAt,
                   pending: false,
                 }
-              : msg,
-          ),
+              : msg;
+          }),
         );
       }
     } catch (e) {
@@ -115,14 +121,14 @@ export function useChatSendNormalHook() {
         setActiveConversationId(conversationId);
       }
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMsgId
-            ? // 拦截文案有值才按正文展示；为空回退 errorMsg，避免占位消息被清理后丢失这轮
-              isBlocked && errMsg
-              ? { ...msg, content: errMsg, pending: false }
-              : { ...msg, errorMsg: errMsg, pending: false }
-            : msg,
-        ),
+        prev.map((msg) => {
+          if (msg.id !== assistantMsgId) return msg;
+          // 拦截文案有值才按正文展示；为空回退 errorMsg，避免占位消息被清理后丢失这轮
+          if (isBlocked && errMsg) {
+            return { ...msg, content: errMsg, pending: false };
+          }
+          return { ...msg, errorMsg: errMsg, pending: false };
+        }),
       );
     } finally {
       setAbortController(null);
@@ -130,6 +136,17 @@ export function useChatSendNormalHook() {
       // 无条件刷新历史列表：落库可能发生在成功 / 失败 / 取消任一路径，
       // 只有向服务端对齐才能保证抽屉内容与 DB 一致
       markTurnSaved();
+      const updatedAt = Math.floor(Date.now() / 1000);
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id === userMsgId && msg.timestamp === undefined) {
+            return { ...msg, timestamp: clientQueryAt };
+          }
+          return msg.id === assistantMsgId && msg.timestamp === undefined
+            ? { ...msg, timestamp: updatedAt }
+            : msg;
+        }),
+      );
       // 空气泡清理：与 DB 落库口径一致（content || reasoning || error_msg），
       // 未交付任何内容时移除占位消息；pending 标记代替占位文案字符串比较
       setMessages((prev) =>

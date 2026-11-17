@@ -11,8 +11,10 @@ export interface HistoryChatMessage {
   reasoning?: string;
   errorMsg?: string;
   turnId?: string;
-  /** 提问时刻（Unix 秒），与流式 start 事件口径一致，供 UI 渲染时间戳 */
+  /** 提问时刻（Unix 秒），与流式 start 事件口径一致 */
   queryAt?: number;
+  /** 消息时间（Unix 秒）：用户消息为提问时间，助手消息为回答完成时间 */
+  timestamp?: number;
   /** 历史轮次已结束推理，标题显示「推理过程」 */
   isReasoning?: boolean;
   /** 与流式收尾状态一致：推理区域默认折叠 */
