@@ -36,12 +36,12 @@ allowed_types:
   docx:
     max_size_bytes: 20971520   # 20MB —— Word 文档（含嵌入图片）
     description: "Word 文档"
-  doc:
-    max_size_bytes: 20971520   # 20MB —— 旧版 Word（需转换）
-    description: "Word 文档(旧版)"
   pptx:
     max_size_bytes: 52428800   # 50MB —— PPT 演示文稿（含图表）
     description: "PPT 演示文稿"
   html:
+    max_size_bytes: 5242880    # 5MB —— 网页文件
+    description: "HTML 网页"
+  htm:
     max_size_bytes: 5242880    # 5MB —— 网页文件
     description: "HTML 网页"

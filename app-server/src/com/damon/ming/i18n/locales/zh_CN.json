@@ -18,6 +18,7 @@
   "upload.too_many_files": "单次最多上传 {max_files} 个文件，当前 {actual} 个",
   "upload.size_exceeded": "文件过大（上限 {max_mb}MB）",
   "upload.total_size_exceeded": "上传总大小超限（上限 {max_mb}MB）",
+  "upload.content_invalid": "文件内容与扩展名不匹配或格式无效",
   "upload.parse_failed": "无法解析文件: {filename}",
   "upload.vector_db_error": "向量库入库结果异常，未找到该文件",
 

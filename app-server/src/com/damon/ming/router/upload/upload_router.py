@@ -50,7 +50,6 @@ async def save_files(
             executor=document_pool,
             user_id=request.state.client.user_id,
             device_id=request.state.client.device_id,
-            db_conn=request.app.state.storage.db_conn,
         )
         logger.info(
             "文件上传请求完成 | success=%s | failed=%s",

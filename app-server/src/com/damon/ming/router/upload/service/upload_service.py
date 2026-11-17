@@ -7,13 +7,17 @@ from pathlib import Path
 from typing import ClassVar
 
 from fastapi import UploadFile
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from src.com.damon.ming.ai.rag_tool import RAGContainer
-from src.com.damon.ming.app.tables.upload_tables import upload_records
 from src.com.damon.ming.app.thread_pools import run_in_pool, submit_to_pool
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.router.upload.service.file_validator import (
+    validate_upload_content,
+)
+from src.com.damon.ming.router.upload.service.upload_store import (
+    record_upload_metadata,
+)
 from src.com.damon.ming.security.digest import sha256_file, sha256_hex
 from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.file_stat import file_creation_time
@@ -95,7 +99,6 @@ class UploadService:
         executor=None,
         user_id: int | None = None,
         device_id: str = "",
-        db_conn=None,
     ) -> dict:
         """批量保存文件——每个文件独立原子提交。
 
@@ -135,9 +138,7 @@ class UploadService:
             raise ValueError(
                 t(
                     I18nKey.UPLOAD_TOTAL_SIZE_EXCEEDED,
-                    max_mb=str(
-                        upload_config.max_total_upload_size // (1024 * 1024)
-                    ),
+                    max_mb=str(upload_config.max_total_upload_size // (1024 * 1024)),
                 )
             )
 
@@ -189,13 +190,18 @@ class UploadService:
 
             content = b"".join(chunks)
 
-            # TODO: P1-8 文件上传仅校验扩展名，可上传伪装文件。
-            # 当前架构下风险可控：文件以 UUID 命名存盘、不经 Web 根目录、
-            # 不被浏览器渲染、仅供后端解析器消费。
-            # 上公网时加 python-magic 做内容嗅探（magic bytes 校验）：
-            #   _MAGIC = {".pdf": b"%PDF", ".docx": b"PK\x03\x04", ...}
-            #   if suffix in _MAGIC and not content.startswith(_MAGIC[suffix]): reject
-            # 文本格式（md/txt/csv/html）无可靠 magic bytes，跳过。
+            try:
+                validate_upload_content(suffix, content)
+            except ValueError:
+                failed_files.append(
+                    {
+                        "filename": file_name,
+                        "file_size": file_size,
+                        "file_sha256": "",
+                        "error": t(I18nKey.UPLOAD_CONTENT_INVALID),
+                    }
+                )
+                continue
 
             logger.info(
                 "收到用户上传文件 | user_id=%s | device=%s | filename=%s | size=%s | type=%s",
@@ -289,18 +295,16 @@ class UploadService:
                     )
 
                     # ── 写入审计表（fire-and-forget，不阻塞上传响应）──
-                    if db_conn is not None:
-                        submit_to_pool(
-                            executor,
-                            _record_upload_metadata,
-                            db_conn,
-                            file_uid,
-                            file_sha256,
-                            str(disk_path.resolve()),
-                            len(content),
-                            user_id,
-                            device_id,
-                        )
+                    submit_to_pool(
+                        executor,
+                        record_upload_metadata,
+                        file_uid,
+                        file_sha256,
+                        str(disk_path.resolve()),
+                        len(content),
+                        user_id,
+                        device_id,
+                    )
 
                 elif file_sha256 in skipped_shas:
                     # 重复文件（内容已存在，跳过入库）
@@ -424,42 +428,3 @@ def _write_file_sync(path: Path, content: bytes) -> None:
     os.rename(tmp_path, path)
 
 
-def _record_upload_metadata(
-    db_conn,
-    file_uid: str,
-    file_sha256: str,
-    file_path: str,
-    file_size: int,
-    user_id: int | None,
-    device_id: str,
-) -> None:
-    """同步写入 upload_records 审计表（在线程池中调用）。
-
-    写入失败记录 error 日志，不影响上传主流程。
-    fire-and-forget 场景下任务可能在服务重启时被取消，审计记录可能丢失，
-    upload_records 与实际入库文件可能不一致时需排查此日志。
-    """
-    from datetime import UTC, datetime
-
-    try:
-        db_conn.execute(
-            pg_insert(upload_records)
-            .values(
-                file_uid=file_uid,
-                file_sha256=file_sha256,
-                file_path=file_path,
-                file_size=str(file_size),
-                user_id=user_id,
-                device_id=device_id[:64] if device_id else "",
-                created_at=datetime.now(tz=UTC),
-            )
-            .on_conflict_do_nothing(index_elements=[upload_records.c.file_uid]),
-            commit=True,
-        )
-    except Exception as e:
-        logger.error(
-            "写入审计表失败 | file_uid=%s sha=%s error=%s",
-            file_uid[:16],
-            file_sha256[:16],
-            e,
-        )

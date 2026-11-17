@@ -16,18 +16,17 @@ const FILE_TYPE_LIMITS: Record<string, number> = {
   csv: 10 * 1024 * 1024, // 10MB
   xlsx: 50 * 1024 * 1024, // 50MB
   docx: 20 * 1024 * 1024, // 20MB
-  doc: 20 * 1024 * 1024, // 20MB
   pptx: 50 * 1024 * 1024, // 50MB
   html: 5 * 1024 * 1024, // 5MB
   htm: 5 * 1024 * 1024, // 5MB
 };
 
 // 支持的扩展名正则
-const ALLOWED_EXTENSIONS = /\.(pdf|md|txt|csv|xlsx|docx|doc|pptx|html|htm)$/i;
+const ALLOWED_EXTENSIONS = /\.(pdf|md|txt|csv|xlsx|docx|pptx|html|htm)$/i;
 
 // 允许的扩展名列表（用于错误提示）
 const ALLOWED_EXTENSIONS_LIST =
-  ".pdf, .md, .txt, .csv, .xlsx, .docx, .doc, .pptx, .html";
+  ".pdf, .md, .txt, .csv, .xlsx, .docx, .pptx, .html, .htm";
 
 function createUploadRequest(files: File[]): UploadRequest {
   if (!files.length) throw new Error("至少选择一个文件");
