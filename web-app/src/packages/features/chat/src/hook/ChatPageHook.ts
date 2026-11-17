@@ -1,4 +1,4 @@
-// chat/src/hook/ChatPageHook.ts
+// web-app/src/packages/features/chat/src/hook/ChatPageHook.ts
 import { useEffect } from "react";
 import { createLogger } from "@ming/core-log";
 import {
@@ -8,7 +8,10 @@ import {
   useSearchStore,
   useKnowledgeStore,
 } from "@ming/store";
-import { useHistory, useSelectConversation } from "@ming/feature-history-api";
+import {
+  useHistory,
+  useSelectConversation,
+} from "@ming/feature-history-api";
 import { useDrawerUploadHook } from "@ming/feature-chat-drawer-api";
 
 const log = createLogger("chat/page");

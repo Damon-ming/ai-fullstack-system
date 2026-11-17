@@ -1,3 +1,4 @@
+// web-app/src/packages/features/history/src/api/index.ts
 export {
   historyStore,
   fetchList,
@@ -10,6 +11,8 @@ export {
   useRemoveHistoryMutation,
   usePinHistoryMutation,
   HISTORY_LIST_KEY,
+  useHistoryTurnsCache,
   HISTORY_PAGE_SIZE,
+  HISTORY_TURN_PAGE_SIZE,
 } from "./history-query";
 export type { HistoryTurn, HistoryItem } from "./types";

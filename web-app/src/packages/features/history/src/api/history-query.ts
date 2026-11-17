@@ -6,12 +6,14 @@
  * fetcher 本身在 history.api.ts 中定义，本层只负责 query/mutation 封装。
  */
 
+import { useCallback } from "react";
+import { useQueryClient , queryFactory, useInfiniteQuery } from "@ming/data-layer";
 import type {
   DataApiResponse,
   DataLayerError,
   InfiniteData,
 } from "@ming/data-layer";
-import { queryFactory, useInfiniteQuery } from "@ming/data-layer";
+
 import { fetchList, pinOnServer, removeFromServer } from "./history.api";
 
 // ---------------------------------------------------------------------------
@@ -19,9 +21,34 @@ import { fetchList, pinOnServer, removeFromServer } from "./history.api";
 // ---------------------------------------------------------------------------
 
 export const HISTORY_LIST_KEY = ["history", "list"] as const;
+export const HISTORY_TURNS_KEY = ["history", "turns"] as const;
+
+export const historyTurnsQueryKey = (conversationId: string) =>
+  [...HISTORY_TURNS_KEY, conversationId] as const;
+
+/** 历史详情的缓存读写入口，供 feature hook 编排使用。 */
+export function useHistoryTurnsCache() {
+  const queryClient = useQueryClient();
+  const fetchTurns = useCallback(
+    <T,>(conversationId: string, queryFn: () => Promise<T>) =>
+      queryClient.query({
+        queryKey: historyTurnsQueryKey(conversationId),
+        queryFn,
+        staleTime: 30 * 1000,
+      }),
+    [queryClient],
+  );
+  const invalidateTurns = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: HISTORY_TURNS_KEY }),
+    [queryClient],
+  );
+  return { fetchTurns, invalidateTurns };
+}
 
 /** 抽屉列表每页条数 */
 export const HISTORY_PAGE_SIZE = 20;
+/** 会话详情每页轮次数 */
+export const HISTORY_TURN_PAGE_SIZE = 50;
 
 // ---------------------------------------------------------------------------
 // 预配置 query/mutation hook（仅配置缓存策略，不含业务逻辑）

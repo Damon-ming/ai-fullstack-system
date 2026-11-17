@@ -1,3 +1,4 @@
+// web-app/src/packages/features/history/src/api/types/response.ts
 /** 一轮问答（四个时间点，时长由展示方派生） */
 export interface HistoryTurn {
   turnId: string;

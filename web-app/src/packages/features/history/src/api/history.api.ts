@@ -22,8 +22,8 @@ const log = createLogger("history/api");
 // ---------------------------------------------------------------------------
 
 export async function fetchList(
-  cursor?: string,
-  limit: number = 20,
+  cursor: string | undefined,
+  limit: number,
 ): Promise<DataApiResponse<unknown>> {
   log.debug("fetch history list", { cursor, limit });
   return dataApi.get<unknown>("/api/history/list/v1", {
@@ -33,8 +33,8 @@ export async function fetchList(
 
 export async function fetchTurns(
   id: string,
-  cursor?: string,
-  limit: number = 50,
+  cursor: string | undefined,
+  limit: number,
 ): Promise<DataApiResponse<unknown>> {
   log.debug("fetch history turns", { id, cursor, limit });
   return dataApi.get<unknown>(`/api/history/v1/${id}`, {

@@ -1,4 +1,4 @@
-// history/src/hook/types.ts
+// web-app/src/packages/features/history/src/hook/types.ts
 /**
  * 模块内部 UI ↔ Hook 通讯类型（非网络请求）。
  */

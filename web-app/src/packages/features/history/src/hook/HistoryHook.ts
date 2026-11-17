@@ -1,5 +1,5 @@
 // web-app/src/packages/features/history/src/hook/HistoryHook.ts
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { HistoryItem, HistoryTurn } from "../api";
 import {
   fetchList,
@@ -8,6 +8,8 @@ import {
   useHistoryListInfiniteQuery,
   useRemoveHistoryMutation,
   usePinHistoryMutation,
+  HISTORY_TURN_PAGE_SIZE,
+  useHistoryTurnsCache,
 } from "../api";
 import { getCalendarDayDistance, getMonthParts } from "@ming/core-util";
 import { createLogger } from "@ming/core-log";
@@ -70,13 +72,17 @@ function unpackDetail(res: DataEnvelope | undefined): unknown {
   return d?.conversation ?? d;
 }
 
+function parseStringValue(raw: unknown): string {
+  return typeof raw === "string" ? raw : "";
+}
+
 function parseListRecord(item: unknown): HistoryItem {
   const obj = item as HistoryApiRecord;
   return {
-    conversationId: String(obj.conversationId ?? ""),
-    title: String(obj.title ?? ""),
-    createdAt: String(obj.createdAt ?? ""),
-    updatedAt: String(obj.updatedAt ?? ""),
+    conversationId: parseStringValue(obj.conversationId),
+    title: parseStringValue(obj.title),
+    createdAt: parseStringValue(obj.createdAt),
+    updatedAt: parseStringValue(obj.updatedAt),
     isPinned: Boolean(obj.isPinned),
     turns: [],
   };
@@ -85,15 +91,15 @@ function parseListRecord(item: unknown): HistoryItem {
 function parseTurn(raw: unknown): HistoryTurn {
   const t = raw as HistoryTurnRecord;
   return {
-    turnId: String(t.turnId ?? ""),
-    query: String(t.query ?? ""),
-    reasoning: String(t.reasoning ?? ""),
-    content: String(t.content ?? ""),
-    errorMsg: String(t.errorMsg ?? ""),
-    queryAt: String(t.queryAt ?? ""),
-    firstTokenAt: String(t.firstTokenAt ?? ""),
-    reasoningDoneAt: String(t.reasoningDoneAt ?? ""),
-    answeredAt: String(t.answeredAt ?? ""),
+    turnId: parseStringValue(t.turnId),
+    query: parseStringValue(t.query),
+    reasoning: parseStringValue(t.reasoning),
+    content: parseStringValue(t.content),
+    errorMsg: parseStringValue(t.errorMsg),
+    queryAt: parseStringValue(t.queryAt),
+    firstTokenAt: parseStringValue(t.firstTokenAt),
+    reasoningDoneAt: parseStringValue(t.reasoningDoneAt),
+    answeredAt: parseStringValue(t.answeredAt),
   };
 }
 
@@ -102,22 +108,27 @@ function parseTurns(raw: unknown): HistoryTurn[] {
   return raw.map(parseTurn);
 }
 
+async function loadAllTurns(id: string): Promise<HistoryTurn[]> {
+  const turns: HistoryTurn[] = [];
+  let cursor: string | undefined;
+  do {
+    // Each page's cursor comes from the previous response, so requests must stay sequential.
+    // eslint-disable-next-line no-await-in-loop
+    const res = await fetchTurns(id, cursor, HISTORY_TURN_PAGE_SIZE);
+    const detail = unpackDetail(res) as HistoryApiRecord | undefined;
+    turns.push(...parseTurns(detail?.turns));
+    cursor =
+      detail?.hasMore && typeof detail.nextCursor === "string"
+        ? detail.nextCursor
+        : undefined;
+  } while (cursor);
+  return turns;
+}
+
 async function fetchAndUnpackTurns(id: string): Promise<HistoryTurn[]> {
   try {
-    const turns: HistoryTurn[] = [];
-    let cursor: string | undefined;
-    do {
-      const res = await fetchTurns(id, cursor);
-      const detail = unpackDetail(res) as HistoryApiRecord | undefined;
-      turns.push(...parseTurns(detail?.turns));
-      cursor =
-        detail?.hasMore && typeof detail.nextCursor === "string"
-          ? detail.nextCursor
-          : undefined;
-    } while (cursor);
-    return turns;
+    return await loadAllTurns(id);
   } catch (e) {
-    // 拉取失败按空会话处理：调用方仍需切换视图，不能静默保留旧会话内容
     log.error("fetch turns failed", e);
     return [];
   }
@@ -176,7 +187,13 @@ function getHistoryGroupLabel(createdAt: number): string {
 
 export function useHistory() {
   const infiniteQuery = useHistoryListInfiniteQuery();
+  const savedTurn = useHistoryStore((state) => state.savedTurn);
+  const { invalidateTurns } = useHistoryTurnsCache();
   const pages = infiniteQuery.data?.pages;
+
+  useEffect(() => {
+    if (savedTurn > 0) void invalidateTurns();
+  }, [savedTurn, invalidateTurns]);
 
   // 累积所有已加载页（后端按 updated_at/id 倒序游标分页）
   const list = useMemo(
@@ -262,6 +279,8 @@ export function useHistory() {
     let cursor: string | undefined;
     const seenCursors = new Set<string>();
     do {
+      // Cursor pagination is sequential: each next cursor comes from the current response.
+      // eslint-disable-next-line no-await-in-loop
       const res = await fetchList(cursor, limit);
       const data = res.data as
         | {
@@ -304,6 +323,7 @@ export function useHistory() {
  * 静默保留旧会话内容会让用户误以为在看新会话。
  */
 export function useSelectConversation() {
+  const { fetchTurns: fetchCachedTurns } = useHistoryTurnsCache();
   const abortStream = useChatMessageStore((s) => s.abortStream);
   const setMessages = useChatMessageStore((s) => s.setMessages);
   const resetSession = useChatUiStore((s) => s.resetSession);
@@ -315,12 +335,27 @@ export function useSelectConversation() {
     async (conversationId: string) => {
       // 切换会话前取消进行中的流，避免旧流的 sending 状态锁住新会话
       abortStream();
-      const turns = await fetchAndUnpackTurns(conversationId);
+      let turns: HistoryTurn[];
+      try {
+        turns = await fetchCachedTurns(conversationId, () =>
+          loadAllTurns(conversationId),
+        );
+      } catch (e) {
+        // 拉取失败按空会话处理，不能静默保留旧会话内容
+        log.error("fetch turns failed", e);
+        turns = [];
+      }
       setMessages(turnsToChatMessages(turns));
       setActiveConversationId(conversationId);
       resetSession();
     },
-    [abortStream, setMessages, resetSession, setActiveConversationId],
+    [
+      fetchCachedTurns,
+      abortStream,
+      setMessages,
+      resetSession,
+      setActiveConversationId,
+    ],
   );
 }
 
