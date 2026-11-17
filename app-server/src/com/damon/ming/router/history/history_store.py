@@ -13,7 +13,6 @@
 存储：通过共享连接池持久化。
 """
 
-import time
 from datetime import datetime
 from enum import Enum
 
@@ -29,7 +28,7 @@ from src.com.damon.ming.app.tables.history_tables import (
 )
 from src.com.damon.ming.db import get_default_db
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.utils.cursor_codec import (
+from src.com.damon.ming.router.history.cursor_codec import (
     CursorCodecError,
     decode_cursor_payload,
     encode_cursor_payload,
@@ -53,9 +52,7 @@ class PinHistoryResult(str, Enum):
 
 
 def _encode_cursor(query_at: datetime, turn_id: str) -> str:
-    return encode_cursor_payload(
-        {"queryAt": query_at.isoformat(), "turnId": turn_id}
-    )
+    return encode_cursor_payload({"queryAt": query_at.isoformat(), "turnId": turn_id})
 
 
 def _decode_cursor(cursor: str) -> tuple[datetime, str]:
@@ -92,38 +89,11 @@ def _db():
     return get_default_db()
 
 
-def _run_transaction(operation, *, description: str):
-    """在事务内执行 operation(conn)，失败按 retry_count 重试。
-
-    transaction() 本身不带重试（与 execute() 不同），这里补齐，
-    避免瞬时连接故障让一次读 / 写直接失败。
-    operation 正常返回即提交，抛异常则回滚。
-    """
+def _run_transaction(operation):
+    """在单个事务内执行 operation(conn)；失败直接向调用方抛出。"""
     db = _db()
-    attempts = max(db.retry_count, 1)
-    backoff = db.backoff_seconds
-    last_error: Exception | None = None
-
-    for attempt in range(attempts):
-        try:
-            with db.transaction() as conn:
-                return operation(conn)
-        except Exception as e:
-            last_error = e
-            logger.warning(
-                "%s 失败（尝试 %d/%d）| error=%s",
-                description,
-                attempt + 1,
-                attempts,
-                e,
-            )
-            if attempt + 1 < attempts:
-                time.sleep(backoff * (attempt + 1))
-
-    logger.error(
-        "%s 最终失败（已重试 %d 次）| error=%s", description, attempts, last_error
-    )
-    raise last_error
+    with db.transaction() as conn:
+        return operation(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -133,8 +103,8 @@ def _run_transaction(operation, *, description: str):
 
 def list_history(
     user_id: int,
-    limit: int = 20,
-    cursor: str | None = None,
+    limit: int,
+    cursor: str | None,
 ) -> tuple[
     list[HistoryConversationRow], list[HistoryConversationRow], bool, str | None
 ]:
@@ -142,16 +112,6 @@ def list_history(
     cursor_values = _decode_list_cursor(cursor) if cursor else None
     base = select(history_conversations).where(
         history_conversations.c.user_id == user_id
-    )
-    pinned_rows = _db().execute(
-        base.where(history_conversations.c.is_pinned.is_(True))
-        .order_by(
-            history_conversations.c.updated_at.desc(),
-            history_conversations.c.id.desc(),
-        )
-        .limit(MAX_PINNED_CONVERSATIONS),
-        commit=False,
-        fetch=True,
     )
     query = base.where(history_conversations.c.is_pinned.is_(False))
     if cursor_values:
@@ -165,32 +125,31 @@ def list_history(
                 ),
             )
         )
-    rows = _db().execute(
-        query.order_by(
-            history_conversations.c.updated_at.desc(),
-            history_conversations.c.id.desc(),
-        ).limit(limit + 1),
-        commit=False,
-        fetch=True,
-    )
-    has_more = len(rows or []) > limit
-    rows = (rows or [])[:limit]
 
-    def _to_rows(values, is_pinned: bool) -> list[HistoryConversationRow]:
-        return [
-            HistoryConversationRow(
-                id=r[0],
-                user_id=r[1],
-                title=r[2],
-                is_pinned=is_pinned,
-                created_at=r[4],
-                updated_at=r[5],
+    with _db().transaction() as conn:
+        pinned_rows = conn.execute(
+            base.where(history_conversations.c.is_pinned.is_(True))
+            .order_by(
+                history_conversations.c.updated_at.desc(),
+                history_conversations.c.id.desc(),
             )
-            for r in values
-        ]
+            .limit(MAX_PINNED_CONVERSATIONS)
+        ).mappings().all()
+        rows = conn.execute(
+            query.order_by(
+                history_conversations.c.updated_at.desc(),
+                history_conversations.c.id.desc(),
+            ).limit(limit + 1)
+        ).mappings().all()
 
-    pinned_items = _to_rows(pinned_rows or [], True)
-    items = _to_rows(rows, False)
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    def _to_rows(values) -> list[HistoryConversationRow]:
+        return [HistoryConversationRow(**row) for row in values]
+
+    pinned_items = _to_rows(pinned_rows)
+    items = _to_rows(rows)
     next_cursor = (
         _encode_list_cursor(items[-1].updated_at, items[-1].id)
         if has_more and items
@@ -207,8 +166,8 @@ def list_history(
 def get_history(
     conversation_id: str,
     user_id: int,
-    limit: int = 50,
-    cursor: str | None = None,
+    limit: int,
+    cursor: str | None,
 ) -> HistoryDetailRow | None:
     """查询单个会话详情的一页轮次，按提问时间升序。
 
@@ -224,17 +183,10 @@ def get_history(
                 history_conversations.c.id == conversation_id,
                 history_conversations.c.user_id == user_id,
             )
-        ).fetchone()
+        ).mappings().first()
         if c is None:
             return None
-        conversation = HistoryConversationRow(
-            id=c[0],
-            user_id=c[1],
-            title=c[2],
-            is_pinned=c[3],
-            created_at=c[4],
-            updated_at=c[5],
-        )
+        conversation = HistoryConversationRow(**c)
 
         turn_query = select(history_turns).where(
             history_turns.c.conversation_id == conversation_id
@@ -254,26 +206,12 @@ def get_history(
             turn_query.order_by(
                 history_turns.c.query_at.asc(), history_turns.c.turn_id.asc()
             ).limit(limit + 1)
-        ).fetchall()
+        ).mappings().all()
         has_more = len(page_rows) > limit
         turn_rows = page_rows[:limit]
-        turns = [
-            HistoryTurnRow(
-                turn_id=r[0],
-                conversation_id=r[1],
-                query=r[2],
-                reasoning=r[3],
-                content=r[4],
-                error_msg=r[5],
-                query_at=r[6],
-                first_token_at=r[7],
-                reasoning_done_at=r[8],
-                answered_at=r[9],
-            )
-            for r in (turn_rows or [])
-        ]
+        turns = [HistoryTurnRow(**row) for row in turn_rows]
         next_cursor = (
-            _encode_cursor(turn_rows[-1][6], turn_rows[-1][0])
+            _encode_cursor(turn_rows[-1]["query_at"], turn_rows[-1]["turn_id"])
             if has_more and turn_rows
             else None
         )
@@ -284,7 +222,7 @@ def get_history(
             next_cursor=next_cursor,
         )
 
-    return _run_transaction(_read, description=f"历史详情读取 | id={conversation_id}")
+    return _run_transaction(_read)
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +242,7 @@ def append_turn(
     first_token_at: datetime | None,
     reasoning_done_at: datetime | None,
     answered_at: datetime,
-    error_msg: str | None = None,
+    error_msg: str | None,
 ) -> str:
     """写入一轮问答，返回会话 id（写入被拒绝时返回空串）。
 
@@ -321,85 +259,56 @@ def append_turn(
     会话 upsert 与轮次插入在同一事务内提交：任一步失败则整体回滚，
     避免留下「有会话、无轮次」的空壳行。
 
-    事务体重试 retry_count 次（与 execute() 同口径）：瞬时连接故障不应
-    让一轮已完成的回答丢失。turn_id 在重试外生成、轮次插入带
-    ON CONFLICT DO NOTHING，保证重试幂等 —— 即使上一次提交实际已生效
-    只是应答丢了，重试也不会插进重复轮次。
+    事务失败时直接向调用方抛出，不在本模块内重试。
     """
     db = _db()
-    retry = db.retry_count
-    backoff = db.backoff_seconds
-    last_error: Exception | None = None
-
-    for attempt in range(max(retry, 1)):
-        try:
-            with db.transaction() as conn:
-                statement = pg_insert(history_conversations).values(
-                    id=conversation_id,
-                    user_id=user_id,
-                    title=title,
-                    created_at=answered_at,
-                    updated_at=answered_at,
-                )
-                rows = conn.execute(
-                    statement.on_conflict_do_update(
-                        index_elements=[history_conversations.c.id],
-                        set_={
-                            history_conversations.c.updated_at: statement.excluded.updated_at
-                        },
-                        where=history_conversations.c.user_id
-                        == statement.excluded.user_id,
-                    ).returning(history_conversations.c.id)
-                ).fetchall()
-                if not rows:
-                    logger.warning(
-                        "会话不存在或不属于当前用户，已跳过轮次写入 | id=%s",
-                        conversation_id,
-                    )
-                    return ""
-
-                conn.execute(
-                    pg_insert(history_turns)
-                    .values(
-                        turn_id=turn_id,
-                        conversation_id=conversation_id,
-                        query=query,
-                        reasoning=reasoning or None,
-                        content=content,
-                        error_msg=error_msg or None,
-                        query_at=query_at,
-                        first_token_at=first_token_at,
-                        reasoning_done_at=reasoning_done_at,
-                        answered_at=answered_at,
-                    )
-                    .on_conflict_do_nothing(index_elements=[history_turns.c.turn_id])
-                )
-            logger.info(
-                "轮次已写入 | conversation_id=%s | turn_id=%s | reasoning=%s",
-                conversation_id,
-                turn_id,
-                "yes" if reasoning else "no",
-            )
-            return conversation_id
-        except Exception as e:
-            last_error = e
+    with db.transaction() as conn:
+        statement = pg_insert(history_conversations).values(
+            id=conversation_id,
+            user_id=user_id,
+            title=title,
+            created_at=answered_at,
+            updated_at=answered_at,
+        )
+        rows = conn.execute(
+            statement.on_conflict_do_update(
+                index_elements=[history_conversations.c.id],
+                set_={
+                    history_conversations.c.updated_at: statement.excluded.updated_at
+                },
+                where=history_conversations.c.user_id == statement.excluded.user_id,
+            ).returning(history_conversations.c.id)
+        ).fetchall()
+        if not rows:
             logger.warning(
-                "轮次写入失败（尝试 %d/%d）| id=%s | error=%s",
-                attempt + 1,
-                retry,
+                "会话不存在或不属于当前用户，已跳过轮次写入 | id=%s",
                 conversation_id,
-                e,
             )
-            if attempt + 1 < retry:
-                time.sleep(backoff * (attempt + 1))
+            return ""
 
-    logger.error(
-        "轮次写入最终失败（已重试 %d 次）| id=%s | error=%s",
-        retry,
+        conn.execute(
+            pg_insert(history_turns)
+            .values(
+                turn_id=turn_id,
+                conversation_id=conversation_id,
+                query=query,
+                reasoning=reasoning or None,
+                content=content,
+                error_msg=error_msg or None,
+                query_at=query_at,
+                first_token_at=first_token_at,
+                reasoning_done_at=reasoning_done_at,
+                answered_at=answered_at,
+            )
+            .on_conflict_do_nothing(index_elements=[history_turns.c.turn_id])
+        )
+    logger.info(
+        "轮次已写入 | conversation_id=%s | turn_id=%s | reasoning=%s",
         conversation_id,
-        last_error,
+        turn_id,
+        "yes" if reasoning else "no",
     )
-    raise last_error
+    return conversation_id
 
 
 # ---------------------------------------------------------------------------
@@ -438,9 +347,7 @@ def delete_history(conversation_id: str, user_id: int) -> bool:
         )
         return True
 
-    deleted = _run_transaction(
-        _delete, description=f"历史会话删除 | id={conversation_id}"
-    )
+    deleted = _run_transaction(_delete)
     if deleted:
         logger.info("历史会话已删除 | id=%s", conversation_id)
     return deleted
@@ -485,4 +392,4 @@ def pin_history(conversation_id: str, user_id: int) -> PinHistoryResult:
         )
         return PinHistoryResult.PINNED
 
-    return _run_transaction(_pin, description=f"会话置顶 | id={conversation_id}")
+    return _run_transaction(_pin)
