@@ -86,8 +86,8 @@ app = FastAPI(
 
 
 # ---- 中间件注册 --------------------------------------------------------
-# inbound:  CORS → Encryption → Auth → I18n → Context → 路由
-# outbound: 路由 → Context → I18n → Auth → Encryption → CORS
+# inbound:  CORS → Context → I18n → Auth → Encryption → 路由
+# outbound: 路由 → Encryption → Auth → I18n → Context → CORS
 # 详细逻辑见 middleware/__init__.py
 register_middlewares(app)
 

@@ -114,7 +114,6 @@ class UploadService:
         duplicate_files: list[dict] = []
         failed_files: list[dict] = []
         allowed_exts = sorted(upload_config.allowed_types.keys())
-        total_uploaded = 0  # 累计已读字节数（总量上限防护）
 
         # 文件数量校验
         if len(file_list) > upload_config.max_files_per_request:
@@ -123,6 +122,22 @@ class UploadService:
                     I18nKey.UPLOAD_TOO_MANY_FILES,
                     max_files=str(upload_config.max_files_per_request),
                     actual=str(len(file_list)),
+                )
+            )
+
+        # FastAPI/Starlette 解析 multipart 后已知道各文件的实际大小；
+        # 在逐个处理前先拒绝总量超限，避免前面的文件已入库后才发现超限。
+        file_sizes = [getattr(file, "size", None) for file in file_list]
+        if any(size is None for size in file_sizes):
+            raise ValueError("无法确认上传文件总大小")
+        total_size = sum(size for size in file_sizes if size is not None)
+        if total_size > upload_config.max_total_upload_size:
+            raise ValueError(
+                t(
+                    I18nKey.UPLOAD_TOTAL_SIZE_EXCEEDED,
+                    max_mb=str(
+                        upload_config.max_total_upload_size // (1024 * 1024)
+                    ),
                 )
             )
 
@@ -148,34 +163,29 @@ class UploadService:
                 )
                 continue
 
-            # 大小校验（边读边校验，超限立即中断）
+            # 单文件大小预检：超限时不再读取文件内容。
             max_size = upload_config.get_max_size_for_ext(suffix)
-            chunks: list[bytes] = []
-            total = 0
-            try:
-                while True:
-                    chunk = await file.read(1024 * 1024)  # 1MB 分块
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    if total > max_size:
-                        raise ValueError(
-                            t(
-                                I18nKey.UPLOAD_SIZE_EXCEEDED,
-                                max_mb=str(max_size // (1024 * 1024)),
-                            )
-                        )
-                    chunks.append(chunk)
-            except ValueError as e:
+            file_size = file.size
+            if file_size > max_size:
                 failed_files.append(
                     {
                         "filename": file_name,
-                        "file_size": 0,
+                        "file_size": file_size,
                         "file_sha256": "",
-                        "error": str(e),
+                        "error": t(
+                            I18nKey.UPLOAD_SIZE_EXCEEDED,
+                            max_mb=str(max_size // (1024 * 1024)),
+                        ),
                     }
                 )
                 continue
+
+            chunks: list[bytes] = []
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB 分块
+                if not chunk:
+                    break
+                chunks.append(chunk)
 
             content = b"".join(chunks)
 
@@ -186,18 +196,6 @@ class UploadService:
             #   _MAGIC = {".pdf": b"%PDF", ".docx": b"PK\x03\x04", ...}
             #   if suffix in _MAGIC and not content.startswith(_MAGIC[suffix]): reject
             # 文本格式（md/txt/csv/html）无可靠 magic bytes，跳过。
-
-            # 总量上限校验（所有文件合计）
-            total_uploaded += len(content)
-            if total_uploaded > upload_config.max_total_upload_size:
-                raise ValueError(
-                    t(
-                        I18nKey.UPLOAD_TOTAL_SIZE_EXCEEDED,
-                        max_mb=str(
-                            upload_config.max_total_upload_size // (1024 * 1024)
-                        ),
-                    )
-                )
 
             logger.info(
                 "收到用户上传文件 | user_id=%s | device=%s | filename=%s | size=%s | type=%s",

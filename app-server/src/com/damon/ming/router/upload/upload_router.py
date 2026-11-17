@@ -1,5 +1,6 @@
 # app-server/src/com/damon/ming/upload/router/upload_router.py
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, File, Request, UploadFile
 from src.com.damon.ming.app.thread_pools import get_document_pool
@@ -26,7 +27,7 @@ router = APIRouter(prefix="/api/files", tags=["文件管理"])
 @limiter.limit("5/minute")
 async def save_files(
     request: Request,
-    files: list[UploadFile] = File(..., description="多文件"),  # noqa: B008
+    files: Annotated[list[UploadFile], File(description="多文件")],
 ):
     logger.info(
         "文件上传请求开始 | file_count=%s | filenames=%s",
