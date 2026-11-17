@@ -8,6 +8,7 @@ import {
   useHistoryListInfiniteQuery,
   useRemoveHistoryMutation,
   usePinHistoryMutation,
+  useUnpinHistoryMutation,
   HISTORY_TURN_PAGE_SIZE,
   useHistoryTurnsCache,
 } from "../api";
@@ -211,6 +212,7 @@ export function useHistory() {
 
   const removeMutation = useRemoveHistoryMutation();
   const pinMutation = usePinHistoryMutation();
+  const unpinMutation = useUnpinHistoryMutation();
 
   const remove = useCallback(
     (id: string) => {
@@ -224,6 +226,13 @@ export function useHistory() {
       pinMutation.mutate(id);
     },
     [pinMutation],
+  );
+
+  const unpin = useCallback(
+    (id: string) => {
+      unpinMutation.mutate(id);
+    },
+    [unpinMutation],
   );
 
   const groups = useMemo(() => {
@@ -310,6 +319,7 @@ export function useHistory() {
     loadAll,
     remove,
     pin,
+    unpin,
     /** 重新拉取历史列表（服务端新建会话后刷新抽屉用） */
     refresh,
   };

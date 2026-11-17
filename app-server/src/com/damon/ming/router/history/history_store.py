@@ -51,6 +51,14 @@ class PinHistoryResult(str, Enum):
     NOT_FOUND = "not_found"
 
 
+class UnpinHistoryResult(str, Enum):
+    """取消置顶会话操作结果。"""
+
+    UNPINNED = "unpinned"
+    ALREADY_UNPINNED = "already_unpinned"
+    NOT_FOUND = "not_found"
+
+
 def _encode_cursor(query_at: datetime, turn_id: str) -> str:
     return encode_cursor_payload({"queryAt": query_at.isoformat(), "turnId": turn_id})
 
@@ -127,20 +135,28 @@ def list_history(
         )
 
     with _db().transaction() as conn:
-        pinned_rows = conn.execute(
-            base.where(history_conversations.c.is_pinned.is_(True))
-            .order_by(
-                history_conversations.c.updated_at.desc(),
-                history_conversations.c.id.desc(),
+        pinned_rows = (
+            conn.execute(
+                base.where(history_conversations.c.is_pinned.is_(True))
+                .order_by(
+                    history_conversations.c.updated_at.desc(),
+                    history_conversations.c.id.desc(),
+                )
+                .limit(MAX_PINNED_CONVERSATIONS)
             )
-            .limit(MAX_PINNED_CONVERSATIONS)
-        ).mappings().all()
-        rows = conn.execute(
-            query.order_by(
-                history_conversations.c.updated_at.desc(),
-                history_conversations.c.id.desc(),
-            ).limit(limit + 1)
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
+        rows = (
+            conn.execute(
+                query.order_by(
+                    history_conversations.c.updated_at.desc(),
+                    history_conversations.c.id.desc(),
+                ).limit(limit + 1)
+            )
+            .mappings()
+            .all()
+        )
 
     has_more = len(rows) > limit
     rows = rows[:limit]
@@ -178,12 +194,16 @@ def get_history(
     cursor_values = _decode_cursor(cursor) if cursor else None
 
     def _read(conn) -> HistoryDetailRow | None:
-        c = conn.execute(
-            select(history_conversations).where(
-                history_conversations.c.id == conversation_id,
-                history_conversations.c.user_id == user_id,
+        c = (
+            conn.execute(
+                select(history_conversations).where(
+                    history_conversations.c.id == conversation_id,
+                    history_conversations.c.user_id == user_id,
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         if c is None:
             return None
         conversation = HistoryConversationRow(**c)
@@ -202,11 +222,15 @@ def get_history(
                     ),
                 )
             )
-        page_rows = conn.execute(
-            turn_query.order_by(
-                history_turns.c.query_at.asc(), history_turns.c.turn_id.asc()
-            ).limit(limit + 1)
-        ).mappings().all()
+        page_rows = (
+            conn.execute(
+                turn_query.order_by(
+                    history_turns.c.query_at.asc(), history_turns.c.turn_id.asc()
+                ).limit(limit + 1)
+            )
+            .mappings()
+            .all()
+        )
         has_more = len(page_rows) > limit
         turn_rows = page_rows[:limit]
         turns = [HistoryTurnRow(**row) for row in turn_rows]
@@ -393,3 +417,37 @@ def pin_history(conversation_id: str, user_id: int) -> PinHistoryResult:
         return PinHistoryResult.PINNED
 
     return _run_transaction(_pin)
+
+
+def unpin_history(conversation_id: str, user_id: int) -> UnpinHistoryResult:
+    """取消置顶一个会话。"""
+
+    def _unpin(conn) -> UnpinHistoryResult:
+        # 与置顶操作使用相同的用户锁，避免并发置顶时状态与数量检查交错。
+        conn.execute(
+            select(users.c.user_id).where(users.c.user_id == user_id).with_for_update()
+        ).fetchone()
+        row = conn.execute(
+            select(history_conversations.c.is_pinned)
+            .where(
+                history_conversations.c.id == conversation_id,
+                history_conversations.c.user_id == user_id,
+            )
+            .with_for_update()
+        ).fetchone()
+        if row is None:
+            return UnpinHistoryResult.NOT_FOUND
+        if not row[0]:
+            return UnpinHistoryResult.ALREADY_UNPINNED
+
+        conn.execute(
+            history_conversations.update()
+            .where(
+                history_conversations.c.id == conversation_id,
+                history_conversations.c.user_id == user_id,
+            )
+            .values(is_pinned=False)
+        )
+        return UnpinHistoryResult.UNPINNED
+
+    return _run_transaction(_unpin)

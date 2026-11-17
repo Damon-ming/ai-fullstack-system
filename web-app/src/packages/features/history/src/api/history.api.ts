@@ -55,6 +55,12 @@ export async function pinOnServer(
   return dataApi.post<unknown>(`/api/history/v1/${id}/pin`);
 }
 
+export async function unpinOnServer(
+  id: string,
+): Promise<DataApiResponse<unknown>> {
+  return dataApi.delete<unknown>(`/api/history/v1/${id}/pin`);
+}
+
 // ---------------------------------------------------------------------------
 // 同步调用对象（非 React 上下文使用，不走缓存）—— 纯透传 fetcher
 // ---------------------------------------------------------------------------
@@ -64,4 +70,5 @@ export const historyStore = {
   turns: fetchTurns,
   remove: removeFromServer,
   pin: pinOnServer,
+  unpin: unpinOnServer,
 };

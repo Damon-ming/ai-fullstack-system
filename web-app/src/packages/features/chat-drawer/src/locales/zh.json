@@ -21,6 +21,7 @@
     "title": "最近对话",
     "pinned": "置顶",
     "pin": "置顶对话",
+    "unpin": "取消置顶",
     "delete": "删除记录",
     "loading": "加载中",
     "empty": "暂无对话记录"

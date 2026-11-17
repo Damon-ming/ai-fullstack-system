@@ -21,6 +21,7 @@
     "title": "Recent Chats",
     "pinned": "Pinned",
     "pin": "Pin conversation",
+    "unpin": "Unpin conversation",
     "delete": "Delete",
     "loading": "Loading",
     "empty": "No chat history"

@@ -18,6 +18,9 @@ export interface ChatDrawerResources {
   };
   history: {
     title: string;
+    pinned: string;
+    pin: string;
+    unpin: string;
     delete: string;
     loading: string;
     empty: string;

@@ -105,11 +105,16 @@ class HistoryService:
         return history_store.delete_history(conversation_id, user_id)
 
     @staticmethod
-    def pin_history(
-        conversation_id: str, user_id: int
-    ) -> PinHistoryResult:
+    def pin_history(conversation_id: str, user_id: int) -> PinHistoryResult:
         """置顶一个会话；每个用户最多 30 个。"""
         return history_store.pin_history(conversation_id, user_id)
+
+    @staticmethod
+    def unpin_history(
+        conversation_id: str, user_id: int
+    ) -> history_store.UnpinHistoryResult:
+        """取消置顶一个会话。"""
+        return history_store.unpin_history(conversation_id, user_id)
 
     @staticmethod
     def save_turn(

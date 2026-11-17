@@ -21,6 +21,7 @@ from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.history.history_store import (
     InvalidHistoryCursor,
     PinHistoryResult,
+    UnpinHistoryResult,
 )
 from src.com.damon.ming.router.history.schemas.bean import (
     HistoryFailedData,
@@ -135,6 +136,35 @@ def pin_history(
         raise
     except Exception as e:
         logger.exception("历史会话置顶状态更新失败")
+        fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
+        return BaseFailedResponse(
+            code=ErrorCode.SYSTEM.DATABASE_FAILURE, data=fail_data
+        )
+
+
+@router.delete("/v1/{conversation_id}/pin", response_model=None)
+@limiter.limit("30/minute")
+def unpin_history(
+    request: Request,
+    conversation_id: str = Path(..., description="会话 ID"),
+):
+    """取消置顶当前用户的会话。"""
+    try:
+        result = HistoryService.unpin_history(
+            conversation_id=conversation_id,
+            user_id=_user_id(request),
+        )
+        if result == UnpinHistoryResult.NOT_FOUND:
+            return BaseFailedResponse(
+                code=ErrorCode.HISTORY.NOT_FOUND,
+                data=HistoryFailedData(error_msg=t(I18nKey.HISTORY_NOT_FOUND)),
+            )
+        return BaseSuccessResponse(
+            code=ErrorCode.OK,
+            data={"conversationId": conversation_id, "isPinned": False},
+        )
+    except Exception as e:
+        logger.exception("历史会话取消置顶失败")
         fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
         return BaseFailedResponse(
             code=ErrorCode.SYSTEM.DATABASE_FAILURE, data=fail_data

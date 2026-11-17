@@ -14,7 +14,12 @@ import type {
   InfiniteData,
 } from "@ming/data-layer";
 
-import { fetchList, pinOnServer, removeFromServer } from "./history.api";
+import {
+  fetchList,
+  pinOnServer,
+  removeFromServer,
+  unpinOnServer,
+} from "./history.api";
 
 // ---------------------------------------------------------------------------
 // 缓存 key
@@ -86,5 +91,12 @@ export const usePinHistoryMutation = queryFactory.createMutationHook<
   unknown,
   string
 >(pinOnServer, {
+  invalidateKeys: [HISTORY_LIST_KEY],
+});
+
+export const useUnpinHistoryMutation = queryFactory.createMutationHook<
+  unknown,
+  string
+>(unpinOnServer, {
   invalidateKeys: [HISTORY_LIST_KEY],
 });

@@ -12,6 +12,7 @@ export const DrawerHistory: React.FC = () => {
     loading,
     selectChat,
     pin,
+    unpin,
     hasMore,
     loadMore,
     isLoadingMore,
@@ -78,13 +79,15 @@ export const DrawerHistory: React.FC = () => {
                   {item.title}
                 </button>
                 {item.isPinned ? (
-                  <span
-                    title={t("history.pinned")}
-                    aria-label={t("history.pinned")}
-                    className="px-2"
+                  <button
+                    type="button"
+                    title={t("history.unpin")}
+                    aria-label={t("history.unpin")}
+                    onClick={() => unpin(item.conversationId)}
+                    className="h-full px-2 text-blue-600 hover:text-gray-400"
                   >
                     📌
-                  </span>
+                  </button>
                 ) : (
                   <button
                     type="button"

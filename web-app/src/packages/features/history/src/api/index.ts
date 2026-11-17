@@ -5,11 +5,13 @@ export {
   fetchTurns,
   removeFromServer,
   pinOnServer,
+  unpinOnServer,
 } from "./history.api";
 export {
   useHistoryListInfiniteQuery,
   useRemoveHistoryMutation,
   usePinHistoryMutation,
+  useUnpinHistoryMutation,
   HISTORY_LIST_KEY,
   useHistoryTurnsCache,
   HISTORY_PAGE_SIZE,
