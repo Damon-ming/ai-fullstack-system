@@ -19,9 +19,6 @@ from src.com.damon.ming.app.config._yaml import load_yaml
 class UploadConfig:
     """上传配置（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
-    # SHA-256 路径缓存 LRU 上限（当前上传流程暂未启用缓存）
-    sha_cache_max: int
-
     # 单次上传最大文件数
     max_files_per_request: int
 
@@ -77,12 +74,6 @@ class UploadConfigLoader:
         """
         raw = self._read_yaml()
 
-        sha_cache_max = raw.get("sha_cache_max")
-        if not sha_cache_max or not isinstance(sha_cache_max, int) or sha_cache_max < 1:
-            raise ValueError(
-                f"上传配置中 sha_cache_max 必须为正整数 | dir={self._config_dir}"
-            )
-
         max_files = raw.get("max_files_per_request")
         if not max_files or not isinstance(max_files, int) or max_files < 1:
             raise ValueError(
@@ -102,7 +93,6 @@ class UploadConfigLoader:
             )
 
         return UploadConfig(
-            sha_cache_max=sha_cache_max,
             max_files_per_request=max_files,
             max_total_upload_size=max_total,
             allowed_types=allowed_types,

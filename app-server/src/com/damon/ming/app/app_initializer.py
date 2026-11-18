@@ -240,13 +240,13 @@ class AppInitializer:
             logger.warning("异常类型注册失败: %s", e)
 
     def _init_upload_service(self) -> None:
-        """上传文件存储：设置知识库目录并初始化 SHA 缓存。"""
+        """上传文件存储：设置知识库目录并清理遗留临时文件。"""
         from src.com.damon.ming.router.upload.service.upload_file_storage import (
             UploadFileStorage,
         )
 
         UploadFileStorage.set_knowledge_dir(self.system_config.knowledge_dir)
-        UploadFileStorage.init_sha_cache(sha_cache_max=self.upload_config.sha_cache_max)
+        UploadFileStorage.clean_temporary_files()
         logger.info("上传文件存储初始化完成")
 
     def _init_database(self) -> None:
