@@ -17,8 +17,8 @@ class UploadFileStorage:
     upload_dir: Path
 
     @classmethod
-    def set_knowledge_dir(cls, knowledge_dir: str) -> None:
-        cls.upload_dir = Path(knowledge_dir).resolve()
+    def set_corpus_dir(cls, corpus_dir: str) -> None:
+        cls.upload_dir = Path(corpus_dir).resolve()
         cls.upload_dir.mkdir(parents=True, exist_ok=True)
         logger.info("上传文件目录已设置 | path=%s", cls.upload_dir)
 

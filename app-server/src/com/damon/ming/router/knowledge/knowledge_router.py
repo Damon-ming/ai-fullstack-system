@@ -111,8 +111,8 @@ def get_knowledge_tree(request: Request):
     try:
         uploader_map = get_file_uploader_map()
 
-        knowledge_dir = Path(request.app.state.config.system_config.knowledge_dir)
-        if not knowledge_dir.exists():
+        corpus_dir = Path(request.app.state.config.system_config.corpus_dir)
+        if not corpus_dir.exists():
             root = KnowledgeNode(
                 name="knowledge",
                 type="directory",
@@ -120,7 +120,7 @@ def get_knowledge_tree(request: Request):
                 children=[],
             )
         else:
-            root = _build_tree(knowledge_dir, knowledge_dir, uploader_map)
+            root = _build_tree(corpus_dir, corpus_dir, uploader_map)
 
         return BaseSuccessResponse(
             code=ErrorCode.OK,

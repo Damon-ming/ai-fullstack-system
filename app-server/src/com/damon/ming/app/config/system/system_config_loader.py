@@ -17,7 +17,7 @@ from src.com.damon.ming.app.config._yaml import load_yaml
 class SystemConfig:
     """系统级配置（纯数据类）。whitelist 可省略，其余参数由 YAML 显式声明。"""
 
-    knowledge_dir: str  # 知识库目录绝对路径
+    corpus_dir: str  # 知识库语料目录绝对路径
     whitelist: Collection[str]  # 加密豁免路径前缀，未配置时为空字典
 
 
@@ -25,7 +25,7 @@ class SystemConfigLoader:
     """从 YAML 加载系统级配置，解析相对路径为绝对路径。
 
     Returns:
-        SystemConfig: knowledge_dir 已解析为绝对路径，whitelist 已校验。
+        SystemConfig: corpus_dir 已解析为绝对路径，whitelist 已校验。
     """
 
     def __init__(self):
@@ -34,22 +34,22 @@ class SystemConfigLoader:
     def load(self) -> SystemConfig:
         raw = self._read_yaml()
 
-        knowledge_dir = raw.get("knowledge_dir")
-        if not knowledge_dir:
+        corpus_dir = raw.get("corpus_dir")
+        if not corpus_dir:
             raise ValueError(
-                f"系统配置中 knowledge_dir 不能为空 | dir={self._config_dir}"
+                f"系统配置中 corpus_dir 不能为空 | dir={self._config_dir}"
             )
 
         # 支持绝对路径（直接使用）或相对路径（基于 app-server/ 根目录解析）
         # __file__ = src/com/damon/ming/app/config/system/system_config_loader.py
         # parents[7] = app-server/
-        if not os.path.isabs(knowledge_dir):
+        if not os.path.isabs(corpus_dir):
             project_root = Path(__file__).resolve().parents[7]
-            knowledge_dir = str((project_root / knowledge_dir).resolve())
+            corpus_dir = str((project_root / corpus_dir).resolve())
 
         whitelist = self._parse_whitelist(raw.get("whitelist"))
 
-        return SystemConfig(knowledge_dir=knowledge_dir, whitelist=whitelist)
+        return SystemConfig(corpus_dir=corpus_dir, whitelist=whitelist)
 
     def _parse_whitelist(self, raw: object) -> Collection[str]:
         """解析可选加密豁免白名单，未配置返回 {}，已配置时校验格式。"""

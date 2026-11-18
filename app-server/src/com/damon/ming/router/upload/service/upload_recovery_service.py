@@ -10,7 +10,7 @@
 
 from pathlib import Path
 
-from src.com.damon.ming.ai.knowledge_index_service import KnowledgeIndexService
+from src.com.damon.ming.ai.knowledge.index_service import KnowledgeIndexService
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.upload.service.upload_audit_repository import (
     get_processing_upload_records,

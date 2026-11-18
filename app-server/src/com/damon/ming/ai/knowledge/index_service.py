@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/knowledge_index_service.py
+# app-server/src/com/damon/ming/ai/knowledge/index_service.py
 """维护知识索引，并提供向量索引的应用层操作。"""
 
 from __future__ import annotations
@@ -10,11 +10,11 @@ from llama_index.core.schema import Document, TextNode
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
-from src.com.damon.ming.ai.knowledge_bootstrap import (
+from src.com.damon.ming.ai.knowledge.bootstrap import (
     IndexSyncFailure,
     KnowledgeBootstrapResult,
 )
-from src.com.damon.ming.ai.metadata_keys import (
+from src.com.damon.ming.ai.knowledge.metadata_keys import (
     FILE_NAME,
     FILE_PATH,
     FILE_SHA256,
@@ -44,7 +44,7 @@ class KnowledgeIndexService:
     def __init__(
         self,
         *,
-        knowledge_dir: Path,
+        corpus_dir: Path,
         thread_pools: RagThreadPools,
         splitter: BaseDocumentSplitter,
         embedder: BaseEmbeddingService,
@@ -52,7 +52,7 @@ class KnowledgeIndexService:
         bm25_index: BM25Index,
         bootstrap_result: KnowledgeBootstrapResult,
     ) -> None:
-        self._knowledge_dir = knowledge_dir
+        self._corpus_dir = corpus_dir
         self._document_pool = thread_pools.document
         self._bm25_pool = thread_pools.bm25
         self._splitter = splitter
@@ -226,7 +226,7 @@ class KnowledgeIndexService:
     async def _load_documents(self, file_paths: list[str]) -> dict[str, list[Document]]:
         docs_by_path: dict[str, list[Document]] = {}
         for source_name in list_engines():
-            source = resolve_source(source_name)(self._knowledge_dir)
+            source = resolve_source(source_name)(self._corpus_dir)
             try:
                 docs = await run_in_pool(
                     self._document_pool, source.load_specific_files, file_paths

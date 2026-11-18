@@ -66,7 +66,7 @@ class AppInitializer:
         logger.info("应用启动开始 | debug=%s", is_debug())
 
         self._register_exception_types()
-        self._init_system_config()  # 必须在其他子系统之前：提供 knowledge_dir
+        self._init_system_config()  # 必须在其他子系统之前：提供 corpus_dir
         self._init_thread_pool()
         self._init_upload_config()
         self._init_upload_service()
@@ -209,7 +209,7 @@ class AppInitializer:
         loader = SystemConfigLoader()
         self.system_config = loader.load()
         logger.info(
-            "系统配置已加载 | knowledge_dir=%s", self.system_config.knowledge_dir
+            "系统配置已加载 | corpus_dir=%s", self.system_config.corpus_dir
         )
 
     def _register_exception_types(self) -> None:
@@ -245,7 +245,7 @@ class AppInitializer:
             UploadFileStorage,
         )
 
-        UploadFileStorage.set_knowledge_dir(self.system_config.knowledge_dir)
+        UploadFileStorage.set_corpus_dir(self.system_config.corpus_dir)
         UploadFileStorage.clean_temporary_files()
         logger.info("上传文件存储初始化完成")
 
@@ -432,7 +432,7 @@ class AppInitializer:
         self.rag_app = get_rag_container(
             thread_pools=get_rag_thread_pools(),
             rag_sem=self.rag_sem,
-            knowledge_dir=self.system_config.knowledge_dir,
+            corpus_dir=self.system_config.corpus_dir,
             loader=self._loader,
         )
         UploadRecoveryService.recover_startup(self.rag_app.knowledge_index_service)

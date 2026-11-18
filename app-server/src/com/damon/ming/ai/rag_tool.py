@@ -44,8 +44,8 @@ from src.com.damon.ming.ai.config.tokenizer.tokenizer_config_loader import (
 from src.com.damon.ming.ai.config.vector.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
-from src.com.damon.ming.ai.knowledge_bootstrap import bootstrap_knowledge_index
-from src.com.damon.ming.ai.knowledge_index_service import KnowledgeIndexService
+from src.com.damon.ming.ai.knowledge.bootstrap import bootstrap_knowledge_index
+from src.com.damon.ming.ai.knowledge.index_service import KnowledgeIndexService
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.registry.source_registry import register_all_sources
@@ -80,7 +80,7 @@ _rag_instance_lock = threading.Lock()
 def get_rag_container(
     thread_pools: RagThreadPools,
     rag_sem: asyncio.Semaphore,
-    knowledge_dir: str,
+    corpus_dir: str,
     loader: RagConfigLoader,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
@@ -88,7 +88,7 @@ def get_rag_container(
     Args:
         thread_pools: 由 AppInitializer 注入的 RAG 命名线程池集合（必填）。
         rag_sem: RAG 流程共享的推理并发信号量（必填）。
-        knowledge_dir: 知识库目录绝对路径（由 app.config 注入，必填）。
+        corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
         loader: 推理配置加载器（由 AppInitializer 注入，必填）。
     """
     global _rag_instance
@@ -98,7 +98,7 @@ def get_rag_container(
                 _rag_instance = RAGContainer(
                     thread_pools=thread_pools,
                     rag_sem=rag_sem,
-                    knowledge_dir=knowledge_dir,
+                    corpus_dir=corpus_dir,
                     loader=loader,
                 )
     return _rag_instance
@@ -110,7 +110,7 @@ class RAGContainer:
         self,
         thread_pools: RagThreadPools,
         rag_sem: asyncio.Semaphore,
-        knowledge_dir: str = "",
+        corpus_dir: str = "",
         loader: RagConfigLoader | None = None,
     ):
         logger.info("RAG 容器初始化开始")
@@ -118,9 +118,9 @@ class RAGContainer:
         # 推理信号量：所有 LLM 调用（主推理 + 摘要 + 压缩）共享同一上限
         self._rag_sem = rag_sem
         # 知识库目录：由 app.config 注入，不再硬编码，不合法直接抛异常
-        if not knowledge_dir:
-            raise ValueError("RAGContainer 初始化失败：knowledge_dir 不能为空")
-        knowledge_path = Path(knowledge_dir)
+        if not corpus_dir:
+            raise ValueError("RAGContainer 初始化失败：corpus_dir 不能为空")
+        corpus_path = Path(corpus_dir)
         # 推理配置加载器：由 AppInitializer 注入（全进程唯一实例）
         if loader is None:
             raise ValueError("RAGContainer 初始化失败：loader 不能为空")
@@ -196,14 +196,14 @@ class RAGContainer:
         )
 
         bootstrap_result = bootstrap_knowledge_index(
-            knowledge_dir=knowledge_path,
+            corpus_dir=corpus_path,
             splitter=self.splitter,
             bm25_index=self.bm25_index,
             embedder=self.embedder,
             vector_store=self._vector_store,
         )
         self.knowledge_index_service = KnowledgeIndexService(
-            knowledge_dir=knowledge_path,
+            corpus_dir=corpus_path,
             thread_pools=thread_pools,
             splitter=self.splitter,
             embedder=self.embedder,

@@ -383,7 +383,7 @@ UA 指纹来自客户端提供的信息。SHA-256 让摘要难以直接反推，
 
 | 配置 | 路径 | 说明 |
 |------|------|------|
-| 系统配置 | `config/system/` | knowledge_dir 等路径 |
+| 系统配置 | `config/system/` | corpus_dir 等路径 |
 | 数据库 | `config/db/` | 连接池参数 |
 | RAG 运行时 | `config/rag/rag-runtime.yaml` | 流水线资源、模型参数和并发控制；`rag.pipeline.shared_inference` 为共享推理并发限制，`rag.transport.sse.retry_ms` 为 SSE 重试间隔 |
 | 加密 | `config/encryption/` | RSA 密钥大小、TTL |

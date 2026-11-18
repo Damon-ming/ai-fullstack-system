@@ -49,7 +49,7 @@ services:
     volumes:
       - ${DATA_DIR}/logs/app-server:/app-server/logs
       - ${DATA_DIR}/chroma:/app-server/chroma
-      - ${DATA_DIR}/knowledge:/app-server/knowledge
+      - ${DATA_DIR}/corpus:/app-server/corpus
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}

@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/knowledge/bootstrap.py
 """从知识库磁盘数据构建内存检索节点并同步通用向量索引。"""
 
 from __future__ import annotations
@@ -7,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.com.damon.ming.ai.metadata_keys import FILE_PATH, FILE_SHA256
+from src.com.damon.ming.ai.knowledge.metadata_keys import FILE_PATH, FILE_SHA256
 from src.com.damon.ming.ai.source import list_engines, resolve_source
 from src.com.damon.ming.log import pin
 
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
     from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 
 
-logger = pin("ai.knowledge_bootstrap")
+logger = pin("ai.knowledge.bootstrap")
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ class KnowledgeBootstrapResult:
 
 def bootstrap_knowledge_index(
     *,
-    knowledge_dir: Path,
+    corpus_dir: Path,
     splitter: BaseDocumentSplitter,
     bm25_index: BM25Index,
     embedder: BaseEmbeddingService,
@@ -54,7 +55,7 @@ def bootstrap_knowledge_index(
     """扫描数据源，重建 BM25 并对账 vector_db。"""
     documents: list[Document] = []
     for source_name in list_engines():
-        source = resolve_source(source_name)(knowledge_dir)
+        source = resolve_source(source_name)(corpus_dir)
         documents.extend(source.load_documents())
 
     discovered_file_paths = {

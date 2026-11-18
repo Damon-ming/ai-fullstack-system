@@ -3,7 +3,7 @@ import asyncio
 from pathlib import Path
 
 from fastapi import UploadFile
-from src.com.damon.ming.ai.knowledge_index_service import KnowledgeIndexService
+from src.com.damon.ming.ai.knowledge.index_service import KnowledgeIndexService
 from src.com.damon.ming.app.thread_pools import get_database_query_pool, run_in_pool
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
