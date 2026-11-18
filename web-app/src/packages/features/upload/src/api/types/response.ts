@@ -1,6 +1,6 @@
 export interface UploadFileResult {
   filename: string;
-  file_uid: string;
+  file_id: string;
 }
 
 export interface UploadDuplicateFile {
