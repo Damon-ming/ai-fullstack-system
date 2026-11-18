@@ -36,7 +36,7 @@ def record_upload_metadata(
     user_id: int | None,
     device_id: str,
 ) -> None:
-    """写入上传审计记录；失败只记日志，不影响上传结果。"""
+    """写入上传审计记录；失败时抛出异常，由上传流程回滚索引和文件。"""
     try:
         get_default_db().execute(
             pg_insert(upload_records)
@@ -59,3 +59,4 @@ def record_upload_metadata(
             file_sha256[:16],
             e,
         )
+        raise

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -48,7 +47,6 @@ class KnowledgeIngestService:
         self._bm25_index = bm25_index
         # BM25 使用启动时的列表作为语料快照，上传在自己的列表上追加。
         self._nodes = list(initial_nodes)
-        self._write_lock = threading.Lock()
 
     async def ingest_files(
         self,
@@ -150,36 +148,52 @@ class KnowledgeIngestService:
         new_nodes: list[TextNode] = []
         failed_count = 0
 
-        # 查重和写入必须共用一把锁，以免并发上传重复写入同一文件。
-        with self._write_lock:
-            for nodes, file_sha256 in parsed:
-                if self._vector_store.get_by_metadata({"file_sha256": file_sha256}):
-                    skipped.append(
-                        {"file_sha256": file_sha256, "reason": "already_indexed"}
-                    )
-                    continue
+        for nodes, file_sha256 in parsed:
+            existing_nodes = self._vector_store.get_by_metadata(
+                {"file_sha256": file_sha256}
+            )
+            if existing_nodes:
+                existing_path = next(
+                    (
+                        Path(node.metadata["file_path"])
+                        for node in existing_nodes
+                        if node.metadata.get("file_path")
+                        and Path(node.metadata["file_path"]).is_file()
+                    ),
+                    None,
+                )
+                skipped.append(
+                    {
+                        "file_sha256": file_sha256,
+                        "reason": "already_indexed",
+                        "existing_file_path": str(existing_path)
+                        if existing_path
+                        else None,
+                    }
+                )
+                continue
 
-                indexed_at = now_iso()
-                for node in nodes:
-                    if file_uid:
-                        node.metadata["file_uid"] = file_uid
-                    if file_name:
-                        node.metadata["file_name"] = file_name
-                    node.metadata["disk_file_at"] = disk_file_at
-                    node.metadata["indexed_at"] = indexed_at
+            indexed_at = now_iso()
+            for node in nodes:
+                if file_uid:
+                    node.metadata["file_uid"] = file_uid
+                if file_name:
+                    node.metadata["file_name"] = file_name
+                node.metadata["disk_file_at"] = disk_file_at
+                node.metadata["indexed_at"] = indexed_at
 
-                try:
-                    self._vector_store.add_documents(nodes)
-                except Exception as exc:
-                    logger.warning(
-                        "向量库入库失败 | file_sha256=%s | error=%s",
-                        file_sha256[:16],
-                        exc,
-                    )
-                    failed_count += 1
-                    continue
+            try:
+                self._vector_store.add_documents(nodes)
+            except Exception as exc:
+                logger.warning(
+                    "向量库入库失败 | file_sha256=%s | error=%s",
+                    file_sha256[:16],
+                    exc,
+                )
+                failed_count += 1
+                continue
 
-                indexed.append({"file_sha256": file_sha256, "chunks": len(nodes)})
-                new_nodes.extend(nodes)
+            indexed.append({"file_sha256": file_sha256, "chunks": len(nodes)})
+            new_nodes.extend(nodes)
 
         return indexed, new_nodes, failed_count

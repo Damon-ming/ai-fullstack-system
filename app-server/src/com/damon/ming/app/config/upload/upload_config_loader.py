@@ -19,7 +19,7 @@ from src.com.damon.ming.app.config._yaml import load_yaml
 class UploadConfig:
     """上传配置（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
 
-    # sha256 内存缓存 LRU 上限（超出时淘汰最久未用条目）
+    # SHA-256 路径缓存 LRU 上限（当前上传流程暂未启用缓存）
     sha_cache_max: int
 
     # 单次上传最大文件数
