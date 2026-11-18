@@ -25,9 +25,10 @@ logger = pin("ai.knowledge_bootstrap")
 
 @dataclass(frozen=True)
 class IndexSyncFailure:
-    """某个磁盘文件的向量补录失败结果。"""
+    """同一内容（SHA）的一个或多个磁盘副本补录失败结果。"""
 
     file_sha256: str
+    # 同 SHA 的并发/中断上传副本可能分布在不同路径；恢复逻辑需要逐个核对。
     file_paths: tuple[str, ...]
     error: str
 
