@@ -23,7 +23,6 @@ from src.com.damon.ming.ai.vector_db.metadata_keys import (
     FILE_NAME,
     FILE_PATH,
     FILE_SHA256,
-    LEGACY_FILE_ID,
 )
 from src.com.damon.ming.app.thread_pools import (
     RagThreadPools,
@@ -195,13 +194,11 @@ class KnowledgeIndexService:
     def delete_by_id(self, file_id: str) -> int:
         """删除本次上传的向量节点，并同步内存 BM25 语料。"""
         deleted = self._vector_store.delete_by_metadata({FILE_ID: file_id})
-        deleted += self._vector_store.delete_by_metadata({LEGACY_FILE_ID: file_id})
         if deleted:
             self._nodes = [
                 node
                 for node in self._nodes
-                if node.metadata.get(FILE_ID, node.metadata.get(LEGACY_FILE_ID))
-                != file_id
+                if node.metadata.get(FILE_ID) != file_id
             ]
             try:
                 submit_to_pool(
@@ -240,6 +237,7 @@ class KnowledgeIndexService:
                 logger.warning("索引文件 | %s 加载阶段被取消", source_name)
                 raise
             for doc in docs:
+                # e.g. "E:/knowledge/report.pdf": [doc1, doc2, doc3]
                 docs_by_path.setdefault(doc.metadata[FILE_PATH], []).append(doc)
         return docs_by_path
 

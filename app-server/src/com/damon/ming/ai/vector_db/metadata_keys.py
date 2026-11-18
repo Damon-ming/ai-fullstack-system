@@ -5,8 +5,6 @@ FILE_SHA256 = "file_sha256"
 FILE_PATH = "file_path"
 FILE_NAME = "file_name"
 FILE_ID = "file_id"
-# 兼容升级前已写入向量 metadata 的 key；仅用于清理历史记录。
-LEGACY_FILE_ID = "file_uid"
 SECTION_ID = "section_id"
 CHUNK_ID = "chunk_id"
 SOURCE_REF_ID = "source_refId"
