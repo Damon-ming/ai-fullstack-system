@@ -1,5 +1,7 @@
+# app-server/src/com/damon/ming/router/upload/service/upload_file_storage.py
 """上传文件的磁盘存储和可选 SHA-256 路径缓存。"""
 
+import asyncio
 import os
 from collections import OrderedDict
 from pathlib import Path
@@ -11,7 +13,7 @@ from src.com.damon.ming.log import pin
 logger = pin("upload.file_store")
 
 
-class UploadFileStore:
+class UploadFileStorage:
     """管理上传目录、原子写盘和可选的 SHA-256 路径缓存。"""
 
     upload_dir: ClassVar[Path]
@@ -35,8 +37,11 @@ class UploadFileStore:
         tmp_cleaned = 0
         for path in cls.upload_dir.rglob("*.tmp"):
             if path.is_file():
-                path.unlink(missing_ok=True)
-                tmp_cleaned += 1
+                try:
+                    path.unlink(missing_ok=True)
+                    tmp_cleaned += 1
+                except OSError:
+                    logger.exception("启动清理残留临时文件失败 | path=%s", path)
         if tmp_cleaned:
             logger.info("启动清理残留临时文件 | count=%d", tmp_cleaned)
 
@@ -77,17 +82,50 @@ class UploadFileStore:
 
     @staticmethod
     async def store_content(file_path: Path, content: bytes, executor) -> None:
-        await run_in_pool(executor, _write_file_sync, file_path, content)
+        write_task = asyncio.create_task(
+            run_in_pool(executor, _write_file_sync, file_path, content)
+        )
+        try:
+            await asyncio.shield(write_task)
+        except asyncio.CancelledError:
+            # 线程池任务无法被 asyncio 取消；等待写盘结束后再让上传层回滚。
+            try:
+                await write_task
+            except Exception:
+                logger.exception("取消期间写盘任务失败 | path=%s", file_path)
+            raise
 
     @staticmethod
-    def remove_file(file_path: Path) -> None:
+    def remove_file(file_path: Path) -> bool:
         try:
             file_path.unlink(missing_ok=True)
+            for key, cached_path in UploadFileStorage._sha_cache.items():
+                if cached_path == file_path:
+                    UploadFileStorage._sha_cache.pop(key, None)
+            return True
         except OSError:
             logger.warning("回滚删除磁盘文件失败 | path=%s", file_path)
-        for key, cached_path in list(UploadFileStore._sha_cache.items()):
-            if cached_path == file_path:
-                UploadFileStore._sha_cache.pop(key, None)
+            return False
+
+    @staticmethod
+    def move_to_temporary(file_path: Path) -> bool:
+        """回滚删除失败时改名，留待下次启动清理。"""
+        if not file_path.exists():
+            return True
+        temporary_path = file_path.with_suffix(file_path.suffix + ".tmp")
+        try:
+            os.replace(file_path, temporary_path)
+            for key, cached_path in UploadFileStorage._sha_cache.items():
+                if cached_path == file_path:
+                    UploadFileStorage._sha_cache.pop(key, None)
+            logger.warning(
+                "磁盘文件删除失败，已改名为待清理临时文件 | path=%s",
+                temporary_path,
+            )
+            return True
+        except OSError:
+            logger.exception("回滚文件改名为临时文件失败 | path=%s", file_path)
+            return False
 
 
 def _write_file_sync(path: Path, content: bytes) -> None:

@@ -1,10 +1,11 @@
 # app-server/src/com/damon/ming/ai/rag_tool.py
 """
-RAG 容器 —— 线程编排层 + 业务入口。
+RAG 容器 —— 检索线程编排层。
 
 职责：
   - 编排 AI 模块的执行顺序（检索 → 重构 → rerank → 拼接 → 全局摘要）
   - 管理线程池使用（将同步 AI 函数提交到 ThreadPoolManager）
+  - vector DB 写入、删除和索引对账由 KnowledgeIndexService 提供
   - 取消由 asyncio.CancelledError 穿透所有 await 层，无需手动检查
   - AI 模块本身不感知线程/取消
 
@@ -44,7 +45,7 @@ from src.com.damon.ming.ai.config.vector.vector_config_loader import VectorConfi
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
 from src.com.damon.ming.ai.knowledge_bootstrap import bootstrap_knowledge_index
-from src.com.damon.ming.ai.knowledge_ingest import KnowledgeIngestService
+from src.com.damon.ming.ai.knowledge_index_service import KnowledgeIndexService
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.registry.source_registry import register_all_sources
@@ -144,7 +145,7 @@ class RAGContainer:
         self.embedders = _embedders
 
         # 步骤3：初始化向量库
-        self.vector_store = cast(PGVectorStore, VectorConfigLoader().load("pgvector"))
+        self._vector_store = cast(PGVectorStore, VectorConfigLoader().load("pgvector"))
 
         # 步骤4：初始化章节重构 + 摘要服务
         _summary_entry = loader.load().rag.roles["summary"]
@@ -167,7 +168,7 @@ class RAGContainer:
 
         # 步骤7：初始化稠密检索器
         self.dense_retriever = DenseRetriever(
-            vector_store=self.vector_store, embedding_service=self.embedder
+            vector_store=self._vector_store, embedding_service=self.embedder
         )
 
         # 步骤8：初始化稀疏BM25索引（启动时预加载所有节点构建）
@@ -194,48 +195,23 @@ class RAGContainer:
             chunk_overlap=self.splitter_config.chunk_overlap,
         )
 
-        initial_nodes = bootstrap_knowledge_index(
+        bootstrap_result = bootstrap_knowledge_index(
             knowledge_dir=knowledge_path,
             splitter=self.splitter,
             bm25_index=self.bm25_index,
             embedder=self.embedder,
-            vector_store=self.vector_store,
+            vector_store=self._vector_store,
         )
-        self._knowledge_ingest = KnowledgeIngestService(
+        self.knowledge_index_service = KnowledgeIndexService(
             knowledge_dir=knowledge_path,
             thread_pools=thread_pools,
             splitter=self.splitter,
             embedder=self.embedder,
-            vector_store=self.vector_store,
+            vector_store=self._vector_store,
             bm25_index=self.bm25_index,
-            initial_nodes=initial_nodes,
+            bootstrap_result=bootstrap_result,
         )
         logger.info("RAG 容器初始化完成")
-
-    async def ingest_files(
-        self,
-        file_paths: list[str],
-        cancellation_token: CancellationToken | None = None,
-        file_uid: str = "",
-        disk_file_at: str = "",
-        file_name: str = "",
-    ) -> dict:
-        """将上传文件交给知识库入库服务处理。"""
-        return await self._knowledge_ingest.ingest_files(
-            file_paths,
-            cancellation_token=cancellation_token,
-            file_uid=file_uid,
-            disk_file_at=disk_file_at,
-            file_name=file_name,
-        )
-
-    def delete_by_uid(self, file_uid: str) -> int:
-        """按 file_uid 删除向量库中的 chunk（上传回滚用）。
-
-        file_uid 在本次上传中唯一，不会跨用户误删。
-        返回删除的 chunk 数量，未匹配返回 0。
-        """
-        return self.vector_store.delete_by_metadata({"file_uid": file_uid})
 
     # ── query_rag：检索线程编排 ────────────────────────────────────────
 
@@ -322,7 +298,7 @@ class RAGContainer:
             # ── 阶段 2: 章节重构 ──
             reconstructed_nodes = (
                 await self.section_recon.reconstruct_sections_to_nodes(
-                    vector_store=self.vector_store,
+                    vector_store=self._vector_store,
                     hit_nodes=raw_nodes,
                     executor=retrieval_pool,
                 )

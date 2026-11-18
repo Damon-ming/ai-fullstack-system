@@ -32,7 +32,8 @@ from collections import OrderedDict
 from typing import Any
 
 from llama_index.core.schema import TextNode
-from sqlalchemy import text
+from sqlalchemy import column, literal, table, text, update
+from sqlalchemy.dialects.postgresql import JSONB
 from src.com.damon.ming.ai.vector_db import register_engine
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
@@ -42,7 +43,7 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.utils.uuid import generate_uuid
 
 # 标识符白名单：仅允许字母、数字、下划线，防止 SQL 注入
-_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_]\w*$", re.ASCII)
 
 # SQL 常量：去重 + 避免 Sonar S1192（重复字面符）
 _SQL_AND = " AND "
@@ -355,6 +356,41 @@ class PGVectorStore(BaseVectorStore):
                 str(e)[:200],
             )
             raise RuntimeError(f"向量库删除失败: {type(e).__name__}") from e
+
+    def update_file_path_by_sha(self, file_sha256: str, file_path: str | None) -> int:
+        """修复同 SHA 向量节点的磁盘路径元数据，并在提交后清理节点缓存。"""
+        vector_table = table(
+            self._table_name,
+            column("id"),
+            column("metadata", JSONB),
+        )
+        metadata_column = vector_table.c.metadata
+        if file_path is None:
+            metadata_expr = metadata_column.op("-")(literal("file_path"))
+        else:
+            metadata_expr = metadata_column.op("||")(
+                literal({"file_path": file_path}, type_=JSONB)
+            )
+        statement = (
+            update(vector_table)
+            .where(metadata_column["file_sha256"].astext == file_sha256)
+            .values(metadata=metadata_expr)
+            .returning(vector_table.c.id)
+        )
+        try:
+            with self._engine.connect() as conn:
+                rows = conn.execute(statement).fetchall()  # nosec B608 — SQLAlchemy Core 表达式；表名已由 _sanitize_identifier 白名单校验
+                conn.commit()
+            for (node_id,) in rows:
+                self._cache_pop(node_id)
+            return len(rows)
+        except Exception as e:
+            self.logger.error(
+                "[PGVectorStore] 修复文件路径元数据失败: %s (%s)",
+                type(e).__name__,
+                str(e)[:200],
+            )
+            raise RuntimeError(f"向量库文件路径修复失败: {type(e).__name__}") from e
 
     def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
         cached = self._cache_get(node_id)

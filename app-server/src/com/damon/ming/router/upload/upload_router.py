@@ -45,7 +45,7 @@ async def save_files(
         result = await UploadService.batch_save_files(
             file_list=files,
             upload_config=request.app.state.config.upload_config,
-            rag_app=request.app.state.rag_runtime.rag_app,
+            knowledge_index=request.app.state.rag_runtime.rag_app.knowledge_index_service,
             cancellation_token=scope.cancellation_token,
             executor=document_pool,
             user_id=request.state.client.user_id,
@@ -53,7 +53,7 @@ async def save_files(
         )
         logger.info(
             "文件上传请求完成 | success=%s | failed=%s",
-            len(result["files"]),
+            len(result["success_files"]),
             len(result["failed_files"]),
         )
 

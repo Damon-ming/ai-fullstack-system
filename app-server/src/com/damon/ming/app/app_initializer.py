@@ -241,12 +241,12 @@ class AppInitializer:
 
     def _init_upload_service(self) -> None:
         """上传文件存储：设置知识库目录并初始化 SHA 缓存。"""
-        from src.com.damon.ming.router.upload.service.upload_file_store import (
-            UploadFileStore,
+        from src.com.damon.ming.router.upload.service.upload_file_storage import (
+            UploadFileStorage,
         )
 
-        UploadFileStore.set_knowledge_dir(self.system_config.knowledge_dir)
-        UploadFileStore.init_sha_cache(sha_cache_max=self.upload_config.sha_cache_max)
+        UploadFileStorage.set_knowledge_dir(self.system_config.knowledge_dir)
+        UploadFileStorage.init_sha_cache(sha_cache_max=self.upload_config.sha_cache_max)
         logger.info("上传文件存储初始化完成")
 
     def _init_database(self) -> None:
@@ -422,6 +422,9 @@ class AppInitializer:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""
         from src.com.damon.ming.ai.rag_tool import get_rag_container
         from src.com.damon.ming.app.thread_pools import get_rag_thread_pools
+        from src.com.damon.ming.router.upload.service.upload_recovery_service import (
+            UploadRecoveryService,
+        )
 
         # rag_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
         # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
@@ -432,6 +435,7 @@ class AppInitializer:
             knowledge_dir=self.system_config.knowledge_dir,
             loader=self._loader,
         )
+        UploadRecoveryService.recover_startup(self.rag_app.knowledge_index_service)
 
         # 推理引擎已由 self._loader.load() 装配（环境变量连接参数 + YAML roles 段）
         _inference_entry = self._loader.load().rag.roles["inference"]

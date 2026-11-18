@@ -1,4 +1,5 @@
-"""解析用户上传的文件并更新检索索引。"""
+# app-server/src/com/damon/ming/ai/knowledge_index_service.py
+"""维护知识索引，并提供向量索引的应用层操作。"""
 
 from __future__ import annotations
 
@@ -7,6 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.com.damon.ming.ai.source import list_engines, resolve_source
+from src.com.damon.ming.ai.knowledge_bootstrap import (
+    IndexSyncFailure,
+    KnowledgeBootstrapResult,
+)
 from src.com.damon.ming.app.thread_pools import run_in_pool, submit_to_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.utils.time import now_iso
@@ -18,15 +23,19 @@ if TYPE_CHECKING:
     )
     from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
     from src.com.damon.ming.ai.spliter.spliter import BaseDocumentSplitter
-    from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
+    from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
     from src.com.damon.ming.app.thread_pools import RagThreadPools
     from src.com.damon.ming.thread import CancellationToken
 
 
-logger = pin("ai.knowledge_ingest")
+logger = pin("ai.knowledge_index")
 
 
-class KnowledgeIngestService:
+class VectorIngestFailure(RuntimeError):
+    """向量写入事务明确失败，没有确认成功的入库结果。"""
+
+
+class KnowledgeIndexService:
     def __init__(
         self,
         *,
@@ -34,9 +43,9 @@ class KnowledgeIngestService:
         thread_pools: RagThreadPools,
         splitter: BaseDocumentSplitter,
         embedder: BaseEmbeddingService,
-        vector_store: BaseVectorStore,
+        vector_store: PGVectorStore,
         bm25_index: BM25Index,
-        initial_nodes: list[TextNode],
+        bootstrap_result: KnowledgeBootstrapResult,
     ) -> None:
         self._knowledge_dir = knowledge_dir
         self._document_pool = thread_pools.document
@@ -46,7 +55,26 @@ class KnowledgeIngestService:
         self._vector_store = vector_store
         self._bm25_index = bm25_index
         # BM25 使用启动时的列表作为语料快照，上传在自己的列表上追加。
-        self._nodes = list(initial_nodes)
+        self._nodes = list(bootstrap_result.nodes)
+        self.startup_index_failures: list[IndexSyncFailure] = (
+            bootstrap_result.index_failures
+        )
+        self.startup_discovered_file_paths: set[str] = (
+            bootstrap_result.discovered_file_paths
+        )
+
+    def get_indexed_file_shas(self) -> set[str] | None:
+        """读取已入库文件 SHA；查询失败时返回 None。"""
+        return self._vector_store.get_all_file_shas()
+
+    def get_indexed_file_paths_by_sha(self, file_sha256: str) -> list[str]:
+        """读取指定 SHA 在向量元数据中记录的来源路径。"""
+        nodes = self._vector_store.get_by_metadata({"file_sha256": file_sha256})
+        return [
+            str(node.metadata["file_path"])
+            for node in nodes
+            if node.metadata.get("file_path")
+        ]
 
     async def ingest_files(
         self,
@@ -83,7 +111,7 @@ class KnowledgeIngestService:
                     self._document_pool, self._splitter.split, docs
                 )
             except asyncio.CancelledError:
-                logger.warning("ingest_files | 文档分割阶段被取消")
+                logger.warning("索引文件 | 文档分割阶段被取消")
                 raise
             if nodes:
                 parsed.append((nodes, file_sha256))
@@ -97,29 +125,96 @@ class KnowledgeIngestService:
             for node, embedding in zip(nodes, embeddings):
                 node.embedding = embedding
 
-        indexed, new_nodes, failed_count = await run_in_pool(
-            self._document_pool,
-            self._write_files,
-            parsed,
-            skipped,
-            file_uid,
-            disk_file_at,
-            file_name,
+        write_task = asyncio.create_task(
+            run_in_pool(
+                self._document_pool,
+                self._write_files,
+                parsed,
+                skipped,
+                file_uid,
+                disk_file_at,
+                file_name,
+            )
         )
+        try:
+            indexed, new_nodes, failed_count = await asyncio.shield(write_task)
+        except asyncio.CancelledError:
+            # 等待同步数据库事务结束后再把取消传给上传层执行补偿。
+            try:
+                await write_task
+            except Exception:
+                logger.exception("取消期间向量入库任务失败 | file_uid=%s", file_uid)
+            raise
         self._nodes.extend(new_nodes)
         if failed_count:
-            raise RuntimeError(f"向量库入库失败，需回滚文件数: {failed_count}")
+            raise VectorIngestFailure(f"向量库入库事务失败，文件数: {failed_count}")
 
         if new_nodes:
             # BM25 全量重建交给单线程池，按提交顺序替换索引。
             snapshot = list(self._nodes)
-            submit_to_pool(self._bm25_pool, self._bm25_index.build, snapshot)
-            logger.info(
-                "BM25后台重建已提交 | 新增%d个节点，总节点数：%d",
-                len(new_nodes),
-                len(snapshot),
-            )
+            try:
+                submit_to_pool(self._bm25_pool, self._bm25_index.build, snapshot)
+                logger.info(
+                    "BM25后台重建已提交 | 新增%d个节点，总节点数：%d",
+                    len(new_nodes),
+                    len(snapshot),
+                )
+            except Exception:
+                # 向量库事务已提交；BM25 是派生索引，后台重建失败不回滚源数据。
+                logger.exception("BM25后台重建提交失败")
         return {"indexed": indexed, "skipped": skipped}
+
+    def update_file_path_by_sha(self, file_sha256: str, file_path: str | None) -> int:
+        """修复向量库和内存 BM25 节点中的同 SHA 文件路径。"""
+        updated = self._vector_store.update_file_path_by_sha(file_sha256, file_path)
+        for node in self._nodes:
+            if node.metadata.get("file_sha256") != file_sha256:
+                continue
+            if file_path is None:
+                node.metadata.pop("file_path", None)
+            else:
+                node.metadata["file_path"] = file_path
+        if updated:
+            snapshot = list(self._nodes)
+            try:
+                submit_to_pool(self._bm25_pool, self._bm25_index.build, snapshot)
+            except Exception:
+                logger.exception("路径修复后的 BM25 重建提交失败")
+        return updated
+
+    def delete_by_uid(self, file_uid: str) -> int:
+        """删除本次上传的向量节点，并同步内存 BM25 语料。"""
+        deleted = self._vector_store.delete_by_metadata({"file_uid": file_uid})
+        if deleted:
+            self._nodes = [
+                node
+                for node in self._nodes
+                if node.metadata.get("file_uid") != file_uid
+            ]
+            try:
+                submit_to_pool(
+                    self._bm25_pool,
+                    self._bm25_index.build,
+                    list(self._nodes),
+                )
+            except Exception:
+                logger.exception("回滚后提交 BM25 重建失败 | file_uid=%s", file_uid)
+        return deleted
+
+    def remove_source_paths(self, file_paths: set[str]) -> int:
+        """从内存节点和 BM25 语料移除对应磁盘路径。"""
+        normalized_paths = {str(Path(path).resolve()) for path in file_paths}
+        previous_count = len(self._nodes)
+        self._nodes = [
+            node
+            for node in self._nodes
+            if not node.metadata.get("file_path")
+            or str(Path(node.metadata["file_path"]).resolve()) not in normalized_paths
+        ]
+        removed_count = previous_count - len(self._nodes)
+        if removed_count:
+            self._bm25_index.build(list(self._nodes))
+        return removed_count
 
     async def _load_documents(self, file_paths: list[str]) -> dict[str, list[Document]]:
         docs_by_path: dict[str, list[Document]] = {}
@@ -130,7 +225,7 @@ class KnowledgeIngestService:
                     self._document_pool, source.load_specific_files, file_paths
                 )
             except asyncio.CancelledError:
-                logger.warning("ingest_files | %s 加载阶段被取消", source_name)
+                logger.warning("索引文件 | %s 加载阶段被取消", source_name)
                 raise
             for doc in docs:
                 docs_by_path.setdefault(doc.metadata["file_path"], []).append(doc)
@@ -153,6 +248,14 @@ class KnowledgeIngestService:
                 {"file_sha256": file_sha256}
             )
             if existing_nodes:
+                stored_path = next(
+                    (
+                        str(node.metadata["file_path"])
+                        for node in existing_nodes
+                        if node.metadata.get("file_path")
+                    ),
+                    None,
+                )
                 existing_path = next(
                     (
                         Path(node.metadata["file_path"])
@@ -169,6 +272,7 @@ class KnowledgeIngestService:
                         "existing_file_path": str(existing_path)
                         if existing_path
                         else None,
+                        "stored_file_path": stored_path,
                     }
                 )
                 continue
