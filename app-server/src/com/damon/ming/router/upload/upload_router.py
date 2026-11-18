@@ -35,9 +35,6 @@ async def save_files(
         [file.filename for file in files],
     )
 
-    # 创建请求级作用域，绑定 CancellationToken
-    scope = request.app.state.threads.pool_mgr.create_request_scope()
-
     try:
         # 复用 document 命名池写盘，统一线程资源管理
         # 逐文件原子提交：写盘 + 向量库入库，任一步失败则回滚该文件
@@ -46,7 +43,6 @@ async def save_files(
             file_list=files,
             upload_config=request.app.state.config.upload_config,
             knowledge_index=request.app.state.rag_runtime.rag_app.knowledge_index_service,
-            cancellation_token=scope.cancellation_token,
             executor=document_pool,
             user_id=request.state.client.user_id,
             device_id=request.state.client.device_id,
@@ -71,6 +67,3 @@ async def save_files(
         logger.exception("文件上传请求失败")
         fail_data = BaseBizFailedData(error_msg=get_safe_error_message(e))
         return BaseFailedResponse(code=ErrorCode.UPLOAD.UPLOAD_FAILED, data=fail_data)
-    finally:
-        # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
-        scope.cleanup()

@@ -19,7 +19,6 @@ from src.com.damon.ming.router.upload.service.upload_file_storage import (
     UploadFileStorage,
 )
 from src.com.damon.ming.security.digest import sha256_hex
-from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.time import now_iso
 from src.com.damon.ming.utils.uuid import generate_uuid_hex
 
@@ -35,7 +34,6 @@ class UploadService:
         file_list: list[UploadFile],
         upload_config,
         knowledge_index: KnowledgeIndexService,
-        cancellation_token: CancellationToken | None = None,
         executor=None,
         user_id: int | None = None,
         device_id: str = "",
@@ -117,9 +115,7 @@ class UploadService:
                         suffix=suffix or t(I18nKey.UPLOAD_NO_EXTENSION),
                         allowed=", ".join(allowed_exts),
                     )
-                    await _finish_audit(
-                        file_id, "rejected", "type_validation", message
-                    )
+                    await _finish_audit(file_id, "rejected", "type_validation", message)
                     failed_files.append(
                         {
                             "filename": file_name,
@@ -136,9 +132,7 @@ class UploadService:
                         I18nKey.UPLOAD_SIZE_EXCEEDED,
                         max_mb=str(max_size // MIB),
                     )
-                    await _finish_audit(
-                        file_id, "rejected", "size_validation", message
-                    )
+                    await _finish_audit(file_id, "rejected", "size_validation", message)
                     failed_files.append(
                         {
                             "filename": file_name,
@@ -201,7 +195,6 @@ class UploadService:
                 ingest_started = True
                 index_result = await knowledge_index.ingest_files(
                     [resolved_path],
-                    cancellation_token=cancellation_token,
                     file_id=file_id,
                     disk_file_at=now_iso(),
                     file_name=file_name,
@@ -440,9 +433,7 @@ def _rollback_file(
     if delete_vectors and knowledge_index:
         try:
             deleted = knowledge_index.delete_by_id(file_id)
-            logger.info(
-                "补偿删除向量记录 | id=%s | deleted=%d", file_id[:16], deleted
-            )
+            logger.info("补偿删除向量记录 | id=%s | deleted=%d", file_id[:16], deleted)
         except Exception:
             logger.exception("补偿删除向量记录失败，保留源文件 | id=%s", file_id[:16])
             return False

@@ -30,7 +30,6 @@ from src.com.damon.ming.app.thread_pools import (
     submit_to_pool,
 )
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.time import now_iso
 
 logger = pin("ai.knowledge_index")
@@ -84,15 +83,11 @@ class KnowledgeIndexService:
     async def ingest_files(
         self,
         file_paths: list[str],
-        cancellation_token: CancellationToken | None = None,
         file_id: str = "",
         disk_file_at: str = "",
         file_name: str = "",
     ) -> dict:
         """增量索引上传文件。向量写入失败时通知上传服务回滚。"""
-        if cancellation_token is not None:
-            cancellation_token.register_task(asyncio.current_task())
-
         docs_by_path = await self._load_documents(file_paths)
         parsed: list[tuple[list[TextNode], str]] = []
         skipped: list[dict] = []
@@ -196,9 +191,7 @@ class KnowledgeIndexService:
         deleted = self._vector_store.delete_by_metadata({FILE_ID: file_id})
         if deleted:
             self._nodes = [
-                node
-                for node in self._nodes
-                if node.metadata.get(FILE_ID) != file_id
+                node for node in self._nodes if node.metadata.get(FILE_ID) != file_id
             ]
             try:
                 submit_to_pool(
