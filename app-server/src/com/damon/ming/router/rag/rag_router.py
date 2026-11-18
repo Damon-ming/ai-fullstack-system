@@ -106,9 +106,15 @@ async def answer(request: Request, body: ChatRequest):
                 recorder.conversation_id,
             )
 
-        # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
+        # ── Phase 1: 护栏检测（独立超时，超时返回错误） ──
         blocked = await check_guardrail_with_timeout(request.app.state, body.query)
         if blocked is not None:
+            if blocked.code == ErrorCode.CHAT.TIMEOUT:
+                timeout_msg = _blocked_message(blocked, t(I18nKey.CHAT_TIMEOUT))
+                recorder.set_error(timeout_msg)
+                return chat_failure(
+                    blocked.code, timeout_msg, recorder.conversation_id
+                )
             recorder.add_content(_blocked_message(blocked, ""))
             await recorder.persist()
             return chat_failure(
@@ -238,9 +244,18 @@ async def stream_chat_generator(
             yield emitter.emit("done", SseMessageFactory.done(recorder.answered_at))
             return
 
-        # ── Phase 1: 护栏检测（独立超时，超时 fail-open 放行） ──
+        # ── Phase 1: 护栏检测（独立超时，超时返回错误） ──
         blocked_resp = await check_guardrail_with_timeout(request.app.state, body.query)
         if blocked_resp is not None:
+            if blocked_resp.code == ErrorCode.CHAT.TIMEOUT:
+                timeout_msg = _blocked_message(
+                    blocked_resp, t(I18nKey.CHAT_TIMEOUT)
+                )
+                recorder.set_error(timeout_msg)
+                yield emitter.emit(
+                    "error", chat_error_event(blocked_resp.code, timeout_msg)
+                )
+                return
             msg = _blocked_message(blocked_resp, t(I18nKey.GUARDRAIL_BLOCKED))
             recorder.add_content(msg)
             await recorder.persist()

@@ -5,7 +5,7 @@
 从 rag_router 抽出的前置检查，供 /rag/answer/v1 与 /rag/stream/v1 复用：
   - check_input:                  纯本地规则，零 IO，微秒级，拦无效/攻击输入
   - check_guardrail_with_timeout: 护栏 LLM 检测 + 独立超时 + 信号量限流
-                                     （超时 fail-open 放行）
+                                     （超时返回错误响应）
 
 返回 BaseLLMFailedResponse 表示被拦截（data.error_msg 即用户可见文案），
 返回 None 表示放行。拦截响应的错误码区分来源：
@@ -69,12 +69,11 @@ async def check_guardrail_with_timeout(
     guardrail_timeout_seconds = app_state.guardrail.timeout_seconds
     guardrail_sem = app_state.guardrail.sem
     try:
-        async with asyncio.timeout(guardrail_timeout_seconds):
-            async with guardrail_sem:
-                return await _check_guardrail(app_state, query)
+        async with asyncio.timeout(guardrail_timeout_seconds), guardrail_sem:
+            return await _check_guardrail(app_state, query)
     except TimeoutError:
         logger.warning(
-            "护栏检测超时，fail-open 放行 | timeout_seconds=%g",
+            "护栏检测超时，返回超时错误 | timeout_seconds=%g",
             guardrail_timeout_seconds,
         )
-        return None
+        return chat_failure(ErrorCode.CHAT.TIMEOUT, t(I18nKey.CHAT_TIMEOUT))
