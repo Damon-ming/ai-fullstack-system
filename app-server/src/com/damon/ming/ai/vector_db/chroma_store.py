@@ -290,18 +290,54 @@ class ChromaDBStore(BaseVectorStore):
             self.logger.error(f"[ChromaDBStore] 批量元数据查询失败: {e}")
             return []
 
-    def get_all_file_shas(self) -> set[str] | None:
-        """返回 collection 中所有 file_sha256；查询失败返回 None。"""
+    def get_distinct_metadata_values(self, key: str) -> set[str] | None:
+        """返回 collection 中指定 metadata 字段的非空字符串值。"""
         try:
             results = self.collection.get(include=["metadatas"])
             return {
-                metadata["file_sha256"]
+                metadata[key]
                 for metadata in results.get("metadatas", [])
-                if metadata and metadata.get("file_sha256")
+                if metadata and isinstance(metadata.get(key), str) and metadata[key]
             }
         except Exception as e:
-            self.logger.error(f"[ChromaDBStore] 查询 file_sha256 集合失败: {e}")
+            self.logger.error(
+                f"[ChromaDBStore] 查询 metadata distinct 值失败 | key={key}: {e}"
+            )
             return None
+
+    def update_metadata_by_filter(
+        self,
+        metadata_filter: dict[str, Any],
+        updates: dict[str, Any] | None = None,
+        remove_keys: set[str] | None = None,
+    ) -> int:
+        """通用 metadata 更新，支持按 metadata 条件更新或移除字段。"""
+        try:
+            results = self.collection.get(
+                where=metadata_filter,
+                include=["metadatas"],
+            )
+            ids = results.get("ids", [])
+            metadatas = results.get("metadatas", [])
+            if not ids:
+                return 0
+
+            updated_metadatas = []
+            for metadata in metadatas:
+                updated = dict(metadata or {})
+                for key in remove_keys or set():
+                    updated.pop(key, None)
+                updated.update(updates or {})
+                updated_metadatas.append(updated)
+
+            self.collection.update(ids=ids, metadatas=updated_metadatas)
+            with self._cache_lock:
+                for node_id in ids:
+                    self._node_cache.pop(node_id, None)
+            return len(ids)
+        except Exception as e:
+            self.logger.error(f"[ChromaDBStore] 更新 metadata 失败: {e}")
+            raise RuntimeError(f"向量库 metadata 更新失败: {e}") from e
 
     def count(self, **kwargs) -> int:
         try:

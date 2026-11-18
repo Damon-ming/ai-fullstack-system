@@ -149,8 +149,18 @@ class BaseVectorStore(ABC):
         ...
 
     @abstractmethod
-    def get_all_file_shas(self) -> set[str] | None:
-        """返回存储中的 file_sha256 集合；查询失败返回 None。"""
+    def get_distinct_metadata_values(self, key: str) -> set[str] | None:
+        """返回指定 metadata 字段的非空字符串集合；查询失败返回 None。"""
+        ...
+
+    @abstractmethod
+    def update_metadata_by_filter(
+        self,
+        metadata_filter: dict[str, Any],
+        updates: dict[str, Any] | None = None,
+        remove_keys: set[str] | None = None,
+    ) -> int:
+        """更新匹配节点的 metadata，返回受影响节点数；失败抛异常。"""
         ...
 
     @abstractmethod

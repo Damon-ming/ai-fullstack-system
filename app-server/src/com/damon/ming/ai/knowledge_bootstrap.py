@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from src.com.damon.ming.ai.metadata_keys import FILE_PATH, FILE_SHA256
 from src.com.damon.ming.ai.source import list_engines, resolve_source
 from src.com.damon.ming.log import pin
 
@@ -57,9 +58,9 @@ def bootstrap_knowledge_index(
         documents.extend(source.load_documents())
 
     discovered_file_paths = {
-        str(Path(doc.metadata["file_path"]).resolve())
+        str(Path(doc.metadata[FILE_PATH]).resolve())
         for doc in documents
-        if doc.metadata.get("file_path")
+        if doc.metadata.get(FILE_PATH)
     }
     nodes = splitter.split(documents)
     failures = _sync_vector_index(nodes, embedder, vector_store)
@@ -79,7 +80,7 @@ def _sync_vector_index(
     vector_store: BaseVectorStore,
 ) -> list[IndexSyncFailure]:
     # 磁盘数据是知识库原始来源；该层只维护通用的磁盘与向量索引对账。
-    db_shas = vector_store.get_all_file_shas()
+    db_shas = vector_store.get_distinct_metadata_values(FILE_SHA256)
     if db_shas is None:
         logger.warning("向量库 file_sha256 查询失败，跳过启动对账")
         return []
@@ -88,12 +89,10 @@ def _sync_vector_index(
         return []
 
     disk_shas = {
-        node.metadata["file_sha256"]
-        for node in nodes
-        if node.metadata.get("file_sha256")
+        node.metadata[FILE_SHA256] for node in nodes if node.metadata.get(FILE_SHA256)
     }
     for file_sha256 in db_shas - disk_shas:
-        deleted = vector_store.delete_by_metadata({"file_sha256": file_sha256})
+        deleted = vector_store.delete_by_metadata({FILE_SHA256: file_sha256})
         logger.info(
             "启动对账：清理磁盘无源文件的向量索引 | sha=%s | chunks=%d",
             file_sha256[:16],
@@ -106,7 +105,7 @@ def _sync_vector_index(
 
     nodes_by_sha: dict[str, list[TextNode]] = defaultdict(list)
     for node in nodes:
-        file_sha = node.metadata.get("file_sha256")
+        file_sha = node.metadata.get(FILE_SHA256)
         if file_sha in missing_shas:
             nodes_by_sha[file_sha].append(node)
 
@@ -118,7 +117,7 @@ def _sync_vector_index(
             _write_vectors(file_nodes, embedder, vector_store)
         except Exception as exc:
             # commit 返回异常时先确认结果，避免把已提交记录误判成孤立磁盘文件。
-            current_shas = vector_store.get_all_file_shas()
+            current_shas = vector_store.get_distinct_metadata_values(FILE_SHA256)
             if current_shas is not None and file_sha in current_shas:
                 logger.warning(
                     "启动补录抛错但 SHA 已存在于 vector_db，按已提交处理 | sha=%s",
@@ -132,9 +131,9 @@ def _sync_vector_index(
                     file_paths=tuple(
                         sorted(
                             {
-                                str(Path(node.metadata["file_path"]).resolve())
+                                str(Path(node.metadata[FILE_PATH]).resolve())
                                 for node in file_nodes
-                                if node.metadata.get("file_path")
+                                if node.metadata.get(FILE_PATH)
                             }
                         )
                     ),

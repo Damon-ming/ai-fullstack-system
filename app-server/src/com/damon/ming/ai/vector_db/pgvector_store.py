@@ -357,23 +357,27 @@ class PGVectorStore(BaseVectorStore):
             )
             raise RuntimeError(f"向量库删除失败: {type(e).__name__}") from e
 
-    def update_file_path_by_sha(self, file_sha256: str, file_path: str | None) -> int:
-        """修复同 SHA 向量节点的磁盘路径元数据，并在提交后清理节点缓存。"""
+    def update_metadata_by_filter(
+        self,
+        metadata_filter: dict[str, Any],
+        updates: dict[str, Any] | None = None,
+        remove_keys: set[str] | None = None,
+    ) -> int:
+        """通用 metadata 更新，支持按 metadata 条件更新或移除字段。"""
         vector_table = table(
             self._table_name,
             column("id"),
             column("metadata", JSONB),
         )
         metadata_column = vector_table.c.metadata
-        if file_path is None:
-            metadata_expr = metadata_column.op("-")(literal("file_path"))
-        else:
-            metadata_expr = metadata_column.op("||")(
-                literal({"file_path": file_path}, type_=JSONB)
-            )
+        metadata_expr = metadata_column
+        for key in remove_keys or set():
+            metadata_expr = metadata_expr.op("-")(literal(key))
+        if updates:
+            metadata_expr = metadata_expr.op("||")(literal(updates, type_=JSONB))
         statement = (
             update(vector_table)
-            .where(metadata_column["file_sha256"].astext == file_sha256)
+            .where(metadata_column.contains(literal(metadata_filter, type_=JSONB)))
             .values(metadata=metadata_expr)
             .returning(vector_table.c.id)
         )
@@ -386,11 +390,11 @@ class PGVectorStore(BaseVectorStore):
             return len(rows)
         except Exception as e:
             self.logger.error(
-                "[PGVectorStore] 修复文件路径元数据失败: %s (%s)",
+                "[PGVectorStore] 更新 metadata 失败: %s (%s)",
                 type(e).__name__,
                 str(e)[:200],
             )
-            raise RuntimeError(f"向量库文件路径修复失败: {type(e).__name__}") from e
+            raise RuntimeError(f"向量库 metadata 更新失败: {type(e).__name__}") from e
 
     def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
         cached = self._cache_get(node_id)
@@ -452,25 +456,25 @@ class PGVectorStore(BaseVectorStore):
             )
             return []
 
-    def get_all_file_shas(self) -> set[str] | None:
-        """返回向量库中所有 file_sha256（启动对账用）。
+    def get_distinct_metadata_values(self, key: str) -> set[str] | None:
+        """返回指定 metadata 字段的所有非空字符串值。
 
         单条聚合查询，走 metadata 上的 GIN 索引。
-        刻意不复用 get_by_metadata：后者异常时返回 []，对账场景会把
-        "查询失败"误判成"文件不存在"，导致每次启动全量重算。
-        查询失败返回 None，由调用方跳过对账（退化为不对账，不会误补）。
+        刻意不复用 get_by_metadata：后者异常时返回 []，调用方可能把
+        "查询失败"误判成"字段没有值"。查询失败返回 None。
         """
         table = self._table_name
         try:
             sql = text(
-                f"SELECT DISTINCT metadata->>'file_sha256' FROM {table} "  # nosec B608 — table 经 _sanitize_identifier 校验
-                "WHERE metadata ? 'file_sha256'"
+                f"SELECT DISTINCT metadata->>:metadata_key FROM {table} "  # nosec B608 — table 经 _sanitize_identifier 校验
+                "WHERE metadata ? :metadata_key"
             )
             with self._engine.connect() as conn:
-                rows = conn.execute(sql).fetchall()
+                rows = conn.execute(sql, {"metadata_key": key}).fetchall()
         except Exception as e:
             self.logger.error(
-                "[PGVectorStore] 查询 file_sha256 集合失败: %s (%s)",
+                "[PGVectorStore] 查询 metadata distinct 值失败 | key=%s: %s (%s)",
+                key,
                 type(e).__name__,
                 str(e)[:200],
             )

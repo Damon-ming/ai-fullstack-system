@@ -5,28 +5,33 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from src.com.damon.ming.ai.source import list_engines, resolve_source
+from llama_index.core.schema import Document, TextNode
+from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
+    BaseEmbeddingService,
+)
 from src.com.damon.ming.ai.knowledge_bootstrap import (
     IndexSyncFailure,
     KnowledgeBootstrapResult,
 )
-from src.com.damon.ming.app.thread_pools import run_in_pool, submit_to_pool
+from src.com.damon.ming.ai.metadata_keys import (
+    FILE_NAME,
+    FILE_PATH,
+    FILE_SHA256,
+    FILE_UID,
+)
+from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
+from src.com.damon.ming.ai.source import list_engines, resolve_source
+from src.com.damon.ming.ai.spliter.spliter import BaseDocumentSplitter
+from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.app.thread_pools import (
+    RagThreadPools,
+    run_in_pool,
+    submit_to_pool,
+)
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.thread import CancellationToken
 from src.com.damon.ming.utils.time import now_iso
-
-if TYPE_CHECKING:
-    from llama_index.core.schema import Document, TextNode
-    from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
-        BaseEmbeddingService,
-    )
-    from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
-    from src.com.damon.ming.ai.spliter.spliter import BaseDocumentSplitter
-    from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
-    from src.com.damon.ming.app.thread_pools import RagThreadPools
-    from src.com.damon.ming.thread import CancellationToken
-
 
 logger = pin("ai.knowledge_index")
 
@@ -43,7 +48,7 @@ class KnowledgeIndexService:
         thread_pools: RagThreadPools,
         splitter: BaseDocumentSplitter,
         embedder: BaseEmbeddingService,
-        vector_store: PGVectorStore,
+        vector_store: BaseVectorStore,
         bm25_index: BM25Index,
         bootstrap_result: KnowledgeBootstrapResult,
     ) -> None:
@@ -65,15 +70,15 @@ class KnowledgeIndexService:
 
     def get_indexed_file_shas(self) -> set[str] | None:
         """读取已入库文件 SHA；查询失败时返回 None。"""
-        return self._vector_store.get_all_file_shas()
+        return self._vector_store.get_distinct_metadata_values(FILE_SHA256)
 
     def get_indexed_file_paths_by_sha(self, file_sha256: str) -> list[str]:
         """读取指定 SHA 在向量元数据中记录的来源路径。"""
-        nodes = self._vector_store.get_by_metadata({"file_sha256": file_sha256})
+        nodes = self._vector_store.get_by_metadata({FILE_SHA256: file_sha256})
         return [
-            str(node.metadata["file_path"])
+            str(node.metadata[FILE_PATH])
             for node in nodes
-            if node.metadata.get("file_path")
+            if node.metadata.get(FILE_PATH)
         ]
 
     async def ingest_files(
@@ -98,14 +103,14 @@ class KnowledgeIndexService:
                 logger.error("无法解析文件: %s", path.name)
                 skipped.append(
                     {
-                        "file_sha256": None,
-                        "file_path": str(path),
+                        FILE_SHA256: None,
+                        FILE_PATH: str(path),
                         "reason": "parse_failed",
                     }
                 )
                 continue
 
-            file_sha256 = docs[0].metadata.get("file_sha256", "")
+            file_sha256 = docs[0].metadata.get(FILE_SHA256, "")
             try:
                 nodes = await run_in_pool(
                     self._document_pool, self._splitter.split, docs
@@ -166,14 +171,18 @@ class KnowledgeIndexService:
 
     def update_file_path_by_sha(self, file_sha256: str, file_path: str | None) -> int:
         """修复向量库和内存 BM25 节点中的同 SHA 文件路径。"""
-        updated = self._vector_store.update_file_path_by_sha(file_sha256, file_path)
+        updated = self._vector_store.update_metadata_by_filter(
+            {FILE_SHA256: file_sha256},
+            updates={FILE_PATH: file_path} if file_path is not None else None,
+            remove_keys={FILE_PATH} if file_path is None else None,
+        )
         for node in self._nodes:
-            if node.metadata.get("file_sha256") != file_sha256:
+            if node.metadata.get(FILE_SHA256) != file_sha256:
                 continue
             if file_path is None:
-                node.metadata.pop("file_path", None)
+                node.metadata.pop(FILE_PATH, None)
             else:
-                node.metadata["file_path"] = file_path
+                node.metadata[FILE_PATH] = file_path
         if updated:
             snapshot = list(self._nodes)
             try:
@@ -184,12 +193,10 @@ class KnowledgeIndexService:
 
     def delete_by_uid(self, file_uid: str) -> int:
         """删除本次上传的向量节点，并同步内存 BM25 语料。"""
-        deleted = self._vector_store.delete_by_metadata({"file_uid": file_uid})
+        deleted = self._vector_store.delete_by_metadata({FILE_UID: file_uid})
         if deleted:
             self._nodes = [
-                node
-                for node in self._nodes
-                if node.metadata.get("file_uid") != file_uid
+                node for node in self._nodes if node.metadata.get(FILE_UID) != file_uid
             ]
             try:
                 submit_to_pool(
@@ -208,8 +215,8 @@ class KnowledgeIndexService:
         self._nodes = [
             node
             for node in self._nodes
-            if not node.metadata.get("file_path")
-            or str(Path(node.metadata["file_path"]).resolve()) not in normalized_paths
+            if not node.metadata.get(FILE_PATH)
+            or str(Path(node.metadata[FILE_PATH]).resolve()) not in normalized_paths
         ]
         removed_count = previous_count - len(self._nodes)
         if removed_count:
@@ -228,7 +235,7 @@ class KnowledgeIndexService:
                 logger.warning("索引文件 | %s 加载阶段被取消", source_name)
                 raise
             for doc in docs:
-                docs_by_path.setdefault(doc.metadata["file_path"], []).append(doc)
+                docs_by_path.setdefault(doc.metadata[FILE_PATH], []).append(doc)
         return docs_by_path
 
     def _write_files(
@@ -245,29 +252,29 @@ class KnowledgeIndexService:
 
         for nodes, file_sha256 in parsed:
             existing_nodes = self._vector_store.get_by_metadata(
-                {"file_sha256": file_sha256}
+                {FILE_SHA256: file_sha256}
             )
             if existing_nodes:
                 stored_path = next(
                     (
-                        str(node.metadata["file_path"])
+                        str(node.metadata[FILE_PATH])
                         for node in existing_nodes
-                        if node.metadata.get("file_path")
+                        if node.metadata.get(FILE_PATH)
                     ),
                     None,
                 )
                 existing_path = next(
                     (
-                        Path(node.metadata["file_path"])
+                        Path(node.metadata[FILE_PATH])
                         for node in existing_nodes
-                        if node.metadata.get("file_path")
-                        and Path(node.metadata["file_path"]).is_file()
+                        if node.metadata.get(FILE_PATH)
+                        and Path(node.metadata[FILE_PATH]).is_file()
                     ),
                     None,
                 )
                 skipped.append(
                     {
-                        "file_sha256": file_sha256,
+                        FILE_SHA256: file_sha256,
                         "reason": "already_indexed",
                         "existing_file_path": str(existing_path)
                         if existing_path
@@ -280,9 +287,9 @@ class KnowledgeIndexService:
             indexed_at = now_iso()
             for node in nodes:
                 if file_uid:
-                    node.metadata["file_uid"] = file_uid
+                    node.metadata[FILE_UID] = file_uid
                 if file_name:
-                    node.metadata["file_name"] = file_name
+                    node.metadata[FILE_NAME] = file_name
                 node.metadata["disk_file_at"] = disk_file_at
                 node.metadata["indexed_at"] = indexed_at
 
@@ -297,7 +304,7 @@ class KnowledgeIndexService:
                 failed_count += 1
                 continue
 
-            indexed.append({"file_sha256": file_sha256, "chunks": len(nodes)})
+            indexed.append({FILE_SHA256: file_sha256, "chunks": len(nodes)})
             new_nodes.extend(nodes)
 
         return indexed, new_nodes, failed_count
