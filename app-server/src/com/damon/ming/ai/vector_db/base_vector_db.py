@@ -149,6 +149,11 @@ class BaseVectorStore(ABC):
         ...
 
     @abstractmethod
+    def get_all_file_shas(self) -> set[str] | None:
+        """返回存储中的 file_sha256 集合；查询失败返回 None。"""
+        ...
+
+    @abstractmethod
     def count(self, **kwargs) -> int:
         """获取文档总数，失败返回 0"""
         ...

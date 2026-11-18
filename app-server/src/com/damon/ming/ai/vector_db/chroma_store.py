@@ -290,6 +290,19 @@ class ChromaDBStore(BaseVectorStore):
             self.logger.error(f"[ChromaDBStore] 批量元数据查询失败: {e}")
             return []
 
+    def get_all_file_shas(self) -> set[str] | None:
+        """返回 collection 中所有 file_sha256；查询失败返回 None。"""
+        try:
+            results = self.collection.get(include=["metadatas"])
+            return {
+                metadata["file_sha256"]
+                for metadata in results.get("metadatas", [])
+                if metadata and metadata.get("file_sha256")
+            }
+        except Exception as e:
+            self.logger.error(f"[ChromaDBStore] 查询 file_sha256 集合失败: {e}")
+            return None
+
     def count(self, **kwargs) -> int:
         try:
             return self.collection.count()

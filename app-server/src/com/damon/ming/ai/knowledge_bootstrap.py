@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     )
     from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
     from src.com.damon.ming.ai.spliter.spliter import BaseDocumentSplitter
-    from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
+    from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 
 
 logger = pin("ai.knowledge_bootstrap")
@@ -47,7 +47,7 @@ def bootstrap_knowledge_index(
     splitter: BaseDocumentSplitter,
     bm25_index: BM25Index,
     embedder: BaseEmbeddingService,
-    vector_store: PGVectorStore,
+    vector_store: BaseVectorStore,
 ) -> KnowledgeBootstrapResult:
     """扫描数据源，重建 BM25 并对账 vector_db。"""
     documents: list[Document] = []
@@ -75,7 +75,7 @@ def bootstrap_knowledge_index(
 def _sync_vector_index(
     nodes: list[TextNode],
     embedder: BaseEmbeddingService,
-    vector_store: PGVectorStore,
+    vector_store: BaseVectorStore,
 ) -> list[IndexSyncFailure]:
     # 磁盘数据是知识库原始来源；该层只维护通用的磁盘与向量索引对账。
     db_shas = vector_store.get_all_file_shas()
@@ -150,7 +150,7 @@ def _sync_vector_index(
 def _write_vectors(
     nodes: list[TextNode],
     embedder: BaseEmbeddingService,
-    vector_store: PGVectorStore,
+    vector_store: BaseVectorStore,
 ) -> None:
     if not nodes:
         return
