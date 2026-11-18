@@ -7,7 +7,7 @@ class FileUploadItem(BaseModel):
     """成功入库文件"""
 
     filename: str = Field(..., description="原始文件名")
-    file_uid: str = Field(..., description="服务端文件唯一 ID（后续删除/引用用）")
+    file_id: str = Field(..., description="服务端文件唯一 ID（后续删除/引用用）")
 
 
 class FileUploadDuplicateItem(BaseModel):

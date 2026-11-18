@@ -50,20 +50,20 @@ class UploadService:
         audit_rows = []
         for file in file_list:
             file_name = Path(file.filename or "unnamed").name
-            file_uid = generate_uuid_hex()
+            file_id = generate_uuid_hex()
             file_size = getattr(file, "size", None)
             contexts.append(
                 {
                     "file": file,
                     "filename": file_name,
-                    "file_uid": file_uid,
+                    "file_id": file_id,
                     "file_size": file_size,
                     "suffix": Path(file_name).suffix.lower(),
                 }
             )
             audit_rows.append(
                 {
-                    "file_uid": file_uid,
+                    "file_id": file_id,
                     "file_name": file_name,
                     "file_size": str(file_size or 0),
                     "user_id": user_id,
@@ -100,7 +100,7 @@ class UploadService:
         for ctx in contexts:
             file = ctx["file"]
             file_name = ctx["filename"]
-            file_uid = ctx["file_uid"]
+            file_id = ctx["file_id"]
             file_size = ctx["file_size"]
             suffix = ctx["suffix"]
             file_sha256 = ""
@@ -118,7 +118,7 @@ class UploadService:
                         allowed=", ".join(allowed_exts),
                     )
                     await _finish_audit(
-                        file_uid, "rejected", "type_validation", message
+                        file_id, "rejected", "type_validation", message
                     )
                     failed_files.append(
                         {
@@ -137,7 +137,7 @@ class UploadService:
                         max_mb=str(max_size // MIB),
                     )
                     await _finish_audit(
-                        file_uid, "rejected", "size_validation", message
+                        file_id, "rejected", "size_validation", message
                     )
                     failed_files.append(
                         {
@@ -162,7 +162,7 @@ class UploadService:
                 except ValueError:
                     message = t(I18nKey.UPLOAD_CONTENT_INVALID)
                     await _finish_audit(
-                        file_uid, "rejected", "content_validation", message
+                        file_id, "rejected", "content_validation", message
                     )
                     failed_files.append(
                         {
@@ -176,13 +176,13 @@ class UploadService:
 
                 file_sha256 = sha256_hex(content)
                 file_path = UploadFileStorage.build_file_path(
-                    file_uid,
+                    file_id,
                     file_name,
                     suffix,
                 )
                 resolved_path = str(file_path.resolve())
                 await _update_audit(
-                    file_uid,
+                    file_id,
                     file_sha256=file_sha256,
                     file_path=resolved_path,
                 )
@@ -202,7 +202,7 @@ class UploadService:
                 index_result = await knowledge_index.ingest_files(
                     [resolved_path],
                     cancellation_token=cancellation_token,
-                    file_uid=file_uid,
+                    file_id=file_id,
                     disk_file_at=now_iso(),
                     file_name=file_name,
                 )
@@ -216,12 +216,12 @@ class UploadService:
                 if file_sha256 in indexed_shas:
                     vector_written = True
                     await _finish_audit(
-                        file_uid,
+                        file_id,
                         "indexed",
                         file_sha256=file_sha256,
                         file_path=resolved_path,
                     )
-                    success_files.append({"filename": file_name, "file_uid": file_uid})
+                    success_files.append({"filename": file_name, "file_id": file_id})
                     continue
 
                 if skipped_items:
@@ -249,7 +249,7 @@ class UploadService:
                         audit_path = resolved_path
 
                     await _finish_audit(
-                        file_uid,
+                        file_id,
                         "duplicate",
                         file_sha256=file_sha256,
                         file_path=audit_path,
@@ -268,18 +268,18 @@ class UploadService:
                 else:
                     rollback_ok = _rollback_file(
                         file_path,
-                        file_uid,
+                        file_id,
                         knowledge_index if ingest_started else None,
                         delete_vectors=ingest_started,
                     )
                 if rollback_ok:
                     await _finish_audit_after_cancel(
-                        file_uid, "cancelled", "request_cancelled"
+                        file_id, "cancelled", "request_cancelled"
                     )
                 else:
                     logger.error(
-                        "取消上传补偿未完成，保留 processing 审计状态 | uid=%s",
-                        file_uid[:16],
+                        "取消上传补偿未完成，保留 processing 审计状态 | id=%s",
+                        file_id[:16],
                     )
                 raise
 
@@ -293,14 +293,14 @@ class UploadService:
                     should_delete_vectors = vector_written
                     rollback_ok = _rollback_file(
                         file_path,
-                        file_uid,
+                        file_id,
                         knowledge_index if should_delete_vectors else None,
                         delete_vectors=should_delete_vectors,
                     )
                     if not rollback_ok:
                         logger.error(
-                            "上传补偿未完全完成 | file_uid=%s | filename=%s",
-                            file_uid[:16],
+                            "上传补偿未完全完成 | file_id=%s | filename=%s",
+                            file_id[:16],
                             file_name,
                         )
 
@@ -313,7 +313,7 @@ class UploadService:
                 if rollback_ok and not audit_write_failed:
                     try:
                         await _finish_audit(
-                            file_uid,
+                            file_id,
                             "failed",
                             "upload",
                             str(exc),
@@ -321,13 +321,13 @@ class UploadService:
                     except Exception:
                         # 保留 processing，表示终态审计未能落库，便于结合日志排查。
                         logger.exception(
-                            "上传回滚完成但终态审计写入失败，保留 processing 状态 | uid=%s",
-                            file_uid[:16],
+                            "上传回滚完成但终态审计写入失败，保留 processing 状态 | id=%s",
+                            file_id[:16],
                         )
                 elif not rollback_ok:
                     logger.error(
-                        "回滚未完成，保留 processing 审计状态 | uid=%s",
-                        file_uid[:16],
+                        "回滚未完成，保留 processing 审计状态 | id=%s",
+                        file_id[:16],
                     )
                 failed_files.append(
                     {
@@ -356,17 +356,17 @@ class AuditUpdateFailure(RuntimeError):
     """审计状态写入失败，上传数据需要补偿回滚。"""
 
 
-async def _update_audit(file_uid: str, **kwargs) -> None:
+async def _update_audit(file_id: str, **kwargs) -> None:
     try:
         await run_in_pool(
-            get_database_query_pool(), update_upload_record, file_uid, **kwargs
+            get_database_query_pool(), update_upload_record, file_id, **kwargs
         )
     except Exception as exc:
         raise AuditUpdateFailure("写入上传审计状态失败") from exc
 
 
 async def _finish_audit(
-    file_uid: str,
+    file_id: str,
     status: str,
     error_stage: str | None = None,
     error_msg: str | None = None,
@@ -378,7 +378,7 @@ async def _finish_audit(
         await run_in_pool(
             get_database_query_pool(),
             update_upload_record,
-            file_uid,
+            file_id,
             status=status,
             file_sha256=file_sha256,
             file_path=file_path,
@@ -394,16 +394,16 @@ async def _finish_many(
     contexts: list[dict], status: str, error_stage: str, error_msg: str
 ) -> None:
     for ctx in contexts:
-        await _finish_audit(ctx["file_uid"], status, error_stage, error_msg)
+        await _finish_audit(ctx["file_id"], status, error_stage, error_msg)
 
 
 async def _finish_audit_after_cancel(
-    file_uid: str, error_msg: str, error_stage: str
+    file_id: str, error_msg: str, error_stage: str
 ) -> None:
     try:
-        await asyncio.shield(_finish_audit(file_uid, "failed", error_stage, error_msg))
+        await asyncio.shield(_finish_audit(file_id, "failed", error_stage, error_msg))
     except Exception:
-        logger.exception("取消上传后更新审计状态失败 | file_uid=%s", file_uid[:16])
+        logger.exception("取消上传后更新审计状态失败 | file_id=%s", file_id[:16])
 
 
 async def _restore_duplicate_path(
@@ -431,7 +431,7 @@ async def _restore_duplicate_path(
 
 def _rollback_file(
     file_path: Path | None,
-    file_uid: str,
+    file_id: str,
     knowledge_index: KnowledgeIndexService | None,
     *,
     delete_vectors: bool,
@@ -439,12 +439,12 @@ def _rollback_file(
     """回滚本次上传；仅在结果可能已提交时删除向量记录。"""
     if delete_vectors and knowledge_index:
         try:
-            deleted = knowledge_index.delete_by_uid(file_uid)
+            deleted = knowledge_index.delete_by_id(file_id)
             logger.info(
-                "补偿删除向量记录 | uid=%s | deleted=%d", file_uid[:16], deleted
+                "补偿删除向量记录 | id=%s | deleted=%d", file_id[:16], deleted
             )
         except Exception:
-            logger.exception("补偿删除向量记录失败，保留源文件 | uid=%s", file_uid[:16])
+            logger.exception("补偿删除向量记录失败，保留源文件 | id=%s", file_id[:16])
             return False
 
     if file_path is None or UploadFileStorage.remove_file(file_path):

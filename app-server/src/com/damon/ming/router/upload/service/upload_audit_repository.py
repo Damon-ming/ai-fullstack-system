@@ -39,7 +39,7 @@ def create_upload_records(records: list[dict]) -> None:
         get_default_db().execute(
             pg_insert(upload_records)
             .values(records)
-            .on_conflict_do_nothing(index_elements=[upload_records.c.file_uid]),
+            .on_conflict_do_nothing(index_elements=[upload_records.c.file_id]),
             commit=True,
         )
     except Exception as exc:
@@ -48,7 +48,7 @@ def create_upload_records(records: list[dict]) -> None:
 
 
 def update_upload_record(
-    file_uid: str,
+    file_id: str,
     *,
     status: str | None = None,
     file_sha256: str | None = None,
@@ -77,16 +77,16 @@ def update_upload_record(
     try:
         result = get_default_db().execute(
             update(upload_records)
-            .where(upload_records.c.file_uid == file_uid)
+            .where(upload_records.c.file_id == file_id)
             .values(**values),
             commit=True,
         )
         if result == 0:
-            raise RuntimeError(f"上传审计记录不存在 | file_uid={file_uid}")
+            raise RuntimeError(f"上传审计记录不存在 | file_id={file_id}")
     except Exception as exc:
         logger.error(
-            "更新上传审计记录失败 | file_uid=%s | status=%s | error=%s",
-            file_uid[:16],
+            "更新上传审计记录失败 | file_id=%s | status=%s | error=%s",
+            file_id[:16],
             status,
             exc,
         )
@@ -99,13 +99,13 @@ def get_processing_upload_records() -> list[dict] | None:
         with get_default_db().engine.connect() as conn:
             rows = conn.execute(
                 select(
-                    upload_records.c.file_uid,
+                    upload_records.c.file_id,
                     upload_records.c.file_sha256,
                     upload_records.c.file_path,
                 ).where(upload_records.c.status == "processing")
             ).fetchall()
         return [
-            {"file_uid": row[0], "file_sha256": row[1], "file_path": row[2]}
+            {"file_id": row[0], "file_sha256": row[1], "file_path": row[2]}
             for row in rows
         ]
     except Exception as exc:

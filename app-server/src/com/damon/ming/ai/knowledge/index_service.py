@@ -14,16 +14,17 @@ from src.com.damon.ming.ai.knowledge.bootstrap import (
     IndexSyncFailure,
     KnowledgeBootstrapResult,
 )
-from src.com.damon.ming.ai.knowledge.metadata_keys import (
-    FILE_NAME,
-    FILE_PATH,
-    FILE_SHA256,
-    FILE_UID,
-)
 from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.source import list_engines, resolve_source
 from src.com.damon.ming.ai.spliter.spliter import BaseDocumentSplitter
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.ai.vector_db.metadata_keys import (
+    FILE_ID,
+    FILE_NAME,
+    FILE_PATH,
+    FILE_SHA256,
+    LEGACY_FILE_ID,
+)
 from src.com.damon.ming.app.thread_pools import (
     RagThreadPools,
     run_in_pool,
@@ -85,7 +86,7 @@ class KnowledgeIndexService:
         self,
         file_paths: list[str],
         cancellation_token: CancellationToken | None = None,
-        file_uid: str = "",
+        file_id: str = "",
         disk_file_at: str = "",
         file_name: str = "",
     ) -> dict:
@@ -136,7 +137,7 @@ class KnowledgeIndexService:
                 self._write_files,
                 parsed,
                 skipped,
-                file_uid,
+                file_id,
                 disk_file_at,
                 file_name,
             )
@@ -148,7 +149,7 @@ class KnowledgeIndexService:
             try:
                 await write_task
             except Exception:
-                logger.exception("取消期间向量入库任务失败 | file_uid=%s", file_uid)
+                logger.exception("取消期间向量入库任务失败 | file_id=%s", file_id)
             raise
         self._nodes.extend(new_nodes)
         if failed_count:
@@ -191,12 +192,16 @@ class KnowledgeIndexService:
                 logger.exception("路径修复后的 BM25 重建提交失败")
         return updated
 
-    def delete_by_uid(self, file_uid: str) -> int:
+    def delete_by_id(self, file_id: str) -> int:
         """删除本次上传的向量节点，并同步内存 BM25 语料。"""
-        deleted = self._vector_store.delete_by_metadata({FILE_UID: file_uid})
+        deleted = self._vector_store.delete_by_metadata({FILE_ID: file_id})
+        deleted += self._vector_store.delete_by_metadata({LEGACY_FILE_ID: file_id})
         if deleted:
             self._nodes = [
-                node for node in self._nodes if node.metadata.get(FILE_UID) != file_uid
+                node
+                for node in self._nodes
+                if node.metadata.get(FILE_ID, node.metadata.get(LEGACY_FILE_ID))
+                != file_id
             ]
             try:
                 submit_to_pool(
@@ -205,7 +210,7 @@ class KnowledgeIndexService:
                     list(self._nodes),
                 )
             except Exception:
-                logger.exception("回滚后提交 BM25 重建失败 | file_uid=%s", file_uid)
+                logger.exception("回滚后提交 BM25 重建失败 | file_id=%s", file_id)
         return deleted
 
     def remove_source_paths(self, file_paths: set[str]) -> int:
@@ -242,7 +247,7 @@ class KnowledgeIndexService:
         self,
         parsed: list[tuple[list[TextNode], str]],
         skipped: list[dict],
-        file_uid: str,
+        file_id: str,
         disk_file_at: str,
         file_name: str,
     ) -> tuple[list[dict], list[TextNode], int]:
@@ -286,8 +291,8 @@ class KnowledgeIndexService:
 
             indexed_at = now_iso()
             for node in nodes:
-                if file_uid:
-                    node.metadata[FILE_UID] = file_uid
+                if file_id:
+                    node.metadata[FILE_ID] = file_id
                 if file_name:
                     node.metadata[FILE_NAME] = file_name
                 node.metadata["disk_file_at"] = disk_file_at

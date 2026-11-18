@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from src.com.damon.ming.ai.knowledge.metadata_keys import FILE_PATH, FILE_SHA256
 from src.com.damon.ming.ai.source import list_engines, resolve_source
+from src.com.damon.ming.ai.vector_db.metadata_keys import FILE_PATH, FILE_SHA256
 from src.com.damon.ming.log import pin
 
 if TYPE_CHECKING:

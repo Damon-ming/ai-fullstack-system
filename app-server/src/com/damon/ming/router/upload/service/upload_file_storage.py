@@ -37,12 +37,12 @@ class UploadFileStorage:
             logger.info("启动清理残留临时文件 | count=%d", tmp_cleaned)
 
     @classmethod
-    def build_file_path(cls, file_uid: str, file_name: str, suffix: str) -> Path:
+    def build_file_path(cls, file_id: str, file_name: str, suffix: str) -> Path:
         safe_name = file_name.replace("/", "_").replace("\\", "_").replace("\0", "")
         sub_folder = suffix.lstrip(".") if suffix else "no_ext"
         target_dir = cls.upload_dir / sub_folder
         target_dir.mkdir(parents=True, exist_ok=True)
-        return target_dir / f"{file_uid}_{safe_name}"
+        return target_dir / f"{file_id}_{safe_name}"
 
     @staticmethod
     async def store_content(file_path: Path, content: bytes, executor) -> None:

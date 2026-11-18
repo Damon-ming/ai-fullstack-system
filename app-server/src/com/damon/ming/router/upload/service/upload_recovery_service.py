@@ -36,7 +36,7 @@ class UploadRecoveryService:
             return
 
         removed_paths: set[str] = set()
-        resolved_uids: set[str] = set()
+        resolved_ids: set[str] = set()
         for failure in knowledge_index.startup_index_failures:
             file_sha = failure.file_sha256
             current_shas = knowledge_index.get_indexed_file_shas()
@@ -52,13 +52,13 @@ class UploadRecoveryService:
                 # 写入异常可能发生在 commit 返回之后；以数据库查询结果为准。
                 for record in matching:
                     update_upload_record(
-                        record["file_uid"],
+                        record["file_id"],
                         status="indexed",
                         file_sha256=file_sha,
                         file_path=record["file_path"],
                         finished=True,
                     )
-                    resolved_uids.add(record["file_uid"])
+                    resolved_ids.add(record["file_id"])
                 continue
 
             if not matching:
@@ -84,16 +84,16 @@ class UploadRecoveryService:
                     raise RuntimeError(f"启动恢复时无法清理孤立文件: {file_path}")
                 removed_paths.add(str(file_path.resolve()))
                 update_upload_record(
-                    record["file_uid"],
+                    record["file_id"],
                     status="failed",
                     error_stage="startup_recovery",
                     error_msg=f"启动增量入库失败，已清理磁盘文件: {failure.error}",
                     finished=True,
                 )
-                resolved_uids.add(record["file_uid"])
+                resolved_ids.add(record["file_id"])
                 logger.error(
-                    "启动补录失败，清理未完成上传文件 | uid=%s | path=%s | error=%s",
-                    record["file_uid"][:16],
+                    "启动补录失败，清理未完成上传文件 | id=%s | path=%s | error=%s",
+                    record["file_id"][:16],
                     file_path,
                     failure.error,
                 )
@@ -103,7 +103,7 @@ class UploadRecoveryService:
         if current_shas is None:
             raise RuntimeError("无法确认 vector_db 状态，保留未完成上传")
         for record in pending_records:
-            if record["file_uid"] in resolved_uids:
+            if record["file_id"] in resolved_ids:
                 continue
             file_sha = record["file_sha256"]
             raw_path = record["file_path"]
@@ -139,13 +139,13 @@ class UploadRecoveryService:
                 audit_path = str(current_file_path)
 
             update_upload_record(
-                record["file_uid"],
+                record["file_id"],
                 status=status,
                 file_sha256=file_sha,
                 file_path=audit_path,
                 finished=True,
             )
-            resolved_uids.add(record["file_uid"])
+            resolved_ids.add(record["file_id"])
 
         # 已落盘但未能被任何数据源解析的 processing 文件也无法补录。
         current_shas = knowledge_index.get_indexed_file_shas()
@@ -153,7 +153,7 @@ class UploadRecoveryService:
             raise RuntimeError("无法确认 vector_db 状态，保留未解析上传文件")
         discovered_paths = knowledge_index.startup_discovered_file_paths
         for record in pending_records:
-            if record["file_uid"] in resolved_uids:
+            if record["file_id"] in resolved_ids:
                 continue
             file_sha = record["file_sha256"]
             raw_path = record["file_path"]
@@ -169,15 +169,15 @@ class UploadRecoveryService:
                 raise RuntimeError(f"启动恢复时无法清理未解析文件: {file_path}")
             removed_paths.add(resolved_path)
             update_upload_record(
-                record["file_uid"],
+                record["file_id"],
                 status="failed",
                 error_stage="startup_recovery",
                 error_msg="启动扫描未能解析该文件，已清理磁盘文件",
                 finished=True,
             )
             logger.error(
-                "启动恢复：上传文件未被知识源解析，已清理 | uid=%s | path=%s",
-                record["file_uid"][:16],
+                "启动恢复：上传文件未被知识源解析，已清理 | id=%s | path=%s",
+                record["file_id"][:16],
                 file_path,
             )
 
