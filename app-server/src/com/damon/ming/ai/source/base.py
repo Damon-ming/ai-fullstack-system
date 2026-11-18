@@ -11,7 +11,11 @@ from llama_index.core import Document
 
 
 class BaseDataSource(ABC):
-    """数据源抽象：仅负责加载原始文档"""
+    """数据源抽象：统一数据目录，并负责加载原始文档。"""
+
+    def __init__(self, folder_path: str) -> None:
+        """初始化数据源目录，所有实现类共享此构造约定。"""
+        self.folder_path = folder_path
 
     @abstractmethod
     def load_documents(self) -> list[Document]:

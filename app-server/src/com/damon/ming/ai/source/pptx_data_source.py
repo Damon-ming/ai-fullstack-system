@@ -51,7 +51,7 @@ class LocalPptxDataSource(BaseDataSource):
         extract_images: bool | None = None,
         vlm_model: str | None = None,
     ):
-        self.folder_path = folder_path
+        super().__init__(folder_path)
         self.logger = pin("LocalPptxDataSource")
         self._ensure_dir_exists()
         self._images_dir = os.path.join(folder_path, "images")

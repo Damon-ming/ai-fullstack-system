@@ -46,7 +46,7 @@ class LocalTextDataSource(BaseDataSource):
         encoding_fallbacks: tuple[str, ...] | None = None,
         pre_chunk_config=None,
     ):
-        self.folder_path = folder_path
+        super().__init__(folder_path)
         self.logger = pin("LocalTextDataSource")
         self._ensure_dir_exists()
 

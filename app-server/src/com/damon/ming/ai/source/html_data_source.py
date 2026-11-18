@@ -85,7 +85,7 @@ class LocalHtmlDataSource(BaseDataSource):
         include_links: bool | None = None,
         include_tables: bool | None = None,
     ):
-        self.folder_path = folder_path
+        super().__init__(folder_path)
         self.logger = pin("LocalHtmlDataSource")
         self._ensure_dir_exists()
 

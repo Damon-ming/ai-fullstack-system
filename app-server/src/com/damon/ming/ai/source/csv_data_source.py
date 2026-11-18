@@ -39,7 +39,7 @@ class LocalCsvDataSource(BaseDataSource):
         batch_rows: int | None = None,
         encoding_fallbacks: tuple[str, ...] | None = None,
     ):
-        self.folder_path = folder_path
+        super().__init__(folder_path)
         self.logger = pin("LocalCsvDataSource")
         self._ensure_dir_exists()
 

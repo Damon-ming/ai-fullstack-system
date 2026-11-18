@@ -35,7 +35,7 @@ class LocalXlsxDataSource(BaseDataSource):
         folder_path: str,
         batch_rows: int | None = None,
     ):
-        self.folder_path = folder_path
+        super().__init__(folder_path)
         self.logger = pin("LocalXlsxDataSource")
         self._ensure_dir_exists()
 

@@ -54,7 +54,7 @@ class LocalDocDataSource(BaseDataSource):
         enable_image_extract: bool = False,
         vlm_model: str | None = None,
     ):
-        self.folder_path = folder_path
+        super().__init__(folder_path)
         self.logger = pin("LocalDocDataSource")
         self._ensure_dir_exists()
         self._images_dir = os.path.join(folder_path, "images")

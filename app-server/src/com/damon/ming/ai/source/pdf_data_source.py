@@ -35,7 +35,7 @@ class LocalPDFDataSource(BaseDataSource):
         enable_image_extract: bool = False,
         vlm_model: str | None = None,
     ):
-        self.folder_path = folder_path
+        super().__init__(folder_path)
         self.enable_image_extract = enable_image_extract
         self.vlm_model = vlm_model
         self.logger = pin("LocalPDFDataSource")
