@@ -73,10 +73,9 @@ async def generate_answer(
     async with asyncio.timeout(app_state.rag_runtime.execution_timeout_seconds):
         prompt_messages = await _build_prompt_messages(app_state, query)
         async with app_state.rag_runtime.inference_sem:
-            async for token in app_state.rag_runtime.infer_service.stream_generate(
-                model_name=app_state.rag_runtime.infer_model_name,
+            async for token in app_state.rag_runtime.inference_gateway.stream(
+                role="inference",
                 messages=prompt_messages,
                 reason=reason,
-                options=dict(app_state.rag_runtime.infer_options),
             ):
                 yield token

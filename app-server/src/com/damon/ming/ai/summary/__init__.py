@@ -1,6 +1,5 @@
-# app-server/src/com/damon/ming/ai/summary/__init__.py
+"""RAG 文本摘要能力。"""
+
 from src.com.damon.ming.ai.summary.summary_service import SummaryService
 
-__all__ = [
-    "SummaryService",
-]
+__all__ = ["SummaryService"]

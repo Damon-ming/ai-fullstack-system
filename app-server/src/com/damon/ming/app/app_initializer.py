@@ -48,10 +48,8 @@ class AppInitializer:
         self.limiter = None
         self.pool_mgr = None
         self.rag_app = None
-        self.infer_service = None
+        self.inference_gateway = None
         self.guardrail = None
-        self.inference_model_name: str = ""
-        self.inference_options: dict = {}
 
         # 上传改为逐文件同步入库，无需后台任务
 
@@ -118,9 +116,7 @@ class AppInitializer:
             retry_ms=self.chat_retry_ms,
             locales=self.rag_locales,
             rag_app=self.rag_app,
-            infer_service=self.infer_service,
-            infer_model_name=self.inference_model_name,
-            infer_options=self.inference_options,
+            inference_gateway=self.inference_gateway,
         )
 
         app.state.storage = Storage(db_conn=self.db_conn)
@@ -428,32 +424,26 @@ class AppInitializer:
 
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""
+        # inference_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
+        # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
+        # loader 同为注入，保证全进程只有一套推理引擎
+        from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag_tool import get_rag_container
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
         )
 
-        # inference_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
-        # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
-        # loader 同为注入，保证全进程只有一套推理引擎
+        rag_config = self._loader.load().rag
+        self.inference_gateway = InferenceGateway(rag_config.roles)
         self.rag_app = get_rag_container(
             pools=self.pool_mgr.for_group("rag"),
             inference_sem=self.inference_sem,
             corpus_dir=self.system_config.corpus_dir,
-            loader=self._loader,
+            inference_gateway=self.inference_gateway,
         )
         UploadRecoveryService.recover_startup(self.rag_app.knowledge_index_service)
 
-        # 推理引擎已由 self._loader.load() 装配（环境变量连接参数 + YAML roles 段）
-        _inference_entry = self._loader.load().rag.roles["inference"]
-        self.infer_service = _inference_entry.engine
-        self.inference_model_name = _inference_entry.model_name
-        self.inference_options = _inference_entry.options
-        logger.info(
-            "RAG、LLM客户端初始化完成 | model=%s | engine=%s",
-            self.inference_model_name,
-            _inference_entry.engine_type,
-        )
+        logger.info("RAG 容器与推理 Gateway 初始化完成")
 
     def _init_guardrail(self) -> None:
         """护栏系统：加载配置，初始化护栏引擎（使用 guardrail 角色自己的引擎）。"""

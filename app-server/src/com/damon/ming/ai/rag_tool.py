@@ -44,6 +44,7 @@ from src.com.damon.ming.ai.config.tokenizer.tokenizer_config_loader import (
 from src.com.damon.ming.ai.config.vector.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.embedding.BaseEmbeddingService import BaseEmbeddingService
+from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
 from src.com.damon.ming.ai.knowledge.bootstrap import bootstrap_knowledge_index
 from src.com.damon.ming.ai.knowledge.index_service import KnowledgeIndexService
 from src.com.damon.ming.ai.registry.embedding_registry import register_all_embeddings
@@ -62,9 +63,6 @@ from src.com.damon.ming.ai.summary import SummaryService
 from src.com.damon.ming.ai.thread_pools import RagThreadPools
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
-from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
-    RagConfigLoader,
-)
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import ThreadPoolGroup
@@ -79,7 +77,7 @@ def get_rag_container(
     pools: ThreadPoolGroup,
     inference_sem: asyncio.Semaphore,
     corpus_dir: str,
-    loader: RagConfigLoader,
+    inference_gateway: InferenceGateway,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
@@ -87,7 +85,7 @@ def get_rag_container(
         pools: 仅限 RAG 资源组的线程池能力，由 AppInitializer 注入。
         inference_sem: RAG 流程共享的推理并发信号量（必填）。
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
-        loader: 推理配置加载器（由 AppInitializer 注入，必填）。
+        inference_gateway: 启动时装配的统一推理入口（必填）。
     """
     global _rag_instance
     if _rag_instance is None:
@@ -97,7 +95,7 @@ def get_rag_container(
                     pools=pools,
                     inference_sem=inference_sem,
                     corpus_dir=corpus_dir,
-                    loader=loader,
+                    inference_gateway=inference_gateway,
                 )
     return _rag_instance
 
@@ -109,7 +107,7 @@ class RAGContainer:
         pools: ThreadPoolGroup,
         inference_sem: asyncio.Semaphore,
         corpus_dir: str = "",
-        loader: RagConfigLoader | None = None,
+        inference_gateway: InferenceGateway | None = None,
     ):
         logger.info("RAG 容器初始化开始")
 
@@ -121,9 +119,8 @@ class RAGContainer:
             raise ValueError("RAGContainer 初始化失败：corpus_dir 不能为空")
         corpus_path = Path(corpus_dir)
 
-        # 推理配置加载器：由 AppInitializer 注入（全进程唯一实例）
-        if loader is None:
-            raise ValueError("RAGContainer 初始化失败：loader 不能为空")
+        if inference_gateway is None:
+            raise ValueError("RAGContainer 初始化失败：inference_gateway 不能为空")
 
         self.thread_pools = RagThreadPools()
         self.thread_pools.initialize(pools)
@@ -152,15 +149,12 @@ class RAGContainer:
         self._vector_store = cast(PGVectorStore, VectorConfigLoader().load("pgvector"))
 
         # 步骤4：初始化章节重构 + 摘要服务
-        _summary_entry = loader.load().rag.roles["summary"]
         self.section_recon = SectionReconstructor(
             self.thread_pools.get_retrieval_pool()
         )
         self.summary = SummaryService(
             tokenizer=self.tokenizer,
-            inference=_summary_entry.engine,
-            summary_model=_summary_entry.model_name,
-            summary_options=_summary_entry.options,
+            inference=inference_gateway,
             semaphore=self._inference_sem,
         )
 

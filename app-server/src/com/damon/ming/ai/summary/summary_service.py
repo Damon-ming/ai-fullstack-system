@@ -18,7 +18,7 @@ import copy
 import time
 
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.infer.base_inference import BaseInferenceService
+from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.log import pin
 
@@ -41,15 +41,12 @@ class SummaryService:
     def __init__(
         self,
         tokenizer: BaseTokenizer,
-        inference: BaseInferenceService | None = None,
-        summary_model: str = "",
-        summary_options: dict | None = None,
+        inference: InferenceGateway,
         semaphore: asyncio.Semaphore | None = None,
     ):
         self.tokenizer = tokenizer
         self.inference = inference
-        self.summary_model = summary_model
-        self.summary_options = summary_options or {}
+        self.role = "summary"
         # 摘要/压缩 LLM 调用共享 RAG 推理信号量（与主推理共用）
         # inject 模式——由 AppInitializer 创建后赋值，不穿透 RAGContainer 构造参数
         self._sem = semaphore
@@ -73,7 +70,7 @@ class SummaryService:
 
     async def run_summary(self, text: str, max_tokens: int) -> str:
         """单文本摘要压缩。超长自动分段，失败降级硬截断。"""
-        num_ctx = self.summary_options.get("num_ctx", 4096)
+        num_ctx = self.inference.role_options(self.role).get("num_ctx", 4096)
         input_limit = int(num_ctx * SUMMARY_INPUT_MAX_RATIO)
         text_tokens = self.tokenizer.count_tokens(text)
 
@@ -165,13 +162,11 @@ class SummaryService:
         ).replace("{content}", text, 1)
         # max_tokens 为通用输出上限键，由推理层按引擎翻译（vLLM 直用 / Ollama → num_predict）。
         # 目标值覆盖角色默认值，保证摘要长度受调用方控制。
-        opts = dict(self.summary_options)
-        opts["max_tokens"] = max_tokens
         try:
-            return await self.inference.text_generation(
-                model_name=self.summary_model,
+            return await self.inference.generate(
+                role=self.role,
                 messages=[{"role": "user", "content": prompt}],
-                options=opts,
+                options={"max_tokens": max_tokens},
             )
         except asyncio.CancelledError:
             logger.warning("_run_single_summary | 摘要生成被取消")

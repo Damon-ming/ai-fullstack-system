@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     import asyncio
 
     from src.com.damon.ming.ai.infer.guardrail.base_guardrail import BaseGuardrail
-    from src.com.damon.ming.ai.infer.base_inference import BaseInferenceService
+    from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
     from src.com.damon.ming.ai.rag_tool import RAGContainer
     from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
         LocaleConfig,
@@ -80,9 +80,7 @@ class RagRuntime:
     retry_ms: int
     locales: dict[str, LocaleConfig]
     rag_app: RAGContainer
-    infer_service: BaseInferenceService
-    infer_model_name: str
-    infer_options: dict
+    inference_gateway: InferenceGateway
 
 
 @dataclass
