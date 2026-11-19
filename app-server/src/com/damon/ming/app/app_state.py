@@ -29,8 +29,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import asyncio
 
-    from src.com.damon.ming.ai.guardrail.base_guardrail import BaseGuardrail
-    from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
+    from src.com.damon.ming.ai.infer.guardrail.base_guardrail import BaseGuardrail
+    from src.com.damon.ming.ai.infer.base_inference import BaseInferenceService
     from src.com.damon.ming.ai.rag_tool import RAGContainer
     from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
         LocaleConfig,

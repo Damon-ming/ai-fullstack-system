@@ -10,7 +10,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 
-from src.com.damon.ming.ai.inference.base_inference import StreamToken
+from src.com.damon.ming.ai.infer.base_inference import StreamToken
 from src.com.damon.ming.i18n import get_locale
 from src.com.damon.ming.i18n.locale_negotiator import get_default_locale
 from src.com.damon.ming.log import pin

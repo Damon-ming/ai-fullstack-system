@@ -26,8 +26,8 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from src.com.damon.ming.ai.inference import resolve_engine
-from src.com.damon.ming.ai.inference.base_inference import (
+from src.com.damon.ming.ai.infer import resolve_engine
+from src.com.damon.ming.ai.infer.base_inference import (
     BaseInferenceService,
     InferenceParams,
 )

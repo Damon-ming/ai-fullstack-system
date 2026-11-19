@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/guardrail/__init__.py
+# app-server/src/com/damon/ming/ai/infer/guardrail/__init__.py
 """
 护栏模块注册表 —— 引擎自注册 + 解析接口。
 
@@ -8,7 +8,7 @@
   3. 在本文件底部 import 引擎类（触发注册）
 """
 
-from src.com.damon.ming.ai.guardrail.base_guardrail import (
+from src.com.damon.ming.ai.infer.guardrail.base_guardrail import (
     BaseGuardrail,
 )
 
@@ -51,7 +51,7 @@ def list_engines() -> list[str]:
 
 
 # ── 触发注册（必须放在注册器定义之后）──────────────────────────────
-from src.com.damon.ming.ai.guardrail.qwen_guardrail import QwenGuardrail
+from src.com.damon.ming.ai.infer.guardrail.qwen_guardrail import QwenGuardrail
 
 __all__ = [
     "BaseGuardrail",

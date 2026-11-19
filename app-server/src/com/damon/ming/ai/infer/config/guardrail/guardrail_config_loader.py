@@ -1,8 +1,8 @@
-# app-server/src/com/damon/ming/ai/config/guardrail/guardrail_config_loader.py
+# app-server/src/com/damon/ming/ai/infer/config/guardrail/guardrail_config_loader.py
 """
 护栏配置加载器 —— 从 YAML 读取护栏配置，构造 GuardrailParams。
 
-本模块属于 config/guardrail/ 配置层，不属于 guardrail/ 模块。
+本模块属于 infer/config/guardrail/ 配置层。
 guardrail/ 模块通过 GuardrailParams 数据类接收参数，不感知配置来源。
 
 护栏引擎复用已初始化的推理引擎，初始化时通过参数注入。
@@ -18,12 +18,12 @@ guardrail/ 模块通过 GuardrailParams 数据类接收参数，不感知配置�
 import os
 
 import yaml
-from src.com.damon.ming.ai.guardrail import resolve_guardrail
-from src.com.damon.ming.ai.guardrail.base_guardrail import (
+from src.com.damon.ming.ai.infer.base_inference import BaseInferenceService
+from src.com.damon.ming.ai.infer.guardrail import resolve_guardrail
+from src.com.damon.ming.ai.infer.guardrail.base_guardrail import (
     BaseGuardrail,
     GuardrailParams,
 )
-from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
 
 
 class GuardrailConfigLoader:

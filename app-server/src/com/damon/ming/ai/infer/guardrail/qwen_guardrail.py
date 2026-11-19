@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/guardrail/qwen_guardrail.py
+# app-server/src/com/damon/ming/ai/infer/guardrail/qwen_guardrail.py
 """
 Qwen 护栏引擎 —— 对用户输入进行安全分类。
 
@@ -18,13 +18,13 @@ import time
 from collections import deque
 
 from pydantic import BaseModel, ValidationError
-from src.com.damon.ming.ai.guardrail import register_engine
-from src.com.damon.ming.ai.guardrail.base_guardrail import (
+from src.com.damon.ming.ai.infer.guardrail import register_engine
+from src.com.damon.ming.ai.infer.guardrail.base_guardrail import (
     BaseGuardrail,
     GuardrailParams,
     GuardrailResult,
 )
-from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
+from src.com.damon.ming.ai.infer.base_inference import BaseInferenceService
 from src.com.damon.ming.log import pin
 
 logger = pin("QwenGuardrail")

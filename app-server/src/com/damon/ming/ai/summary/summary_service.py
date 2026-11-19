@@ -18,7 +18,7 @@ import copy
 import time
 
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService
+from src.com.damon.ming.ai.infer.base_inference import BaseInferenceService
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.log import pin
 

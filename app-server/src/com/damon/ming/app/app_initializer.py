@@ -457,7 +457,7 @@ class AppInitializer:
 
     def _init_guardrail(self) -> None:
         """护栏系统：加载配置，初始化护栏引擎（使用 guardrail 角色自己的引擎）。"""
-        from src.com.damon.ming.ai.config.guardrail.guardrail_config_loader import (
+        from src.com.damon.ming.ai.infer.config.guardrail.guardrail_config_loader import (
             GuardrailConfigLoader,
         )
 

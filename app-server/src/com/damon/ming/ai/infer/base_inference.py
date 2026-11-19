@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/inference/base_inference.py
+# app-server/src/com/damon/ming/ai/infer/base_inference.py
 """
 推理服务抽象层 —— 纯技术模块，支持多种推理引擎。
 

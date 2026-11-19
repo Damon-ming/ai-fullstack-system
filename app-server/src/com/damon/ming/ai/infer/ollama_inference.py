@@ -1,11 +1,11 @@
-# app-server/src/com/damon/ming/ai/inference/ollama_inference.py
+# app-server/src/com/damon/ming/ai/infer/ollama_inference.py
 
 import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 
 import ollama
-from src.com.damon.ming.ai.inference.base_inference import (
+from src.com.damon.ming.ai.infer.base_inference import (
     STREAM_TYPE_CONTENT,
     STREAM_TYPE_REASONING,
     BaseInferenceService,

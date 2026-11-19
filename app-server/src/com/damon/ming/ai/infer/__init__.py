@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/inference/__init__.py
+# app-server/src/com/damon/ming/ai/infer/__init__.py
 """
 推理服务抽象层 —— 纯技术模块，支持多种推理引擎。
 
@@ -15,7 +15,7 @@
 引擎注册表由各实现类通过 @register_engine 自动注册。
 """
 
-from src.com.damon.ming.ai.inference.base_inference import (
+from src.com.damon.ming.ai.infer.base_inference import (
     BaseInferenceService,
     InferenceParams,
     ModelOptions,
@@ -24,8 +24,8 @@ from src.com.damon.ming.ai.inference.base_inference import (
     register_engine,
     resolve_engine,
 )
-from src.com.damon.ming.ai.inference.ollama_inference import OllamaInference
-from src.com.damon.ming.ai.inference.vllm_inference import VLLMInference
+from src.com.damon.ming.ai.infer.ollama_inference import OllamaInference
+from src.com.damon.ming.ai.infer.vllm_inference import VLLMInference
 
 __all__ = [
     "BaseInferenceService",

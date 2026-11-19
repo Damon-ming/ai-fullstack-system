@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/guardrail/base_guardrail.py
+# app-server/src/com/damon/ming/ai/infer/guardrail/base_guardrail.py
 """
 护栏抽象层 —— 纯技术模块，支持多种护栏引擎。
 
@@ -12,10 +12,10 @@
 护栏引擎复用推理客户端（guardrail 角色），模型名称和生成参数由角色配置注入，
 gateway 仅负责按 api_key 选择上游实例。
 
-配置见 ai/config/guardrail/guardrail-config.yaml，本模块不感知配置来源。
+配置见 ai/infer/config/guardrail/guardrail-config.yaml，本模块不感知配置来源。
 
 用法：
-  from src.com.damon.ming.ai.guardrail import BaseGuardrail, GuardrailParams, register_engine
+  from src.com.damon.ming.ai.infer.guardrail import BaseGuardrail, GuardrailParams, register_engine
 
   @register_engine("qwen-guardrail")
   class QwenGuardrail(BaseGuardrail):

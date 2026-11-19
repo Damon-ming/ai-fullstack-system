@@ -18,7 +18,7 @@ finally：清理请求上下文 + 未落库则兜底落库
 import asyncio
 
 from fastapi import APIRouter, Request
-from src.com.damon.ming.ai.inference.base_inference import STREAM_TYPE_REASONING
+from src.com.damon.ming.ai.infer.base_inference import STREAM_TYPE_REASONING
 from src.com.damon.ming.ai.schemas.response import (
     BaseLLMSuccessData,
     BaseLLMSuccessResponse,

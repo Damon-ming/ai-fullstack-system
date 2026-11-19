@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/inference/vllm_inference.py
+# app-server/src/com/damon/ming/ai/infer/vllm_inference.py
 
 import asyncio
 from collections.abc import AsyncGenerator
@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from openai import AsyncOpenAI
-from src.com.damon.ming.ai.inference.base_inference import (
+from src.com.damon.ming.ai.infer.base_inference import (
     STREAM_TYPE_CONTENT,
     STREAM_TYPE_REASONING,
     BaseInferenceService,
