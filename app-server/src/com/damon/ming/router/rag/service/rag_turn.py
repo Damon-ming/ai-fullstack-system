@@ -14,7 +14,7 @@ rag_router 把本轮交付内容喂进来，结束时一次性落库：
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from src.com.damon.ming.ai.infer.base_inference import STREAM_TYPE_REASONING
+from src.com.damon.ming.ai.inference.base_inference import STREAM_TYPE_REASONING
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.history.service.history_service import HistoryService

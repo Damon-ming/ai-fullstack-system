@@ -1,0 +1,141 @@
+# app-server/src/com/damon/ming/ai/inference/vllm_inference.py
+
+import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from typing import Any
+
+from openai import AsyncOpenAI
+from src.com.damon.ming.ai.inference.base_inference import (
+    STREAM_TYPE_CONTENT,
+    STREAM_TYPE_REASONING,
+    BaseInferenceService,
+    InferenceParams,
+    StreamToken,
+    register_engine,
+)
+from src.com.damon.ming.log import pin
+
+logger = pin("VLLMInference")
+
+
+def _map_options(options: dict[str, Any] | None) -> dict[str, Any]:
+    """将统一的模型级参数映射为 OpenAI API 字段。
+
+    num_ctx → max_tokens（OpenAI 兼容接口的 token 上限参数名）
+    """
+    if not options:
+        return {}
+    mapped = dict(options)
+    if "num_ctx" in mapped:
+        mapped["max_tokens"] = mapped.pop("num_ctx")
+    return mapped
+
+
+@register_engine("vllm")
+class VLLMInference(BaseInferenceService):
+    def __init__(self, params: InferenceParams):
+        super().__init__(params)
+        self.client = AsyncOpenAI(
+            base_url=params.base_url,
+            api_key=params.api_key,
+            timeout=params.timeout,
+        )
+        logger.info(f"VLLM推理客户端初始化 | url={params.base_url}")
+
+    async def text_generation(
+        self,
+        messages: list[dict[str, str]],
+        reason: bool = False,
+        response_schema: dict[str, Any] | None = None,
+        options: dict[str, Any] | None = None,
+        model_name: str = "",
+    ) -> str:
+        run_opts = _map_options(options)
+
+        # 使用角色配置中的上游模型名，网关仅负责路由。
+        create_kwargs: dict[str, Any] = {"messages": messages, **run_opts}
+        if model_name:
+            create_kwargs["model"] = model_name
+
+        if response_schema:
+            create_kwargs["response_format"] = {
+                "type": "json_object",
+                "schema": response_schema,
+            }
+
+        # 推理开关：透传给 chat template（Qwen3 的 enable_thinking）。
+        # 非思考型模型（如 Qwen2.5）的模板不引用该变量，自动忽略。
+        create_kwargs["extra_body"] = {
+            "chat_template_kwargs": {"enable_thinking": reason}
+        }
+
+        # 无重试：异常直接抛给上层，由前端自行重试请求
+        resp = await self.client.chat.completions.create(**create_kwargs)
+        return resp.choices[0].message.content
+
+    @asynccontextmanager
+    async def _managed_stream(self, **create_kwargs):
+        """托管 vLLM 流式响应生命周期，确保 close 恰好一次。"""
+        stream = await self.client.chat.completions.create(**create_kwargs)
+        try:
+            yield stream
+        finally:
+            try:
+                await stream.close()
+            except Exception:
+                pass
+
+    async def stream_generate(
+        self,
+        messages: list[dict[str, str]],
+        reason: bool = False,
+        options: dict[str, Any] | None = None,
+        model_name: str = "",
+    ) -> AsyncGenerator[StreamToken, None]:
+        run_opts = _map_options(options)
+        create_kwargs: dict[str, Any] = {
+            "messages": messages,
+            "stream": True,
+            **run_opts,
+        }
+        if model_name:
+            create_kwargs["model"] = model_name
+
+        # 推理开关：透传给 chat template（Qwen3 的 enable_thinking）。
+        # 非思考型模型（如 Qwen2.5）的模板不引用该变量，自动忽略。
+        create_kwargs["extra_body"] = {
+            "chat_template_kwargs": {"enable_thinking": reason}
+        }
+        try:
+            async with self._managed_stream(**create_kwargs) as stream:
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if reasoning:
+                        yield StreamToken(content=reasoning, type=STREAM_TYPE_REASONING)
+                    content = delta.content
+                    if content:
+                        yield StreamToken(content=content, type=STREAM_TYPE_CONTENT)
+        except asyncio.CancelledError:
+            logger.warning("VLLM stream 收到取消信号，关闭流")
+            raise
+
+    async def check_model_ready(self, model_name: str = "") -> bool:
+        try:
+            models = await self.client.models.list()
+            # gateway 模式下 /v1/models 返回的是上游 vLLM 的模型列表
+            model_names = [m.id for m in models.data]
+            if model_name:
+                return model_name in model_names
+            return len(model_names) > 0
+        except Exception as e:
+            logger.error("VLLM模型检测失败: %s", e)
+            return False
+
+    def get_model_info(self) -> dict[str, Any]:
+        return {
+            "provider": "vllm",
+            "base_url": self.params.base_url,
+            "timeout": self.params.timeout,
+        }

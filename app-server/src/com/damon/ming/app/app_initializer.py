@@ -385,8 +385,8 @@ class AppInitializer:
         """加载 AI 配置，初始化 RAG 容器和统一推理入口。"""
         import asyncio
 
-        from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
-        from src.com.damon.ming.ai.rag_tool import get_rag_container
+        from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
+        from src.com.damon.ming.ai.rag.rag_tool import get_rag_container
         from src.com.damon.ming.app.config.inference.inference_config_loader import (
             InferenceConfigLoader,
         )

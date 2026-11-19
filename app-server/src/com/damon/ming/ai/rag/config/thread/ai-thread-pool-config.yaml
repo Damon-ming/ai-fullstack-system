@@ -1,0 +1,7 @@
+# app-server/src/com/damon/ming/ai/rag/config/thread/ai-thread-pool-config.yaml
+# RAG 资源组内部的 worker 分配，总量必须不超过 app/config/thread 中的 rag 预算。
+retrieval: 4
+document: 8
+rerank: 2
+# 后台全量重建串行执行；BM25 查询使用 retrieval 池。
+bm25: 1

@@ -18,7 +18,7 @@ finally：清理请求上下文 + 未落库则兜底落库
 import asyncio
 
 from fastapi import APIRouter, Request
-from src.com.damon.ming.ai.infer.base_inference import STREAM_TYPE_REASONING
+from src.com.damon.ming.ai.inference.base_inference import STREAM_TYPE_REASONING
 from src.com.damon.ming.app.thread_pools import get_database_pool
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message

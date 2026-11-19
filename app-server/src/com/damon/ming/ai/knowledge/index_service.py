@@ -8,18 +8,18 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from llama_index.core.schema import Document, TextNode
-from src.com.damon.ming.ai.embedding.BaseEmbeddingService import (
+from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
 from src.com.damon.ming.ai.knowledge.bootstrap import (
     IndexSyncFailure,
     KnowledgeBootstrapResult,
 )
-from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
-from src.com.damon.ming.ai.source import list_engines, resolve_source
-from src.com.damon.ming.ai.spliter.spliter import BaseDocumentSplitter
-from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
-from src.com.damon.ming.ai.vector_db.metadata_keys import (
+from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
+from src.com.damon.ming.ai.rag.source import list_engines, resolve_source
+from src.com.damon.ming.ai.rag.spliter.spliter import BaseDocumentSplitter
+from src.com.damon.ming.ai.rag.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.ai.rag.vector_db.metadata_keys import (
     FILE_ID,
     FILE_NAME,
     FILE_PATH,
