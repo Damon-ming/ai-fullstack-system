@@ -40,7 +40,6 @@ from src.com.damon.ming.router.rag.schemas.bean import ChatRequest
 from src.com.damon.ming.router.rag.service.rag_core import generate_answer
 from src.com.damon.ming.router.rag.service.rag_turn import RagTurnRecorder
 from src.com.damon.ming.router.rag.sse import SseEmitter, SseMessageFactory
-from src.com.damon.ming.thread.pool_manager import RequestScope
 from src.com.damon.ming.utils.time import now, to_unix_timestamp
 from src.com.damon.ming.utils.uuid import generate_uuid_hex
 from sse_starlette.sse import EventSourceResponse
@@ -87,8 +86,6 @@ async def answer(request: Request, body: ChatRequest):
     )
 
     # ── 本轮对话的上下文 ─────────────────────────────────────────────
-    # 请求作用域（含 CancellationToken，finally 统一 cleanup）
-    scope = request.app.state.threads.pool_mgr.create_request_scope()
     # 落库记录器：turn_id 由工厂自动生成，conversation_id 供响应回传
     recorder = _create_recorder(request, body)
 
@@ -112,9 +109,7 @@ async def answer(request: Request, body: ChatRequest):
             if blocked.code == ErrorCode.CHAT.TIMEOUT:
                 timeout_msg = _blocked_message(blocked, t(I18nKey.CHAT_TIMEOUT))
                 recorder.set_error(timeout_msg)
-                return chat_failure(
-                    blocked.code, timeout_msg, recorder.conversation_id
-                )
+                return chat_failure(blocked.code, timeout_msg, recorder.conversation_id)
             recorder.add_content(_blocked_message(blocked, ""))
             await recorder.persist()
             return chat_failure(
@@ -124,9 +119,7 @@ async def answer(request: Request, body: ChatRequest):
             )
 
         # ── Phase 2: RAG + 推理（超时预算覆盖整段，见 generate_answer） ──
-        async for token in generate_answer(
-            request.app.state, body.query, body.reason, scope.cancellation_token
-        ):
+        async for token in generate_answer(request.app.state, body.query, body.reason):
             recorder.record_token(token.type, token.content, now())
 
         # ── 成功收尾：标记回答完成并落库（服务端写入，不依赖客户端回传） ──
@@ -177,8 +170,6 @@ async def answer(request: Request, body: ChatRequest):
         logger.exception("同步聊天请求未知异常")
         return chat_failure(ErrorCode.CHAT.UNKNOWN, err_msg, recorder.conversation_id)
     finally:
-        # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
-        scope.cleanup()
         # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」。
         # 成功路径已落库则跳过；未尝试或上次失败则再给一次机会
         await recorder.ensure_persisted()
@@ -190,12 +181,11 @@ async def stream(request: Request, body: ChatRequest):
     """流式问答接口，SSE流式输出（W3C EventSource 标准格式）"""
     logger.info("流式聊天请求开始 | query_length=%s", len(body.query))
 
-    # 本轮对话的上下文：请求作用域 + 落库记录器（turn_id 由工厂自动生成）
-    scope = request.app.state.threads.pool_mgr.create_request_scope()
+    # 本轮对话的落库记录器（turn_id 由工厂自动生成）
     recorder = _create_recorder(request, body)
 
     return EventSourceResponse(
-        stream_chat_generator(request, body, scope, recorder),
+        stream_chat_generator(request, body, recorder),
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
@@ -207,7 +197,6 @@ async def stream(request: Request, body: ChatRequest):
 async def stream_chat_generator(
     request: Request,
     body: ChatRequest,
-    scope: RequestScope,
     recorder: RagTurnRecorder,
 ):
     """流式问答 SSE 生成器 —— 编排与同步端点一致，只是交付方式不同。
@@ -248,9 +237,7 @@ async def stream_chat_generator(
         blocked_resp = await check_guardrail_with_timeout(request.app.state, body.query)
         if blocked_resp is not None:
             if blocked_resp.code == ErrorCode.CHAT.TIMEOUT:
-                timeout_msg = _blocked_message(
-                    blocked_resp, t(I18nKey.CHAT_TIMEOUT)
-                )
+                timeout_msg = _blocked_message(blocked_resp, t(I18nKey.CHAT_TIMEOUT))
                 recorder.set_error(timeout_msg)
                 yield emitter.emit(
                     "error", chat_error_event(blocked_resp.code, timeout_msg)
@@ -267,9 +254,7 @@ async def stream_chat_generator(
             return
 
         # ── Phase 2: RAG + 推理（超时预算覆盖整段，见 generate_answer） ──
-        async for token in generate_answer(
-            request.app.state, body.query, body.reason, scope.cancellation_token
-        ):
+        async for token in generate_answer(request.app.state, body.query, body.reason):
             # 根据 token 类型发射不同事件：
             #   reasoning → event: "reasoning"（推理过程）
             #   content   → event: "delta"（正文回答）
@@ -312,7 +297,7 @@ async def stream_chat_generator(
         )
     except asyncio.CancelledError:
         # 客户端已断开，无需 re-raise（避免 ASGI 层记录 500），
-        # 让 generator 自然结束；scope.cleanup() 在 finally 中保证执行。
+        # 让 generator 自然结束，保留已交付内容供 finally 兜底落库。
         # 主动取消不展示客户端文案，但已交付内容仍要落库。
         logger.warning("【统计】流式SSE请求被客户端主动取消")
         return
@@ -322,8 +307,6 @@ async def stream_chat_generator(
         logger.exception("流式聊天请求失败")
         yield emitter.emit("error", chat_error_event(ErrorCode.CHAT.UNKNOWN, err_msg))
     finally:
-        # 请求结束（无论成功/失败/取消）：清理请求上下文，回收线程资源
-        scope.cleanup()
         # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」。
         # 成功路径已落库则跳过；未尝试或上次失败则再给一次机会
         await recorder.ensure_persisted()

@@ -10,7 +10,7 @@ RAG 容器 —— 检索线程编排层。
   - AI 模块本身不感知线程/取消
 
 检索取消策略：
-  - CancellationToken.register_task() 使 token.cancel() 直接取消当前 asyncio 协程
+  - asyncio task 取消通过 await 链传播；cancel_event 通知线程任务协作停止
   - 任意 await 点立即抛出 CancelledError，外层 catch 后 re-raise
   - 中断时直接抛弃内存中的中间数据（clones、压缩结果等），不做任何保存/恢复
   - 不碰 vector_db 中的原始数据
@@ -67,7 +67,7 @@ from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
 )
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.thread import CancellationToken, ThreadPoolGroup
+from src.com.damon.ming.thread import ThreadPoolGroup
 
 logger = pin("ai.rag")
 
@@ -227,7 +227,6 @@ class RAGContainer:
         self,
         query: str,
         max_context_tokens: int,
-        cancellation_token: CancellationToken | None = None,
     ) -> str:
         """RAG 检索主流程。
 
@@ -243,9 +242,6 @@ class RAGContainer:
           - 取消时 CancelledError 穿透所有 await 层，无需手动检查
 
         取消联动：
-          - cancellation_token.register_task(asyncio.current_task()) 使 token.cancel()
-            能直接取消当前协程，实现毫秒级中断
-
         参数：
           - 候选池大小和最终输出大小均由 YAML 配置驱动，不再提供函数入参：
             retrieve_top_k — 检索器返回多少 section 给 reranker（候选池，决定 precision 上限）
@@ -257,10 +253,6 @@ class RAGContainer:
         Raises:
             asyncio.CancelledError: 客户端断开或超时时向上传播。
         """
-        # 注册当前 task → token.cancel() 可直接取消本协程
-        if cancellation_token is not None:
-            cancellation_token.register_task(asyncio.current_task())
-
         cfg = self.retriever_config
         # 候选池大小（retrieve）与最终输出大小（rerank）分离，全部由 YAML 配置驱动：
         #   retrieve_top_k — 检索器返回多少 section 给 reranker（候选池，决定 precision 上限）

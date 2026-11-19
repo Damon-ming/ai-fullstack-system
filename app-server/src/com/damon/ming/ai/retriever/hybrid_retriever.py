@@ -148,6 +148,10 @@ class HybridRetriever:
                 self.logger.info(
                     f"[HybridRetriever] 稠密检索完成 | 返回 {len(dense_results)} 个结果"
                 )
+            except asyncio.CancelledError:
+                dense_future.cancel()
+                sparse_future.cancel()
+                raise
             except Exception as e:
                 self.logger.error(f"[HybridRetriever] 稠密检索失败: {e}")
 
@@ -164,6 +168,9 @@ class HybridRetriever:
                 self.logger.info(
                     f"[HybridRetriever] 稀疏检索完成 | 返回 {len(sparse_results)} 个结果"
                 )
+            except asyncio.CancelledError:
+                sparse_future.cancel()
+                raise
             except Exception as e:
                 self.logger.error(f"[HybridRetriever] 稀疏检索失败: {e}")
 

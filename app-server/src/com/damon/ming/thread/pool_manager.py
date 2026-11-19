@@ -14,8 +14,7 @@
 职责：
   - 统一校验资源组和进程级 worker 预算
   - 组件按需创建命名池，管理器统一统计和关闭
-  - 请求级作用域：通过 create_request_scope() 创建
-  - 优雅关闭：shutdown 时先取消所有令牌，再关闭所有线程池
+  - 优雅关闭：统一关闭所有线程池
 
 用法：
   # 在 AppInitializer 中：
@@ -24,13 +23,6 @@
 
   # AI 模块获取命名线程池：
   executor = pool_mgr.create_pool("rag", "retrieval", max_workers=4)
-
-  # 请求级作用域（在路由入口处）：
-  scope = pool_mgr.create_request_scope()
-  try:
-      future = executor.submit(work_fn, scope.cancellation_token, ...)
-  finally:
-      scope.cleanup()
 
   # AppInitializer.shutdown 中：
   pool_mgr.shutdown()
@@ -43,9 +35,6 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Self
 
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.thread.cancellation import CancellationToken
-from src.com.damon.ming.thread.request_scope import RequestScope
-from src.com.damon.ming.utils.uuid import generate_uuid_hex
 
 logger = pin("thread.pool_manager")
 
@@ -65,7 +54,6 @@ class ThreadPoolManager:
 
         # AI 模块中获取线程池：
         executor = self.pool_mgr.create_pool("rag", "retrieval", max_workers=4)
-        future = executor.submit(work, cancellation_token, ...)
 
         # AppInitializer.shutdown 中：
         self.pool_mgr.shutdown()
@@ -129,7 +117,7 @@ class ThreadPoolManager:
         if not self._initialized:
             return
 
-        # 1. 关闭所有线程池（RequestScope.cleanup() 会在路由层单独取消各令牌）
+        # 关闭所有线程池
         for name, pool in self._pools.items():
             try:
                 pool.shutdown(wait=wait, cancel_futures=cancel_futures)
@@ -283,21 +271,6 @@ class ThreadPoolManager:
         import asyncio
 
         return await asyncio.wrap_future(self.submit(pool, func, *args, **kwargs))
-
-    def create_request_scope(self, request_id: str | None = None) -> RequestScope:
-        """创建请求级作用域，绑定一个 CancellationToken。
-
-        Args:
-            request_id: 请求标识（默认自动生成 UUID）。
-
-        Returns:
-            RequestScope 实例。
-        """
-        req_id = request_id or f"req-{generate_uuid_hex()[:12]}"
-        cancellation_token = CancellationToken(token_id=f"{req_id}-tok")
-        scope = RequestScope(request_id=req_id, cancellation_token=cancellation_token)
-        logger.debug("请求作用域已创建 | request_id=%s", req_id)
-        return scope
 
     def get_stats(self) -> dict[str, Any]:
         """获取线程池运行状态，用于监控。"""

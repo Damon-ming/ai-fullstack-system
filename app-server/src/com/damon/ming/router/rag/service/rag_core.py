@@ -14,7 +14,6 @@ from src.com.damon.ming.ai.inference.base_inference import StreamToken
 from src.com.damon.ming.i18n import get_locale
 from src.com.damon.ming.i18n.locale_negotiator import get_default_locale
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.thread import CancellationToken
 
 logger = pin("chat.core")
 
@@ -30,9 +29,7 @@ def _resolve_locale_text(rag_locales: dict, locale: str):
     return rag_locales.get(locale) or rag_locales[get_default_locale()]
 
 
-async def _build_prompt_messages(
-    app_state, query: str, cancellation_token: CancellationToken | None = None
-) -> list[dict[str, str]]:
+async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
     """RAG 检索参考资料并构造标准 messages 数组。
 
     system prompt 保持纯净（只含指令），用户数据（参考资料 + 问题）全部放在
@@ -47,7 +44,6 @@ async def _build_prompt_messages(
         ref_content = await app_state.rag_runtime.rag_app.query_rag(
             query,
             max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
-            cancellation_token=cancellation_token,
         )
 
     prompt_messages = [
@@ -65,7 +61,6 @@ async def generate_answer(
     app_state,
     query: str,
     reason: bool,
-    cancellation_token: CancellationToken | None = None,
 ) -> AsyncGenerator[StreamToken, None]:
     """Phase 2 全流程：RAG 检索 → prompt 组装 → 推理，逐 token 产出。
 
@@ -75,9 +70,7 @@ async def generate_answer(
     确保 infer_service 内部 finally 能正确关闭推理流。
     """
     async with asyncio.timeout(app_state.rag_runtime.execution_timeout_seconds):
-        prompt_messages = await _build_prompt_messages(
-            app_state, query, cancellation_token
-        )
+        prompt_messages = await _build_prompt_messages(app_state, query)
         async with app_state.rag_runtime.sem:
             async for token in app_state.rag_runtime.infer_service.stream_generate(
                 model_name=app_state.rag_runtime.infer_model_name,
