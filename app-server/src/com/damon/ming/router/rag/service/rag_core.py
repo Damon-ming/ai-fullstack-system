@@ -9,6 +9,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 
 from src.com.damon.ming.ai.infer.base_inference import StreamToken
 from src.com.damon.ming.i18n import get_locale
@@ -38,14 +39,14 @@ async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
     """
 
     # RAG 上下文处理在推理信号量外执行，由 rag_sem 做反压。
-    async with app_state.rag_runtime.rag_sem:
+    async with app_state.ai.rag.rag_sem:
         logger.debug("开始执行 RAG 检索")
-        ref_content = await app_state.rag_runtime.rag_app.query_rag(
+        ref_content = await app_state.ai.rag.rag_app.query_rag(
             query,
             max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
         )
 
-    chat_cfg = _resolve_locale_text(app_state.rag_runtime.locales, get_locale())
+    chat_cfg = _resolve_locale_text(app_state.ai.rag.locales, get_locale())
 
     prompt_messages = [
         {"role": "system", "content": chat_cfg.system_prompt},
@@ -70,12 +71,12 @@ async def generate_answer(
     CancelledError 不加内层捕获，直接穿透到外层统一处理，
     确保 infer_service 内部 finally 能正确关闭推理流。
     """
-    async with asyncio.timeout(app_state.rag_runtime.execution_timeout_seconds):
+    async with asyncio.timeout(app_state.ai.rag.execution_timeout_seconds):
         prompt_messages = await _build_prompt_messages(app_state, query)
-        async with app_state.rag_runtime.inference_sem:
-            async for token in app_state.rag_runtime.inference_gateway.stream(
-                role="inference",
-                messages=prompt_messages,
-                reason=reason,
-            ):
+        async with aclosing(
+            app_state.ai.inference.gateway.get("inference").stream(
+                messages=prompt_messages, reason=reason
+            )
+        ) as stream:
+            async for token in stream:
                 yield token

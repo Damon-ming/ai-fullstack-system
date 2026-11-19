@@ -10,10 +10,8 @@
 
 分组：
   config      配置快照（启动时从 YAML 装载，运行期只读）
-  rag_runtime RAG 流程运行时（RAG 容器 / 推理服务 / 并发配置）
+  ai          AI 子系统运行时（RAG / 推理）
   threads     全局线程池运行时（跨 RAG、数据库等模块共享）
-  guardrail   护栏（引擎 + 并发 + 超时）
-  chat        聊天链路运行时（并发 / 超时 / 重试 / 多 locale 文案）
   storage     持久化
   encryption  加密
 
@@ -29,7 +27,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import asyncio
 
-    from src.com.damon.ming.ai.infer.guardrail.base_guardrail import BaseGuardrail
     from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
     from src.com.damon.ming.ai.rag_tool import RAGContainer
     from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
@@ -40,6 +37,7 @@ if TYPE_CHECKING:
     from src.com.damon.ming.app.encryption.session_service import SessionService
     from src.com.damon.ming.db.db_connection import DbConnection
     from src.com.damon.ming.encryption.v1.field_encryptor import FieldEncryptor
+    from src.com.damon.ming.router.rag.preflight import GuardrailConfig
     from src.com.damon.ming.thread.pool_manager import ThreadPoolManager
 
 
@@ -59,28 +57,30 @@ class ThreadRuntime:
 
 
 @dataclass
-class GuardrailState:
-    """护栏 —— 引擎 + 并发 + 超时。"""
-
-    engine: BaseGuardrail
-    sem: asyncio.Semaphore
-    timeout_seconds: float
-
-
-@dataclass
 class RagRuntime:
-    """RAG 流程运行时 —— RAG 容器、推理服务及流程配置。
+    """RAG 容器及流程配置。"""
 
-    inference_sem 限制 LLM 推理并发；rag_sem 限制 RAG 上下文处理流程并发。
-    """
-
-    inference_sem: asyncio.Semaphore
     rag_sem: asyncio.Semaphore
     execution_timeout_seconds: float
     retry_ms: int
     locales: dict[str, LocaleConfig]
     rag_app: RAGContainer
-    inference_gateway: InferenceGateway
+    preflight: GuardrailConfig
+
+
+@dataclass
+class InferenceRuntime:
+    """统一推理入口及主推理、摘要共享的并发限制。"""
+
+    gateway: InferenceGateway
+
+
+@dataclass
+class AIRuntime:
+    """进程级 AI 子系统。"""
+
+    rag: RagRuntime
+    inference: InferenceRuntime
 
 
 @dataclass

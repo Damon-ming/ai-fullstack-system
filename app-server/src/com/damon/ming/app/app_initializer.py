@@ -49,7 +49,6 @@ class AppInitializer:
         self.pool_mgr = None
         self.rag_app = None
         self.inference_gateway = None
-        self.guardrail = None
 
         # 上传改为逐文件同步入库，无需后台任务
 
@@ -73,9 +72,8 @@ class AppInitializer:
         self._init_encryption()
         self._init_sign_context()
         self._init_rate_limiter()
-        self._init_rag()  # 必须在 _init_ai 之前：创建 inference_sem 供 RAGContainer 传递
+        self._init_rag()  # 必须在 _init_ai 之前：创建推理并发限制
         self._init_ai()
-        self._init_guardrail()
 
         logger.info("应用启动完成")
 
@@ -87,13 +85,15 @@ class AppInitializer:
         slowapi 框架硬编码读写该键。
         """
         from src.com.damon.ming.app.app_state import (
+            AIRuntime,
             AppConfig,
             EncryptionState,
-            GuardrailState,
+            InferenceRuntime,
             RagRuntime,
             Storage,
             ThreadRuntime,
         )
+        from src.com.damon.ming.router.rag.preflight import GuardrailConfig
 
         app.state.config = AppConfig(
             system_config=self.system_config,
@@ -102,21 +102,22 @@ class AppInitializer:
 
         app.state.threads = ThreadRuntime(pool_mgr=self.pool_mgr)
 
-        app.state.guardrail = GuardrailState(
-            engine=self.guardrail,
-            sem=self.guardrail_sem,
-            timeout_seconds=self.guardrail_timeout_seconds,
-        )
-
-        # Semaphore 在 lifespan 内创建，绑定到正确的事件循环
-        app.state.rag_runtime = RagRuntime(
-            inference_sem=self.inference_sem,
-            rag_sem=self.rag_sem,
-            execution_timeout_seconds=self.execution_timeout_seconds,
-            retry_ms=self.chat_retry_ms,
-            locales=self.rag_locales,
-            rag_app=self.rag_app,
-            inference_gateway=self.inference_gateway,
+        app.state.ai = AIRuntime(
+            rag=RagRuntime(
+                rag_sem=self.rag_sem,
+                execution_timeout_seconds=self.execution_timeout_seconds,
+                retry_ms=self.chat_retry_ms,
+                locales=self.rag_locales,
+                rag_app=self.rag_app,
+                preflight=GuardrailConfig(
+                    prompt_template=self.guardrail_prompt_template,
+                    semaphore=self.guardrail_sem,
+                    timeout_seconds=self.guardrail_timeout_seconds,
+                ),
+            ),
+            inference=InferenceRuntime(
+                gateway=self.inference_gateway,
+            ),
         )
 
         app.state.storage = Storage(db_conn=self.db_conn)
@@ -407,6 +408,7 @@ class AppInitializer:
         self.guardrail_sem = asyncio.Semaphore(rag.guardrail_max_concurrency)
         self.execution_timeout_seconds = rag.execution_timeout_seconds
         self.guardrail_timeout_seconds = rag.guardrail_timeout_seconds
+        self.guardrail_prompt_template = rag.guardrail_prompt_template
         self.chat_retry_ms = rag.sse_retry_ms
         # 多 locale 文本配置：locale → LocaleConfig
         self.rag_locales = cfg.rag.locales
@@ -424,9 +426,7 @@ class AppInitializer:
 
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""
-        # inference_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
-        # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
-        # loader 同为注入，保证全进程只有一套推理引擎
+        # Gateway 接收共享信号量，主回答与摘要共用并发限制。
         from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag_tool import get_rag_container
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
@@ -434,32 +434,15 @@ class AppInitializer:
         )
 
         rag_config = self._loader.load().rag
-        self.inference_gateway = InferenceGateway(rag_config.roles)
+        self.inference_gateway = InferenceGateway(rag_config.roles, self.inference_sem)
         self.rag_app = get_rag_container(
             pools=self.pool_mgr.for_group("rag"),
-            inference_sem=self.inference_sem,
             corpus_dir=self.system_config.corpus_dir,
             inference_gateway=self.inference_gateway,
         )
         UploadRecoveryService.recover_startup(self.rag_app.knowledge_index_service)
 
         logger.info("RAG 容器与推理 Gateway 初始化完成")
-
-    def _init_guardrail(self) -> None:
-        """护栏系统：加载配置，初始化护栏引擎（使用 guardrail 角色自己的引擎）。"""
-        from src.com.damon.ming.ai.infer.config.guardrail.guardrail_config_loader import (
-            GuardrailConfigLoader,
-        )
-
-        loader = GuardrailConfigLoader()
-        guardrail_entry = self._loader.load().rag.roles["guardrail"]
-        loaded = loader.load_all(
-            inference=guardrail_entry.engine,
-            model_name=guardrail_entry.model_name,
-            options=guardrail_entry.options,
-        )
-        self.guardrail = loaded["engine"]
-        logger.info("护栏系统初始化完成 | engine=%s", type(self.guardrail).__name__)
 
 
 # ---------------------------------------------------------------------------

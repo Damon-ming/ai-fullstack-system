@@ -14,7 +14,12 @@
 """
 
 import asyncio
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass
 
+from pydantic import BaseModel, ValidationError
 from src.com.damon.ming.ai.schemas.response import BaseLLMFailedResponse
 from src.com.damon.ming.ai.security import InputValidator
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -27,6 +32,42 @@ logger = pin("chat.preflight")
 
 # 轻量级输入校验器（模块级单例，无状态，可并发）
 _input_validator = InputValidator()
+_fail_open_timestamps: deque[float] = deque()
+_fail_open_lock = threading.Lock()
+
+
+@dataclass(frozen=True)
+class GuardrailConfig:
+    prompt_template: str
+    semaphore: asyncio.Semaphore
+    timeout_seconds: float
+
+
+class _GuardrailResponse(BaseModel):
+    safe: bool
+    reason: str = ""
+
+
+def _record_fail_open(reason: str) -> None:
+    now = time.monotonic()
+    with _fail_open_lock:
+        _fail_open_timestamps.append(now)
+        while _fail_open_timestamps and _fail_open_timestamps[0] < now - 60:
+            _fail_open_timestamps.popleft()
+        count = len(_fail_open_timestamps)
+    if count >= 5:
+        logger.warning(
+            "护栏连续 fail-open 告警 | 窗口内次数=%d | 窗口=60s | 最近原因=%s",
+            count,
+            reason,
+        )
+
+
+def _record_guardrail_success() -> None:
+    cutoff = time.monotonic() - 60
+    with _fail_open_lock:
+        while _fail_open_timestamps and _fail_open_timestamps[0] < cutoff:
+            _fail_open_timestamps.popleft()
 
 
 def check_input(query: str) -> BaseLLMFailedResponse | None:
@@ -49,8 +90,34 @@ def check_input(query: str) -> BaseLLMFailedResponse | None:
 
 async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None:
     """执行护栏检测，不通过时返回失败响应，通过时返回 None。"""
-    result = await app_state.guardrail.engine.check(query)
-    if not result.passed:
+    prompt = app_state.ai.rag.preflight.prompt_template.replace("{query}", query, 1)
+    try:
+        raw = await app_state.ai.inference.gateway.get("guardrail").generate(
+            messages=[{"role": "user", "content": prompt}],
+            response_schema=_GuardrailResponse.model_json_schema(),
+        )
+    except asyncio.CancelledError:
+        logger.warning("护栏检测被取消，fail-open 放行")
+        _record_fail_open("cancelled")
+        return None
+    except TimeoutError:
+        logger.warning("护栏检测超时，fail-open 放行")
+        _record_fail_open("timeout")
+        return None
+    except Exception as exc:
+        logger.warning("护栏检测异常，fail-open 放行 | error=%s", exc)
+        _record_fail_open(str(exc))
+        return None
+
+    _record_guardrail_success()
+    try:
+        result = _GuardrailResponse.model_validate_json(raw)
+    except ValidationError as exc:
+        logger.warning("护栏响应解析失败，fail-open 放行 | error=%s", exc)
+        _record_fail_open(f"parse_error: {exc}")
+        return None
+
+    if not result.safe:
         logger.warning("护栏拦截用户输入 | reason=%s", result.reason)
         return chat_failure(
             ErrorCode.CHAT.GUARDRAIL_BLOCKED,
@@ -62,18 +129,13 @@ async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | Non
 async def check_guardrail_with_timeout(
     app_state, query: str
 ) -> BaseLLMFailedResponse | None:
-    """护栏检测 + 独立超时 + 信号量限流（超时 fail-open 放行）。
-
-    guardrail_sem 保护护栏 LLM 调用不被打爆。
-    """
-    guardrail_timeout_seconds = app_state.guardrail.timeout_seconds
-    guardrail_sem = app_state.guardrail.sem
+    """执行护栏检测，超时时返回聊天超时错误。"""
     try:
-        async with asyncio.timeout(guardrail_timeout_seconds), guardrail_sem:
+        async with (
+            asyncio.timeout(app_state.ai.rag.preflight.timeout_seconds),
+            app_state.ai.rag.preflight.semaphore,
+        ):
             return await _check_guardrail(app_state, query)
     except TimeoutError:
-        logger.warning(
-            "护栏检测超时，返回超时错误 | timeout_seconds=%g",
-            guardrail_timeout_seconds,
-        )
+        logger.warning("护栏检测超时，返回超时错误")
         return chat_failure(ErrorCode.CHAT.TIMEOUT, t(I18nKey.CHAT_TIMEOUT))

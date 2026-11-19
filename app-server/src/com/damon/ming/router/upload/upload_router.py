@@ -35,7 +35,7 @@ async def save_files(
     )
 
     try:
-        rag_app = request.app.state.rag_runtime.rag_app
+        rag_app = request.app.state.ai.rag.rag_app
         # 逐文件原子提交：写盘 + 向量库入库，任一步失败则回滚该文件
         result = await UploadService.batch_save_files(
             file_list=files,

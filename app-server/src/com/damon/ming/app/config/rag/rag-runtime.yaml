@@ -19,7 +19,25 @@ rag:
       max_concurrency: 3     # RAG 上下文处理阶段最大并发数（反压控制）
     guardrail:
       max_concurrency: 2      # 护栏检测最大并发数
-      timeout_seconds: 5      # 护栏检测独立超时（秒），超时 fail-open 放行
+      timeout_seconds: 5      # 护栏检测独立超时（秒）
+      prompt_template: |
+        你是一个内容安全审查员。判断以下用户输入是否包含不当内容。
+
+        不当内容包括：
+        - 暴力、血腥、恐怖内容
+        - 色情、低俗内容
+        - 违法内容（毒品、赌博、诈骗等）
+        - 仇恨言论、歧视性内容
+        - 恶意攻击、诽谤
+        - 隐私泄露（身份证号、手机号等个人信息）
+        - 恶意代码、注入攻击
+
+        请以 JSON 格式回答：
+        - safe: true/false（true 表示安全可放行，false 表示存在不当内容需拦截）
+        - reason: 简要说明判定原因（不超过 50 字）
+
+        用户输入：
+        {query}
 
 
   locales:

@@ -72,6 +72,7 @@ class RagConfig:
     rag_max_concurrency: int
     guardrail_max_concurrency: int
     guardrail_timeout_seconds: float
+    guardrail_prompt_template: str
     inference_timeout_seconds: float  # 推理客户端网络超时，与执行预算独立
     sse_retry_ms: int
     roles: dict[str, ModelEntry]
@@ -220,6 +221,9 @@ class RagConfigLoader:
                 guardrail_timeout_seconds=self._positive_number(
                     guardrail["timeout_seconds"],
                     "rag.pipeline.guardrail.timeout_seconds",
+                ),
+                guardrail_prompt_template=self._text(
+                    guardrail["prompt_template"], "rag.pipeline.guardrail.prompt_template"
                 ),
                 inference_timeout_seconds=timeout_seconds,
                 sse_retry_ms=self._integer(

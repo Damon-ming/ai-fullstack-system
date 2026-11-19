@@ -15,7 +15,6 @@
 
 import asyncio
 import copy
-import time
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
@@ -42,31 +41,16 @@ class SummaryService:
         self,
         tokenizer: BaseTokenizer,
         inference: InferenceGateway,
-        semaphore: asyncio.Semaphore | None = None,
     ):
         self.tokenizer = tokenizer
         self.inference = inference
         self.role = "summary"
-        # 摘要/压缩 LLM 调用共享 RAG 推理信号量（与主推理共用）
-        # inject 模式——由 AppInitializer 创建后赋值，不穿透 RAGContainer 构造参数
-        self._sem = semaphore
 
     # ── 公开接口 ──────────────────────────────────────────────────────
 
     async def _guarded_summary(self, text: str, max_tokens: int) -> str:
-        """带信号量保护的 _run_single_summary，竞争时记录等待耗时。"""
-        if self._sem is None:
-            return await self._run_single_summary(text, max_tokens)
-
-        # 检测竞争：信号量已锁说明需要排队等待
-        contended = self._sem.locked()
-        wait_start = time.monotonic() if contended else 0
-
-        async with self._sem:
-            if contended:
-                wait_ms = (time.monotonic() - wait_start) * 1000
-                logger.info("摘要等待推理槽 | wait_ms=%.0f", wait_ms)
-            return await self._run_single_summary(text, max_tokens)
+        """调用摘要推理，并发控制由 Gateway 管理。"""
+        return await self._run_single_summary(text, max_tokens)
 
     async def run_summary(self, text: str, max_tokens: int) -> str:
         """单文本摘要压缩。超长自动分段，失败降级硬截断。"""
@@ -163,8 +147,7 @@ class SummaryService:
         # max_tokens 为通用输出上限键，由推理层按引擎翻译（vLLM 直用 / Ollama → num_predict）。
         # 目标值覆盖角色默认值，保证摘要长度受调用方控制。
         try:
-            return await self.inference.generate(
-                role=self.role,
+            return await self.inference.get(self.role).generate(
                 messages=[{"role": "user", "content": prompt}],
                 options={"max_tokens": max_tokens},
             )
