@@ -15,7 +15,7 @@
 【可选（本地开发用，生产镜像通过 build_info.py 固化）】
   APP_ENV                 环境标志：debug / release（默认 debug）
   LOG_LEVEL               日志级别：DEBUG / INFO / WARNING / ERROR（默认 INFO）
-  INFERENCE_TEMPERATURE        聊天采样温度（环境变量覆盖 rag-runtime.yaml，格式 ROLE_PARAM）【未实现】
+  INFERENCE_TEMPERATURE        聊天采样温度（环境变量覆盖 inference-config.yaml，格式 ROLE_PARAM）【未实现】
   CORS_ORIGINS            Release 模式的 CORS 允许来源（逗号分隔）
 
 【配置文件（YAML）】

@@ -14,7 +14,7 @@ class InferenceGateway:
     def __init__(
         self,
         roles: dict[str, Any],
-        inference_semaphore: asyncio.Semaphore | None = None,
+        inference_semaphore: asyncio.Semaphore,
     ):
         if not roles:
             raise ValueError("InferenceGateway 至少需要一个已配置 role")
@@ -58,10 +58,8 @@ class InferenceGateway:
                 options=role_options,
             )
 
-        if role in ("inference", "summary") and self._inference_semaphore is not None:
-            async with self._inference_semaphore:
-                return await call()
-        return await call()
+        async with self._inference_semaphore:
+            return await call()
 
     async def stream(
         self,
@@ -86,17 +84,9 @@ class InferenceGateway:
                 async for token in stream:
                     yield token
 
-        async with aclosing(produce()) as stream:
-            if (
-                role in ("inference", "summary")
-                and self._inference_semaphore is not None
-            ):
-                async with self._inference_semaphore:
-                    async for token in stream:
-                        yield token
-            else:
-                async for token in stream:
-                    yield token
+        async with aclosing(produce()) as stream, self._inference_semaphore:
+            async for token in stream:
+                yield token
 
 
 class RoleInference:

@@ -4,7 +4,7 @@
 
 从 rag_router 抽出的前置检查，供 /rag/answer/v1 与 /rag/stream/v1 复用：
   - check_input:                  纯本地规则，零 IO，微秒级，拦无效/攻击输入
-  - check_guardrail_with_timeout: 护栏 LLM 检测 + 独立超时 + 信号量限流
+  - check_guardrail_with_timeout: 护栏 LLM 检测 + 独立超时
                                      （超时返回错误响应）
 
 返回 BaseLLMFailedResponse 表示被拦截（data.error_msg 即用户可见文案），
@@ -23,8 +23,9 @@ from pydantic import BaseModel, ValidationError
 from src.com.damon.ming.ai.schemas.response import BaseLLMFailedResponse
 from src.com.damon.ming.ai.security import InputValidator
 from src.com.damon.ming.exception.error_codes import ErrorCode
-from src.com.damon.ming.i18n import t
+from src.com.damon.ming.i18n import get_locale, t
 from src.com.damon.ming.i18n.constants import I18nKey
+from src.com.damon.ming.i18n.locale_negotiator import get_default_locale
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.rag.failure import chat_failure
 
@@ -38,8 +39,6 @@ _fail_open_lock = threading.Lock()
 
 @dataclass(frozen=True)
 class GuardrailConfig:
-    prompt_template: str
-    semaphore: asyncio.Semaphore
     timeout_seconds: float
 
 
@@ -90,16 +89,16 @@ def check_input(query: str) -> BaseLLMFailedResponse | None:
 
 async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None:
     """执行护栏检测，不通过时返回失败响应，通过时返回 None。"""
-    prompt = app_state.ai.rag.preflight.prompt_template.replace("{query}", query, 1)
+    locales = app_state.ai.rag.locales
+    locale_config = locales.get(get_locale()) or locales[get_default_locale()]
+    prompt = locale_config.guardrail_prompt_template.replace("{query}", query, 1)
     try:
         raw = await app_state.ai.inference.gateway.get("guardrail").generate(
             messages=[{"role": "user", "content": prompt}],
             response_schema=_GuardrailResponse.model_json_schema(),
         )
     except asyncio.CancelledError:
-        logger.warning("护栏检测被取消，fail-open 放行")
-        _record_fail_open("cancelled")
-        return None
+        raise
     except TimeoutError:
         logger.warning("护栏检测超时，fail-open 放行")
         _record_fail_open("timeout")
@@ -131,10 +130,7 @@ async def check_guardrail_with_timeout(
 ) -> BaseLLMFailedResponse | None:
     """执行护栏检测，超时时返回聊天超时错误。"""
     try:
-        async with (
-            asyncio.timeout(app_state.ai.rag.preflight.timeout_seconds),
-            app_state.ai.rag.preflight.semaphore,
-        ):
+        async with asyncio.timeout(app_state.ai.rag.preflight.timeout_seconds):
             return await _check_guardrail(app_state, query)
     except TimeoutError:
         logger.warning("护栏检测超时，返回超时错误")

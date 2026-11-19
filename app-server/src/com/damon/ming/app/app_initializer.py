@@ -30,12 +30,16 @@ class AppInitializer:
     """
 
     def __init__(self) -> None:
-        # 推理配置加载器：进程级单例（引擎只装配一次）
+        # 推理配置加载器在启动时只装配一次客户端。
+        from src.com.damon.ming.app.config.inference.inference_config_loader import (
+            InferenceConfigLoader,
+        )
         from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
             RagConfigLoader,
         )
 
         self._loader = RagConfigLoader()
+        self._inference_loader = InferenceConfigLoader()
 
         # 子系统状态（startup 后填充）
         self.system_config = None
@@ -72,7 +76,7 @@ class AppInitializer:
         self._init_encryption()
         self._init_sign_context()
         self._init_rate_limiter()
-        self._init_rag()  # 必须在 _init_ai 之前：创建推理并发限制
+        self._init_rag()
         self._init_ai()
 
         logger.info("应用启动完成")
@@ -110,8 +114,6 @@ class AppInitializer:
                 locales=self.rag_locales,
                 rag_app=self.rag_app,
                 preflight=GuardrailConfig(
-                    prompt_template=self.guardrail_prompt_template,
-                    semaphore=self.guardrail_sem,
                     timeout_seconds=self.guardrail_timeout_seconds,
                 ),
             ),
@@ -403,38 +405,38 @@ class AppInitializer:
         rag = cfg.rag
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
-        self.inference_sem = asyncio.Semaphore(rag.shared_inference_max_concurrency)
         self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
-        self.guardrail_sem = asyncio.Semaphore(rag.guardrail_max_concurrency)
         self.execution_timeout_seconds = rag.execution_timeout_seconds
         self.guardrail_timeout_seconds = rag.guardrail_timeout_seconds
-        self.guardrail_prompt_template = rag.guardrail_prompt_template
         self.chat_retry_ms = rag.sse_retry_ms
         # 多 locale 文本配置：locale → LocaleConfig
         self.rag_locales = cfg.rag.locales
 
         logger.info(
-            "RAG 配置初始化完成 | locales=%s | shared_inference_max_concurrency=%d | rag_max_concurrency=%d | "
-            "guardrail_max_concurrency=%d | guardrail_timeout_seconds=%g | execution_timeout_seconds=%g",
+            "RAG 配置初始化完成 | locales=%s | rag_max_concurrency=%d | "
+            "guardrail_timeout_seconds=%g | execution_timeout_seconds=%g",
             list(self.rag_locales.keys()),
-            rag.shared_inference_max_concurrency,
             rag.rag_max_concurrency,
-            rag.guardrail_max_concurrency,
             rag.guardrail_timeout_seconds,
             rag.execution_timeout_seconds,
         )
 
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""
-        # Gateway 接收共享信号量，主回答与摘要共用并发限制。
+        # 所有推理角色共享 Gateway 的并发限制。
+        import asyncio
+
         from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag_tool import get_rag_container
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
         )
 
-        rag_config = self._loader.load().rag
-        self.inference_gateway = InferenceGateway(rag_config.roles, self.inference_sem)
+        inference_config = self._inference_loader.load()
+        self.inference_gateway = InferenceGateway(
+            inference_config.roles,
+            asyncio.Semaphore(inference_config.max_concurrency),
+        )
         self.rag_app = get_rag_container(
             pools=self.pool_mgr.for_group("rag"),
             corpus_dir=self.system_config.corpus_dir,

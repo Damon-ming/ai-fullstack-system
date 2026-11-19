@@ -70,7 +70,7 @@ class RagRuntime:
 
 @dataclass
 class InferenceRuntime:
-    """统一推理入口及主推理、摘要共享的并发限制。"""
+    """统一推理入口。"""
 
     gateway: InferenceGateway
 
