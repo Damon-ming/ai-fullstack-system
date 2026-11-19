@@ -45,8 +45,8 @@ from src.com.damon.ming.ai.rag.config.vector.vector_config_loader import VectorC
 from src.com.damon.ming.ai.rag.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import BaseEmbeddingService
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
-from src.com.damon.ming.ai.knowledge.bootstrap import bootstrap_knowledge_index
-from src.com.damon.ming.ai.knowledge.index_service import KnowledgeIndexService
+from src.com.damon.ming.ai.rag.knowledge.bootstrap import bootstrap_knowledge_index
+from src.com.damon.ming.ai.rag.knowledge.index_service import KnowledgeIndexService
 from src.com.damon.ming.ai.rag.registry.embedding_registry import register_all_embeddings
 from src.com.damon.ming.ai.rag.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.rag.registry.source_registry import register_all_sources
@@ -62,7 +62,7 @@ from src.com.damon.ming.ai.rag.spliter.spliter import MarkdownDocumentSplitter
 from src.com.damon.ming.ai.rag.summary import SummaryService
 from src.com.damon.ming.ai.rag.thread_pools import RagThreadPools
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
-from src.com.damon.ming.ai.rag.vector_db.pgvector_store import PGVectorStore
+from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import ThreadPoolGroup

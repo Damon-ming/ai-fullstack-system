@@ -9,7 +9,7 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.rag.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 

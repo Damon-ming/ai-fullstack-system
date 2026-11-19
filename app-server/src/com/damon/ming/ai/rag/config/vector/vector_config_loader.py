@@ -16,8 +16,8 @@ import os
 from dataclasses import MISSING
 
 import yaml
-from src.com.damon.ming.ai.rag.vector_db import resolve_store
-from src.com.damon.ming.ai.rag.vector_db.base_vector_db import (
+from src.com.damon.ming.ai.vector_db import resolve_store
+from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
     VectorStoreParams,
 )

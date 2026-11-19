@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/vector_db/base_vector_db.py
+# app-server/src/com/damon/ming/ai/vector_db/base_vector_db.py
 """
 向量存储抽象层 —— 纯技术模块，零业务逻辑，可独立移植。
 
@@ -11,9 +11,9 @@
   - 具体实现 → 见 chroma_store.py / pgvector_store.py
 
 用法：
-  from src.com.damon.ming.ai.rag.vector_db import BaseVectorStore, VectorStoreParams
-  from src.com.damon.ming.ai.rag.vector_db.chroma_store import ChromaDBStore
-  from src.com.damon.ming.ai.rag.vector_db.pgvector_store import PGVectorStore
+  from src.com.damon.ming.ai.vector_db import BaseVectorStore, VectorStoreParams
+  from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
+  from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 
   params = VectorStoreParams(connection_string="postgresql://...", embedding_dimension=1024)
   store = PGVectorStore(params)

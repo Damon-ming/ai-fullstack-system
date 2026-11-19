@@ -1,12 +1,12 @@
-# app-server/src/com/damon/ming/ai/rag/vector_db/chroma_store.py
+# app-server/src/com/damon/ming/ai/vector_db/chroma_store.py
 
 import threading
 from collections import OrderedDict
 from typing import Any
 
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.rag.vector_db import register_engine
-from src.com.damon.ming.ai.rag.vector_db.base_vector_db import (
+from src.com.damon.ming.ai.vector_db import register_engine
+from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
     VectorStoreParams,
 )

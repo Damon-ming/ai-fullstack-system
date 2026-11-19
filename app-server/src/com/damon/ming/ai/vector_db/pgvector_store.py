@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/vector_db/pgvector_store.py
+# app-server/src/com/damon/ming/ai/vector_db/pgvector_store.py
 """
 PGVector 向量存储实现 —— PostgreSQL + pgvector 扩展。
 
@@ -34,8 +34,8 @@ from typing import Any
 from llama_index.core.schema import TextNode
 from sqlalchemy import column, literal, table, text, update
 from sqlalchemy.dialects.postgresql import JSONB
-from src.com.damon.ming.ai.rag.vector_db import register_engine
-from src.com.damon.ming.ai.rag.vector_db.base_vector_db import (
+from src.com.damon.ming.ai.vector_db import register_engine
+from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
     VectorStoreParams,
 )

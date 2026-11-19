@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/vector_db/__init__.py
+# app-server/src/com/damon/ming/ai/vector_db/__init__.py
 """
 向量存储抽象层 —— 纯技术模块。
 
@@ -13,7 +13,7 @@
 新增 vector_db 只需：写实现类 → 加 @register_engine("name") 装饰器。
 """
 
-from src.com.damon.ming.ai.rag.vector_db.base_vector_db import (
+from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
     VectorStoreParams,
 )
@@ -64,8 +64,8 @@ def list_engines() -> list[str]:
 
 
 # ── 触发注册（必须放在注册器定义之后）──────────────────────────────
-from src.com.damon.ming.ai.rag.vector_db.chroma_store import ChromaDBStore
-from src.com.damon.ming.ai.rag.vector_db.pgvector_store import PGVectorStore
+from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
+from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 
 __all__ = [
     "BaseVectorStore",

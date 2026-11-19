@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/knowledge/bootstrap.py
+# app-server/src/com/damon/ming/ai/rag/knowledge/bootstrap.py
 """从知识库磁盘数据构建内存检索节点并同步通用向量索引。"""
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.com.damon.ming.ai.rag.source import list_engines, resolve_source
-from src.com.damon.ming.ai.rag.vector_db.metadata_keys import FILE_PATH, FILE_SHA256
+from src.com.damon.ming.ai.vector_db.metadata_keys import FILE_PATH, FILE_SHA256
 from src.com.damon.ming.log import pin
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     )
     from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
     from src.com.damon.ming.ai.rag.spliter.spliter import BaseDocumentSplitter
-    from src.com.damon.ming.ai.rag.vector_db.base_vector_db import BaseVectorStore
+    from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 
 
 logger = pin("ai.knowledge.bootstrap")
