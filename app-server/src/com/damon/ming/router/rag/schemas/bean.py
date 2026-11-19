@@ -1,8 +1,7 @@
-from pydantic import Field
-from src.com.damon.ming.ai.schemas.request import BaseLLMRequest
+from pydantic import BaseModel, Field
 
 
-class ChatRequest(BaseLLMRequest):
+class ChatRequest(BaseModel):
     query: str
     reason: bool
     conversationId: str | None = Field(

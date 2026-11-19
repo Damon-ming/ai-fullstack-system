@@ -11,14 +11,14 @@ SSE 业务消息工厂 —— 统一构造 StreamMessage 并序列化。
 import json
 from datetime import datetime
 
-from src.com.damon.ming.ai.schemas.response import (
+from src.com.damon.ming.exception.error_codes import ErrorCode
+from src.com.damon.ming.router.rag.schemas.response import (
     BaseLLMFailedData,
     ChatDeltaData,
     ChatDoneData,
     ChatStartData,
     StreamMessage,
 )
-from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.utils.time import to_unix_timestamp, unix_timestamp
 from src.com.damon.ming.utils.uuid import generate_uuid_hex
 

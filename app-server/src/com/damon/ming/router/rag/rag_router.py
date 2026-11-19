@@ -19,11 +19,6 @@ import asyncio
 
 from fastapi import APIRouter, Request
 from src.com.damon.ming.ai.infer.base_inference import STREAM_TYPE_REASONING
-from src.com.damon.ming.ai.schemas.response import (
-    BaseLLMSuccessData,
-    BaseLLMSuccessResponse,
-    ChatDeltaData,
-)
 from src.com.damon.ming.app.thread_pools import get_database_pool
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
@@ -37,6 +32,11 @@ from src.com.damon.ming.router.rag.preflight import (
     check_input,
 )
 from src.com.damon.ming.router.rag.schemas.bean import ChatRequest
+from src.com.damon.ming.router.rag.schemas.response import (
+    BaseLLMSuccessData,
+    BaseLLMSuccessResponse,
+    ChatDeltaData,
+)
 from src.com.damon.ming.router.rag.service.rag_core import generate_answer
 from src.com.damon.ming.router.rag.service.rag_turn import RagTurnRecorder
 from src.com.damon.ming.router.rag.sse import SseEmitter, SseMessageFactory

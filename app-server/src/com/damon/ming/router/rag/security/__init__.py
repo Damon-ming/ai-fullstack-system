@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/security/__init__.py
+# app-server/src/com/damon/ming/router/rag/security/__init__.py
 """
 轻量级输入安全校验 —— guardrail 前置过滤层。
 
@@ -13,7 +13,7 @@
   3. InjectionRule    —— 已知 prompt injection 模式匹配（高频简单攻击）
 
 用法：
-  from src.com.damon.ming.ai.security import InputValidator, ValidationResult
+  from src.com.damon.ming.router.rag.security import InputValidator, ValidationResult
 
   validator = InputValidator()
   result = validator.validate(query)
@@ -21,7 +21,7 @@
       return reject_response(result.reason)
 """
 
-from src.com.damon.ming.ai.security.input_validator import (
+from src.com.damon.ming.router.rag.security.input_validator import (
     InputValidator,
     ValidationResult,
 )

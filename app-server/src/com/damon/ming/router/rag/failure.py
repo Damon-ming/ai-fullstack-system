@@ -6,7 +6,7 @@ chat 链路统一失败响应构造。
 把原先散落在 rag_router / preflight 各处的 BaseLLMFailedData 组装收敛到一处。
 """
 
-from src.com.damon.ming.ai.schemas.response import (
+from src.com.damon.ming.router.rag.schemas.response import (
     BaseLLMFailedData,
     BaseLLMFailedResponse,
 )

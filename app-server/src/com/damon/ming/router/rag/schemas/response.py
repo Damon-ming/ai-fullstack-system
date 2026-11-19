@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/schemas/response.py
+# app-server/src/com/damon/ming/router/rag/schemas/response.py
 
 from typing import Any, Generic, TypeVar
 

@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/security/input_validator.py
+# app-server/src/com/damon/ming/router/rag/security/input_validator.py
 """
 轻量级输入校验器 —— 纯本地规则，零 IO，微秒级判定。
 
