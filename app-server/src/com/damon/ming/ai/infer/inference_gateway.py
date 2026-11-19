@@ -58,7 +58,10 @@ class InferenceGateway:
                 options=role_options,
             )
 
-        async with self._inference_semaphore:
+        async with (
+            asyncio.timeout(self._roles[role].timeout_seconds),
+            self._inference_semaphore,
+        ):
             return await call()
 
     async def stream(
@@ -84,7 +87,11 @@ class InferenceGateway:
                 async for token in stream:
                     yield token
 
-        async with aclosing(produce()) as stream, self._inference_semaphore:
+        async with (
+            asyncio.timeout(self._roles[role].timeout_seconds),
+            self._inference_semaphore,
+            aclosing(produce()) as stream,
+        ):
             async for token in stream:
                 yield token
 

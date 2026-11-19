@@ -25,6 +25,7 @@ class ModelEntry:
     api_key: str
     engine_type: str
     engine: BaseInferenceService
+    timeout_seconds: float | None
 
 
 @dataclass(frozen=True)
@@ -80,7 +81,12 @@ class InferenceConfigLoader:
                     )
                 )
             entries[role] = ModelEntry(
-                config["model_name"], config["options"], key, engine_type, engines[key]
+                config["model_name"],
+                config["options"],
+                key,
+                engine_type,
+                engines[key],
+                config["timeout_seconds"],
             )
         self._config = InferenceConfig(concurrency, float(timeout), entries)
         return self._config
@@ -99,6 +105,14 @@ class InferenceConfigLoader:
                 raise ValueError(f"{path}.model_name 必须是非空字符串")
             if not isinstance(options, dict):
                 raise TypeError(f"{path}.options 必须是键值对")
+            role_timeout = params.get("timeout_seconds")
+            if role_timeout is not None and (
+                isinstance(role_timeout, bool)
+                or not isinstance(role_timeout, (int, float))
+                or not math.isfinite(role_timeout)
+                or role_timeout <= 0
+            ):
+                raise ValueError(f"{path}.timeout_seconds 必须是有限正数")
             if "max_tokens" in options and (
                 type(options["max_tokens"]) is not int or options["max_tokens"] < 1
             ):
@@ -114,5 +128,11 @@ class InferenceConfigLoader:
                         or (field == "top_p" and value == 0)
                     ):
                         raise ValueError(f"{path}.options.{field} 超出有效数值范围")
-            cleaned[role] = {"model_name": name, "options": dict(options)}
+            cleaned[role] = {
+                "model_name": name,
+                "options": dict(options),
+                "timeout_seconds": float(role_timeout)
+                if role_timeout is not None
+                else None,
+            }
         return cleaned

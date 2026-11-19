@@ -17,8 +17,9 @@ import asyncio
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
 
+import httpx
+from openai import APITimeoutError
 from pydantic import BaseModel, ValidationError
 from src.com.damon.ming.ai.schemas.response import BaseLLMFailedResponse
 from src.com.damon.ming.ai.security import InputValidator
@@ -35,11 +36,6 @@ logger = pin("chat.preflight")
 _input_validator = InputValidator()
 _fail_open_timestamps: deque[float] = deque()
 _fail_open_lock = threading.Lock()
-
-
-@dataclass(frozen=True)
-class GuardrailConfig:
-    timeout_seconds: float
 
 
 class _GuardrailResponse(BaseModel):
@@ -99,10 +95,8 @@ async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | Non
         )
     except asyncio.CancelledError:
         raise
-    except TimeoutError:
-        logger.warning("护栏检测超时，fail-open 放行")
-        _record_fail_open("timeout")
-        return None
+    except (TimeoutError, APITimeoutError, httpx.TimeoutException) as exc:
+        raise TimeoutError("护栏推理超时") from exc
     except Exception as exc:
         logger.warning("护栏检测异常，fail-open 放行 | error=%s", exc)
         _record_fail_open(str(exc))
@@ -130,8 +124,7 @@ async def check_guardrail_with_timeout(
 ) -> BaseLLMFailedResponse | None:
     """执行护栏检测，超时时返回聊天超时错误。"""
     try:
-        async with asyncio.timeout(app_state.ai.rag.preflight.timeout_seconds):
-            return await _check_guardrail(app_state, query)
+        return await _check_guardrail(app_state, query)
     except TimeoutError:
         logger.warning("护栏检测超时，返回超时错误")
         return chat_failure(ErrorCode.CHAT.TIMEOUT, t(I18nKey.CHAT_TIMEOUT))

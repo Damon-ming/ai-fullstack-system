@@ -30,17 +30,6 @@ class AppInitializer:
     """
 
     def __init__(self) -> None:
-        # 推理配置加载器在启动时只装配一次客户端。
-        from src.com.damon.ming.app.config.inference.inference_config_loader import (
-            InferenceConfigLoader,
-        )
-        from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
-            RagConfigLoader,
-        )
-
-        self._loader = RagConfigLoader()
-        self._inference_loader = InferenceConfigLoader()
-
         # 子系统状态（startup 后填充）
         self.system_config = None
         self.db_conn = None
@@ -76,7 +65,6 @@ class AppInitializer:
         self._init_encryption()
         self._init_sign_context()
         self._init_rate_limiter()
-        self._init_rag()
         self._init_ai()
 
         logger.info("应用启动完成")
@@ -97,7 +85,6 @@ class AppInitializer:
             Storage,
             ThreadRuntime,
         )
-        from src.com.damon.ming.router.rag.preflight import GuardrailConfig
 
         app.state.config = AppConfig(
             system_config=self.system_config,
@@ -113,9 +100,6 @@ class AppInitializer:
                 retry_ms=self.chat_retry_ms,
                 locales=self.rag_locales,
                 rag_app=self.rag_app,
-                preflight=GuardrailConfig(
-                    timeout_seconds=self.guardrail_timeout_seconds,
-                ),
             ),
             inference=InferenceRuntime(
                 gateway=self.inference_gateway,
@@ -397,42 +381,41 @@ class AppInitializer:
             )
         logger.info("HKDF sign_context 已从配置读出")
 
-    def _init_rag(self) -> None:
-        """RAG 配置：从 YAML 读取 Semaphore 参数、超时、多 locale 文本。"""
-        import asyncio
-
-        cfg = self._loader.load()
-        rag = cfg.rag
-
-        # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
-        self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
-        self.execution_timeout_seconds = rag.execution_timeout_seconds
-        self.guardrail_timeout_seconds = rag.guardrail_timeout_seconds
-        self.chat_retry_ms = rag.sse_retry_ms
-        # 多 locale 文本配置：locale → LocaleConfig
-        self.rag_locales = cfg.rag.locales
-
-        logger.info(
-            "RAG 配置初始化完成 | locales=%s | rag_max_concurrency=%d | "
-            "guardrail_timeout_seconds=%g | execution_timeout_seconds=%g",
-            list(self.rag_locales.keys()),
-            rag.rag_max_concurrency,
-            rag.guardrail_timeout_seconds,
-            rag.execution_timeout_seconds,
-        )
-
     def _init_ai(self) -> None:
-        """AI 子系统：推理注册 + RAG + LLM 客户端。"""
-        # 所有推理角色共享 Gateway 的并发限制。
+        """加载 AI 配置，初始化 RAG 容器和统一推理入口。"""
         import asyncio
 
         from src.com.damon.ming.ai.infer.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag_tool import get_rag_container
+        from src.com.damon.ming.app.config.inference.inference_config_loader import (
+            InferenceConfigLoader,
+        )
+        from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
+            RagConfigLoader,
+        )
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
         )
 
-        inference_config = self._inference_loader.load()
+        rag = RagConfigLoader().load().rag
+        inference_config = InferenceConfigLoader().load()
+
+        # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
+        self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
+        self.execution_timeout_seconds = rag.execution_timeout_seconds
+        self.chat_retry_ms = rag.retry_ms
+        # 多 locale 文本配置：locale → LocaleConfig
+        self.rag_locales = rag.locales
+
+        logger.info(
+            "RAG 配置初始化完成 | locales=%s | rag_max_concurrency=%d | "
+            "execution_timeout_seconds=%g",
+            list(self.rag_locales.keys()),
+            rag.rag_max_concurrency,
+            rag.execution_timeout_seconds,
+        )
+
+        # 所有推理角色共享 Gateway 的并发限制。
         self.inference_gateway = InferenceGateway(
             inference_config.roles,
             asyncio.Semaphore(inference_config.max_concurrency),

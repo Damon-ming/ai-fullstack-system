@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/app/config/inference/inference-config.yaml
 # 推理网关连接超时、共享并发上限和各用途模型配置。
 # 引擎、网关地址及各角色 API key 从环境变量加载。
 inference:
@@ -6,6 +7,7 @@ inference:
   max_concurrency: 16  # 所有 role 共享的推理并发上限
   roles:
     inference:
+      timeout_seconds: 180  # 包含等待并发槽及完整输出
       model_name: qwen2.5-0.5B-instruct
       options:
         temperature: 0.1
@@ -24,12 +26,14 @@ inference:
         top_p: 0.9
         max_tokens: 256
     summary:
+      timeout_seconds: 10   # 每次摘要调用预算
       model_name: qwen2.5-0.5B-instruct
       options:
         temperature: 0.1
         top_p: 0.9
         max_tokens: 1024
     guardrail:
+      timeout_seconds: 5    # 包含等待并发槽
       model_name: qwen2.5-0.5B-instruct
       options:
         temperature: 0.1

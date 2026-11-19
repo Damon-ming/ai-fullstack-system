@@ -37,7 +37,6 @@ if TYPE_CHECKING:
     from src.com.damon.ming.app.encryption.session_service import SessionService
     from src.com.damon.ming.db.db_connection import DbConnection
     from src.com.damon.ming.encryption.v1.field_encryptor import FieldEncryptor
-    from src.com.damon.ming.router.rag.preflight import GuardrailConfig
     from src.com.damon.ming.thread.pool_manager import ThreadPoolManager
 
 
@@ -65,7 +64,6 @@ class RagRuntime:
     retry_ms: int
     locales: dict[str, LocaleConfig]
     rag_app: RAGContainer
-    preflight: GuardrailConfig
 
 
 @dataclass

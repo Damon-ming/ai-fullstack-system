@@ -32,8 +32,7 @@ class RagConfig:
 
     execution_timeout_seconds: float  # 检索、上下文构造和主推理预算（秒），不含护栏
     rag_max_concurrency: int
-    guardrail_timeout_seconds: float
-    sse_retry_ms: int
+    retry_ms: int
     locales: dict[str, LocaleConfig]
 
 
@@ -81,25 +80,18 @@ class RagConfigLoader:
             raise TypeError(f"运行时配置缺少 rag 段 | dir={self._config_dir}")
 
         try:
-            pipeline = rag["pipeline"]
-            rag_pipeline = pipeline["rag"]
-            guardrail = pipeline["guardrail"]
             return RagConfig(
                 execution_timeout_seconds=self._positive_number(
-                    pipeline["execution_timeout_seconds"],
-                    "rag.pipeline.execution_timeout_seconds",
+                    rag["execution_timeout_seconds"],
+                    "rag.execution_timeout_seconds",
                 ),
                 rag_max_concurrency=self._integer(
-                    rag_pipeline["max_concurrency"],
-                    "rag.pipeline.rag.max_concurrency",
+                    rag["max_concurrency"],
+                    "rag.max_concurrency",
                 ),
-                guardrail_timeout_seconds=self._positive_number(
-                    guardrail["timeout_seconds"],
-                    "rag.pipeline.guardrail.timeout_seconds",
-                ),
-                sse_retry_ms=self._integer(
-                    rag["transport"]["sse"]["retry_ms"],
-                    "rag.transport.sse.retry_ms",
+                retry_ms=self._integer(
+                    rag["retry_ms"],
+                    "rag.retry_ms",
                     minimum=0,
                 ),
                 locales=self._load_rag_locales(rag.get("locales")),
