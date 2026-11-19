@@ -26,6 +26,8 @@ import threading
 from pathlib import Path
 from typing import cast
 
+from src.com.damon.ming.ai.vector_db.config.vector_config_loader import VectorConfigLoader
+from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
 from src.com.damon.ming.ai.rag.config.embedding.embedding_config_loader import (
     EmbeddingConfigLoader,
 )
@@ -41,16 +43,20 @@ from src.com.damon.ming.ai.rag.config.splitter.splitter_config_loader import (
 from src.com.damon.ming.ai.rag.config.tokenizer.tokenizer_config_loader import (
     TokenizerConfigLoader,
 )
-from src.com.damon.ming.ai.rag.config.vector.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.rag.constructor.constructor import SectionReconstructor
-from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import BaseEmbeddingService
-from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
+from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
+    BaseEmbeddingService,
+)
 from src.com.damon.ming.ai.rag.knowledge.bootstrap import bootstrap_knowledge_index
 from src.com.damon.ming.ai.rag.knowledge.index_service import KnowledgeIndexService
-from src.com.damon.ming.ai.rag.registry.embedding_registry import register_all_embeddings
+from src.com.damon.ming.ai.rag.registry.embedding_registry import (
+    register_all_embeddings,
+)
 from src.com.damon.ming.ai.rag.registry.rerank_registry import register_all_rerankers
 from src.com.damon.ming.ai.rag.registry.source_registry import register_all_sources
-from src.com.damon.ming.ai.rag.registry.tokenizer_registry import register_all_tokenizers
+from src.com.damon.ming.ai.rag.registry.tokenizer_registry import (
+    register_all_tokenizers,
+)
 from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker
 from src.com.damon.ming.ai.rag.retriever.base_retriever import (
     DenseRetriever,

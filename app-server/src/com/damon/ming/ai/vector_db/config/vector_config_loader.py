@@ -1,8 +1,8 @@
-# app-server/src/com/damon/ming/ai/rag/config/vector_config_loader.py
+# app-server/src/com/damon/ming/ai/vector_db/config/vector_config_loader.py
 """
 向量存储配置加载器 —— 从 YAML 读取引擎参数，构造 VectorStoreParams。
 
-本模块属于 ai/config/ 配置层，不属于 vector_db/ 模块。
+本模块属于 ai/vector_db/config/ 配置层，不属于 vector_db/ 模块。
 vector_db/ 模块通过 VectorStoreParams 数据类接收参数，不感知配置来源。
 
 上层调用方必须显式指定引擎名，不能依赖隐式默认值。

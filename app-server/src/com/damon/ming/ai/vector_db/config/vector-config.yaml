@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/config/vector-config.yaml
+# app-server/src/com/damon/ming/ai/vector_db/config/vector-config.yaml
 # 向量存储配置 —— 由 VectorConfigLoader 读取，注入 vector_db 模块。
 # vector_db 模块本身不包含任何配置文件，纯参数化调用。
 #

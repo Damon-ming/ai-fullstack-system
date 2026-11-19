@@ -7,7 +7,7 @@
   - VectorStoreParams: 纯数据类，参数由上层配置注入
   - resolve_store:     根据引擎名称解析对应的实现类
 
-配置加载见 ai/config/vector_config_loader.py，本模块不感知配置来源。
+配置加载见 ai/vector_db/config/vector_config_loader.py，本模块不感知配置来源。
 
 引擎注册表（_name_to_class）由各实现类在模块导入时自动注册。
 新增 vector_db 只需：写实现类 → 加 @register_engine("name") 装饰器。

@@ -7,7 +7,7 @@
   - VectorStoreParams: 纯数据类，参数由上层配置注入，本模块不感知配置来源
 
 不提供：
-  - 配置加载 → 见 ai/config/vector_config_loader.py
+  - 配置加载 → 见 ai/vector_db/config/vector_config_loader.py
   - 具体实现 → 见 chroma_store.py / pgvector_store.py
 
 用法：
