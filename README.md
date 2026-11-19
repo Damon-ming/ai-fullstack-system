@@ -389,7 +389,8 @@ UA 指纹来自客户端提供的信息。SHA-256 让摘要难以直接反推，
 | 加密 | `config/encryption/` | RSA 密钥大小、TTL |
 | i18n | `config/i18n/` | 默认语言、支持语言列表 |
 | 上传 | `config/upload/` | 文件类型白名单、大小限制 |
-| 线程池 | `config/thread/thread-pool-config.yaml` | 集中配置 RAG、数据库等分组的线程池；校验全局和分组 worker 上限 |
+| 线程池预算 | `config/thread/thread-pool-config.yaml` | 配置全局及 RAG、数据库等资源组 worker 上限 |
+| AI 线程池分配 | `ai/config/thread/ai-thread-pool-config.yaml` | 配置 AI 资源组内部各命名线程池的 worker 分配 |
 | 推理网络超时 | `config/rag/rag-runtime.yaml` → `rag.transport.inference.timeout_seconds` | 推理客户端网络超时，独立于流水线执行预算 |
 | 网关路由 | `inference-gateway/config/gateway.yaml` | api_key → upstream 映射 |
 
@@ -484,12 +485,11 @@ python gateway.py
 ThreadPoolManager（进程单例）
 ├── retrieval  pool(4)    ← HybridRetriever 稠密+稀疏并发
 ├── document   pool(8)    ← PDF 加载 / 文档分割
-├── inference  pool(2)    ← 推理辅助线程
 ├── rerank     pool(2)    ← CrossEncoder 重排专用（与 retrieval 隔离）
 └── bm25       pool(1)    ← BM25 全量重建（串行，防检索池饿死）
 ```
 
-各 AI 模块从 `ThreadPoolManager` 获取命名线程池，不自行创建。同步 I/O（DB 查询、文件读写、BM25 计算）通过 `loop.run_in_executor()` 丢进线程池，不阻塞事件循环。
+应用配置控制资源组和全局 worker 预算；AI 配置直接以线程池名称映射 worker 数，控制 RAG 组内部的命名池分配。当前 RAG 池容量合计 15，低于全局配置中的 rag 预算 17。各模块通过 `ThreadPoolManager` 创建或获取自己的池，管理器统一校验预算、统计并在关闭时回收。主推理和摘要使用异步调用及共享信号量，不配置专用线程池。BM25 池仅用于后台串行重建，BM25 查询使用 retrieval 池。
 
 ## RAG 流水线
 

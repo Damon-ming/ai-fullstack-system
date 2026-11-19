@@ -175,11 +175,21 @@ class AppInitializer:
         from src.com.damon.ming.thread import ThreadPoolManager
 
         loader = ThreadPoolConfigLoader()
-        pool_configs = loader.load()
-        logger.info("线程池配置已从 YAML 加载: %s", pool_configs)
+        budget = loader.load()
+        logger.info(
+            "线程池全局预算已加载 | groups=%s | max_total=%d",
+            budget.group_limits,
+            budget.max_total_workers,
+        )
 
         self.pool_mgr = ThreadPoolManager()
-        self.pool_mgr.startup(pool_configs=pool_configs)
+        self.pool_mgr.startup(
+            group_limits=budget.group_limits,
+            max_total_workers=budget.max_total_workers,
+        )
+        from src.com.damon.ming.app.thread_pools import create_io_pool
+
+        create_io_pool()
         logger.info("线程池管理器初始化完成")
 
     def _init_upload_config(self) -> None:
@@ -208,9 +218,7 @@ class AppInitializer:
 
         loader = SystemConfigLoader()
         self.system_config = loader.load()
-        logger.info(
-            "系统配置已加载 | corpus_dir=%s", self.system_config.corpus_dir
-        )
+        logger.info("系统配置已加载 | corpus_dir=%s", self.system_config.corpus_dir)
 
     def _register_exception_types(self) -> None:
         """注册子系统异常类型到全局异常分类器。"""
@@ -295,7 +303,7 @@ class AppInitializer:
         from src.com.damon.ming.app.encryption.field_key_material import KeyMaterial
         from src.com.damon.ming.app.encryption.field_key_store import PgFieldKeyStore
         from src.com.damon.ming.app.encryption.session_service import SessionService
-        from src.com.damon.ming.app.thread_pools import get_database_query_pool
+        from src.com.damon.ming.app.thread_pools import create_database_pool
         from src.com.damon.ming.encryption.v1.rsa_key_pair import RSAKeyPair
 
         self._enc_config = self._load_encryption_config()
@@ -318,7 +326,7 @@ class AppInitializer:
             kek=kek,
             ttl_seconds=ttl_seconds,
             key_store=key_store,
-            db_executor=get_database_query_pool(),
+            db_executor=create_database_pool(),
         )
         self.session_service.initialize()
 
@@ -421,7 +429,6 @@ class AppInitializer:
     def _init_ai(self) -> None:
         """AI 子系统：推理注册 + RAG + LLM 客户端。"""
         from src.com.damon.ming.ai.rag_tool import get_rag_container
-        from src.com.damon.ming.app.thread_pools import get_rag_thread_pools
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
         )
@@ -430,7 +437,7 @@ class AppInitializer:
         # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
         # loader 同为注入，保证全进程只有一套推理引擎
         self.rag_app = get_rag_container(
-            thread_pools=get_rag_thread_pools(),
+            pools=self.pool_mgr.for_group("rag"),
             rag_sem=self.rag_sem,
             corpus_dir=self.system_config.corpus_dir,
             loader=self._loader,

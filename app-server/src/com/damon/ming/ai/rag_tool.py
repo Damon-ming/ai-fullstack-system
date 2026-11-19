@@ -4,7 +4,7 @@ RAG 容器 —— 检索线程编排层。
 
 职责：
   - 编排 AI 模块的执行顺序（检索 → 重构 → rerank → 拼接 → 全局摘要）
-  - 管理线程池使用（将同步 AI 函数提交到 ThreadPoolManager）
+  - 使用外层授予的 RAG 线程池能力，不接触其他资源组
   - vector DB 写入、删除和索引对账由 KnowledgeIndexService 提供
   - 取消由 asyncio.CancelledError 穿透所有 await 层，无需手动检查
   - AI 模块本身不感知线程/取消
@@ -15,9 +15,9 @@ RAG 容器 —— 检索线程编排层。
   - 中断时直接抛弃内存中的中间数据（clones、压缩结果等），不做任何保存/恢复
   - 不碰 vector_db 中的原始数据
 
-线程模型（executor 注入模式）：
-  - 同步 AI 函数通过 app.thread_pools 统一提交入口执行
-  - AI 模块（HybridRetriever/SectionReconstructor）通过参数接收 executor 用于内部并行
+线程模型：
+  - 全局线程预算由 app/config/thread 控制，RAG 内部池分配由 ai/config/thread 控制
+  - 所属组件通过 RAG 线程池接口获取本组件需要的池
   - 异步 AI 函数（SummaryService.run_summary）直接调用
 """
 
@@ -59,17 +59,15 @@ from src.com.damon.ming.ai.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.retriever.hybrid_retriever import HybridRetriever
 from src.com.damon.ming.ai.spliter.spliter import MarkdownDocumentSplitter
 from src.com.damon.ming.ai.summary import SummaryService
+from src.com.damon.ming.ai.thread_pools import RagThreadPools
 from src.com.damon.ming.ai.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
     RagConfigLoader,
 )
-from src.com.damon.ming.app.thread_pools import (
-    RagThreadPools,
-    run_in_pool,
-)
+from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
-from src.com.damon.ming.thread import CancellationToken
+from src.com.damon.ming.thread import CancellationToken, ThreadPoolGroup
 
 logger = pin("ai.rag")
 
@@ -78,7 +76,7 @@ _rag_instance_lock = threading.Lock()
 
 
 def get_rag_container(
-    thread_pools: RagThreadPools,
+    pools: ThreadPoolGroup,
     rag_sem: asyncio.Semaphore,
     corpus_dir: str,
     loader: RagConfigLoader,
@@ -86,7 +84,7 @@ def get_rag_container(
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
     Args:
-        thread_pools: 由 AppInitializer 注入的 RAG 命名线程池集合（必填）。
+        pools: 仅限 RAG 资源组的线程池能力，由 AppInitializer 注入。
         rag_sem: RAG 流程共享的推理并发信号量（必填）。
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
         loader: 推理配置加载器（由 AppInitializer 注入，必填）。
@@ -96,7 +94,7 @@ def get_rag_container(
         with _rag_instance_lock:
             if _rag_instance is None:
                 _rag_instance = RAGContainer(
-                    thread_pools=thread_pools,
+                    pools=pools,
                     rag_sem=rag_sem,
                     corpus_dir=corpus_dir,
                     loader=loader,
@@ -108,22 +106,28 @@ def get_rag_container(
 class RAGContainer:
     def __init__(
         self,
-        thread_pools: RagThreadPools,
+        pools: ThreadPoolGroup,
         rag_sem: asyncio.Semaphore,
         corpus_dir: str = "",
         loader: RagConfigLoader | None = None,
     ):
         logger.info("RAG 容器初始化开始")
-        self._thread_pools = thread_pools
+
         # 推理信号量：所有 LLM 调用（主推理 + 摘要 + 压缩）共享同一上限
         self._rag_sem = rag_sem
+
         # 知识库目录：由 app.config 注入，不再硬编码，不合法直接抛异常
         if not corpus_dir:
             raise ValueError("RAGContainer 初始化失败：corpus_dir 不能为空")
         corpus_path = Path(corpus_dir)
+
         # 推理配置加载器：由 AppInitializer 注入（全进程唯一实例）
         if loader is None:
             raise ValueError("RAGContainer 初始化失败：loader 不能为空")
+
+        self.thread_pools = RagThreadPools()
+        self.thread_pools.initialize(pools)
+
         # 步骤1：执行所有模块注册
         register_all_rerankers()
         register_all_tokenizers()
@@ -149,7 +153,9 @@ class RAGContainer:
 
         # 步骤4：初始化章节重构 + 摘要服务
         _summary_entry = loader.load().rag.roles["summary"]
-        self.section_recon = SectionReconstructor()
+        self.section_recon = SectionReconstructor(
+            self.thread_pools.get_retrieval_pool()
+        )
         self.summary = SummaryService(
             tokenizer=self.tokenizer,
             inference=_summary_entry.engine,
@@ -184,6 +190,7 @@ class RAGContainer:
             fuse_k=self.retriever_config.fuse_k,
             max_section_oversample_multiplier=self.retriever_config.max_section_oversample_multiplier,
             rrf_oversample_multiplier=self.retriever_config.rrf_oversample_multiplier,
+            retrieval_pool=self.thread_pools.get_retrieval_pool(),
         )
 
         # 步骤10：加载分割器参数并构造切块器
@@ -204,7 +211,8 @@ class RAGContainer:
         )
         self.knowledge_index_service = KnowledgeIndexService(
             corpus_dir=corpus_path,
-            thread_pools=thread_pools,
+            document_pool=self.thread_pools.get_document_pool(),
+            bm25_pool=self.thread_pools.get_bm25_pool(),
             splitter=self.splitter,
             embedder=self.embedder,
             vector_store=self._vector_store,
@@ -223,17 +231,15 @@ class RAGContainer:
     ) -> str:
         """RAG 检索主流程。
 
-        线程编排层（executor 注入模式）：
-          1. 混合检索（HybridRetriever，线程池注入）
-          2. 章节重构（SectionReconstructor，线程池注入）
+        线程编排层：
+          1. 混合检索（HybridRetriever 使用 retrieval 池）
+          2. 章节重构（SectionReconstructor 使用 retrieval 池）
           3. rerank 重排（长节点由 reranker 内部滑动窗口处理）
           4. 拼接
           5. 全局超限摘要（run_summary 或 truncate_by_token）
           6. 取消由 asyncio.CancelledError 统一处理——任何 await 点立即中断
 
-        Executor 注入模式：
-          - 检索流程使用注入的检索和重排线程池
-          - AI 模块通过参数接收 executor，不创建/不持有线程池
+        线程池由统一管理器统计和回收；组件通过 RAG 专属接口获取需要的池。
           - 取消时 CancelledError 穿透所有 await 层，无需手动检查
 
         取消联动：
@@ -269,27 +275,20 @@ class RAGContainer:
             rerank_top_k,
         )
 
-        retrieval_pool = self._thread_pools.retrieval
-        rerank_pool = self._thread_pools.rerank
-
         # 协作取消信号：超时或客户端断开时通知线程池中的 rerank 提前退出
         cancel_event = threading.Event()
 
         try:
             # ── 阶段 1: 混合检索（参数全部来自 YAML 配置） ──
             # 传入 cancel_event，使稠密/稀疏检索之间可感知取消信号
-            raw_nodes = await run_in_pool(
-                retrieval_pool,
-                lambda: self.hybrid_retriever.retrieve(
-                    query=query,
-                    top_k=retrieve_top_k,
-                    dedup_by_section=cfg.dedup_by_section,
-                    dense_top_k=cfg.dense_top_k,
-                    sparse_top_k=cfg.sparse_top_k,
-                    executor=retrieval_pool,
-                    metadata_filter=None,
-                    cancel_event=cancel_event,
-                ),
+            raw_nodes = await self.hybrid_retriever.retrieve(
+                query=query,
+                top_k=retrieve_top_k,
+                dedup_by_section=cfg.dedup_by_section,
+                dense_top_k=cfg.dense_top_k,
+                sparse_top_k=cfg.sparse_top_k,
+                metadata_filter=None,
+                cancel_event=cancel_event,
             )
             if not raw_nodes:
                 logger.info("RAG 检索无结果")
@@ -300,7 +299,6 @@ class RAGContainer:
                 await self.section_recon.reconstruct_sections_to_nodes(
                     vector_store=self._vector_store,
                     hit_nodes=raw_nodes,
-                    executor=retrieval_pool,
                 )
             )
 
@@ -309,7 +307,7 @@ class RAGContainer:
             # 使用独立池避免 rerank 长耗时占用 retrieval 线程（与 Stage 1/2 隔离）
             # 传入 cancel_event，使 rerank 内部可在取消信号下提前退出
             ranked_nodes = await run_in_pool(
-                rerank_pool,
+                self.thread_pools.get_rerank_pool(),
                 self.reranker.rerank,
                 query,
                 reconstructed_nodes,

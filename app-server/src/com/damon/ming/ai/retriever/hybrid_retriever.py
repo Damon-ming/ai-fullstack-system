@@ -1,4 +1,5 @@
 # app-server/src/com/damon/ming/ai/retriever/hybrid_retriever.py
+import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -10,6 +11,7 @@ from src.com.damon.ming.ai.retriever.base_retriever import (
     SparseRetriever,
 )
 from src.com.damon.ming.ai.retriever.rrf import ReciprocalRankFusion
+from src.com.damon.ming.app.thread_pools import submit_to_pool
 from src.com.damon.ming.log import pin
 
 
@@ -17,8 +19,8 @@ class HybridRetriever:
     """混合检索器：稠密 + 稀疏 + RRF（并发执行）。
 
     线程模型：
-      - 不持有自己的线程池，由 RAGContainer 通过 retrieve() 的 executor 参数注入。
-      - 稠密和稀疏检索通过注入的 executor 并发提交。
+      - 使用调用方注入的 retrieval 池。
+      - 稠密和稀疏检索通过内部持有的池并发提交。
       - 稠密检索完成后检查 cancel_event，已取消则跳过稀疏检索提前返回。
 
     纯业务逻辑：本类只做检索 + RRF 融合，不管理线程生命周期。
@@ -40,6 +42,7 @@ class HybridRetriever:
         fuse_k: int,
         max_section_oversample_multiplier: int,
         rrf_oversample_multiplier: int,
+        retrieval_pool: ThreadPoolExecutor,
     ):
         self.dense_retriever = dense_retriever
         self.sparse_retriever = sparse_retriever
@@ -48,16 +51,16 @@ class HybridRetriever:
         self.fuser = ReciprocalRankFusion(k=fuse_k)
         self.max_section_oversample_multiplier = max_section_oversample_multiplier
         self.rrf_oversample_multiplier = rrf_oversample_multiplier
+        self._executor = retrieval_pool
         self.logger = pin("HybridRetriever")
 
-    def retrieve(
+    async def retrieve(
         self,
         query: str,
         top_k: int,
         dedup_by_section: bool,
         dense_top_k: int,
         sparse_top_k: int,
-        executor: ThreadPoolExecutor,
         metadata_filter: dict[str, Any] | None = None,
         cancel_event: threading.Event | None = None,
     ) -> list[TextNode]:
@@ -72,7 +75,6 @@ class HybridRetriever:
                               必须显式传入，无默认值。
             dense_top_k: 稠密检索候选数。
             sparse_top_k: 稀疏检索候选数。
-            executor: 由 RAGContainer 注入的线程池（必须非 None）。
             metadata_filter: 元数据过滤条件。
             cancel_event: 协作取消信号，稠密检索完成后检查，已取消则跳过稀疏检索。
 
@@ -83,20 +85,20 @@ class HybridRetriever:
             f"[HybridRetriever] 开始混合检索 | query={query[:50]} | dedup_by_section={dedup_by_section}"
         )
 
-        return self._retrieve_with_executor(
+        return await self._retrieve_with_executor(
             query,
             top_k,
             dense_top_k,
             sparse_top_k,
             metadata_filter,
-            executor,
+            self._executor,
             dedup_by_section,
             cancel_event,
         )
 
     # ── 有 executor：并发检索 + 可选循环扩大 ─────────────────────────
 
-    def _retrieve_with_executor(
+    async def _retrieve_with_executor(
         self,
         query: str,
         top_k: int,
@@ -119,14 +121,16 @@ class HybridRetriever:
             cur_sparse_top_k = sparse_top_k * multiplier
 
             # ① 并发提交稠密 + 稀疏检索（dedup_by_section 透传）
-            dense_future = executor.submit(
+            dense_future = submit_to_pool(
+                executor,
                 self.dense_retriever.retrieve_with_score,
                 query,
                 cur_dense_top_k,
                 dedup_by_section,
                 metadata_filter,
             )
-            sparse_future = executor.submit(
+            sparse_future = submit_to_pool(
+                executor,
                 self.sparse_retriever.retrieve_with_score,
                 query,
                 cur_sparse_top_k,
@@ -138,7 +142,9 @@ class HybridRetriever:
             sparse_results: list = []
 
             try:
-                dense_results = dense_future.result(timeout=30)
+                dense_results = await asyncio.wait_for(
+                    asyncio.wrap_future(dense_future), timeout=30
+                )
                 self.logger.info(
                     f"[HybridRetriever] 稠密检索完成 | 返回 {len(dense_results)} 个结果"
                 )
@@ -147,11 +153,14 @@ class HybridRetriever:
 
             # 协作取消：稠密检索完成后检查信号，已取消则放弃稀疏检索
             if cancel_event is not None and cancel_event.is_set():
+                sparse_future.cancel()
                 self.logger.info("[HybridRetriever] 检测到取消信号，放弃稀疏检索")
                 return []
 
             try:
-                sparse_results = sparse_future.result(timeout=30)
+                sparse_results = await asyncio.wait_for(
+                    asyncio.wrap_future(sparse_future), timeout=30
+                )
                 self.logger.info(
                     f"[HybridRetriever] 稀疏检索完成 | 返回 {len(sparse_results)} 个结果"
                 )

@@ -5,7 +5,7 @@ import asyncio
 import os
 from pathlib import Path
 
-from src.com.damon.ming.app.thread_pools import run_in_pool
+from src.com.damon.ming.app.thread_pools import get_io_pool, run_in_pool
 from src.com.damon.ming.log import pin
 
 logger = pin("upload.file_store")
@@ -45,9 +45,9 @@ class UploadFileStorage:
         return target_dir / f"{file_id}_{safe_name}"
 
     @staticmethod
-    async def store_content(file_path: Path, content: bytes, executor) -> None:
+    async def store_content(file_path: Path, content: bytes) -> None:
         write_task = asyncio.create_task(
-            run_in_pool(executor, _write_file_sync, file_path, content)
+            run_in_pool(get_io_pool(), _write_file_sync, file_path, content)
         )
         try:
             await asyncio.shield(write_task)

@@ -24,7 +24,7 @@ from src.com.damon.ming.ai.schemas.response import (
     BaseLLMSuccessResponse,
     ChatDeltaData,
 )
-from src.com.damon.ming.app.thread_pools import get_database_query_pool
+from src.com.damon.ming.app.thread_pools import get_database_pool
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.i18n import t
@@ -67,7 +67,7 @@ def _create_recorder(request: Request, body) -> RagTurnRecorder:
         conversation_id=body.conversationId or SseMessageFactory.new_conversation_id(),
         query=body.query,
         query_at=now(),
-        db_executor=get_database_query_pool(),
+        db_executor=get_database_pool(),
     )
 
 

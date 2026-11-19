@@ -23,7 +23,7 @@ GET 无 body 可加密需放行，POST 有 body 必须加密，同一前缀无�
 
 from fastapi import APIRouter, Request
 from src.com.damon.ming.app.thread_pools import (
-    get_database_query_pool,
+    get_database_pool,
     run_in_pool,
 )
 from src.com.damon.ming.exception.error_codes import ErrorCode
@@ -85,7 +85,7 @@ async def login(body: LoginRequest, request: Request):
     # 1. 登录或自动注册
     try:
         user_id, is_new = await run_in_pool(
-            get_database_query_pool(),
+            get_database_pool(),
             login_or_register,
             body.phone,
             body.password,
@@ -134,7 +134,7 @@ async def login(body: LoginRequest, request: Request):
 async def logout(request: Request):
     """退出当前设备，立即撤销其会话 token。"""
     await run_in_pool(
-        get_database_query_pool(), revoke_session, request.state.client.session_id
+        get_database_pool(), revoke_session, request.state.client.session_id
     )
     return BaseSuccessResponse(code=ErrorCode.OK, data={})
 

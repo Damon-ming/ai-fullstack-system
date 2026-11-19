@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from llama_index.core.schema import Document, TextNode
@@ -24,11 +25,7 @@ from src.com.damon.ming.ai.vector_db.metadata_keys import (
     FILE_PATH,
     FILE_SHA256,
 )
-from src.com.damon.ming.app.thread_pools import (
-    RagThreadPools,
-    run_in_pool,
-    submit_to_pool,
-)
+from src.com.damon.ming.app.thread_pools import run_in_pool, submit_to_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.utils.time import now_iso
 
@@ -44,7 +41,8 @@ class KnowledgeIndexService:
         self,
         *,
         corpus_dir: Path,
-        thread_pools: RagThreadPools,
+        document_pool: ThreadPoolExecutor,
+        bm25_pool: ThreadPoolExecutor,
         splitter: BaseDocumentSplitter,
         embedder: BaseEmbeddingService,
         vector_store: BaseVectorStore,
@@ -52,8 +50,8 @@ class KnowledgeIndexService:
         bootstrap_result: KnowledgeBootstrapResult,
     ) -> None:
         self._corpus_dir = corpus_dir
-        self._document_pool = thread_pools.document
-        self._bm25_pool = thread_pools.bm25
+        self._document_pool = document_pool
+        self._bm25_pool = bm25_pool
         self._splitter = splitter
         self._embedder = embedder
         self._vector_store = vector_store

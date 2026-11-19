@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import UploadFile
 from src.com.damon.ming.ai.knowledge.index_service import KnowledgeIndexService
-from src.com.damon.ming.app.thread_pools import get_database_query_pool, run_in_pool
+from src.com.damon.ming.app.thread_pools import get_database_pool, run_in_pool
 from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
 from src.com.damon.ming.log import pin
@@ -34,7 +34,6 @@ class UploadService:
         file_list: list[UploadFile],
         upload_config,
         knowledge_index: KnowledgeIndexService,
-        executor=None,
         user_id: int | None = None,
         device_id: str = "",
     ) -> dict:
@@ -69,7 +68,7 @@ class UploadService:
                     "status": "processing",
                 }
             )
-        await run_in_pool(get_database_query_pool(), create_upload_records, audit_rows)
+        await run_in_pool(get_database_pool(), create_upload_records, audit_rows)
 
         if len(file_list) > upload_config.max_files_per_request:
             message = t(
@@ -190,7 +189,7 @@ class UploadService:
                     suffix,
                 )
 
-                await UploadFileStorage.store_content(file_path, content, executor)
+                await UploadFileStorage.store_content(file_path, content)
 
                 ingest_started = True
                 index_result = await knowledge_index.ingest_files(
@@ -232,7 +231,7 @@ class UploadService:
                         repaired_old_path = stored_path
                         path_repair_attempted = True
                         repaired = await run_in_pool(
-                            get_database_query_pool(),
+                            get_database_pool(),
                             knowledge_index.update_file_path_by_sha,
                             file_sha256,
                             resolved_path,
@@ -352,7 +351,7 @@ class AuditUpdateFailure(RuntimeError):
 async def _update_audit(file_id: str, **kwargs) -> None:
     try:
         await run_in_pool(
-            get_database_query_pool(), update_upload_record, file_id, **kwargs
+            get_database_pool(), update_upload_record, file_id, **kwargs
         )
     except Exception as exc:
         raise AuditUpdateFailure("写入上传审计状态失败") from exc
@@ -369,7 +368,7 @@ async def _finish_audit(
 ) -> None:
     try:
         await run_in_pool(
-            get_database_query_pool(),
+            get_database_pool(),
             update_upload_record,
             file_id,
             status=status,
@@ -407,7 +406,7 @@ async def _restore_duplicate_path(
 ) -> bool:
     try:
         updated = await run_in_pool(
-            get_database_query_pool(),
+            get_database_pool(),
             knowledge_index.update_file_path_by_sha,
             file_sha256,
             old_path,

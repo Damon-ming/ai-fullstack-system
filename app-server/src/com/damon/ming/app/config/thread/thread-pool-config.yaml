@@ -1,25 +1,9 @@
-# 线程池资源统一配置。
-# 启动时校验：每组池的 max_workers 总和不超过组上限，所有池总和不超过全局上限。
+# app-server/src/com/damon/ming/app/config/thread/thread-pool-config.yaml
+# 全局线程资源预算。各资源组在自己的模块内部创建并分配线程池。
 thread_pools:
-  max_total_workers: 20
+  max_total_workers: 22
 
   groups:
-    rag:
-      max_total_workers: 17
-      pools:
-        retrieval:
-          max_workers: 4
-        document:
-          max_workers: 8
-        inference:
-          max_workers: 2
-        rerank:
-          max_workers: 2
-        bm25:
-          max_workers: 1
-
-    database:
-      max_total_workers: 3
-      pools:
-        query:
-          max_workers: 3
+    rag: 17
+    database: 3
+    io: 2

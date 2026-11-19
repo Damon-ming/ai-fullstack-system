@@ -19,20 +19,21 @@ logger = pin("SectionReconstructor")
 class SectionReconstructor:
     """章节重构服务，只做 chunk 合并，不做摘要。
 
-    不持有线程池——上层 RAGContainer 通过参数注入 executor。
+    使用调用方注入的 retrieval 池，不管理线程池生命周期。
     """
+
+    def __init__(self, retrieval_pool: ThreadPoolExecutor) -> None:
+        self._executor = retrieval_pool
 
     async def reconstruct_sections_to_nodes(
         self,
         vector_store: BaseVectorStore,
         hit_nodes: list[TextNode],
-        executor: ThreadPoolExecutor,
     ) -> list[TextNode]:
         """
         从召回节点，拉取完整章节分片，每个 section_id 合并成单个 TextNode。
 
-        内部并发获取多个章节的分片，每个分片查询通过注入的 executor 提交。
-        executor 由上层 RAGContainer 注入，不持有线程池。
+        将批量数据库查询提交到调用方提供的 retrieval 池。
         """
         if not hit_nodes:
             logger.warning("reconstruct_sections_to_nodes | hit_nodes 为空")
@@ -44,7 +45,7 @@ class SectionReconstructor:
             return []
 
         all_section_nodes = await self._fetch_all_section_chunks(
-            vector_store, section_keys, executor
+            vector_store, section_keys, self._executor
         )
         group_map = self._group_chunks_by_section(all_section_nodes)
         return self._build_section_nodes(group_map, section_keys)
