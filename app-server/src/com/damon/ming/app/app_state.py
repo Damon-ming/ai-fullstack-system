@@ -71,13 +71,11 @@ class GuardrailState:
 class RagRuntime:
     """RAG 流程运行时 —— RAG 容器、推理服务及流程配置。
 
-    字段名去掉了与分组名重复的前缀：rag_sem → sem、execution_timeout_seconds 显式标注秒单位，
-    与 request_context.py 中 ClientContext.token（而非 client_token）同一约定。
-    retrieval_sem 标识检索阶段：与 sem 是两个不同用途的信号量，需要区分。
+    inference_sem 限制 LLM 推理并发；rag_sem 限制 RAG 上下文处理流程并发。
     """
 
-    sem: asyncio.Semaphore
-    retrieval_sem: asyncio.Semaphore
+    inference_sem: asyncio.Semaphore
+    rag_sem: asyncio.Semaphore
     execution_timeout_seconds: float
     retry_ms: int
     locales: dict[str, LocaleConfig]

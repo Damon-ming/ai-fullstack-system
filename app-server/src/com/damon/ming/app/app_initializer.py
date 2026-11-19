@@ -75,7 +75,7 @@ class AppInitializer:
         self._init_encryption()
         self._init_sign_context()
         self._init_rate_limiter()
-        self._init_rag()  # 必须在 _init_ai 之前：创建 rag_sem 供 RAGContainer 传递
+        self._init_rag()  # 必须在 _init_ai 之前：创建 inference_sem 供 RAGContainer 传递
         self._init_ai()
         self._init_guardrail()
 
@@ -112,8 +112,8 @@ class AppInitializer:
 
         # Semaphore 在 lifespan 内创建，绑定到正确的事件循环
         app.state.rag_runtime = RagRuntime(
-            sem=self.rag_sem,
-            retrieval_sem=self.retrieval_sem,
+            inference_sem=self.inference_sem,
+            rag_sem=self.rag_sem,
             execution_timeout_seconds=self.execution_timeout_seconds,
             retry_ms=self.chat_retry_ms,
             locales=self.rag_locales,
@@ -406,8 +406,8 @@ class AppInitializer:
         rag = cfg.rag
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
-        self.rag_sem = asyncio.Semaphore(rag.shared_inference_max_concurrency)
-        self.retrieval_sem = asyncio.Semaphore(rag.retrieval_max_concurrency)
+        self.inference_sem = asyncio.Semaphore(rag.shared_inference_max_concurrency)
+        self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
         self.guardrail_sem = asyncio.Semaphore(rag.guardrail_max_concurrency)
         self.execution_timeout_seconds = rag.execution_timeout_seconds
         self.guardrail_timeout_seconds = rag.guardrail_timeout_seconds
@@ -416,11 +416,11 @@ class AppInitializer:
         self.rag_locales = cfg.rag.locales
 
         logger.info(
-            "RAG 配置初始化完成 | locales=%s | shared_inference_max_concurrency=%d | retrieval_max_concurrency=%d | "
+            "RAG 配置初始化完成 | locales=%s | shared_inference_max_concurrency=%d | rag_max_concurrency=%d | "
             "guardrail_max_concurrency=%d | guardrail_timeout_seconds=%g | execution_timeout_seconds=%g",
             list(self.rag_locales.keys()),
             rag.shared_inference_max_concurrency,
-            rag.retrieval_max_concurrency,
+            rag.rag_max_concurrency,
             rag.guardrail_max_concurrency,
             rag.guardrail_timeout_seconds,
             rag.execution_timeout_seconds,
@@ -433,12 +433,12 @@ class AppInitializer:
             UploadRecoveryService,
         )
 
-        # rag_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
+        # inference_sem 由 _init_rag() 创建（已在 lifespan 事件循环内），
         # 注入 RAGContainer → SummaryService，所有 LLM 调用共享同一信号量；
         # loader 同为注入，保证全进程只有一套推理引擎
         self.rag_app = get_rag_container(
             pools=self.pool_mgr.for_group("rag"),
-            rag_sem=self.rag_sem,
+            inference_sem=self.inference_sem,
             corpus_dir=self.system_config.corpus_dir,
             loader=self._loader,
         )

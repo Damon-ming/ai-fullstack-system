@@ -69,7 +69,7 @@ class RagConfig:
 
     execution_timeout_seconds: float  # 检索、上下文构造和主推理预算（秒），不含护栏
     shared_inference_max_concurrency: int
-    retrieval_max_concurrency: int
+    rag_max_concurrency: int
     guardrail_max_concurrency: int
     guardrail_timeout_seconds: float
     inference_timeout_seconds: float  # 推理客户端网络超时，与执行预算独立
@@ -194,7 +194,7 @@ class RagConfigLoader:
         try:
             pipeline = rag["pipeline"]
             shared_inference = pipeline["shared_inference"]
-            retrieval = pipeline["retrieval"]
+            rag_pipeline = pipeline["rag"]
             guardrail = pipeline["guardrail"]
             timeout_seconds = self._positive_number(
                 rag["transport"]["inference"]["timeout_seconds"],
@@ -209,9 +209,9 @@ class RagConfigLoader:
                     shared_inference["max_concurrency"],
                     "rag.pipeline.shared_inference.max_concurrency",
                 ),
-                retrieval_max_concurrency=self._integer(
-                    retrieval["max_concurrency"],
-                    "rag.pipeline.retrieval.max_concurrency",
+                rag_max_concurrency=self._integer(
+                    rag_pipeline["max_concurrency"],
+                    "rag.pipeline.rag.max_concurrency",
                 ),
                 guardrail_max_concurrency=self._integer(
                     guardrail["max_concurrency"],

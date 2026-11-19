@@ -15,8 +15,8 @@ rag:
     execution_timeout_seconds: 30  # 检索、上下文构造与主推理预算，含等待并发槽；不含护栏
     shared_inference:
       max_concurrency: 16    # 主推理与摘要/压缩共享的最大并发数
-    retrieval:
-      max_concurrency: 3     # 检索阶段最大并发数（反压控制）
+    rag:
+      max_concurrency: 3     # RAG 上下文处理阶段最大并发数（反压控制）
     guardrail:
       max_concurrency: 2      # 护栏检测最大并发数
       timeout_seconds: 5      # 护栏检测独立超时（秒），超时 fail-open 放行

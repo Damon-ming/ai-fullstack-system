@@ -36,15 +36,16 @@ async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
     user message 中，避免 ref_content 中的模板占位符或恶意内容污染 system prompt。
     消息标签从 YAML 配置读取，与 system prompt 同文件管理。
     """
-    chat_cfg = _resolve_locale_text(app_state.rag_runtime.locales, get_locale())
 
-    # RAG 检索在推理信号量外执行（自身有线程池保护 + retrieval_sem 反压）
-    async with app_state.rag_runtime.retrieval_sem:
+    # RAG 上下文处理在推理信号量外执行，由 rag_sem 做反压。
+    async with app_state.rag_runtime.rag_sem:
         logger.debug("开始执行 RAG 检索")
         ref_content = await app_state.rag_runtime.rag_app.query_rag(
             query,
             max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
         )
+
+    chat_cfg = _resolve_locale_text(app_state.rag_runtime.locales, get_locale())
 
     prompt_messages = [
         {"role": "system", "content": chat_cfg.system_prompt},
@@ -71,7 +72,7 @@ async def generate_answer(
     """
     async with asyncio.timeout(app_state.rag_runtime.execution_timeout_seconds):
         prompt_messages = await _build_prompt_messages(app_state, query)
-        async with app_state.rag_runtime.sem:
+        async with app_state.rag_runtime.inference_sem:
             async for token in app_state.rag_runtime.infer_service.stream_generate(
                 model_name=app_state.rag_runtime.infer_model_name,
                 messages=prompt_messages,

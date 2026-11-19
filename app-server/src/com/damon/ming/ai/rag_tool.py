@@ -77,7 +77,7 @@ _rag_instance_lock = threading.Lock()
 
 def get_rag_container(
     pools: ThreadPoolGroup,
-    rag_sem: asyncio.Semaphore,
+    inference_sem: asyncio.Semaphore,
     corpus_dir: str,
     loader: RagConfigLoader,
 ):
@@ -85,7 +85,7 @@ def get_rag_container(
 
     Args:
         pools: 仅限 RAG 资源组的线程池能力，由 AppInitializer 注入。
-        rag_sem: RAG 流程共享的推理并发信号量（必填）。
+        inference_sem: RAG 流程共享的推理并发信号量（必填）。
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
         loader: 推理配置加载器（由 AppInitializer 注入，必填）。
     """
@@ -95,7 +95,7 @@ def get_rag_container(
             if _rag_instance is None:
                 _rag_instance = RAGContainer(
                     pools=pools,
-                    rag_sem=rag_sem,
+                    inference_sem=inference_sem,
                     corpus_dir=corpus_dir,
                     loader=loader,
                 )
@@ -107,14 +107,14 @@ class RAGContainer:
     def __init__(
         self,
         pools: ThreadPoolGroup,
-        rag_sem: asyncio.Semaphore,
+        inference_sem: asyncio.Semaphore,
         corpus_dir: str = "",
         loader: RagConfigLoader | None = None,
     ):
         logger.info("RAG 容器初始化开始")
 
         # 推理信号量：所有 LLM 调用（主推理 + 摘要 + 压缩）共享同一上限
-        self._rag_sem = rag_sem
+        self._inference_sem = inference_sem
 
         # 知识库目录：由 app.config 注入，不再硬编码，不合法直接抛异常
         if not corpus_dir:
@@ -161,7 +161,7 @@ class RAGContainer:
             inference=_summary_entry.engine,
             summary_model=_summary_entry.model_name,
             summary_options=_summary_entry.options,
-            semaphore=self._rag_sem,
+            semaphore=self._inference_sem,
         )
 
         # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）
