@@ -54,7 +54,7 @@ class SummaryService:
 
     async def run_summary(self, text: str, max_tokens: int) -> str:
         """单文本摘要压缩。超长自动分段，失败降级硬截断。"""
-        num_ctx = self.inference.role_options(self.role).get("num_ctx", 4096)
+        num_ctx = self.inference.get(self.role).context_window()
         input_limit = int(num_ctx * SUMMARY_INPUT_MAX_RATIO)
         text_tokens = self.tokenizer.count_tokens(text)
 

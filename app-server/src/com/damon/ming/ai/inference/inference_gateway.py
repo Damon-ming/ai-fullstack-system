@@ -1,11 +1,17 @@
+# app-server/src/com/damon/ming/ai/inference/inference_gateway.py
 """按业务 role 路由到已装配的推理引擎。"""
+
+from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from typing import Any
 
-from src.com.damon.ming.ai.inference.base_inference import BaseInferenceService, StreamToken
+from src.com.damon.ming.ai.inference.base_inference import (
+    BaseInferenceService,
+    StreamToken,
+)
 
 
 class InferenceGateway:
@@ -21,9 +27,10 @@ class InferenceGateway:
         self._roles = dict(roles)
         self._inference_semaphore = inference_semaphore
 
-    def get(self, role: str) -> "RoleInference":
+    def get(self, role: str) -> RoleInference:
         """获取指定角色的推理入口。"""
-        self._resolve(role)
+        if role not in self._roles:
+            raise ValueError(f"未配置推理 role: {role}")
         return RoleInference(self, role)
 
     def _resolve(self, role: str) -> tuple[BaseInferenceService, str, dict[str, Any]]:
@@ -32,10 +39,6 @@ class InferenceGateway:
         except KeyError as exc:
             raise ValueError(f"未配置推理 role: {role}") from exc
         return entry.engine, entry.model_name, dict(entry.options)
-
-    def role_options(self, role: str) -> dict[str, Any]:
-        """返回角色默认参数副本，供上层计算预算时读取。"""
-        return dict(self._resolve(role)[2])
 
     async def generate(
         self,
@@ -75,22 +78,17 @@ class InferenceGateway:
         engine, model_name, role_options = self._resolve(role)
         role_options.update(options or {})
 
-        async def produce() -> AsyncGenerator[StreamToken, None]:
-            async with aclosing(
+        async with (
+            asyncio.timeout(self._roles[role].timeout_seconds),
+            self._inference_semaphore,
+            aclosing(
                 engine.stream_generate(
                     model_name=model_name,
                     messages=messages,
                     reason=reason,
                     options=role_options,
                 )
-            ) as stream:
-                async for token in stream:
-                    yield token
-
-        async with (
-            asyncio.timeout(self._roles[role].timeout_seconds),
-            self._inference_semaphore,
-            aclosing(produce()) as stream,
+            ) as stream,
         ):
             async for token in stream:
                 yield token
@@ -102,6 +100,17 @@ class RoleInference:
     def __init__(self, gateway: InferenceGateway, role: str):
         self._gateway = gateway
         self._role = role
+
+    def options(self) -> dict[str, Any]:
+        """返回该角色的默认生成参数副本。"""
+        return self._gateway._resolve(self._role)[2]
+
+    def context_window(self) -> int:
+        """返回配置的模型上下文窗口，未配置时明确报错。"""
+        context_window = self._gateway._roles[self._role].context_window_tokens
+        if context_window is None:
+            raise ValueError(f"推理 role '{self._role}' 未配置 context_window_tokens")
+        return context_window
 
     async def generate(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         return await self._gateway.generate(self._role, messages, **kwargs)

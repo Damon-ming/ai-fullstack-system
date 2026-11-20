@@ -8,18 +8,21 @@ inference:
   roles:
     inference:
       timeout_seconds: 180  # 包含等待并发槽及完整输出
+      context_window_tokens: 2048  # 与对应 vLLM 实例的 --max-model-len 一致
       model_name: qwen2.5-0.5B-instruct
       options:
         temperature: 0.1
         top_p: 0.9
         max_tokens: 1024
     intent:
+      context_window_tokens: 2048
       model_name: qwen2.5-0.5B-instruct
       options:
         temperature: 0.3
         top_p: 0.95
         max_tokens: 256
     rewrite:
+      context_window_tokens: 2048
       model_name: qwen2.5-0.5B-instruct
       options:
         temperature: 0.5
@@ -27,6 +30,7 @@ inference:
         max_tokens: 256
     summary:
       timeout_seconds: 10   # 每次摘要调用预算
+      context_window_tokens: 2048  # 与摘要模型的实际上下文窗口一致
       model_name: qwen2.5-0.5B-instruct
       options:
         temperature: 0.1
@@ -34,6 +38,7 @@ inference:
         max_tokens: 1024
     guardrail:
       timeout_seconds: 5    # 包含等待并发槽
+      context_window_tokens: 2048
       model_name: qwen2.5-0.5B-instruct
       options:
         temperature: 0.1

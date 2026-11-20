@@ -26,6 +26,7 @@ class ModelEntry:
     engine_type: str
     engine: BaseInferenceService
     timeout_seconds: float | None
+    context_window_tokens: int | None
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,7 @@ class InferenceConfigLoader:
                 engine_type,
                 engines[key],
                 config["timeout_seconds"],
+                config["context_window_tokens"],
             )
         self._config = InferenceConfig(concurrency, float(timeout), entries)
         return self._config
@@ -106,6 +108,13 @@ class InferenceConfigLoader:
             if not isinstance(options, dict):
                 raise TypeError(f"{path}.options 必须是键值对")
             role_timeout = params.get("timeout_seconds")
+            context_window = params.get("context_window_tokens")
+            if (role == "summary" or context_window is not None) and (
+                type(context_window) is not int or context_window < 2
+            ):
+                raise ValueError(
+                    f"{path}.context_window_tokens 必须是大于等于 2 的整数"
+                )
             if role_timeout is not None and (
                 isinstance(role_timeout, bool)
                 or not isinstance(role_timeout, (int, float))
@@ -131,6 +140,7 @@ class InferenceConfigLoader:
             cleaned[role] = {
                 "model_name": name,
                 "options": dict(options),
+                "context_window_tokens": context_window,
                 "timeout_seconds": float(role_timeout)
                 if role_timeout is not None
                 else None,
