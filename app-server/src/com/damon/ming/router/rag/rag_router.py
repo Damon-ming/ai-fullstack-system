@@ -39,7 +39,11 @@ from src.com.damon.ming.router.rag.schemas.response import (
 )
 from src.com.damon.ming.router.rag.service.rag_core import generate_answer
 from src.com.damon.ming.router.rag.service.rag_turn import RagTurnRecorder
-from src.com.damon.ming.router.rag.sse import SseEmitter, SseMessageFactory
+from src.com.damon.ming.router.rag.sse import (
+    SseEmitter,
+    SseEventType,
+    SseMessageFactory,
+)
 from src.com.damon.ming.utils.time import now, to_unix_timestamp
 from src.com.damon.ming.utils.uuid import generate_uuid_hex
 from sse_starlette.sse import EventSourceResponse
@@ -130,6 +134,7 @@ async def answer(request: Request, body: ChatRequest):
             persist_ok = await recorder.ensure_persisted()
 
         # 同步链路没有流式缓冲可展示，落库失败只能整体报错
+        # TODO: 同步返回已生成的回答及历史保存状态；与流式 done 事件和前端约定统一。（历史保存失败不应该影响整体返回）
         if not persist_ok:
             return chat_failure(
                 ErrorCode.CHAT.PERSIST_FAILED,
@@ -210,7 +215,7 @@ async def stream_chat_generator(
     try:
         # ── start 事件：在信号量外立即发送，客户端无需排队等待即可感知连接建立 ──
         yield emitter.emit(
-            "start",
+            SseEventType.START.value,
             SseMessageFactory.start(
                 SseMessageFactory.get_start_data(
                     turn_id, conversation_id, recorder.query_at
@@ -227,10 +232,12 @@ async def stream_chat_generator(
             recorder.add_content(msg)
             await recorder.persist()
             yield emitter.emit(
-                "delta",
+                SseEventType.DELTA.value,
                 SseMessageFactory.delta(ChatDeltaData(content=msg)),
             )
-            yield emitter.emit("done", SseMessageFactory.done(recorder.answered_at))
+            yield emitter.emit(
+                SseEventType.DONE.value, SseMessageFactory.done(recorder.answered_at)
+            )
             return
 
         # ── Phase 1: 护栏检测（独立超时，超时返回错误） ──
@@ -240,17 +247,20 @@ async def stream_chat_generator(
                 timeout_msg = _blocked_message(blocked_resp, t(I18nKey.CHAT_TIMEOUT))
                 recorder.set_error(timeout_msg)
                 yield emitter.emit(
-                    "error", chat_error_event(blocked_resp.code, timeout_msg)
+                    SseEventType.ERROR.value,
+                    chat_error_event(blocked_resp.code, timeout_msg),
                 )
                 return
             msg = _blocked_message(blocked_resp, t(I18nKey.GUARDRAIL_BLOCKED))
             recorder.add_content(msg)
             await recorder.persist()
             yield emitter.emit(
-                "delta",
+                SseEventType.DELTA.value,
                 SseMessageFactory.delta(ChatDeltaData(content=msg)),
             )
-            yield emitter.emit("done", SseMessageFactory.done(recorder.answered_at))
+            yield emitter.emit(
+                SseEventType.DONE.value, SseMessageFactory.done(recorder.answered_at)
+            )
             return
 
         # ── Phase 2: RAG + 推理（超时预算覆盖整段，见 generate_answer） ──
@@ -259,7 +269,11 @@ async def stream_chat_generator(
             #   reasoning → event: "reasoning"（推理过程）
             #   content   → event: "delta"（正文回答）
             recorder.record_token(token.type, token.content, now())
-            event_name = "reasoning" if token.type == STREAM_TYPE_REASONING else "delta"
+            event_name = (
+                SseEventType.REASONING.value
+                if token.type == STREAM_TYPE_REASONING
+                else SseEventType.DELTA.value
+            )
             yield emitter.emit(
                 event_name,
                 SseMessageFactory.delta(ChatDeltaData(content=token.content)),
@@ -276,7 +290,7 @@ async def stream_chat_generator(
         # 与「存不下」，避免客户端把已显示的回答当成模型没答上
         if not persist_ok:
             yield emitter.emit(
-                "error",
+                SseEventType.ERROR.value,
                 chat_error_event(
                     ErrorCode.CHAT.PERSIST_FAILED, t(I18nKey.CHAT_PERSIST_FAILED)
                 ),
@@ -284,7 +298,9 @@ async def stream_chat_generator(
             return
 
         # ── done 事件（结束包） ──
-        yield emitter.emit("done", SseMessageFactory.done(recorder.answered_at))
+        yield emitter.emit(
+            SseEventType.DONE.value, SseMessageFactory.done(recorder.answered_at)
+        )
         logger.info("流式聊天请求完成 | lastEventId=%s", emitter.last_event_id)
 
     except TimeoutError:
@@ -293,7 +309,8 @@ async def stream_chat_generator(
         recorder.set_error(timeout_msg)
         logger.warning("流式聊天请求超时")
         yield emitter.emit(
-            "error", chat_error_event(ErrorCode.CHAT.TIMEOUT, timeout_msg)
+            SseEventType.ERROR.value,
+            chat_error_event(ErrorCode.CHAT.TIMEOUT, timeout_msg),
         )
     except asyncio.CancelledError:
         # 客户端已断开，无需 re-raise（避免 ASGI 层记录 500），
@@ -305,7 +322,9 @@ async def stream_chat_generator(
         err_msg = get_safe_error_message(e)
         recorder.set_error(err_msg)
         logger.exception("流式聊天请求失败")
-        yield emitter.emit("error", chat_error_event(ErrorCode.CHAT.UNKNOWN, err_msg))
+        yield emitter.emit(
+            SseEventType.ERROR.value, chat_error_event(ErrorCode.CHAT.UNKNOWN, err_msg)
+        )
     finally:
         # 失败 / 中断路径兜底落库：DB 存「服务端已交付的内容」。
         # 成功路径已落库则跳过；未尝试或上次失败则再给一次机会

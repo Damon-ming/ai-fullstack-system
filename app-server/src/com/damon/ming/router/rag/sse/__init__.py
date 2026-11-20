@@ -2,11 +2,13 @@
 """SSE 工具子模块 —— 消息工厂 / 发射器 / 事件对象"""
 
 from src.com.damon.ming.router.rag.sse.emitter import SseEmitter, SseEvent
+from src.com.damon.ming.router.rag.sse.event_type import SseEventType
 
 from .messages import SseMessageFactory
 
 __all__ = [
     "SseEmitter",
     "SseEvent",
+    "SseEventType",
     "SseMessageFactory",
 ]

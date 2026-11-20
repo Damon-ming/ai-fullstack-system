@@ -9,13 +9,13 @@ SSE 发射器 —— 管理事件 id 递增，返回 dict 供 EventSourceRespons
 主流程使用示例:
     emitter = SseEmitter(retry_ms=3000)
 
-    yield emitter.emit("start", SseMessageFactory.start(data), retry=True)
+    yield emitter.emit(SseEventType.START.value, SseMessageFactory.start(data), retry=True)
 
     async for token in stream:
-        event = "reasoning" if token.type == STREAM_TYPE_REASONING else "delta"
+        event = SseEventType.REASONING.value if token.type == STREAM_TYPE_REASONING else SseEventType.DELTA.value
         yield emitter.emit(event, SseMessageFactory.delta(ChatDeltaData(content=token.content)))
 
-    yield emitter.emit("done", SseMessageFactory.done(answered_at))
+    yield emitter.emit(SseEventType.DONE.value, SseMessageFactory.done(answered_at))
 """
 
 from dataclasses import dataclass
@@ -51,7 +51,7 @@ class SseEvent:
 class SseEmitter:
     """SSE 事件发射器 —— emit() 返回 dict，适配 EventSourceResponse"""
 
-    def __init__(self, retry_ms: int = 3000):
+    def __init__(self, retry_ms: int):
         self._event_seq = 0
         self._retry_ms = retry_ms
 
@@ -75,7 +75,7 @@ class SseEmitter:
         创建一条 SseEvent 对象。
 
         参数:
-            event: 事件名 (start / delta / done / error)
+            event: 事件名 (start / delta / reasoning / done / error)
             data:  已序列化的 JSON 字符串
             retry: 是否附加 retry: 字段（通常在 start 事件上设置）
         返回:
@@ -100,7 +100,7 @@ class SseEmitter:
         构造一条 SSE 事件 dict（便捷方法 = create_event + to_dict）。
 
         参数:
-            event: 事件名 (start / delta / done / error)
+            event: 事件名 (start / delta / reasoning / done / error)
             data:  已序列化的 JSON 字符串
             retry: 是否附加 retry: 字段
         返回:
