@@ -6,7 +6,6 @@ PGVector 向量存储实现 —— PostgreSQL + pgvector 扩展。
 调用 pgvector 特有操作符（<=>、::vector 等）。
 
 设计对齐 ChromaDBStore：
-  - LRU 缓存（OrderedDict + threading.Lock）
   - 异常行为规范与 base_vector_db.py 一致
   - 参数通过 VectorStoreParams 注入，不感知配置来源
 
@@ -28,7 +27,6 @@ PGVector 向量存储实现 —— PostgreSQL + pgvector 扩展。
 import json
 import re
 import threading
-from collections import OrderedDict
 from typing import Any
 
 from llama_index.core.schema import TextNode
@@ -67,9 +65,7 @@ class PGVectorStore(BaseVectorStore):
         super().__init__(params)
         self.logger = pin("PGVectorStore")
         self._closed = False
-        self._node_cache: OrderedDict[str, TextNode] = OrderedDict()
-        self._cache_lock = threading.RLock()
-        self._CACHE_MAX = params.extra.get("cache_max", 5000)
+        self._close_lock = threading.Lock()
 
         self._table_name = _sanitize_identifier(params.table_name, "table_name")
         self._engine = self._create_engine()
@@ -158,26 +154,6 @@ class PGVectorStore(BaseVectorStore):
                 conn.execute(text(stmt))
             conn.commit()
 
-    # ── LRU 缓存辅助 ───────────────────────────────────────────────
-
-    def _cache_put(self, node_id: str, node: TextNode) -> None:
-        with self._cache_lock:
-            self._node_cache[node_id] = node
-            self._node_cache.move_to_end(node_id)
-            if len(self._node_cache) > self._CACHE_MAX:
-                self._node_cache.popitem(last=False)
-
-    def _cache_get(self, node_id: str) -> TextNode | None:
-        with self._cache_lock:
-            node = self._node_cache.get(node_id)
-            if node is not None:
-                self._node_cache.move_to_end(node_id)
-            return node
-
-    def _cache_pop(self, node_id: str) -> None:
-        with self._cache_lock:
-            self._node_cache.pop(node_id, None)
-
     # ── 核心 CRUD ──────────────────────────────────────────────────
 
     def add_documents(
@@ -228,24 +204,8 @@ class PGVectorStore(BaseVectorStore):
             )
             raise
 
-        # commit 成功后才更新缓存，保证缓存与 DB 一致
-        for node, node_id in zip(nodes, ids):
-            self._cache_put(node_id, node)
-
         self.logger.info("[PGVectorStore] 添加 %d 个文档成功", len(nodes))
         return ids
-
-    def similarity_search(
-        self,
-        query: str,
-        k: int = 4,
-        metadata_filter: dict[str, Any] | None = None,
-        **kwargs,
-    ) -> list[TextNode]:
-        raise NotImplementedError(
-            "PGVectorStore 不支持文本直查，"
-            "请先获取 embedding 再调用 similarity_search_by_vector"
-        )
 
     def similarity_search_by_vector(
         self,
@@ -293,37 +253,6 @@ class PGVectorStore(BaseVectorStore):
             )
             return []
 
-    def delete(self, node_ids: list[str], **kwargs) -> bool:
-        if not node_ids:
-            return True
-
-        table = self._table_name
-        try:
-            with self._engine.connect() as conn:
-                # 分批执行，避免 SQL 参数过多
-                batch_size = 500
-                for i in range(0, len(node_ids), batch_size):
-                    batch = node_ids[i : i + batch_size]
-                    placeholders = ", ".join(f":id_{j}" for j in range(len(batch)))
-                    params = {f"id_{j}": nid for j, nid in enumerate(batch)}
-                    conn.execute(
-                        text(f"DELETE FROM {table} WHERE id IN ({placeholders})"),  # nosec B608 — table 经 _sanitize_identifier 校验
-                        params,
-                    )
-                conn.commit()
-
-            for node_id in node_ids:
-                self._cache_pop(node_id)
-
-            return True
-        except Exception as e:
-            self.logger.error(
-                "[PGVectorStore] 删除失败: %s (%s)",
-                type(e).__name__,
-                str(e)[:200],
-            )
-            return False
-
     def delete_by_metadata(self, metadata_filter: dict[str, Any], **kwargs) -> int:
         """按元数据删除匹配文档，返回删除数量。
 
@@ -340,15 +269,7 @@ class PGVectorStore(BaseVectorStore):
                 rows = conn.execute(text(delete_sql), where_params).fetchall()
                 conn.commit()
 
-            if not rows:
-                return 0
-
-            node_ids = [row[0] for row in rows]
-
-            for node_id in node_ids:
-                self._cache_pop(node_id)
-
-            return len(node_ids)
+            return len(rows)
         except Exception as e:
             self.logger.error(
                 "[PGVectorStore] 按元数据删除失败: %s (%s)",
@@ -385,8 +306,6 @@ class PGVectorStore(BaseVectorStore):
             with self._engine.connect() as conn:
                 rows = conn.execute(statement).fetchall()  # nosec B608 — SQLAlchemy Core 表达式；表名已由 _sanitize_identifier 白名单校验
                 conn.commit()
-            for (node_id,) in rows:
-                self._cache_pop(node_id)
             return len(rows)
         except Exception as e:
             self.logger.error(
@@ -395,37 +314,6 @@ class PGVectorStore(BaseVectorStore):
                 str(e)[:200],
             )
             raise RuntimeError(f"向量库 metadata 更新失败: {type(e).__name__}") from e
-
-    def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
-        cached = self._cache_get(node_id)
-        if cached is not None:
-            return cached
-
-        table = self._table_name
-        try:
-            with self._engine.connect() as conn:
-                row = conn.execute(
-                    text(f"SELECT id, document, metadata FROM {table} WHERE id = :id"),  # nosec B608 — table 经 _sanitize_identifier 校验
-                    {"id": node_id},
-                ).fetchone()
-
-            if row is None:
-                return None
-
-            node = TextNode(
-                id_=row[0],
-                text=row[1],
-                metadata=json.loads(row[2]) if isinstance(row[2], str) else row[2],
-            )
-            self._cache_put(node_id, node)
-            return node
-        except Exception as e:
-            self.logger.error(
-                "[PGVectorStore] 获取文档失败: %s (%s)",
-                type(e).__name__,
-                str(e)[:200],
-            )
-            return None
 
     def get_by_metadata(
         self, metadata_filter: dict[str, Any], **kwargs
@@ -544,60 +432,13 @@ class PGVectorStore(BaseVectorStore):
             )
             return 0
 
-    def clear(self, **kwargs) -> bool:
-
-        try:
-            with self._engine.connect() as conn:
-                conn.execute(text(f"TRUNCATE TABLE {self._table_name}"))  # nosec B608 — _table_name 经 _sanitize_identifier 校验
-                conn.commit()
-
-            self._node_cache.clear()
-            return True
-        except Exception as e:
-            self.logger.error(
-                "[PGVectorStore] 清空失败: %s (%s)",
-                type(e).__name__,
-                str(e)[:200],
-            )
-            return False
-
-    def get_collection_info(self) -> dict[str, Any]:
-        try:
-            return {
-                "provider": "pgvector",
-                "table_name": self._table_name,
-                "count": self.count(),
-                "embedding_dimension": self.params.embedding_dimension,
-            }
-        except Exception as e:
-            return {
-                "provider": "pgvector",
-                "table_name": self._table_name,
-                "error": str(e),
-            }
-
     # ── 生命周期 ────────────────────────────────────────────────────
 
-    def health_check(self) -> bool:
-
-        try:
-            with self._engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            return True
-        except Exception as e:
-            self.logger.error(
-                "[PGVectorStore] 健康检查失败: %s (%s)",
-                type(e).__name__,
-                str(e)[:200],
-            )
-            return False
-
     def close(self) -> None:
-        with self._cache_lock:
+        with self._close_lock:
             if self._closed:
                 return
             self._closed = True
-            self._node_cache.clear()
 
         if self._engine is not None:
             self._engine.dispose()

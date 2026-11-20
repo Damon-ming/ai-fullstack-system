@@ -67,15 +67,10 @@ class BaseVectorStore(ABC):
 
     异常行为规范（所有实现类必须遵守）：
       add_documents           → 失败抛 Exception
-      delete / clear          → 失败返回 False
-      similarity_search       → 失败抛 NotImplementedError（不支持文本直查）
       similarity_search_by_vector → 失败返回 []
       delete_by_metadata      → 默认失败返回 0；PGVector 实现覆盖为抛 RuntimeError
-      get_by_id               → 失败返回 None
       get_by_metadata         → 失败返回 []
       count                   → 失败返回 0
-      get_collection_info     → 失败返回 {"error": str}
-      health_check            → 不可用返回 False
       close                   → 幂等不抛异常
     """
 
@@ -86,17 +81,6 @@ class BaseVectorStore(ABC):
     def add_documents(self, nodes: list[TextNode], **kwargs) -> list[str]:
         """添加文档，失败抛 Exception"""
         ...
-
-    @abstractmethod
-    def similarity_search(
-        self,
-        query: str,
-        k: int = 4,
-        metadata_filter: dict[str, Any] | None = None,
-        **kwargs,
-    ) -> list[TextNode]:
-        """文本相似度检索（需内置 embedding），默认返回空列表"""
-        return []
 
     @abstractmethod
     def similarity_search_by_vector(
@@ -110,11 +94,6 @@ class BaseVectorStore(ABC):
         ...
 
     @abstractmethod
-    def delete(self, node_ids: list[str], **kwargs) -> bool:
-        """删除文档，失败返回 False"""
-        ...
-
-    @abstractmethod
     def delete_by_metadata(self, metadata_filter: dict[str, Any], **kwargs) -> int:
         """根据元数据删除文档，返回删除数量。
 
@@ -122,11 +101,6 @@ class BaseVectorStore(ABC):
         PGVector 实现覆盖为失败抛 RuntimeError，确保调用方可感知。
         调用方应按需 try/except RuntimeError 处理。
         """
-        ...
-
-    @abstractmethod
-    def get_by_id(self, node_id: str, **kwargs) -> TextNode | None:
-        """根据 ID 获取文档，失败返回 None"""
         ...
 
     @abstractmethod
@@ -170,21 +144,6 @@ class BaseVectorStore(ABC):
         ...
 
     @abstractmethod
-    def clear(self, **kwargs) -> bool:
-        """清空所有文档，失败返回 False"""
-        ...
-
-    @abstractmethod
-    def get_collection_info(self) -> dict[str, Any]:
-        """获取集合信息"""
-        ...
-
-    @abstractmethod
     def close(self) -> None:
         """关闭连接/释放资源，幂等"""
-        ...
-
-    @abstractmethod
-    def health_check(self) -> bool:
-        """健康检查"""
         ...

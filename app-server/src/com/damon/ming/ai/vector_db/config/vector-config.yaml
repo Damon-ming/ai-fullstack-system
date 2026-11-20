@@ -5,7 +5,6 @@
 #   collection_name: rag_documents
 #   persist_directory: ./chroma
 #   embedding_dimension: 1024
-#   cache_max: 5000
 
 pgvector:
   connection_string: ${DB_URL}
@@ -16,5 +15,3 @@ pgvector:
   # pgvector HNSW 索引参数
   hnsw_m: 16
   hnsw_ef_construction: 240
-  # LRU 缓存上限
-  cache_max: 5000
