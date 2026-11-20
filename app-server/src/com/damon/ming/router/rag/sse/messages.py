@@ -19,45 +19,30 @@ from src.com.damon.ming.router.rag.schemas.response import (
     ChatStartData,
     StreamMessage,
 )
-from src.com.damon.ming.utils.time import to_unix_timestamp, unix_timestamp
-from src.com.damon.ming.utils.uuid import generate_uuid_hex
+from src.com.damon.ming.utils.time import to_unix_timestamp
 
 
 class SseMessageFactory:
     """统一构造 StreamMessage 并序列化为 JSON 字符串"""
 
     @staticmethod
-    def new_conversation_id() -> str:
-        """生成新的会话 id。
-
-        该 id 同时作为 history_conversations 表主键，跨轮次稳定，
-        由 start 事件下发，客户端后续轮次原样回传。
-        """
-        return f"conv_{generate_uuid_hex()[:8]}"
-
-    @staticmethod
-    def get_start_data(
+    def start(
         turn_id: str,
-        conversation_id: str | None = None,
-        query_at: datetime | None = None,
-    ) -> ChatStartData:
-        """构造 start 事件的元数据。
+        conversation_id: str,
+        query_at: datetime,
+    ) -> str:
+        """构造并序列化 start 事件，使用与历史记录一致的 ID 和提问时间。
 
         turn_id 由调用方生成，与落库后的 history_turns.turn_id 保持一致；
-        conversation_id 由调用方解析：新建会话时由 new_conversation_id() 生成，
-        已有会话时沿用客户端回传的 id，保证一个会话内多轮共享同一 id；
+        conversation_id 由调用方解析：新建会话时生成，已有会话时沿用客户端回传的 id；
         query_at 由调用方传入落库用的同一时刻，保证 start 事件与 DB 的
         query_at 完全一致（而不是在发事件时重新取当前时间）。
         """
-        return ChatStartData(
+        data = ChatStartData(
             turnId=turn_id,
-            conversationId=conversation_id or SseMessageFactory.new_conversation_id(),
-            queryAt=to_unix_timestamp(query_at) if query_at else unix_timestamp(),
+            conversationId=conversation_id,
+            queryAt=to_unix_timestamp(query_at),
         )
-
-    @staticmethod
-    def start(data: ChatStartData) -> str:
-        """构造 start 事件消息 —— 携带本次回答的元信息"""
         msg = StreamMessage[ChatStartData](
             code=ErrorCode.OK,
             data=data,

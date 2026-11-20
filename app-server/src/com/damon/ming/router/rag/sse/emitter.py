@@ -9,7 +9,7 @@ SSE 发射器 —— 管理事件 id 递增，返回 dict 供 EventSourceRespons
 主流程使用示例:
     emitter = SseEmitter(retry_ms=3000)
 
-    yield emitter.emit(SseEventType.START.value, SseMessageFactory.start(data), retry=True)
+    yield emitter.emit(SseEventType.START.value, SseMessageFactory.start(turn_id, conversation_id, query_at), retry=True)
 
     async for token in stream:
         event = SseEventType.REASONING.value if token.type == STREAM_TYPE_REASONING else SseEventType.DELTA.value

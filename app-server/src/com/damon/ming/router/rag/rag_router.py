@@ -67,7 +67,7 @@ def _create_recorder(request: Request, body) -> RagTurnRecorder:
     return RagTurnRecorder(
         user_id=_request_user_id(request),
         turn_id=f"turn_{generate_uuid_hex()[:12]}",
-        conversation_id=body.conversationId or SseMessageFactory.new_conversation_id(),
+        conversation_id=body.conversationId or f"conv_{generate_uuid_hex()[:8]}",
         query=body.query,
         query_at=now(),
         db_executor=get_database_pool(),
@@ -217,9 +217,9 @@ async def stream_chat_generator(
         yield emitter.emit(
             SseEventType.START.value,
             SseMessageFactory.start(
-                SseMessageFactory.get_start_data(
-                    turn_id, conversation_id, recorder.query_at
-                )
+                turn_id=turn_id,
+                conversation_id=conversation_id,
+                query_at=recorder.query_at,
             ),
             retry=True,
         )
@@ -288,6 +288,7 @@ async def stream_chat_generator(
 
         # 回答已完整交付，但历史没写进去：用专属错误码区分「模型失败」
         # 与「存不下」，避免客户端把已显示的回答当成模型没答上
+        # TODO: 与同步接口统一，在 done 事件中返回历史保存状态并由前端提示。
         if not persist_ok:
             yield emitter.emit(
                 SseEventType.ERROR.value,
