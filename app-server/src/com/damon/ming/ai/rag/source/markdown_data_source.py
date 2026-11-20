@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/markdown_data_source.py
 """
-Markdown 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+Markdown 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
 
 与纯文本数据源的核心差异：
   - 使用 LlamaIndex MarkdownNodeParser 做 AST 解析，
@@ -20,7 +20,9 @@ from pathlib import Path
 from llama_index.core import Document
 from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.rag.config.source.source_config_loader import SourceConfigLoader
+from src.com.damon.ming.ai.rag.config.source.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
 from src.com.damon.ming.log import pin

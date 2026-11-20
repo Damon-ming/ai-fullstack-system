@@ -8,7 +8,7 @@
   - 不持有线程池，纯 asyncio 并发
 
 取消策略：
-  - 不感知取消——由上层 RAGContainer 通过 asyncio.CancelledError 统一处理
+  - 不感知取消——由上层 RagChoreographer 通过 asyncio.CancelledError 统一处理
   - compress_nodes / run_summary 中的 await 点被 CancelledError 自然中断
   - 中断时直接抛弃所有中间结果（副本、压缩文本等），不做任何保存/恢复
 """
@@ -125,7 +125,7 @@ class SummaryService:
         return result_nodes
 
     # ── 取消说明 ────────────────────────────────────────────────────────
-    # 取消由上层 RAGContainer 通过 asyncio.CancelledError 统一处理，
+    # 取消由上层 RagChoreographer 通过 asyncio.CancelledError 统一处理，
     # compress_nodes / run_summary 中的 await 点被自然中断，
     # 压缩结果直接丢弃，无需任何清理或恢复操作。
 

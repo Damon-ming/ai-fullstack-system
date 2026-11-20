@@ -40,7 +40,7 @@ class AppInitializer:
         self.session_service = None
         self.limiter = None
         self.pool_mgr = None
-        self.rag_app = None
+        self.rag_choreographer = None
         self.inference_gateway = None
 
         # 上传改为逐文件同步入库，无需后台任务
@@ -99,7 +99,7 @@ class AppInitializer:
                 execution_timeout_seconds=self.execution_timeout_seconds,
                 retry_ms=self.rag_retry_ms,
                 locales=self.rag_locales,
-                rag_app=self.rag_app,
+                choreographer=self.rag_choreographer,
             ),
             inference=InferenceRuntime(
                 gateway=self.inference_gateway,
@@ -128,8 +128,8 @@ class AppInitializer:
             logger.info("线程池管理器已关闭")
 
         # 2. 关闭 RAG 持有的向量存储
-        if self.rag_app is not None:
-            self.rag_app.close()
+        if self.rag_choreographer is not None:
+            self.rag_choreographer.close()
 
         # 3. 关闭应用数据库
         if self.db_conn is not None:
@@ -390,7 +390,7 @@ class AppInitializer:
         import asyncio
 
         from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
-        from src.com.damon.ming.ai.rag.rag_tool import get_rag_container
+        from src.com.damon.ming.ai.rag.rag_tool import get_rag_choreographer
         from src.com.damon.ming.app.config.ai.inference.inference_config_loader import (
             InferenceConfigLoader,
         )
@@ -426,13 +426,15 @@ class AppInitializer:
             asyncio.Semaphore(inference_config.max_concurrency),
         )
 
-        self.rag_app = get_rag_container(
+        self.rag_choreographer = get_rag_choreographer(
             pools=get_rag_pool_group(),
             corpus_dir=self.system_config.corpus_dir,
             inference_gateway=self.inference_gateway,
         )
 
-        UploadRecoveryService.recover_startup(self.rag_app.knowledge_index_service)
+        UploadRecoveryService.recover_startup(
+            self.rag_choreographer.knowledge_index_service
+        )
 
         logger.info("RAG 容器与推理 Gateway 初始化完成")
 

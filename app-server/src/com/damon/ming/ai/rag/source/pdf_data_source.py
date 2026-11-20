@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/pdf_data_source.py
 """
-PDF 数据源 —— 路由层，线程编排由上层 RAGContainer 负责。
+PDF 数据源 —— 路由层，线程编排由上层 RagChoreographer 负责。
 
 本模块只负责"给定 PDF 文件路径，返回 Document 列表"，
 具体解析策略由 pdf/ 子包内的多策略解析器承担。

@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/spliter/spliter.py
 """
-文档分块器 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+文档分块器 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
 
 本模块只负责"给定 Document 列表，返回切分后的 TextNode 列表"，
 不感知线程池、取消令牌等基础设施。
@@ -37,7 +37,7 @@ class BaseDocumentSplitter(ABC):
 class MarkdownDocumentSplitter(BaseDocumentSplitter):
     """Markdown 文档分块器，同步处理。
 
-    上层 RAGContainer 使用 asyncio.to_thread 将本类的调用提交到线程池。
+    上层 RagChoreographer 使用 asyncio.to_thread 将本类的调用提交到线程池。
     """
 
     # 类级别锁，用于统计同步
@@ -268,10 +268,10 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         """分割文档列表（同步）。
 
         注意：本方法本身是同步的。当需要并行处理多个文档时，
-        上层 RAGContainer 应将每个文档的分割作为独立任务提交到线程池，
+        上层 RagChoreographer 应将每个文档的分割作为独立任务提交到线程池，
         而非在本方法内部做并行。这样可以保证：
-        - RAGContainer 控制线程生命周期
-        - 取消时 RAGContainer 只需取消未开始的 future
+        - RagChoreographer 控制线程生命周期
+        - 取消时 RagChoreographer 只需取消未开始的 future
 
         Args:
             docs: 待分割的 Document 列表。
@@ -298,7 +298,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         self.logger.info(f"[Splitter] 合并为 {len(merged_docs)} 个文档")
 
         # 2. 逐个同步处理每个文档（无内部并行）
-        #    并行由 RAGContainer 在更高层编排（按文件粒度提交到线程池）
+        #    并行由 RagChoreographer 在更高层编排（按文件粒度提交到线程池）
         all_nodes = []
         errors = 0
 

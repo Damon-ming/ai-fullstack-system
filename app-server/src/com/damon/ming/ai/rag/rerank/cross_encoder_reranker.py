@@ -139,7 +139,7 @@ class CrossEncoderReranker(BaseReranker):
             node_scores.append(max(scores[idx : idx + count]))
             idx += count
 
-        # 锁外排序 + deepcopy：nodes 是 rerank() 局部参数，RAGContainer 顺序调用，
+        # 锁外排序 + deepcopy：nodes 是 rerank() 局部参数，RagChoreographer 顺序调用，
         # 执行期间不会并发修改这些节点对象，锁外操作安全。
         scored_pairs = sorted(
             zip(nodes, node_scores),

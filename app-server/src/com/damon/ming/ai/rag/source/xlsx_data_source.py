@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/xlsx_data_source.py
 """
-Excel (XLSX) 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+Excel (XLSX) 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
 
 与 CSV 数据源的核心差异：
   - 多 sheet 支持：每个 sheet 独立生成一组 Document（page_index 跨 sheet 递增）
@@ -17,7 +17,9 @@ from pathlib import Path
 
 import pandas as pd
 from llama_index.core import Document
-from src.com.damon.ming.ai.rag.config.source.source_config_loader import SourceConfigLoader
+from src.com.damon.ming.ai.rag.config.source.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
 from src.com.damon.ming.log import pin

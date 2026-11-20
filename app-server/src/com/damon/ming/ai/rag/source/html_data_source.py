@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/html_data_source.py
 """
-HTML 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+HTML 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
 
 使用 BeautifulSoup (lxml) 解析 HTML 文件，提取正文内容。
 
@@ -27,7 +27,9 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup, Comment, Tag
 from llama_index.core import Document
-from src.com.damon.ming.ai.rag.config.source.source_config_loader import SourceConfigLoader
+from src.com.damon.ming.ai.rag.config.source.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
 from src.com.damon.ming.log import pin
@@ -73,7 +75,7 @@ _HEADING_TAGS = frozenset(["h1", "h2", "h3", "h4", "h5", "h6"])
 class LocalHtmlDataSource(BaseDataSource):
     """HTML 文件加载实现，同步处理。
 
-    上层 RAGContainer 使用 asyncio.to_thread 或 ThreadPoolExecutor
+    上层 RagChoreographer 使用 asyncio.to_thread 或 ThreadPoolExecutor
     将本类的调用提交到线程池，本类不感知线程环境。
     """
 

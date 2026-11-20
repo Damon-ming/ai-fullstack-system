@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/text_data_source.py
 """
-纯文本数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+纯文本数据源 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
 
 本模块只负责"给定文本文件路径，返回 Document 列表"，
 不感知线程池、取消令牌等基础设施。
@@ -22,7 +22,9 @@ import threading
 from pathlib import Path
 
 from llama_index.core import Document
-from src.com.damon.ming.ai.rag.config.source.source_config_loader import SourceConfigLoader
+from src.com.damon.ming.ai.rag.config.source.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
 from src.com.damon.ming.log import pin
@@ -35,7 +37,7 @@ logger = pin("LocalTextDataSource")
 class LocalTextDataSource(BaseDataSource):
     """纯文本数据源，同步处理。
 
-    上层 RAGContainer 使用 asyncio.to_thread 或 ThreadPoolExecutor
+    上层 RagChoreographer 使用 asyncio.to_thread 或 ThreadPoolExecutor
     将本类的调用提交到线程池，本类不感知线程环境。
     """
 

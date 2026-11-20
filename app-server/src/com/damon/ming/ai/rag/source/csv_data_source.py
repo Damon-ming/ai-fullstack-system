@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/csv_data_source.py
 """
-CSV 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+CSV 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
 
 CSV 无"页"概念，因此：
   - 将整个 CSV 按 batch_rows 分批，每批生成一个 Document
@@ -20,7 +20,9 @@ from pathlib import Path
 
 import pandas as pd
 from llama_index.core import Document
-from src.com.damon.ming.ai.rag.config.source.source_config_loader import SourceConfigLoader
+from src.com.damon.ming.ai.rag.config.source.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
 from src.com.damon.ming.log import pin

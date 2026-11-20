@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/doc_data_source.py
 """
-DOC/DOCX 数据源 —— 纯同步实现，线程编排由上层 RAGContainer 负责。
+DOC/DOCX 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
 
 使用 python-docx 提取 .docx 文件的文本和表格内容。
 旧版 .doc（BIFF 格式）无法直接读取，需先转换为 .docx。
@@ -26,7 +26,9 @@ from pathlib import Path
 from docx import Document
 from docx.document import Document as DocxDocumentType
 from llama_index.core import Document
-from src.com.damon.ming.ai.rag.config.source.source_config_loader import SourceConfigLoader
+from src.com.damon.ming.ai.rag.config.source.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
 from src.com.damon.ming.log import pin
@@ -42,7 +44,7 @@ _HEADING_PATTERN = re.compile(r"^Heading\s+(\d+)$", re.IGNORECASE)
 class LocalDocDataSource(BaseDataSource):
     """DOC/DOCX 文件加载实现，同步处理。
 
-    上层 RAGContainer 使用 asyncio.to_thread 或 ThreadPoolExecutor
+    上层 RagChoreographer 使用 asyncio.to_thread 或 ThreadPoolExecutor
     将本类的调用提交到线程池，本类不感知线程环境。
     """
 

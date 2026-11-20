@@ -2,7 +2,7 @@
 """
 章节重构服务 —— 纯合并分片，不含摘要逻辑。
 
-线程编排由上层 RAGContainer 负责。
+线程编排由上层 RagChoreographer 负责。
 线程池通过参数注入，本模块只做同步计算。
 """
 
@@ -97,7 +97,7 @@ class SectionReconstructor:
 
         通过 vector_store.get_by_metadata_batch 合并为单次 OR 查询，
         将 N 次数据库扫描降为 1 次，显著减少向量查询耗时。
-        executor 由上层 RAGContainer 注入，通过统一线程池入口提交任务。
+        executor 由上层 RagChoreographer 注入，通过统一线程池入口提交任务。
         """
         if not section_keys:
             return []

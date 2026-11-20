@@ -49,11 +49,11 @@ from src.com.damon.ming.thread import ThreadPoolGroup
 
 logger = pin("ai.rag")
 
-_rag_instance = None
-_rag_instance_lock = threading.Lock()
+_rag_choreographer_instance = None
+_rag_choreographer_lock = threading.Lock()
 
 
-def get_rag_container(
+def get_rag_choreographer(
     pools: ThreadPoolGroup,
     corpus_dir: str,
     inference_gateway: InferenceGateway,
@@ -65,20 +65,20 @@ def get_rag_container(
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
         inference_gateway: 启动时装配的统一推理入口（必填）。
     """
-    global _rag_instance
-    if _rag_instance is None:
-        with _rag_instance_lock:
-            if _rag_instance is None:
-                _rag_instance = RAGContainer(
+    global _rag_choreographer_instance
+    if _rag_choreographer_instance is None:
+        with _rag_choreographer_lock:
+            if _rag_choreographer_instance is None:
+                _rag_choreographer_instance = RagChoreographer(
                     pools=pools,
                     corpus_dir=corpus_dir,
                     inference_gateway=inference_gateway,
                 )
-    return _rag_instance
+    return _rag_choreographer_instance
 
 
 # 1. 全局单例容器
-class RAGContainer:
+class RagChoreographer:
     def __init__(
         self,
         pools: ThreadPoolGroup,
@@ -89,11 +89,11 @@ class RAGContainer:
 
         # 知识库目录：由 app.config 注入，不再硬编码，不合法直接抛异常
         if not corpus_dir:
-            raise ValueError("RAGContainer 初始化失败：corpus_dir 不能为空")
+            raise ValueError("RagChoreographer 初始化失败：corpus_dir 不能为空")
         corpus_path = Path(corpus_dir)
 
         if inference_gateway is None:
-            raise ValueError("RAGContainer 初始化失败：inference_gateway 不能为空")
+            raise ValueError("RagChoreographer 初始化失败：inference_gateway 不能为空")
 
         self.thread_pools = RagThreadPools()
         self.thread_pools.initialize(pools)
@@ -110,9 +110,7 @@ class RAGContainer:
 
         # 步骤3：初始化向量库
         self.vector_store_manager = create_vector_stores()
-        self._vector_store: BaseVectorStore = (
-            self.vector_store_manager.get_pgvector()
-        )
+        self._vector_store: BaseVectorStore = self.vector_store_manager.get_pgvector()
 
         # 步骤4：初始化章节重构 + 摘要服务
         self.section_recon = SectionReconstructor(
