@@ -127,7 +127,11 @@ class AppInitializer:
             self.pool_mgr.shutdown(wait=True, cancel_futures=True)
             logger.info("线程池管理器已关闭")
 
-        # 3. 关闭数据库
+        # 2. 关闭 RAG 持有的向量存储
+        if self.rag_app is not None:
+            self.rag_app.close()
+
+        # 3. 关闭应用数据库
         if self.db_conn is not None:
             self.db_conn.close()
             logger.info("数据库连接池已关闭")

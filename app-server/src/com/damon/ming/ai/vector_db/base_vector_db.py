@@ -4,7 +4,7 @@
 
 设计模式与 db/ 模块一致：
   - BaseVectorStore:  抽象接口（所有 vector_db 实现的契约）
-  - VectorStoreParams: 纯数据类，参数由上层配置注入，本模块不感知配置来源
+  - VectorStoreParams: 纯数据类，组合公共参数与引擎参数
 
 不提供：
   - 配置加载 → 见 ai/vector_db/config/vector_config_loader.py
@@ -15,13 +15,16 @@
   from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
   from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 
-  params = VectorStoreParams(connection_string="postgresql://...", embedding_dimension=1024)
+  params = VectorStoreParams(
+      shared_params=SharedVectorStoreParams(embedding_dimension=1024),
+      engine_params=PGVectorParams(...),
+  )
   store = PGVectorStore(params)
   nodes = store.similarity_search_by_vector(query_vector, k=4)
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from llama_index.core.schema import TextNode
@@ -30,32 +33,40 @@ from llama_index.core.schema import TextNode
 
 
 @dataclass(frozen=True)
-class VectorStoreParams:
-    """向量存储连接参数（纯数据类）。
+class SharedVectorStoreParams:
+    """所有向量存储共用的参数。"""
 
-    vector_db 模块内不含 YAML/环境变量读取逻辑。
-    公共参数及当前引擎所需参数由配置加载器按引擎校验；其他引擎字段可省略。
-    """
-
-    # ---- 通用 ----
     embedding_dimension: int
 
-    # ---- ChromaDB（由所选引擎决定是否需要）----
-    collection_name: str = ""
-    persist_directory: str = ""
+
+@dataclass(frozen=True)
+class PGVectorParams:
+    """PGVector 专属配置。"""
+
+    connection_string: str
+    table_name: str
+    pool_min_conn: int
+    pool_max_conn: int
+    hnsw_m: int
+    hnsw_ef_construction: int
+
+
+@dataclass(frozen=True)
+class ChromaParams:
+    """Chroma 专属配置。"""
+
+    collection_name: str
+    persist_directory: str
     host: str = ""
     port: int = 0
 
-    # ---- PGVector（由所选引擎决定是否需要）----
-    connection_string: str = ""
-    table_name: str = ""
-    pool_min_conn: int = 0
-    pool_max_conn: int = 0
-    hnsw_m: int = 0
-    hnsw_ef_construction: int = 0
 
-    # ---- 扩展（各实现特有参数透传）----
-    extra: dict[str, Any] = field(default_factory=dict)
+@dataclass(frozen=True)
+class VectorStoreParams:
+    """公共参数与所选向量引擎的专属参数。"""
+
+    shared_params: SharedVectorStoreParams
+    engine_params: PGVectorParams | ChromaParams
 
 
 # ── 抽象接口 ──────────────────────────────────────────────────────
@@ -86,7 +97,7 @@ class BaseVectorStore(ABC):
     def similarity_search_by_vector(
         self,
         query_vector: list[float],
-        k: int = 4,
+        k: int,
         metadata_filter: dict[str, Any] | None = None,
         **kwargs,
     ) -> list[TextNode]:

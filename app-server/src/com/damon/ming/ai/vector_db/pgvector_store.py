@@ -35,6 +35,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from src.com.damon.ming.ai.vector_db import register_engine
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
+    PGVectorParams,
     VectorStoreParams,
 )
 from src.com.damon.ming.log import pin
@@ -62,18 +63,23 @@ class PGVectorStore(BaseVectorStore):
     """PostgreSQL + pgvector 向量存储实现。"""
 
     def __init__(self, params: VectorStoreParams):
+        if not isinstance(params.engine_params, PGVectorParams):
+            raise TypeError("PGVectorStore 需要 PGVectorParams")
         super().__init__(params)
+        self.pgvector_params = params.engine_params
         self.logger = pin("PGVectorStore")
         self._closed = False
         self._close_lock = threading.Lock()
 
-        self._table_name = _sanitize_identifier(params.table_name, "table_name")
+        self._table_name = _sanitize_identifier(
+            self.pgvector_params.table_name, "table_name"
+        )
         self._engine = self._create_engine()
         self._ensure_schema()
         self.logger.info(
             "[PGVectorStore] 初始化完成: table=%s, dim=%d",
             self._table_name,
-            params.embedding_dimension,
+            params.shared_params.embedding_dimension,
         )
 
     # ── 引擎 & 建表 ───────────────────────────────────────────────
@@ -85,14 +91,14 @@ class PGVectorStore(BaseVectorStore):
         except ImportError:
             raise ImportError("请安装 sqlalchemy: pip install sqlalchemy>=2.0.0")
 
-        url = self.params.connection_string
+        url = self.pgvector_params.connection_string
         if not url:
             raise ValueError(
                 "PGVectorStore 需要 connection_string，请在 YAML 中配置 DB_URL"
             )
 
-        min_conn = self.params.pool_min_conn
-        max_conn = self.params.pool_max_conn
+        min_conn = self.pgvector_params.pool_min_conn
+        max_conn = self.pgvector_params.pool_max_conn
         if max_conn < min_conn:
             raise ValueError(
                 f"pool_max_conn({max_conn}) 不能小于 pool_min_conn({min_conn})"
@@ -115,10 +121,10 @@ class PGVectorStore(BaseVectorStore):
     def _ensure_schema(self):
         """确保 pgvector 扩展、表、索引存在。"""
 
-        dim = self.params.embedding_dimension
+        dim = self.params.shared_params.embedding_dimension
         table = self._table_name
-        m = self.params.hnsw_m
-        ef = self.params.hnsw_ef_construction
+        m = self.pgvector_params.hnsw_m
+        ef = self.pgvector_params.hnsw_ef_construction
 
         # 参数范围校验
         if not (1 <= dim <= 16000):
@@ -162,7 +168,7 @@ class PGVectorStore(BaseVectorStore):
         if not nodes:
             return []
 
-        expected_dim = self.params.embedding_dimension
+        expected_dim = self.params.shared_params.embedding_dimension
         ids = []
         rows = []
         for node in nodes:
@@ -210,7 +216,7 @@ class PGVectorStore(BaseVectorStore):
     def similarity_search_by_vector(
         self,
         query_vector: list[float],
-        k: int = 4,
+        k: int,
         metadata_filter: dict[str, Any] | None = None,
         **kwargs,
     ) -> list[TextNode]:

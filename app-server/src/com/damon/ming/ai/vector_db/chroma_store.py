@@ -7,6 +7,7 @@ from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.vector_db import register_engine
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
+    ChromaParams,
     VectorStoreParams,
 )
 from src.com.damon.ming.log import pin
@@ -23,7 +24,10 @@ class ChromaDBStore(BaseVectorStore):
     """
 
     def __init__(self, params: VectorStoreParams):
+        if not isinstance(params.engine_params, ChromaParams):
+            raise TypeError("ChromaDBStore 需要 ChromaParams")
         super().__init__(params)
+        self.chroma_params = params.engine_params
         self.logger = pin("ChromaDBStore")
         self._closed = False
         self._close_lock = threading.Lock()
@@ -35,38 +39,38 @@ class ChromaDBStore(BaseVectorStore):
             raise ImportError("请安装 chromadb: pip install chromadb")
 
         # 远程模式 vs 本地持久化
-        if self.params.host and self.params.port:
+        if self.chroma_params.host and self.chroma_params.port:
             self.client = chromadb.HttpClient(
-                host=self.params.host,
-                port=self.params.port,
+                host=self.chroma_params.host,
+                port=self.chroma_params.port,
                 settings=Settings(anonymized_telemetry=False),
             )
             self.logger.info(
-                f"[ChromaDBStore] 远程模式: {self.params.host}:{self.params.port}"
+                f"[ChromaDBStore] 远程模式: {self.chroma_params.host}:{self.chroma_params.port}"
             )
         else:
             self.client = chromadb.PersistentClient(
-                path=self.params.persist_directory,
+                path=self.chroma_params.persist_directory,
                 settings=Settings(anonymized_telemetry=False),
             )
             self.logger.info(
-                f"[ChromaDBStore] 本地持久化: {self.params.persist_directory}"
+                f"[ChromaDBStore] 本地持久化: {self.chroma_params.persist_directory}"
             )
 
         self.collection = self._get_or_create_collection()
         self.logger.info(
-            f"[ChromaDBStore] 初始化完成: collection={self.params.collection_name}, "
-            f"dim={self.params.embedding_dimension}"
+            f"[ChromaDBStore] 初始化完成: collection={self.chroma_params.collection_name}, "
+            f"dim={self.params.shared_params.embedding_dimension}"
         )
 
     def _get_or_create_collection(self):
         """获取或创建 collection（幂等）"""
         try:
             existing = self.client.list_collections()
-            if self.params.collection_name in [c.name for c in existing]:
-                return self.client.get_collection(self.params.collection_name)
+            if self.chroma_params.collection_name in [c.name for c in existing]:
+                return self.client.get_collection(self.chroma_params.collection_name)
             return self.client.create_collection(
-                name=self.params.collection_name,
+                name=self.chroma_params.collection_name,
                 metadata={"hnsw:space": "cosine"},
             )
         except Exception as e:
@@ -90,10 +94,10 @@ class ChromaDBStore(BaseVectorStore):
             node_id = node.node_id or generate_uuid()
             if (
                 node.embedding
-                and len(node.embedding) != self.params.embedding_dimension
+                and len(node.embedding) != self.params.shared_params.embedding_dimension
             ):
                 self.logger.warning(
-                    f"向量维度不匹配！期望={self.params.embedding_dimension}，"
+                    f"向量维度不匹配！期望={self.params.shared_params.embedding_dimension}，"
                     f"实际={len(node.embedding)}，node_id={node_id}"
                 )
             ids.append(node_id)
@@ -117,7 +121,7 @@ class ChromaDBStore(BaseVectorStore):
     def similarity_search_by_vector(
         self,
         query_vector: list[float],
-        k: int = 4,
+        k: int,
         metadata_filter: dict[str, Any] | None = None,
         **kwargs,
     ) -> list[TextNode]:

@@ -15,6 +15,9 @@
 
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
+    ChromaParams,
+    PGVectorParams,
+    SharedVectorStoreParams,
     VectorStoreParams,
 )
 
@@ -80,7 +83,10 @@ def create_vector_stores():
 __all__ = [
     "BaseVectorStore",
     "ChromaDBStore",
+    "ChromaParams",
     "PGVectorStore",
+    "PGVectorParams",
+    "SharedVectorStoreParams",
     "VectorStoreParams",
     "create_vector_stores",
     "list_engines",

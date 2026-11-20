@@ -18,6 +18,9 @@ import yaml
 from src.com.damon.ming.ai.vector_db import resolve_store
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
+    ChromaParams,
+    PGVectorParams,
+    SharedVectorStoreParams,
     VectorStoreParams,
 )
 
@@ -29,18 +32,6 @@ class VectorConfigLoader:
     """
 
     _cache: dict[str, BaseVectorStore] = {}
-    _required_params: dict[str, set[str]] = {  # noqa: RUF012
-        "chroma": {"collection_name", "persist_directory", "embedding_dimension"},
-        "pgvector": {
-            "connection_string",
-            "embedding_dimension",
-            "table_name",
-            "pool_min_conn",
-            "pool_max_conn",
-            "hnsw_m",
-            "hnsw_ef_construction",
-        },
-    }
 
     def __init__(self, config_path: str | None = None):
         if config_path is None:
@@ -61,22 +52,35 @@ class VectorConfigLoader:
             return self._cache[engine]
 
         raw = self._read_yaml(engine)
-        params_raw = raw
-
-        if not isinstance(params_raw, dict):
+        if not isinstance(raw, dict):
             raise TypeError(f"引擎 '{engine}' 配置必须是键值对")
-        known_fields = set(VectorStoreParams.__dataclass_fields__)
-        required_fields = self._required_params.get(engine, set())
-        missing = sorted(required_fields - params_raw.keys())
-        if missing:
-            raise ValueError(
-                f"引擎 '{engine}' 配置缺少必填字段: {missing}。"
-                "请在 vector-config.yaml 对应引擎节点下补充。"
+        raw_params = dict(raw)
+        try:
+            shared_params = SharedVectorStoreParams(
+                embedding_dimension=raw_params.pop("embedding_dimension")
             )
+        except KeyError as exc:
+            raise ValueError(
+                f"引擎 '{engine}' 配置缺少公共参数: embedding_dimension"
+            ) from exc
 
-        base_kwargs = {k: v for k, v in params_raw.items() if k in known_fields}
-        extra_kwargs = {k: v for k, v in params_raw.items() if k not in known_fields}
-        params = VectorStoreParams(**base_kwargs, extra=extra_kwargs)
+        engine_params_types = {
+            "pgvector": PGVectorParams,
+            "chroma": ChromaParams,
+        }
+        try:
+            engine_params_type = engine_params_types[engine]
+        except KeyError as exc:
+            raise ValueError(f"没有引擎参数类型定义: '{engine}'") from exc
+        try:
+            engine_params = engine_params_type(**raw_params)
+        except TypeError as exc:
+            raise ValueError(f"引擎 '{engine}' 配置字段无效: {exc}") from exc
+
+        params = VectorStoreParams(
+            shared_params=shared_params,
+            engine_params=engine_params,
+        )
 
         store_class = resolve_store(engine)
         instance = store_class(params)

@@ -42,8 +42,7 @@ from src.com.damon.ming.ai.rag.summary import SummaryService
 from src.com.damon.ming.ai.rag.thread_pools import RagThreadPools
 from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
-from src.com.damon.ming.ai.vector_db import create_vector_stores
-from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
+from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import ThreadPoolGroup
@@ -111,7 +110,9 @@ class RAGContainer:
 
         # 步骤3：初始化向量库
         self.vector_store_manager = create_vector_stores()
-        self._vector_store: PGVectorStore = self.vector_store_manager.get_pgvector()
+        self._vector_store: BaseVectorStore = (
+            self.vector_store_manager.get_pgvector()
+        )
 
         # 步骤4：初始化章节重构 + 摘要服务
         self.section_recon = SectionReconstructor(
@@ -283,3 +284,8 @@ class RAGContainer:
             cancel_event.set()
             logger.warning("RAG 检索超时，通知后台线程停止")
             raise
+
+    def close(self) -> None:
+        """关闭 RAG 持有的存储资源。"""
+        self._vector_store.close()
+        logger.info("RAG 向量存储已关闭")
