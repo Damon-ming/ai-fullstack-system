@@ -47,6 +47,7 @@ class PGVectorParams:
     table_name: str
     pool_min_conn: int
     pool_max_conn: int
+    pool_recycle: int
     hnsw_m: int
     hnsw_ef_construction: int
 

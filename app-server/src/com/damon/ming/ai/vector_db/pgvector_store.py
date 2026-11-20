@@ -26,7 +26,6 @@ PGVector 向量存储实现 —— PostgreSQL + pgvector 扩展。
 
 import json
 import re
-import threading
 from typing import Any
 
 from llama_index.core.schema import TextNode
@@ -69,7 +68,6 @@ class PGVectorStore(BaseVectorStore):
         self.pgvector_params = params.engine_params
         self.logger = pin("PGVectorStore")
         self._closed = False
-        self._close_lock = threading.Lock()
 
         self._table_name = _sanitize_identifier(
             self.pgvector_params.table_name, "table_name"
@@ -108,7 +106,7 @@ class PGVectorStore(BaseVectorStore):
             url,
             pool_size=min_conn,
             max_overflow=max_conn - min_conn,
-            pool_recycle=3600,
+            pool_recycle=self.pgvector_params.pool_recycle,
         )
 
         # 测试连接
@@ -137,21 +135,21 @@ class PGVectorStore(BaseVectorStore):
         ddl_statements = [
             "CREATE EXTENSION IF NOT EXISTS vector",
             (
-                f"CREATE TABLE IF NOT EXISTS {table} ("  # nosec B608 — table 经 _sanitize_identifier 校验
+                f"CREATE TABLE IF NOT EXISTS {table} ("
                 "  id        TEXT PRIMARY KEY,"
                 "  document  TEXT NOT NULL,"
                 "  metadata  JSONB NOT NULL DEFAULT '{}'::jsonb,"
-                f"  embedding vector({dim}) NOT NULL"  # nosec B608 — dim 为整数参数
+                f"  embedding vector({dim}) NOT NULL"
                 ")"
             ),
             (
-                f"CREATE INDEX IF NOT EXISTS {table}_embedding_idx"  # nosec B608 — table 校验
-                f"  ON {table} USING hnsw (embedding vector_cosine_ops)"  # nosec B608 — table 校验
-                f"  WITH (m = {m}, ef_construction = {ef})"  # nosec B608 — m/ef 为整数参数
+                f"CREATE INDEX IF NOT EXISTS {table}_embedding_idx"
+                f"  ON {table} USING hnsw (embedding vector_cosine_ops)"
+                f"  WITH (m = {m}, ef_construction = {ef})"
             ),
             (
-                f"CREATE INDEX IF NOT EXISTS {table}_metadata_idx"  # nosec B608 — table 校验
-                f"  ON {table} USING gin (metadata)"  # nosec B608 — table 校验
+                f"CREATE INDEX IF NOT EXISTS {table}_metadata_idx"
+                f"  ON {table} USING gin (metadata)"
             ),
         ]
 
@@ -192,7 +190,7 @@ class PGVectorStore(BaseVectorStore):
         # ON CONFLICT DO NOTHING：chunk_id 确定性生成，重复入库时幂等跳过，
         # 避免主键冲突导致整批插入回滚（启动重建 / 去重击穿场景）
         insert_sql = (
-            f"INSERT INTO {table} (id, document, metadata, embedding) "  # nosec B608 — table 经 _sanitize_identifier 校验
+            f"INSERT INTO {table} (id, document, metadata, embedding) "
             "VALUES (:id, :document, :metadata::jsonb, :embedding::vector) "
             "ON CONFLICT (id) DO NOTHING"
         )
@@ -441,10 +439,9 @@ class PGVectorStore(BaseVectorStore):
     # ── 生命周期 ────────────────────────────────────────────────────
 
     def close(self) -> None:
-        with self._close_lock:
-            if self._closed:
-                return
-            self._closed = True
+        if self._closed:
+            return
+        self._closed = True
 
         if self._engine is not None:
             self._engine.dispose()

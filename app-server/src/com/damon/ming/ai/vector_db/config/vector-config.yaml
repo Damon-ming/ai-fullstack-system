@@ -12,6 +12,7 @@ pgvector:
   table_name: rag_documents
   pool_min_conn: 2
   pool_max_conn: 10
+  pool_recycle: 3600  # 连接年龄回收阈值（秒）
   # pgvector HNSW 索引参数
   hnsw_m: 16
   hnsw_ef_construction: 240
