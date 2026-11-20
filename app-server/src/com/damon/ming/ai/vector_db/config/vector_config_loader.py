@@ -57,11 +57,12 @@ class VectorConfigLoader:
         raw_params = dict(raw)
         try:
             shared_params = SharedVectorStoreParams(
-                embedding_dimension=raw_params.pop("embedding_dimension")
+                table_name=raw_params.pop("table_name"),
+                embedding_dimension=raw_params.pop("embedding_dimension"),
             )
         except KeyError as exc:
             raise ValueError(
-                f"引擎 '{engine}' 配置缺少公共参数: embedding_dimension"
+                f"引擎 '{engine}' 配置缺少公共参数: {exc.args[0]}"
             ) from exc
 
         engine_params_types = {

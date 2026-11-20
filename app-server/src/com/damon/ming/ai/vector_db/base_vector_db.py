@@ -16,7 +16,9 @@
   from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 
   params = VectorStoreParams(
-      shared_params=SharedVectorStoreParams(embedding_dimension=1024),
+      shared_params=SharedVectorStoreParams(
+          table_name="rag_documents", embedding_dimension=1024
+      ),
       engine_params=PGVectorParams(...),
   )
   store = PGVectorStore(params)
@@ -34,8 +36,9 @@ from llama_index.core.schema import TextNode
 
 @dataclass(frozen=True)
 class SharedVectorStoreParams:
-    """所有向量存储共用的参数。"""
+    """所有向量存储共用的参数。table_name 对 Chroma 表示 collection 名。"""
 
+    table_name: str
     embedding_dimension: int
 
 
@@ -44,7 +47,6 @@ class PGVectorParams:
     """PGVector 专属配置。"""
 
     connection_string: str
-    table_name: str
     pool_min_conn: int
     pool_max_conn: int
     pool_recycle: int
@@ -56,7 +58,6 @@ class PGVectorParams:
 class ChromaParams:
     """Chroma 专属配置。"""
 
-    collection_name: str
     persist_directory: str
     host: str = ""
     port: int = 0

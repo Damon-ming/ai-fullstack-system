@@ -2,14 +2,14 @@
 # 向量存储配置 —— 由 VectorConfigLoader 读取，注入 vector_db 模块。
 
 # chroma:
-#   collection_name: rag_documents
+#   table_name: rag_documents  # Chroma 会将其用作 collection 名称
 #   persist_directory: ./chroma
 #   embedding_dimension: 1024
 
 pgvector:
   connection_string: ${DB_URL}
-  embedding_dimension: 1024
   table_name: rag_documents
+  embedding_dimension: 1024
   pool_min_conn: 2
   pool_max_conn: 10
   pool_recycle: 3600  # 连接年龄回收阈值（秒）

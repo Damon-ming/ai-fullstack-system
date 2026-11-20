@@ -70,7 +70,7 @@ class PGVectorStore(BaseVectorStore):
         self._closed = False
 
         self._table_name = _sanitize_identifier(
-            self.pgvector_params.table_name, "table_name"
+            params.shared_params.table_name, "table_name"
         )
         self._engine = self._create_engine()
         self._ensure_schema()
@@ -190,7 +190,7 @@ class PGVectorStore(BaseVectorStore):
         # ON CONFLICT DO NOTHING：chunk_id 确定性生成，重复入库时幂等跳过，
         # 避免主键冲突导致整批插入回滚（启动重建 / 去重击穿场景）
         insert_sql = (
-            f"INSERT INTO {table} (id, document, metadata, embedding) "
+            f"INSERT INTO {table} (id, document, metadata, embedding) "  # nosec B608 — table 经 _sanitize_identifier 白名单校验
             "VALUES (:id, :document, :metadata::jsonb, :embedding::vector) "
             "ON CONFLICT (id) DO NOTHING"
         )
@@ -225,7 +225,7 @@ class PGVectorStore(BaseVectorStore):
         where_clause, where_params = self._build_metadata_filter(metadata_filter)
         sql = (
             "SELECT id, document, metadata, embedding <=> :vec::vector AS distance "
-            f"FROM {table} "  # nosec B608 — table 经 _sanitize_identifier 校验
+            f"FROM {table} "
             f"{where_clause} "  # nosec B608 — where_clause 用 bind params
             "ORDER BY embedding <=> :vec::vector "
             "LIMIT :limit"
@@ -236,15 +236,18 @@ class PGVectorStore(BaseVectorStore):
 
         try:
             with self._engine.connect() as conn:
-                rows = conn.execute(text(sql), params).fetchall()  # nosec B608 — table 校验 + where_clause 用 bind params
+                rows = conn.execute(text(sql), params).mappings().all()
 
             nodes = []
             for row in rows:
-                distance = row[3]
+                distance = row["distance"]
+                metadata = row["metadata"]
                 node = TextNode(
-                    id_=row[0],
-                    text=row[1],
-                    metadata=json.loads(row[2]) if isinstance(row[2], str) else row[2],
+                    id_=row["id"],
+                    text=row["document"],
+                    metadata=json.loads(metadata)
+                    if isinstance(metadata, str)
+                    else metadata,
                 )
                 node.metadata["_score"] = 1 - distance
                 nodes.append(node)

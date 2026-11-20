@@ -1,6 +1,5 @@
 # app-server/src/com/damon/ming/ai/vector_db/chroma_store.py
 
-import threading
 from typing import Any
 
 from llama_index.core.schema import TextNode
@@ -30,7 +29,6 @@ class ChromaDBStore(BaseVectorStore):
         self.chroma_params = params.engine_params
         self.logger = pin("ChromaDBStore")
         self._closed = False
-        self._close_lock = threading.Lock()
 
         try:
             import chromadb
@@ -59,7 +57,7 @@ class ChromaDBStore(BaseVectorStore):
 
         self.collection = self._get_or_create_collection()
         self.logger.info(
-            f"[ChromaDBStore] 初始化完成: collection={self.chroma_params.collection_name}, "
+            f"[ChromaDBStore] 初始化完成: collection={self.params.shared_params.table_name}, "
             f"dim={self.params.shared_params.embedding_dimension}"
         )
 
@@ -67,10 +65,11 @@ class ChromaDBStore(BaseVectorStore):
         """获取或创建 collection（幂等）"""
         try:
             existing = self.client.list_collections()
-            if self.chroma_params.collection_name in [c.name for c in existing]:
-                return self.client.get_collection(self.chroma_params.collection_name)
+            collection_name = self.params.shared_params.table_name
+            if collection_name in [c.name for c in existing]:
+                return self.client.get_collection(collection_name)
             return self.client.create_collection(
-                name=self.chroma_params.collection_name,
+                name=collection_name,
                 metadata={"hnsw:space": "cosine"},
             )
         except Exception as e:
@@ -280,8 +279,7 @@ class ChromaDBStore(BaseVectorStore):
     # ── 生命周期 ────────────────────────────────────────────────────
 
     def close(self) -> None:
-        with self._close_lock:
-            if self._closed:
-                return
-            self._closed = True
+        if self._closed:
+            return
+        self._closed = True
         self.logger.info("[ChromaDBStore] 资源已释放")
