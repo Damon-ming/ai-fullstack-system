@@ -333,13 +333,15 @@ class PGVectorStore(BaseVectorStore):
         try:
             sql = text(f"SELECT id, document, metadata FROM {table} {where_clause}")  # nosec B608 — table 校验 + where_clause 用 bind params
             with self._engine.connect() as conn:
-                rows = conn.execute(sql, where_params).fetchall()
+                rows = conn.execute(sql, where_params).mappings().all()
 
             return [
                 TextNode(
-                    id_=row[0],
-                    text=row[1],
-                    metadata=json.loads(row[2]) if isinstance(row[2], str) else row[2],
+                    id_=row["id"],
+                    text=row["document"],
+                    metadata=json.loads(row["metadata"])
+                    if isinstance(row["metadata"], str)
+                    else row["metadata"],
                 )
                 for row in rows
             ]
@@ -361,11 +363,11 @@ class PGVectorStore(BaseVectorStore):
         table = self._table_name
         try:
             sql = text(
-                f"SELECT DISTINCT metadata->>:metadata_key FROM {table} "  # nosec B608 — table 经 _sanitize_identifier 校验
+                f"SELECT DISTINCT metadata->>:metadata_key AS value FROM {table} "  # nosec B608 — table 经 _sanitize_identifier 校验
                 "WHERE metadata ? :metadata_key"
             )
             with self._engine.connect() as conn:
-                rows = conn.execute(sql, {"metadata_key": key}).fetchall()
+                rows = conn.execute(sql, {"metadata_key": key}).mappings().all()
         except Exception as e:
             self.logger.error(
                 "[PGVectorStore] 查询 metadata distinct 值失败 | key=%s: %s (%s)",
@@ -374,7 +376,7 @@ class PGVectorStore(BaseVectorStore):
                 str(e)[:200],
             )
             return None
-        return {row[0] for row in rows if row[0]}
+        return {row["value"] for row in rows if row["value"]}
 
     def get_by_metadata_batch(
         self,
@@ -407,13 +409,15 @@ class PGVectorStore(BaseVectorStore):
             sql = text(f"SELECT id, document, metadata FROM {table} WHERE {where_str}")  # nosec B608 — table 校验 + where_str 用 bind params
 
             with self._engine.connect() as conn:
-                rows = conn.execute(sql, or_params).fetchall()
+                rows = conn.execute(sql, or_params).mappings().all()
 
             return [
                 TextNode(
-                    id_=row[0],
-                    text=row[1],
-                    metadata=json.loads(row[2]) if isinstance(row[2], str) else row[2],
+                    id_=row["id"],
+                    text=row["document"],
+                    metadata=json.loads(row["metadata"])
+                    if isinstance(row["metadata"], str)
+                    else row["metadata"],
                 )
                 for row in rows
             ]
