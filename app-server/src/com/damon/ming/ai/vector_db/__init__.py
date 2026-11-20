@@ -67,11 +67,22 @@ def list_engines() -> list[str]:
 from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
 from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 
+
+def create_vector_stores():
+    """初始化并返回向量存储管理器。"""
+    from src.com.damon.ming.ai.vector_db.manager import VectorStoreManager
+
+    manager = VectorStoreManager()
+    manager.initialize()
+    return manager
+
+
 __all__ = [
     "BaseVectorStore",
     "ChromaDBStore",
     "PGVectorStore",
     "VectorStoreParams",
+    "create_vector_stores",
     "list_engines",
     "register_engine",
     "resolve_store",

@@ -33,25 +33,26 @@ from llama_index.core.schema import TextNode
 class VectorStoreParams:
     """向量存储连接参数（纯数据类）。
 
-    所有参数由上层配置传入，vector_db 模块内不含任何 YAML/环境变量读取逻辑。
-    关键决策参数无默认值，必须在 YAML 中显式声明。
+    vector_db 模块内不含 YAML/环境变量读取逻辑。
+    公共参数及当前引擎所需参数由配置加载器按引擎校验；其他引擎字段可省略。
     """
 
-    # ---- 全部无默认值，由 YAML 显式注入 ----
-    # ChromaDB
-    collection_name: str
-    persist_directory: str
-    host: str
-    port: int
-    # PGVector
-    connection_string: str
-    table_name: str
-    pool_min_conn: int
-    pool_max_conn: int
-    hnsw_m: int
-    hnsw_ef_construction: int
-    # 通用
+    # ---- 通用 ----
     embedding_dimension: int
+
+    # ---- ChromaDB（由所选引擎决定是否需要）----
+    collection_name: str = ""
+    persist_directory: str = ""
+    host: str = ""
+    port: int = 0
+
+    # ---- PGVector（由所选引擎决定是否需要）----
+    connection_string: str = ""
+    table_name: str = ""
+    pool_min_conn: int = 0
+    pool_max_conn: int = 0
+    hnsw_m: int = 0
+    hnsw_ef_construction: int = 0
 
     # ---- 扩展（各实现特有参数透传）----
     extra: dict[str, Any] = field(default_factory=dict)

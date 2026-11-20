@@ -24,7 +24,6 @@ RAG 容器 —— 检索线程编排层。
 import asyncio
 import threading
 from pathlib import Path
-from typing import cast
 
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
 from src.com.damon.ming.ai.rag.constructor.constructor import SectionReconstructor
@@ -43,9 +42,7 @@ from src.com.damon.ming.ai.rag.summary import SummaryService
 from src.com.damon.ming.ai.rag.thread_pools import RagThreadPools
 from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
-from src.com.damon.ming.ai.vector_db.config.vector_config_loader import (
-    VectorConfigLoader,
-)
+from src.com.damon.ming.ai.vector_db import create_vector_stores
 from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
@@ -113,7 +110,8 @@ class RAGContainer:
         self.embedder: BaseEmbeddingService = self.embedding_manager.get_huggingface()
 
         # 步骤3：初始化向量库
-        self._vector_store = cast(PGVectorStore, VectorConfigLoader().load("pgvector"))
+        self.vector_store_manager = create_vector_stores()
+        self._vector_store: PGVectorStore = self.vector_store_manager.get_pgvector()
 
         # 步骤4：初始化章节重构 + 摘要服务
         self.section_recon = SectionReconstructor(

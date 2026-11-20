@@ -13,7 +13,6 @@ vector_db/ 模块通过 VectorStoreParams 数据类接收参数，不感知配�
 """
 
 import os
-from dataclasses import MISSING
 
 import yaml
 from src.com.damon.ming.ai.vector_db import resolve_store
@@ -30,6 +29,18 @@ class VectorConfigLoader:
     """
 
     _cache: dict[str, BaseVectorStore] = {}
+    _required_params: dict[str, set[str]] = {  # noqa: RUF012
+        "chroma": {"collection_name", "persist_directory", "embedding_dimension"},
+        "pgvector": {
+            "connection_string",
+            "embedding_dimension",
+            "table_name",
+            "pool_min_conn",
+            "pool_max_conn",
+            "hnsw_m",
+            "hnsw_ef_construction",
+        },
+    }
 
     def __init__(self, config_path: str | None = None):
         if config_path is None:
@@ -50,21 +61,17 @@ class VectorConfigLoader:
             return self._cache[engine]
 
         raw = self._read_yaml(engine)
-        params_raw = raw.get("params", {})
+        params_raw = raw
 
-        known_fields = {f.name for f in VectorStoreParams.__dataclass_fields__.values()}
-        # 校验：无默认值的字段必须在 YAML 中显式声明
-        missing = [
-            f_name
-            for f_name, f_obj in VectorStoreParams.__dataclass_fields__.items()
-            if f_obj.default is MISSING
-            and f_obj.default_factory is MISSING
-            and f_name not in params_raw
-        ]
+        if not isinstance(params_raw, dict):
+            raise TypeError(f"引擎 '{engine}' 配置必须是键值对")
+        known_fields = set(VectorStoreParams.__dataclass_fields__)
+        required_fields = self._required_params.get(engine, set())
+        missing = sorted(required_fields - params_raw.keys())
         if missing:
             raise ValueError(
                 f"引擎 '{engine}' 配置缺少必填字段: {missing}。"
-                "请在 vector-config.yaml 的 params 下补充。"
+                "请在 vector-config.yaml 对应引擎节点下补充。"
             )
 
         base_kwargs = {k: v for k, v in params_raw.items() if k in known_fields}
@@ -85,13 +92,12 @@ class VectorConfigLoader:
         with open(self._config_path, "r", encoding="utf-8") as f:
             raw_cfg = yaml.safe_load(f)
 
-        if raw_cfg is None or "vector_engines" not in raw_cfg:
-            raise ValueError("配置文件格式错误：缺少 'vector_engines' 根节点")
+        if raw_cfg is None or not isinstance(raw_cfg, dict):
+            raise ValueError("配置文件格式错误：顶层必须是键值对")
 
-        section = raw_cfg["vector_engines"]
-        if engine not in section:
+        if engine not in raw_cfg:
             raise ValueError(
-                f"未找到引擎配置: '{engine}'. 可用: {list(section.keys())}"
+                f"未找到引擎配置: '{engine}'. 可用: {list(raw_cfg.keys())}"
             )
 
-        return section[engine]
+        return raw_cfg[engine]
