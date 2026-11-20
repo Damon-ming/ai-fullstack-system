@@ -26,48 +26,26 @@ import threading
 from pathlib import Path
 from typing import cast
 
-from src.com.damon.ming.ai.vector_db.config.vector_config_loader import VectorConfigLoader
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
-from src.com.damon.ming.ai.rag.config.embedding.embedding_config_loader import (
-    EmbeddingConfigLoader,
-)
-from src.com.damon.ming.ai.rag.config.rerank.rerank_config_loader import (
-    RerankerConfigLoader,
-)
-from src.com.damon.ming.ai.rag.config.retriever.retriever_config_loader import (
-    RetrieverConfigLoader,
-)
-from src.com.damon.ming.ai.rag.config.splitter.splitter_config_loader import (
-    SplitterConfigLoader,
-)
-from src.com.damon.ming.ai.rag.config.tokenizer.tokenizer_config_loader import (
-    TokenizerConfigLoader,
-)
 from src.com.damon.ming.ai.rag.constructor.constructor import SectionReconstructor
+from src.com.damon.ming.ai.rag.embedding import create_embedders
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
 from src.com.damon.ming.ai.rag.knowledge.bootstrap import bootstrap_knowledge_index
 from src.com.damon.ming.ai.rag.knowledge.index_service import KnowledgeIndexService
-from src.com.damon.ming.ai.rag.registry.embedding_registry import (
-    register_all_embeddings,
-)
-from src.com.damon.ming.ai.rag.registry.rerank_registry import register_all_rerankers
-from src.com.damon.ming.ai.rag.registry.source_registry import register_all_sources
-from src.com.damon.ming.ai.rag.registry.tokenizer_registry import (
-    register_all_tokenizers,
-)
+from src.com.damon.ming.ai.rag.rerank import create_rerankers
 from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker
-from src.com.damon.ming.ai.rag.retriever.base_retriever import (
-    DenseRetriever,
-    SparseRetriever,
-)
+from src.com.damon.ming.ai.rag.retriever import create_retrievers
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
-from src.com.damon.ming.ai.rag.retriever.hybrid_retriever import HybridRetriever
-from src.com.damon.ming.ai.rag.spliter.spliter import MarkdownDocumentSplitter
+from src.com.damon.ming.ai.rag.spliter import create_splitters
 from src.com.damon.ming.ai.rag.summary import SummaryService
 from src.com.damon.ming.ai.rag.thread_pools import RagThreadPools
+from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
+from src.com.damon.ming.ai.vector_db.config.vector_config_loader import (
+    VectorConfigLoader,
+)
 from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
@@ -124,25 +102,15 @@ class RAGContainer:
         self.thread_pools = RagThreadPools()
         self.thread_pools.initialize(pools)
 
-        # 步骤1：执行所有模块注册
-        register_all_rerankers()
-        register_all_tokenizers()
-        register_all_embeddings()
-        register_all_sources()
-
-        # 步骤1.5：全量加载所有分词器（启动时一次性加载，避免响应延迟）
-        _tokenizers = TokenizerConfigLoader().load_all()
-        self.tokenizer: BaseTokenizer = _tokenizers["llm_counter"]
+        # 步骤1：全量加载所有分词器（启动时一次性加载，避免响应延迟）
+        self.tokenizer_manager = create_tokenizers()
+        self.llm_tokenizer: BaseTokenizer = self.tokenizer_manager.get_llm_tokenizer()
         # BM25 词语分词器（中文关键词检索）
-        self.word_tokenizer = _tokenizers["bm25_searcher"]
-        # 所有分词器实例，外部按名字直接引用
-        self.tokenizers = _tokenizers
+        self.bm25_tokenizer = self.tokenizer_manager.get_bm25_tokenizer()
 
         # 步骤2：全量加载所有 embedding（启动时一次性加载，避免响应延迟）
-        _embedders = EmbeddingConfigLoader().load_all()
-        self.embedder: BaseEmbeddingService = _embedders["huggingface"]
-        # 所有 embedding 实例，外部按名字直接引用
-        self.embedders = _embedders
+        self.embedding_manager = create_embedders()
+        self.embedder: BaseEmbeddingService = self.embedding_manager.get_huggingface()
 
         # 步骤3：初始化向量库
         self._vector_store = cast(PGVectorStore, VectorConfigLoader().load("pgvector"))
@@ -152,47 +120,29 @@ class RAGContainer:
             self.thread_pools.get_retrieval_pool()
         )
         self.summary = SummaryService(
-            tokenizer=self.tokenizer,
+            tokenizer=self.llm_tokenizer,
             inference=inference_gateway,
         )
 
         # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）
-        self.rerankers: dict[str, BaseReranker] = RerankerConfigLoader().load_all()
-        self.reranker: BaseReranker = self.rerankers["zh_primary"]
+        self.reranker_manager = create_rerankers()
+        self.primary_reranker: BaseReranker = self.reranker_manager.get_zh_primary()
 
-        # 步骤6：加载检索器配置（top_k/weights/fuse_k 全部由 YAML 驱动）
-        _retriever_cfgs = RetrieverConfigLoader().load_all()
-        self.retriever_config = _retriever_cfgs["common"]
-
-        # 步骤7：初始化稠密检索器
-        self.dense_retriever = DenseRetriever(
-            vector_store=self._vector_store, embedding_service=self.embedder
-        )
-
-        # 步骤8：初始化稀疏BM25索引（启动时预加载所有节点构建）
-        self.bm25_index = BM25Index(tokenizer=self.word_tokenizer.tokenize)
-        self.sparse_retriever = SparseRetriever(bm25_index=self.bm25_index)
-
-        # 步骤9：混合检索器（稠密+稀疏RRF融合，参数来自 YAML）
-        self.hybrid_retriever = HybridRetriever(
-            dense_retriever=self.dense_retriever,
-            sparse_retriever=self.sparse_retriever,
-            dense_weight=self.retriever_config.dense_weight,
-            sparse_weight=self.retriever_config.sparse_weight,
-            fuse_k=self.retriever_config.fuse_k,
-            max_section_oversample_multiplier=self.retriever_config.max_section_oversample_multiplier,
-            rrf_oversample_multiplier=self.retriever_config.rrf_oversample_multiplier,
+        # 步骤6：BM25 索引由知识库和稀疏检索器共享。
+        self.bm25_index = BM25Index(tokenizer=self.bm25_tokenizer.tokenize)
+        self.retriever_manager = create_retrievers(
+            vector_store=self._vector_store,
+            embedder=self.embedder,
+            bm25_index=self.bm25_index,
             retrieval_pool=self.thread_pools.get_retrieval_pool(),
         )
+        self.retriever_config = self.retriever_manager.get_common_config()
+        self.hybrid_retriever = self.retriever_manager.get_hybrid()
 
-        # 步骤10：加载分割器参数并构造切块器
-        _splitter_cfgs = SplitterConfigLoader().load_all()
-        self.splitter_config = _splitter_cfgs["common"]
-        self.splitter = MarkdownDocumentSplitter(
-            tokenizer=self.tokenizer,
-            max_chunk_token_size=self.splitter_config.max_chunk_token_size,
-            chunk_overlap=self.splitter_config.chunk_overlap,
-        )
+        # 步骤7：初始化分割器
+        self.splitter_manager = create_splitters(tokenizer=self.llm_tokenizer)
+        # todo: 为什么这里是固定splitter
+        self.splitter = self.splitter_manager.get_markdown()
 
         bootstrap_result = bootstrap_knowledge_index(
             corpus_dir=corpus_path,
@@ -212,8 +162,6 @@ class RAGContainer:
             bootstrap_result=bootstrap_result,
         )
         logger.info("RAG 容器初始化完成")
-
-    # ── query_rag：检索线程编排 ────────────────────────────────────────
 
     async def query_rag(
         self,
@@ -249,6 +197,7 @@ class RAGContainer:
         # 候选池大小（retrieve）与最终输出大小（rerank）分离，全部由 YAML 配置驱动：
         #   retrieve_top_k — 检索器返回多少 section 给 reranker（候选池，决定 precision 上限）
         #   top_k          — reranker 精选后保留多少 section（最终上下文量级）
+        # TODO: 支持由外层调用参数动态传入 retrieve_top_k 和 rerank_top_k。
         retrieve_top_k = cfg.retrieve_top_k
         rerank_top_k = cfg.top_k
 
@@ -292,7 +241,7 @@ class RAGContainer:
             # 传入 cancel_event，使 rerank 内部可在取消信号下提前退出
             ranked_nodes = await run_in_pool(
                 self.thread_pools.get_rerank_pool(),
-                self.reranker.rerank,
+                self.primary_reranker.rerank,
                 query,
                 reconstructed_nodes,
                 rerank_top_k,

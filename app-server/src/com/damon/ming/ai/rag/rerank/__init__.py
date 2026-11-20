@@ -51,10 +51,21 @@ def list_engines() -> list[str]:
 # ── 触发注册（必须放在注册器定义之后）──────────────────────────────
 from src.com.damon.ming.ai.rag.rerank.cross_encoder_reranker import CrossEncoderReranker
 
+
+def create_rerankers():
+    """初始化并返回已加载的重排模型集合。"""
+    from src.com.damon.ming.ai.rag.rerank.manager import RagRerankers
+
+    manager = RagRerankers()
+    manager.initialize()
+    return manager
+
+
 __all__ = [
     "BaseReranker",
     "CrossEncoderReranker",
     "RerankerParams",
+    "create_rerankers",
     "list_engines",
     "register_reranker",
     "resolve_reranker",

@@ -62,12 +62,23 @@ def list_engines() -> list[str]:
 from src.com.damon.ming.ai.rag.tokenizer.jieba_tokenizer import JiebaTokenizer
 from src.com.damon.ming.ai.rag.tokenizer.tiktoken_tokenizer import TiktokenTokenizer
 
+
+def create_tokenizers():
+    """初始化并返回已加载的分词器集合。"""
+    from src.com.damon.ming.ai.rag.tokenizer.manager import RagTokenizers
+
+    manager = RagTokenizers()
+    manager.initialize()
+    return manager
+
+
 __all__ = [
     "BaseTokenizer",
     "BaseWordTokenizer",
     "JiebaTokenizer",
     "TiktokenTokenizer",
     "TokenizerParams",
+    "create_tokenizers",
     "list_engines",
     "register_engine",
     "resolve_tokenizer",

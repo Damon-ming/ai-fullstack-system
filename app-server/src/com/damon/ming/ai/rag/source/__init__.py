@@ -58,7 +58,9 @@ def list_engines() -> list[str]:
 from src.com.damon.ming.ai.rag.source.csv_data_source import LocalCsvDataSource
 from src.com.damon.ming.ai.rag.source.doc_data_source import LocalDocDataSource
 from src.com.damon.ming.ai.rag.source.html_data_source import LocalHtmlDataSource
-from src.com.damon.ming.ai.rag.source.markdown_data_source import LocalMarkdownDataSource
+from src.com.damon.ming.ai.rag.source.markdown_data_source import (
+    LocalMarkdownDataSource,
+)
 from src.com.damon.ming.ai.rag.source.pdf_data_source import LocalPDFDataSource
 from src.com.damon.ming.ai.rag.source.pptx_data_source import LocalPptxDataSource
 from src.com.damon.ming.ai.rag.source.text_data_source import LocalTextDataSource

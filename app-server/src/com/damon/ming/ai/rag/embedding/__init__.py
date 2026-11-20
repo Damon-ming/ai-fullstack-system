@@ -54,11 +54,22 @@ def list_engines() -> list[str]:
 from src.com.damon.ming.ai.rag.embedding.huggingface import HuggingFaceEmbedding
 from src.com.damon.ming.ai.rag.embedding.ollama import OllamaEmbedding
 
+
+def create_embedders():
+    """初始化并返回已加载的 embedding 模型集合。"""
+    from src.com.damon.ming.ai.rag.embedding.manager import RagEmbedders
+
+    manager = RagEmbedders()
+    manager.initialize()
+    return manager
+
+
 __all__ = [
     "BaseEmbeddingService",
     "EmbeddingParams",
     "HuggingFaceEmbedding",
     "OllamaEmbedding",
+    "create_embedders",
     "list_engines",
     "register_engine",
     "resolve_embedding",
