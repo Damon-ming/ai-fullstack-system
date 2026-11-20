@@ -123,17 +123,6 @@ class OllamaInference(BaseInferenceService):
         except Exception:
             logger.exception("Ollama模型预热失败 | model=%s", model_name)
 
-    async def check_model_ready(self, model_name: str = "") -> bool:
-        try:
-            res = await self.client.list()
-            model_list = [m["name"] for m in res.get("models", [])]
-            if model_name:
-                return model_name in model_list
-            return len(model_list) > 0
-        except Exception as e:
-            logger.error("模型检测失败: %s", e)
-            return False
-
     def get_model_info(self) -> dict[str, Any]:
         return {
             "provider": "ollama",

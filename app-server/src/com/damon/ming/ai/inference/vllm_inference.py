@@ -121,18 +121,6 @@ class VLLMInference(BaseInferenceService):
             logger.warning("VLLM stream 收到取消信号，关闭流")
             raise
 
-    async def check_model_ready(self, model_name: str = "") -> bool:
-        try:
-            models = await self.client.models.list()
-            # gateway 模式下 /v1/models 返回的是上游 vLLM 的模型列表
-            model_names = [m.id for m in models.data]
-            if model_name:
-                return model_name in model_names
-            return len(model_names) > 0
-        except Exception as e:
-            logger.error("VLLM模型检测失败: %s", e)
-            return False
-
     def get_model_info(self) -> dict[str, Any]:
         return {
             "provider": "vllm",

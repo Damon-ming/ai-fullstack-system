@@ -97,7 +97,7 @@ class AppInitializer:
             rag=RagRuntime(
                 rag_sem=self.rag_sem,
                 execution_timeout_seconds=self.execution_timeout_seconds,
-                retry_ms=self.chat_retry_ms,
+                retry_ms=self.rag_retry_ms,
                 locales=self.rag_locales,
                 rag_app=self.rag_app,
             ),
@@ -404,7 +404,7 @@ class AppInitializer:
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
         self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
         self.execution_timeout_seconds = rag.execution_timeout_seconds
-        self.chat_retry_ms = rag.retry_ms
+        self.rag_retry_ms = rag.retry_ms
         # 多 locale 文本配置：locale → LocaleConfig
         self.rag_locales = rag.locales
 
