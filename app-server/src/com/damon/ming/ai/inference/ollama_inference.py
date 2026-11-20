@@ -35,6 +35,14 @@ def _map_options(options: dict[str, Any] | None) -> dict[str, Any]:
 class OllamaInference(BaseInferenceService):
     def __init__(self, params: InferenceParams):
         super().__init__(params)
+        keep_alive = params.extra.get("keep_alive")
+        if keep_alive is not None and (
+            isinstance(keep_alive, bool)
+            or not isinstance(keep_alive, (str, int))
+            or (isinstance(keep_alive, str) and not keep_alive.strip())
+        ):
+            keep_alive = None
+        self.keep_alive = keep_alive
         self.client = ollama.AsyncClient(host=params.base_url, timeout=params.timeout)
         logger.info(f"Ollama推理客户端初始化 | url={params.base_url}")
 
@@ -56,27 +64,17 @@ class OllamaInference(BaseInferenceService):
         }
         if response_schema is not None:
             ollama_kwargs["format"] = response_schema
-        ollama_kwargs["stream"] = True
+        if self.keep_alive is not None:
+            ollama_kwargs["keep_alive"] = self.keep_alive
+        # 一次性返回完整响应；只有 stream_generate 使用 Ollama 流式接口。
+        ollama_kwargs["stream"] = False
 
         # 无重试：异常直接抛给上层，由前端自行重试请求
-        stream = await self.client.chat(**ollama_kwargs)
         try:
-            # 正文为纯文本；推理只在流式通道返回（text_generation 不携带推理）
-            content_parts: list[str] = []
-            async for chunk in stream:
-                msg = chunk.get("message", {})
-                content = msg.get("content", "")
-                if content:
-                    content_parts.append(content)
-            await stream.close()
-            return "".join(content_parts)
-        except asyncio.CancelledError:
-            logger.warning("text_generation 任务被取消，关闭ollama流")
-            await stream.close()
-            raise
+            response = await self.client.chat(**ollama_kwargs)
+            return response.message.content or ""
         except Exception:
             logger.exception("Ollama推理失败")
-            await stream.close()
             raise
 
     async def stream_generate(
@@ -89,13 +87,15 @@ class OllamaInference(BaseInferenceService):
         run_opts = _map_options(options)
         if reason:
             run_opts["think"] = True
-        stream = await self.client.chat(
-            model=model_name,
-            messages=messages,
-            options=run_opts,
-            stream=True,
-            keep_alive="30m",
-        )
+        chat_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": messages,
+            "options": run_opts,
+            "stream": True,
+        }
+        if self.keep_alive is not None:
+            chat_kwargs["keep_alive"] = self.keep_alive
+        stream = await self.client.chat(**chat_kwargs)
         try:
             async for chunk in stream:
                 msg = chunk.get("message", {})
@@ -113,13 +113,19 @@ class OllamaInference(BaseInferenceService):
 
     async def warmup(self, model_name: str) -> None:
         try:
-            await self.client.chat(
-                model=model_name,
-                messages=[{"role": "user", "content": "ping"}],
-                options={"num_predict": 1},
-                keep_alive="30m",
+            chat_kwargs: dict[str, Any] = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": "ping"}],
+                "options": {"num_predict": 1},
+            }
+            if self.keep_alive is not None:
+                chat_kwargs["keep_alive"] = self.keep_alive
+            await self.client.chat(**chat_kwargs)
+            logger.info(
+                "Ollama模型预热完成 | model=%s | keep_alive=%s",
+                model_name,
+                self.keep_alive if self.keep_alive is not None else "server default",
             )
-            logger.info("Ollama模型预热完成 | model=%s | keep_alive=30m", model_name)
         except Exception:
             logger.exception("Ollama模型预热失败 | model=%s", model_name)
 

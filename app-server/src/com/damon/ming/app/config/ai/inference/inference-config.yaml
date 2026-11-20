@@ -5,6 +5,8 @@ inference:
   transport:
     timeout_seconds: 180
   max_concurrency: 16  # 所有 role 共享的推理并发上限
+  engine_options:
+    keep_alive: "30m"  # Ollama 专用：请求结束后模型继续驻留的时间；其他引擎忽略
   roles:
     inference:
       timeout_seconds: 180  # 包含等待并发槽及完整输出

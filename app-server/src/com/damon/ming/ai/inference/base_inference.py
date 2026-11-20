@@ -46,6 +46,7 @@ class InferenceParams:
     base_url: str
     timeout: float
     api_key: str
+    # 所选引擎的专属配置；其他引擎不解析。
     extra: dict[str, Any] = field(default_factory=dict)
 
 

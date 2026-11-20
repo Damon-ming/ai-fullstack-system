@@ -71,6 +71,11 @@ class InferenceConfigLoader:
         engine_type = get_inference_server()
         base_url = get_inference_gateway_url()
         impl = resolve_engine(engine_type)
+        engine_options = raw.get("engine_options", {})
+        if engine_options is None:
+            engine_options = {}
+        if not isinstance(engine_options, dict):
+            raise TypeError("inference.engine_options 必须是键值对")
         engines: dict[str, BaseInferenceService] = {}
         entries: dict[str, ModelEntry] = {}
         for role, config in roles.items():
@@ -78,7 +83,10 @@ class InferenceConfigLoader:
             if key not in engines:
                 engines[key] = impl(
                     InferenceParams(
-                        base_url=base_url, timeout=float(timeout), api_key=key
+                        base_url=base_url,
+                        timeout=float(timeout),
+                        api_key=key,
+                        extra=dict(engine_options),
                     )
                 )
             entries[role] = ModelEntry(
@@ -102,7 +110,10 @@ class InferenceConfigLoader:
             if not isinstance(params, dict):
                 raise TypeError(f"角色 '{role}' 配置格式错误")
             path = f"inference.roles.{role}"
-            name, options = params.get("model_name"), params.get("options")
+            name = params.get("model_name")
+            options = params.get("options", {})
+            if options is None:
+                options = {}
             if not isinstance(name, str) or not name.strip():
                 raise ValueError(f"{path}.model_name 必须是非空字符串")
             if not isinstance(options, dict):
