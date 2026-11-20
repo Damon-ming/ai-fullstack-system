@@ -13,6 +13,7 @@ class SummaryConfig:
     """摘要策略参数。"""
 
     input_max_ratio: float
+    prompt_template: str
 
 
 class SummaryConfigLoader:
@@ -36,7 +37,22 @@ class SummaryConfigLoader:
         ratio = float(value)
         if not math.isfinite(ratio) or not 0 < ratio < 1:
             raise ValueError("summary.input_max_ratio 必须大于 0 且小于 1")
-        self._config = SummaryConfig(input_max_ratio=ratio)
+
+        prompt_template = raw_config.get("prompt_template")
+        if not isinstance(prompt_template, str) or not prompt_template.strip():
+            raise ValueError("summary.prompt_template 必须是非空字符串")
+        required_placeholders = ("{max_tokens}", "{content}")
+        if any(
+            placeholder not in prompt_template for placeholder in required_placeholders
+        ):
+            raise ValueError(
+                "summary.prompt_template 必须包含 {max_tokens} 和 {content}"
+            )
+
+        self._config = SummaryConfig(
+            input_max_ratio=ratio,
+            prompt_template=prompt_template,
+        )
         return self._config
 
     def _read_yaml(self) -> dict:

@@ -17,7 +17,7 @@ import asyncio
 import copy
 
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
+from src.com.damon.ming.ai.inference.inference_gateway import RoleInference
 from src.com.damon.ming.ai.rag.summary.config.summary_config_loader import (
     SummaryConfig,
 )
@@ -27,42 +27,31 @@ from src.com.damon.ming.log import pin
 logger = pin("SummaryService")
 
 
-SUMMARY_PROMPT_TEMPLATE = """你是文本摘要助手，精简下面文档内容，保留全部关键数据、结论、条款，不要冗余描述。
-摘要控制在{max_tokens}token以内，直接输出摘要，不要多余解释：
-文档内容：
-{content}
-"""
-
-
 class SummaryService:
     """摘要压缩服务，纯技术模块，不含业务逻辑。"""
 
     def __init__(
         self,
         tokenizer: BaseTokenizer,
-        inference: InferenceGateway,
+        summary_inference: RoleInference,
         config: SummaryConfig,
     ):
         self.tokenizer = tokenizer
-        self.inference = inference
+        self.summary_inference = summary_inference
         self.config = config
 
     # ── 公开接口 ──────────────────────────────────────────────────────
 
-    async def _guarded_summary(self, text: str, max_tokens: int) -> str:
-        """调用摘要推理，并发控制由 Gateway 管理。"""
-        return await self._run_single_summary(text, max_tokens)
-
     async def run_summary(self, text: str, max_tokens: int) -> str:
         """单文本摘要压缩。超长自动分段，失败降级硬截断。"""
-        num_ctx = self.inference.get_summary().context_window()
+        num_ctx = self.summary_inference.context_window()
         input_limit = int(num_ctx * self.config.input_max_ratio)
         text_tokens = self.tokenizer.count_tokens(text)
 
         if text_tokens > input_limit:
             return await self._run_segmented_summary(text, max_tokens, input_limit)
 
-        return await self._guarded_summary(text, max_tokens)
+        return await self._run_single_summary(text, max_tokens)
 
     async def compress_nodes(
         self, nodes: list[TextNode], max_tokens: int
@@ -86,7 +75,7 @@ class SummaryService:
         # 并发执行所有压缩任务
         tasks = [
             asyncio.create_task(
-                self._guarded_summary(text=nodes[idx].text, max_tokens=max_tokens)
+                self._run_single_summary(text=nodes[idx].text, max_tokens=max_tokens)
             )
             for idx in compress_indices
         ]
@@ -142,13 +131,13 @@ class SummaryService:
 
     async def _run_single_summary(self, text: str, max_tokens: int) -> str:
         """单段摘要，带容错降级。"""
-        prompt = SUMMARY_PROMPT_TEMPLATE.replace(
+        prompt = self.config.prompt_template.replace(
             "{max_tokens}", str(max_tokens), 1
         ).replace("{content}", text, 1)
         # max_tokens 为通用输出上限键，由推理层按引擎翻译（vLLM 直用 / Ollama → num_predict）。
         # 目标值覆盖角色默认值，保证摘要长度受调用方控制。
         try:
-            return await self.inference.get_summary().generate(
+            return await self.summary_inference.generate(
                 messages=[{"role": "user", "content": prompt}],
                 options={"max_tokens": max_tokens},
             )
@@ -171,7 +160,7 @@ class SummaryService:
 
         per_segment_max = max(max_tokens // len(segments), 1)
         tasks = [
-            self._guarded_summary(segment, per_segment_max) for segment in segments
+            self._run_single_summary(segment, per_segment_max) for segment in segments
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

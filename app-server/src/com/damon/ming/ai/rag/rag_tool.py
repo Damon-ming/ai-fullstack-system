@@ -118,7 +118,7 @@ class RagChoreographer:
         )
         self.summary = create_summary_service(
             tokenizer=self.llm_tokenizer,
-            inference=inference_gateway,
+            summary_inference=inference_gateway.get_summary(),
         )
 
         # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）
