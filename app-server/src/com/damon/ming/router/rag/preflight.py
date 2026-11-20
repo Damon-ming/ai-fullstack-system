@@ -60,10 +60,12 @@ async def check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None
     """执行护栏检测，超时返回错误，其他异常交由路由层处理。"""
     locales = app_state.ai.rag.locales
     locale_config = locales.get(get_locale()) or locales[get_default_locale()]
-    prompt = locale_config.guardrail_prompt_template.replace("{query}", query, 1)
     try:
         raw = await app_state.ai.inference.gateway.get("guardrail").generate(
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": locale_config.guardrail_prompt},
+                {"role": "user", "content": query},
+            ],
             response_schema=_GuardrailResponse.model_json_schema(),
         )
     except asyncio.CancelledError:
