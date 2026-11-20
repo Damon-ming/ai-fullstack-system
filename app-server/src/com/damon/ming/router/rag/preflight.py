@@ -4,7 +4,7 @@
 
 从 rag_router 抽出的前置检查，供 /rag/answer/v1 与 /rag/stream/v1 复用：
   - check_input:                  纯本地规则，零 IO，微秒级，拦无效/攻击输入
-  - check_guardrail_with_timeout: 护栏 LLM 检测 + 独立超时
+  - check_guardrail:              护栏 LLM 检测 + 独立超时
                                      （超时返回错误响应）
 
 返回 BaseLLMFailedResponse 表示被拦截（data.error_msg 即用户可见文案），
@@ -14,13 +14,10 @@
 """
 
 import asyncio
-import threading
-import time
-from collections import deque
 
 import httpx
 from openai import APITimeoutError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.i18n import get_locale, t
 from src.com.damon.ming.i18n.constants import I18nKey
@@ -34,35 +31,11 @@ logger = pin("chat.preflight")
 
 # 轻量级输入校验器（模块级单例，无状态，可并发）
 _input_validator = InputValidator()
-_fail_open_timestamps: deque[float] = deque()
-_fail_open_lock = threading.Lock()
 
 
 class _GuardrailResponse(BaseModel):
     safe: bool
     reason: str = ""
-
-
-def _record_fail_open(reason: str) -> None:
-    now = time.monotonic()
-    with _fail_open_lock:
-        _fail_open_timestamps.append(now)
-        while _fail_open_timestamps and _fail_open_timestamps[0] < now - 60:
-            _fail_open_timestamps.popleft()
-        count = len(_fail_open_timestamps)
-    if count >= 5:
-        logger.warning(
-            "护栏连续 fail-open 告警 | 窗口内次数=%d | 窗口=60s | 最近原因=%s",
-            count,
-            reason,
-        )
-
-
-def _record_guardrail_success() -> None:
-    cutoff = time.monotonic() - 60
-    with _fail_open_lock:
-        while _fail_open_timestamps and _fail_open_timestamps[0] < cutoff:
-            _fail_open_timestamps.popleft()
 
 
 def check_input(query: str) -> BaseLLMFailedResponse | None:
@@ -83,8 +56,8 @@ def check_input(query: str) -> BaseLLMFailedResponse | None:
     return None
 
 
-async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None:
-    """执行护栏检测，不通过时返回失败响应，通过时返回 None。"""
+async def check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None:
+    """执行护栏检测，超时返回错误，其他异常交由路由层处理。"""
     locales = app_state.ai.rag.locales
     locale_config = locales.get(get_locale()) or locales[get_default_locale()]
     prompt = locale_config.guardrail_prompt_template.replace("{query}", query, 1)
@@ -95,20 +68,10 @@ async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | Non
         )
     except asyncio.CancelledError:
         raise
-    except (TimeoutError, APITimeoutError, httpx.TimeoutException) as exc:
-        raise TimeoutError("护栏推理超时") from exc
-    except Exception as exc:
-        logger.warning("护栏检测异常，fail-open 放行 | error=%s", exc)
-        _record_fail_open(str(exc))
-        return None
-
-    _record_guardrail_success()
-    try:
-        result = _GuardrailResponse.model_validate_json(raw)
-    except ValidationError as exc:
-        logger.warning("护栏响应解析失败，fail-open 放行 | error=%s", exc)
-        _record_fail_open(f"parse_error: {exc}")
-        return None
+    except (TimeoutError, APITimeoutError, httpx.TimeoutException):
+        logger.warning("护栏检测超时，返回超时错误")
+        return chat_failure(ErrorCode.CHAT.TIMEOUT, t(I18nKey.CHAT_TIMEOUT))
+    result = _GuardrailResponse.model_validate_json(raw)
 
     if not result.safe:
         logger.warning("护栏拦截用户输入 | reason=%s", result.reason)
@@ -117,14 +80,3 @@ async def _check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | Non
             result.reason or t(I18nKey.GUARDRAIL_BLOCKED),
         )
     return None
-
-
-async def check_guardrail_with_timeout(
-    app_state, query: str
-) -> BaseLLMFailedResponse | None:
-    """执行护栏检测，超时时返回聊天超时错误。"""
-    try:
-        return await _check_guardrail(app_state, query)
-    except TimeoutError:
-        logger.warning("护栏检测超时，返回超时错误")
-        return chat_failure(ErrorCode.CHAT.TIMEOUT, t(I18nKey.CHAT_TIMEOUT))

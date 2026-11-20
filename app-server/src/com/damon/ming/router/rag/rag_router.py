@@ -28,7 +28,7 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.rag.failure import chat_error_event, chat_failure
 from src.com.damon.ming.router.rag.preflight import (
-    check_guardrail_with_timeout,
+    check_guardrail,
     check_input,
 )
 from src.com.damon.ming.router.rag.schemas.bean import ChatRequest
@@ -104,7 +104,7 @@ async def answer(request: Request, body: ChatRequest):
             )
 
         # ── Phase 1: 护栏检测（独立超时，超时返回错误） ──
-        blocked = await check_guardrail_with_timeout(request.app.state, body.query)
+        blocked = await check_guardrail(request.app.state, body.query)
         if blocked is not None:
             if blocked.code == ErrorCode.CHAT.TIMEOUT:
                 timeout_msg = _blocked_message(blocked, t(I18nKey.CHAT_TIMEOUT))
@@ -234,7 +234,7 @@ async def stream_chat_generator(
             return
 
         # ── Phase 1: 护栏检测（独立超时，超时返回错误） ──
-        blocked_resp = await check_guardrail_with_timeout(request.app.state, body.query)
+        blocked_resp = await check_guardrail(request.app.state, body.query)
         if blocked_resp is not None:
             if blocked_resp.code == ErrorCode.CHAT.TIMEOUT:
                 timeout_msg = _blocked_message(blocked_resp, t(I18nKey.CHAT_TIMEOUT))
