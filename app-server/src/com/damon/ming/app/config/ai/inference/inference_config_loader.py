@@ -1,4 +1,4 @@
-"""加载推理配置并在启动时装配共享的引擎客户端。"""
+"""加载 AI 推理配置并在启动时装配共享的引擎客户端。"""
 
 import math
 from dataclasses import dataclass

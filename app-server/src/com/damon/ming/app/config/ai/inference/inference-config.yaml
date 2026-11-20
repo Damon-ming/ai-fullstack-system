@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/app/config/inference/inference-config.yaml
+# app-server/src/com/damon/ming/app/config/ai/inference/inference-config.yaml
 # 推理网关连接超时、共享并发上限和各用途模型配置。
 # 引擎、网关地址及各角色 API key 从环境变量加载。
 inference:

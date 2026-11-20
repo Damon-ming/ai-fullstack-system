@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
     from src.com.damon.ming.ai.rag.rag_tool import RAGContainer
-    from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
+    from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
         LocaleConfig,
     )
     from src.com.damon.ming.app.config.system.system_config_loader import SystemConfig

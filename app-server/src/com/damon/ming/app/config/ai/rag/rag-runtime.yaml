@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/app/config/rag/rag-runtime.yaml
+# app-server/src/com/damon/ming/app/config/ai/rag/rag-runtime.yaml
 # RAG 流程并发、超时、SSE 和多语言提示词。
 
 rag:

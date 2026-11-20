@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/app/config/rag/rag_runtime_config_loader.py
+# app-server/src/com/damon/ming/app/config/ai/rag/rag_runtime_config_loader.py
 # RAG 运行时配置加载器 —— 流程配置和多语言文本。
 
 from __future__ import annotations

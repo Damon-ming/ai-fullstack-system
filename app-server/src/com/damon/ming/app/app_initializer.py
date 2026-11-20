@@ -387,10 +387,10 @@ class AppInitializer:
 
         from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag.rag_tool import get_rag_container
-        from src.com.damon.ming.app.config.inference.inference_config_loader import (
+        from src.com.damon.ming.app.config.ai.inference.inference_config_loader import (
             InferenceConfigLoader,
         )
-        from src.com.damon.ming.app.config.rag.rag_runtime_config_loader import (
+        from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
             RagConfigLoader,
         )
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
