@@ -95,9 +95,6 @@ class BaseInferenceService(ABC):
         不做 JSON 约束。model_name 由角色配置传入。
         """
 
-    async def warmup(self, model_name: str) -> None:
-        """可选模型预热钩子。"""
-
     @abstractmethod
     def get_model_info(self) -> dict[str, Any]:
         """监控、日志模型信息。"""

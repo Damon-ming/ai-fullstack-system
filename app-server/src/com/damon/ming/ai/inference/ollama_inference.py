@@ -111,24 +111,6 @@ class OllamaInference(BaseInferenceService):
         finally:
             await stream.close()
 
-    async def warmup(self, model_name: str) -> None:
-        try:
-            chat_kwargs: dict[str, Any] = {
-                "model": model_name,
-                "messages": [{"role": "user", "content": "ping"}],
-                "options": {"num_predict": 1},
-            }
-            if self.keep_alive is not None:
-                chat_kwargs["keep_alive"] = self.keep_alive
-            await self.client.chat(**chat_kwargs)
-            logger.info(
-                "Ollama模型预热完成 | model=%s | keep_alive=%s",
-                model_name,
-                self.keep_alive if self.keep_alive is not None else "server default",
-            )
-        except Exception:
-            logger.exception("Ollama模型预热失败 | model=%s", model_name)
-
     def get_model_info(self) -> dict[str, Any]:
         return {
             "provider": "ollama",
