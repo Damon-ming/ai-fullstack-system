@@ -18,6 +18,9 @@ import copy
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
+from src.com.damon.ming.ai.rag.config.summary.summary_config_loader import (
+    SummaryConfig,
+)
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.log import pin
 
@@ -30,9 +33,6 @@ SUMMARY_PROMPT_TEMPLATE = """你是文本摘要助手，精简下面文档内容
 {content}
 """
 
-# 摘要输入占模型上下文窗口的最大比例，留出空间给 prompt 模板和输出
-SUMMARY_INPUT_MAX_RATIO = 0.6
-
 
 class SummaryService:
     """摘要压缩服务，纯技术模块，不含业务逻辑。"""
@@ -41,9 +41,11 @@ class SummaryService:
         self,
         tokenizer: BaseTokenizer,
         inference: InferenceGateway,
+        config: SummaryConfig,
     ):
         self.tokenizer = tokenizer
         self.inference = inference
+        self.config = config
 
     # ── 公开接口 ──────────────────────────────────────────────────────
 
@@ -54,7 +56,7 @@ class SummaryService:
     async def run_summary(self, text: str, max_tokens: int) -> str:
         """单文本摘要压缩。超长自动分段，失败降级硬截断。"""
         num_ctx = self.inference.get_summary().context_window()
-        input_limit = int(num_ctx * SUMMARY_INPUT_MAX_RATIO)
+        input_limit = int(num_ctx * self.config.input_max_ratio)
         text_tokens = self.tokenizer.count_tokens(text)
 
         if text_tokens > input_limit:

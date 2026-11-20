@@ -38,7 +38,7 @@ from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker
 from src.com.damon.ming.ai.rag.retriever import create_retrievers
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.rag.spliter import create_splitters
-from src.com.damon.ming.ai.rag.summary import SummaryService
+from src.com.damon.ming.ai.rag.summary import create_summary_service
 from src.com.damon.ming.ai.rag.thread_pools import RagThreadPools
 from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
@@ -116,7 +116,7 @@ class RagChoreographer:
         self.section_recon = SectionReconstructor(
             self.thread_pools.get_retrieval_pool()
         )
-        self.summary = SummaryService(
+        self.summary = create_summary_service(
             tokenizer=self.llm_tokenizer,
             inference=inference_gateway,
         )
