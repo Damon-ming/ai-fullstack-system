@@ -5,7 +5,12 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
 
-from src.com.damon.ming.thread import ThreadPoolManager
+from src.com.damon.ming.thread import ThreadPoolGroup, ThreadPoolManager
+
+
+def get_rag_pool_group() -> ThreadPoolGroup:
+    """获取 RAG 专用资源组，供 RAG 模块按预算创建线程池。"""
+    return ThreadPoolManager().for_group("rag")
 
 
 def create_database_pool() -> ThreadPoolExecutor:

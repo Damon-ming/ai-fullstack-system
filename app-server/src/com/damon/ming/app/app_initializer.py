@@ -393,6 +393,7 @@ class AppInitializer:
         from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
             RagConfigLoader,
         )
+        from src.com.damon.ming.app.thread_pools import get_rag_pool_group
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
         )
@@ -420,11 +421,13 @@ class AppInitializer:
             inference_config.roles,
             asyncio.Semaphore(inference_config.max_concurrency),
         )
+
         self.rag_app = get_rag_container(
-            pools=self.pool_mgr.for_group("rag"),
+            pools=get_rag_pool_group(),
             corpus_dir=self.system_config.corpus_dir,
             inference_gateway=self.inference_gateway,
         )
+
         UploadRecoveryService.recover_startup(self.rag_app.knowledge_index_service)
 
         logger.info("RAG 容器与推理 Gateway 初始化完成")
