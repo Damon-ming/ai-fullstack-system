@@ -1,9 +1,9 @@
-# app-server/src/com/damon/ming/ai/rag/config/retriever/retriever_config_loader.py
+# app-server/src/com/damon/ming/ai/rag/retriever/config/retriever_config_loader.py
 """
 检索器配置加载器 —— 从 YAML 读取 HybridRetriever 构造参数和检索参数。
 
-本模块属于 ai/config/ 配置层，不属于 retriever/ 模块。
-retriever/ 模块通过 RetrieverConfig 数据类接收参数，不感知配置来源。
+本模块属于 retriever/ 配置层。
+retriever/ 实现通过 RetrieverConfig 数据类接收参数。
 
 启动时通过 load_all() 一次性加载全部配置实例，避免懒加载导致的响应延迟。
 

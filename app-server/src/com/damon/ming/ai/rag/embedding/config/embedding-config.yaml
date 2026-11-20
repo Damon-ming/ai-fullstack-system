@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/config/embedding-config.yaml
+# app-server/src/com/damon/ming/ai/rag/embedding/config/embedding-config.yaml
 # Embedding 配置 —— 由 EmbeddingConfigLoader 读取，注入 embedding 模块。
 # embedding 模块本身不包含任何配置文件，纯参数化调用。
 #

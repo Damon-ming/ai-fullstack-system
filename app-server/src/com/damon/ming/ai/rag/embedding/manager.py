@@ -1,10 +1,10 @@
 """RAG embedding 模型的初始化和访问入口。"""
 
-from src.com.damon.ming.ai.rag.config.embedding.embedding_config_loader import (
-    EmbeddingConfigLoader,
-)
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
+)
+from src.com.damon.ming.ai.rag.embedding.config.embedding_config_loader import (
+    EmbeddingConfigLoader,
 )
 
 

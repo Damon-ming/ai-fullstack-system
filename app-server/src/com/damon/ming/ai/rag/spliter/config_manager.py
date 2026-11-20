@@ -1,6 +1,6 @@
 """分割器配置的初始化和访问入口。"""
 
-from src.com.damon.ming.ai.rag.config.splitter.splitter_config_loader import (
+from src.com.damon.ming.ai.rag.spliter.config.splitter_config_loader import (
     SplitterConfig,
     SplitterConfigLoader,
 )

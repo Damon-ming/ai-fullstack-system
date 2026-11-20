@@ -3,7 +3,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
-from src.com.damon.ming.ai.rag.config.thread import AiThreadPoolConfigLoader
+from src.com.damon.ming.ai.rag.thread_pools.config import AiThreadPoolConfigLoader
 from src.com.damon.ming.thread import ThreadPoolGroup
 
 

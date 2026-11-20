@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/config/tokenizer-config.yaml
+# app-server/src/com/damon/ming/ai/rag/tokenizer/config/tokenizer-config.yaml
 # 分词器配置 —— 支持多个分词器实例，各组件按需选用。
 #
 # Token ID 级（LLM 上下文管理）：
@@ -23,7 +23,7 @@ tokenizers:
     tokenizer_engine: jieba
     params:
       encoding_name: none
-      dicts_base_dir: "com/damon/ming/ai/rag/config/tokenizer/dicts"  # 词典目录（相对路径，基于 src/）
+      dicts_base_dir: "com/damon/ming/ai/rag/tokenizer/config/dicts"  # 词典目录（相对路径，基于 src/）
       dict_paths:
         - tech_terms.txt  # 相对于 dicts_base_dir
 

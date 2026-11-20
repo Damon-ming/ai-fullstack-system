@@ -1,8 +1,8 @@
-# app-server/src/com/damon/ming/ai/rag/config/source/source_config_loader.py
+# app-server/src/com/damon/ming/ai/rag/source/config/source_config_loader.py
 """
 数据源配置加载器 —— 从 YAML 读取各数据源类型的可配置参数。
 
-本模块属于 ai/config/source/ 配置子模块。
+本模块属于 source/ 配置子模块。
 LocalTextDataSource 通过 SourceConfig 数据类接收参数，不感知配置来源。
 
 配置项：

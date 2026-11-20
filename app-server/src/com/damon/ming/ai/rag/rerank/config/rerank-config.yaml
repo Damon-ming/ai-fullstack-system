@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/config/rerank/rerank-config.yaml
+# app-server/src/com/damon/ming/ai/rag/rerank/config/rerank-config.yaml
 # 重排器配置 —— 支持多个命名实例并存，上层按业务逻辑路由选择
 #
 # 工业场景典型用法：

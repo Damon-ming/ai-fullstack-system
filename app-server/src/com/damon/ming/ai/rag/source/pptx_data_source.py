@@ -25,7 +25,7 @@ from pathlib import Path
 
 from llama_index.core import Document
 from pptx import Presentation
-from src.com.damon.ming.ai.rag.config.source.source_config_loader import (
+from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
     SourceConfigLoader,
 )
 from src.com.damon.ming.ai.rag.source import register_engine

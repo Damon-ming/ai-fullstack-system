@@ -1,7 +1,7 @@
 """RAG 文本摘要能力。"""
 
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
-from src.com.damon.ming.ai.rag.config.summary.summary_config_loader import (
+from src.com.damon.ming.ai.rag.summary.config.summary_config_loader import (
     SummaryConfigLoader,
 )
 from src.com.damon.ming.ai.rag.summary.summary_service import SummaryService

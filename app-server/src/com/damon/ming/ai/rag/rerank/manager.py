@@ -1,6 +1,6 @@
 """RAG 重排模型的初始化和访问入口。"""
 
-from src.com.damon.ming.ai.rag.config.rerank.rerank_config_loader import (
+from src.com.damon.ming.ai.rag.rerank.config.rerank_config_loader import (
     RerankerConfigLoader,
 )
 from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker

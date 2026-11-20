@@ -18,7 +18,7 @@ import copy
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
-from src.com.damon.ming.ai.rag.config.summary.summary_config_loader import (
+from src.com.damon.ming.ai.rag.summary.config.summary_config_loader import (
     SummaryConfig,
 )
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer

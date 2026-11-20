@@ -1,9 +1,9 @@
-# app-server/src/com/damon/ming/ai/rag/config/tokenizer_config_loader.py
+# app-server/src/com/damon/ming/ai/rag/tokenizer/config/tokenizer_config_loader.py
 """
 分词器配置加载器 —— 从 YAML 读取引擎名称和参数，构造 TokenizerParams。
 
-本模块属于 ai/config/ 配置层，不属于 tokenizer/ 模块。
-tokenizer/ 模块通过 TokenizerParams 数据类接收参数，不感知配置来源。
+本模块属于 tokenizer/ 配置层。
+tokenizer/ 实现通过 TokenizerParams 数据类接收参数。
 
 启动时通过 load_all() 一次性加载全部配置实例，避免懒加载导致的响应延迟。
 

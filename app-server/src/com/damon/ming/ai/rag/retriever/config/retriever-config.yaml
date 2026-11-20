@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/config/retriever/retriever-config.yaml
+# app-server/src/com/damon/ming/ai/rag/retriever/config/retriever-config.yaml
 retrievers:
   common:
     # 最终输出大小：reranker 精选后保留的 section 数（决定上下文量级）

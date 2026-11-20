@@ -6,7 +6,7 @@ Embedding 服务抽象层 —— 纯技术模块。
   - BaseEmbeddingService:  抽象接口
   - EmbeddingParams:       纯数据类，参数由上层配置注入
 
-配置加载见 ai/config/embedding_config_loader.py，本模块不感知配置来源。
+配置加载见 embedding/config/，由本模块的 manager 负责装配。
 
 用法：
   from src.com.damon.ming.ai.rag.embedding import BaseEmbeddingService, EmbeddingParams, register_engine

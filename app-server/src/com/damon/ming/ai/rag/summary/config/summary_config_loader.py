@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/config/summary/summary_config_loader.py
+# app-server/src/com/damon/ming/ai/rag/summary/config/summary_config_loader.py
 """摘要配置加载器 —— 读取摘要分段策略。"""
 
 import math

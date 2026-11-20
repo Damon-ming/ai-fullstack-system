@@ -1,6 +1,6 @@
-# app-server/src/com/damon/ming/ai/rag/config/source/__init__.py
+# app-server/src/com/damon/ming/ai/rag/source/config/__init__.py
 
-from src.com.damon.ming.ai.rag.config.source.source_config_loader import (
+from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
     CsvSourceConfig,
     MarkdownSourceConfig,
     PreChunkConfig,

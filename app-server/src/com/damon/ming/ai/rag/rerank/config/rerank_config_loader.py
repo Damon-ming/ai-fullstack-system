@@ -1,8 +1,8 @@
-# app-server/src/com/damon/ming/ai/rag/config/rerank_config_loader.py
+# app-server/src/com/damon/ming/ai/rag/rerank/config/rerank_config_loader.py
 """
 重排器配置加载器 —— 从 YAML 读取引擎名称和参数，构造 RerankerParams。
 
-本模块属于 ai/config/ 配置层，不属于 rerank/ 模块。
+本模块属于 rerank/ 配置层。
 rerank/ 模块通过 RerankerParams 数据类接收参数，不感知配置来源。
 
 启动时通过 load_all() 一次性加载全部配置实例，避免懒加载导致的响应延迟。

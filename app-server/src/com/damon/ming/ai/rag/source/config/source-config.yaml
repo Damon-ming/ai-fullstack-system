@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/config/source/source-config.yaml
+# app-server/src/com/damon/ming/ai/rag/source/config/source-config.yaml
 # 数据源配置 —— 各数据源类型的可配置参数。
 #
 # PDF 数据源参数通过构造函数注入（无额外配置需求）。

@@ -9,7 +9,7 @@
   - resolve_reranker:  根据引擎名称解析实现类
   - list_engines:     列出所有已注册的引擎名称
 
-配置加载见 ai/config/rerank_config_loader.py，本模块不感知配置来源。
+配置加载见 rerank/config/，由本模块的 manager 负责装配。
 
 引擎注册表由各实现类通过 @register_reranker 自动注册。
 """

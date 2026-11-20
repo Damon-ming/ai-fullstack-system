@@ -2,7 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
-from src.com.damon.ming.ai.rag.config.retriever.retriever_config_loader import (
+from src.com.damon.ming.ai.rag.retriever.config.retriever_config_loader import (
     RetrieverConfig,
 )
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (

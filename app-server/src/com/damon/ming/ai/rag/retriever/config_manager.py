@@ -1,6 +1,6 @@
 """检索器配置的初始化和访问入口。"""
 
-from src.com.damon.ming.ai.rag.config.retriever.retriever_config_loader import (
+from src.com.damon.ming.ai.rag.retriever.config.retriever_config_loader import (
     RetrieverConfig,
     RetrieverConfigLoader,
 )

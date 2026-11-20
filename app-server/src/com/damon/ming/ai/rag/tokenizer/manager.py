@@ -3,7 +3,7 @@
 
 from typing import cast
 
-from src.com.damon.ming.ai.rag.config.tokenizer.tokenizer_config_loader import (
+from src.com.damon.ming.ai.rag.tokenizer.config.tokenizer_config_loader import (
     TokenizerConfigLoader,
 )
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (

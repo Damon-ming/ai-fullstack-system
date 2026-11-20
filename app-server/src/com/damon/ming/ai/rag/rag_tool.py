@@ -16,7 +16,7 @@ RAG 容器 —— 检索线程编排层。
   - 不碰 vector_db 中的原始数据
 
 线程模型：
-  - 全局线程预算由 app/config/thread 控制，RAG 内部池分配由 ai/config/thread 控制
+  - 全局线程预算由 app/config/thread 控制，RAG 内部池分配由 thread_pools/config 控制
   - 所属组件通过 RAG 线程池接口获取本组件需要的池
   - 异步 AI 函数（SummaryService.run_summary）直接调用
 """
