@@ -61,7 +61,7 @@ async def check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None
     locales = app_state.ai.rag.locales
     locale_config = locales.get(get_locale()) or locales[get_default_locale()]
     try:
-        raw = await app_state.ai.inference.gateway.get("guardrail").generate(
+        raw = await app_state.ai.inference.gateway.get_guardrail().generate(
             messages=[
                 {"role": "system", "content": locale_config.guardrail_prompt},
                 {"role": "user", "content": query},

@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/rag/tokenizer/manager.py
 """RAG 分词器的初始化和访问入口。"""
 
 from typing import cast

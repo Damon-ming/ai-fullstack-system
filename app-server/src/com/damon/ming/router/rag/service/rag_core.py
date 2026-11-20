@@ -74,7 +74,7 @@ async def generate_answer(
     async with asyncio.timeout(app_state.ai.rag.execution_timeout_seconds):
         prompt_messages = await _build_prompt_messages(app_state, query)
         async with aclosing(
-            app_state.ai.inference.gateway.get("inference").stream(
+            app_state.ai.inference.gateway.get_inference().stream(
                 messages=prompt_messages, reason=reason
             )
         ) as stream:

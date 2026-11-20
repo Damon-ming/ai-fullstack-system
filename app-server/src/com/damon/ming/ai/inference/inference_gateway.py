@@ -28,10 +28,30 @@ class InferenceGateway:
         self._inference_semaphore = inference_semaphore
 
     def get(self, role: str) -> RoleInference:
-        """获取指定角色的推理入口。"""
+        """按配置名称获取推理入口，供动态角色使用。"""
         if role not in self._roles:
             raise ValueError(f"未配置推理 role: {role}")
         return RoleInference(self, role)
+
+    def get_inference(self) -> RoleInference:
+        """获取主回答模型的推理入口。"""
+        return self.get("inference")
+
+    def get_guardrail(self) -> RoleInference:
+        """获取护栏模型的推理入口。"""
+        return self.get("guardrail")
+
+    def get_summary(self) -> RoleInference:
+        """获取摘要模型的推理入口。"""
+        return self.get("summary")
+
+    def get_intent(self) -> RoleInference:
+        """获取意图识别模型的推理入口。"""
+        return self.get("intent")
+
+    def get_rewrite(self) -> RoleInference:
+        """获取查询改写模型的推理入口。"""
+        return self.get("rewrite")
 
     def _resolve(self, role: str) -> tuple[BaseInferenceService, str, dict[str, Any]]:
         try:

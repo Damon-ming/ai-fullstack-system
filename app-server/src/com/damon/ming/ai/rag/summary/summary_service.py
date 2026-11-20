@@ -44,7 +44,6 @@ class SummaryService:
     ):
         self.tokenizer = tokenizer
         self.inference = inference
-        self.role = "summary"
 
     # ── 公开接口 ──────────────────────────────────────────────────────
 
@@ -54,7 +53,7 @@ class SummaryService:
 
     async def run_summary(self, text: str, max_tokens: int) -> str:
         """单文本摘要压缩。超长自动分段，失败降级硬截断。"""
-        num_ctx = self.inference.get(self.role).context_window()
+        num_ctx = self.inference.get_summary().context_window()
         input_limit = int(num_ctx * SUMMARY_INPUT_MAX_RATIO)
         text_tokens = self.tokenizer.count_tokens(text)
 
@@ -147,7 +146,7 @@ class SummaryService:
         # max_tokens 为通用输出上限键，由推理层按引擎翻译（vLLM 直用 / Ollama → num_predict）。
         # 目标值覆盖角色默认值，保证摘要长度受调用方控制。
         try:
-            return await self.inference.get(self.role).generate(
+            return await self.inference.get_summary().generate(
                 messages=[{"role": "user", "content": prompt}],
                 options={"max_tokens": max_tokens},
             )
