@@ -33,6 +33,7 @@ from sqlalchemy import column, literal, table, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from src.com.damon.ming.ai.vector_db import register_engine
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
+    VECTOR_SCORE_KEY,
     BaseVectorStore,
     PGVectorParams,
     VectorStoreParams,
@@ -171,10 +172,12 @@ class PGVectorStore(BaseVectorStore):
         rows = []
         for node in nodes:
             node_id = node.node_id or generate_uuid()
-            if node.embedding and len(node.embedding) != expected_dim:
+            embedding = node.embedding
+            actual_dim = len(embedding) if embedding is not None else 0
+            if actual_dim != expected_dim:
                 raise ValueError(
                     f"向量维度不匹配: 期望 {expected_dim}, "
-                    f"实际 {len(node.embedding)}, node_id={node_id}"
+                    f"实际 {actual_dim}, node_id={node_id}"
                 )
             ids.append(node_id)
             rows.append(
@@ -182,7 +185,7 @@ class PGVectorStore(BaseVectorStore):
                     "id": node_id,
                     "document": node.text,
                     "metadata": json.dumps(node.metadata, ensure_ascii=False),
-                    "embedding": str(node.embedding),
+                    "embedding": str(embedding),
                 }
             )
 
@@ -249,7 +252,7 @@ class PGVectorStore(BaseVectorStore):
                     if isinstance(metadata, str)
                     else metadata,
                 )
-                node.metadata["_score"] = 1 - distance
+                node.metadata[VECTOR_SCORE_KEY] = 1 - distance
                 nodes.append(node)
             return nodes
         except Exception as e:
@@ -264,11 +267,13 @@ class PGVectorStore(BaseVectorStore):
         """按元数据删除匹配文档，返回删除数量。
 
         使用 DELETE ... RETURNING 合并为单次查询。
-        失败时抛 RuntimeError 而非静默返回 0，确保调用方可感知。
+        查询失败抛 RuntimeError；缺少有效过滤条件时抛 ValueError。
         """
 
         table = self._table_name
         where_clause, where_params = self._build_metadata_filter(metadata_filter)
+        if not where_clause:
+            raise ValueError("删除操作必须提供有效的 metadata_filter")
 
         try:
             with self._engine.connect() as conn:

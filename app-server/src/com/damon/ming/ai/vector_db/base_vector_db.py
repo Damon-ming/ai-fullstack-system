@@ -31,6 +31,9 @@ from typing import Any
 
 from llama_index.core.schema import TextNode
 
+# 向量检索分数保存在 TextNode.metadata 中，供统一检索器读取。
+VECTOR_SCORE_KEY = "_score"
+
 # ── 参数数据类 ──────────────────────────────────────────────────────
 
 

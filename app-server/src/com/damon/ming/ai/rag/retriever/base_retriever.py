@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.vector_db.base_vector_db import VECTOR_SCORE_KEY
 
 
 def _extract_section_key(node: TextNode) -> tuple[str, str] | None:
@@ -101,7 +102,7 @@ class DenseRetriever(BaseRetriever):
         nodes = self.vector_store.similarity_search_by_vector(
             query_vector=query_vector, k=top_k, metadata_filter=metadata_filter
         )
-        scored = [(node, node.metadata.get("_score", 0.0)) for node in nodes]
+        scored = [(node, node.metadata.get(VECTOR_SCORE_KEY, 0.0)) for node in nodes]
 
         # 3. 可选的 section 去重
         if dedup_by_section:

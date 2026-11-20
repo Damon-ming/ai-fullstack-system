@@ -1,4 +1,3 @@
-# app-server/src/com/damon/ming/ai/vector_db/metadata_keys.py
 """知识库节点 metadata 的共享字段名。"""
 
 FILE_SHA256 = "file_sha256"

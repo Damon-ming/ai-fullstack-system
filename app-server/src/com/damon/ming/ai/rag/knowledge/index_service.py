@@ -15,16 +15,16 @@ from src.com.damon.ming.ai.rag.knowledge.bootstrap import (
     IndexSyncFailure,
     KnowledgeBootstrapResult,
 )
-from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
-from src.com.damon.ming.ai.rag.source import list_engines, resolve_source
-from src.com.damon.ming.ai.rag.spliter.spliter import BaseDocumentSplitter
-from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
-from src.com.damon.ming.ai.vector_db.metadata_keys import (
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_ID,
     FILE_NAME,
     FILE_PATH,
     FILE_SHA256,
 )
+from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
+from src.com.damon.ming.ai.rag.source import list_engines, resolve_source
+from src.com.damon.ming.ai.rag.spliter.spliter import BaseDocumentSplitter
+from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.app.thread_pools import run_in_pool, submit_to_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.utils.time import now_iso

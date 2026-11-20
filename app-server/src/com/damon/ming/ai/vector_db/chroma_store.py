@@ -5,6 +5,7 @@ from typing import Any
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.vector_db import register_engine
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
+    VECTOR_SCORE_KEY,
     BaseVectorStore,
     ChromaParams,
     VectorStoreParams,
@@ -88,20 +89,20 @@ class ChromaDBStore(BaseVectorStore):
         documents = []
         embeddings = []
         metadatas = []
+        expected_dim = self.params.shared_params.embedding_dimension
 
         for node in nodes:
             node_id = node.node_id or generate_uuid()
-            if (
-                node.embedding
-                and len(node.embedding) != self.params.shared_params.embedding_dimension
-            ):
-                self.logger.warning(
-                    f"向量维度不匹配！期望={self.params.shared_params.embedding_dimension}，"
-                    f"实际={len(node.embedding)}，node_id={node_id}"
+            embedding = node.embedding
+            actual_dim = len(embedding) if embedding is not None else 0
+            if actual_dim != expected_dim:
+                raise ValueError(
+                    f"向量维度不匹配: 期望 {expected_dim}, "
+                    f"实际 {actual_dim}, node_id={node_id}"
                 )
             ids.append(node_id)
             documents.append(node.text)
-            embeddings.append(node.embedding)
+            embeddings.append(embedding)
             metadatas.append(node.metadata)
 
         try:
@@ -138,14 +139,20 @@ class ChromaDBStore(BaseVectorStore):
             if not results["ids"] or not results["ids"][0]:
                 return []
 
+            result_ids = results["ids"][0]
+            documents = results["documents"][0]
+            metadatas = results["metadatas"][0]
+            distances = results["distances"][0]
             nodes = []
-            for i, node_id in enumerate(results["ids"][0]):
+            for node_id, document, metadata, distance in zip(
+                result_ids, documents, metadatas, distances
+            ):
                 node = TextNode(
                     id_=node_id,
-                    text=results["documents"][0][i],
-                    metadata=results["metadatas"][0][i],
+                    text=document,
+                    metadata=metadata,
                 )
-                node.metadata["_score"] = 1 - results["distances"][0][i]
+                node.metadata[VECTOR_SCORE_KEY] = 1 - distance
                 nodes.append(node)
 
             return nodes
@@ -156,8 +163,11 @@ class ChromaDBStore(BaseVectorStore):
     def delete_by_metadata(self, metadata_filter: dict[str, Any], **kwargs) -> int:
         """按元数据查询并删除匹配文档，返回删除数量。
 
-        失败时抛 RuntimeError 而非静默返回 0，确保调用方可感知。
+        查询失败抛 RuntimeError；缺少有效过滤条件时抛 ValueError。
         """
+        if not metadata_filter:
+            raise ValueError("删除操作必须提供有效的 metadata_filter")
+
         try:
             results = self.collection.get(where=metadata_filter)
             if not results["ids"]:
