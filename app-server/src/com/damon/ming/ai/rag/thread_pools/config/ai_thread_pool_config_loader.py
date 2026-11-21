@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/rag/thread_pools/config/ai_thread_pool_config_loader.py
 """读取 AI 资源组内部的线程池分配。"""
 
 import os

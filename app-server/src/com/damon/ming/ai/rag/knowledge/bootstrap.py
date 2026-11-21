@@ -27,7 +27,7 @@ logger = pin("ai.knowledge.bootstrap")
 
 @dataclass(frozen=True)
 class IndexSyncFailure:
-    """同一内容（SHA）的一个或多个磁盘副本补录失败结果。"""
+    """同一内容（SHA）的磁盘副本在分块或向量补录时失败。"""
 
     file_sha256: str
     # 同 SHA 的并发/中断上传副本可能分布在不同路径；恢复逻辑需要逐个核对。
@@ -63,8 +63,42 @@ def bootstrap_knowledge_index(
         for doc in documents
         if doc.metadata.get(FILE_PATH)
     }
-    nodes = splitter.split(documents)
-    failures = _sync_vector_index(nodes, embedder, vector_store)
+    documents_by_sha: dict[str, list[Document]] = defaultdict(list)
+    for doc in documents:
+        file_sha = doc.metadata.get(FILE_SHA256)
+        if not file_sha:
+            raise ValueError("启动扫描得到的文档缺少 file_sha256，向量对账中止")
+        documents_by_sha[file_sha].append(doc)
+
+    nodes: list[TextNode] = []
+    failures: list[IndexSyncFailure] = []
+    for file_sha, file_documents in documents_by_sha.items():
+        try:
+            file_nodes = splitter.split(file_documents)
+            if not file_nodes:
+                raise ValueError("文档分块结果为空")
+            nodes.extend(file_nodes)
+        except Exception as exc:
+            failures.append(
+                IndexSyncFailure(
+                    file_sha256=file_sha,
+                    file_paths=tuple(
+                        sorted(
+                            {
+                                str(Path(doc.metadata[FILE_PATH]).resolve())
+                                for doc in file_documents
+                                if doc.metadata.get(FILE_PATH)
+                            }
+                        )
+                    ),
+                    error=f"split_failed: {exc}",
+                )
+            )
+            logger.exception("启动文档分块失败，保留已有向量 | sha=%s", file_sha[:16])
+
+    failures.extend(
+        _sync_vector_index(nodes, set(documents_by_sha), embedder, vector_store)
+    )
     if nodes:
         bm25_index.build(nodes)
 
@@ -77,6 +111,7 @@ def bootstrap_knowledge_index(
 
 def _sync_vector_index(
     nodes: list[TextNode],
+    disk_shas: set[str],
     embedder: BaseEmbeddingService,
     vector_store: BaseVectorStore,
 ) -> list[IndexSyncFailure]:
@@ -89,9 +124,6 @@ def _sync_vector_index(
         logger.warning("向量库无 file_sha256 元数据，跳过启动对账")
         return []
 
-    disk_shas = {
-        node.metadata[FILE_SHA256] for node in nodes if node.metadata.get(FILE_SHA256)
-    }
     for file_sha256 in db_shas - disk_shas:
         deleted = vector_store.delete_by_metadata({FILE_SHA256: file_sha256})
         logger.info(
@@ -100,7 +132,10 @@ def _sync_vector_index(
             deleted,
         )
 
-    missing_shas = disk_shas - db_shas
+    indexed_shas = {
+        node.metadata[FILE_SHA256] for node in nodes if node.metadata.get(FILE_SHA256)
+    }
+    missing_shas = indexed_shas - db_shas
     if not missing_shas:
         return []
 

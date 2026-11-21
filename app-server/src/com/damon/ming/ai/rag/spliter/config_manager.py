@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/rag/spliter/config_manager.py
 """分割器配置的初始化和访问入口。"""
 
 from src.com.damon.ming.ai.rag.spliter.config.splitter_config_loader import (

@@ -366,7 +366,6 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         # 2. 逐个同步处理每个文档（无内部并行）
         #    并行由 RagChoreographer 在更高层编排（按文件粒度提交到线程池）
         all_nodes = []
-        errors = 0
 
         for doc in merged_docs:
             try:
@@ -379,7 +378,6 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 )
                 all_nodes.extend(nodes)
             except Exception as e:
-                errors += 1
                 self.logger.exception(
                     f"[Splitter] 处理文档失败 | "
                     f"file={doc.metadata.get(FILE_NAME, 'unknown')} | "
@@ -387,6 +385,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 )
                 with self._stats_lock:
                     self.stats["errors"] += 1
+                raise
 
         # 更新统计
         with self._stats_lock:
@@ -396,8 +395,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             f"[Splitter] 分割完成 | "
             f"总chunk={len(all_nodes)} | "
             f"章节数={self.stats['total_sections']} | "
-            f"触发分割={self.stats['split_sections']} | "
-            f"错误={errors}"
+            f"触发分割={self.stats['split_sections']}"
         )
 
         return all_nodes
@@ -525,12 +523,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
     ) -> list[TextNode]:
         """表格感知的章节分割。
 
-        1. 将表格区域替换为占位符
-        2. 对剩余文本走 TokenTextSplitter
-        3. 将表格作为独立 chunk 插入原位置
-        4. 超大表格用 _split_table_with_header 拆分
+        普通文本段独立切分，表格段按原位置插入；超大表格按行切分并重复表头。
         """
-        # 提取表格文本，用占位符替换
+        # 按原文顺序划分普通文本和表格区域
         segments: list[tuple[int, int, bool]] = []  # (start, end, is_table)
         cursor = 0
         for tb_start, tb_end in table_blocks:
@@ -541,66 +536,33 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         if cursor < len(text):
             segments.append((cursor, len(text), False))
 
-        # 构建占位文本
-        placeholder_map: dict[str, str] = {}
-        parts: list[str] = []
-        for start, end, is_table in segments:
-            if is_table:
-                tbl_text = text[start:end]
-                placeholder = f"__TABLE_{len(placeholder_map)}__"
-                placeholder_map[placeholder] = tbl_text
-                parts.append(placeholder)
-            else:
-                parts.append(text[start:end])
-        placeholder_text = "".join(parts)
-
-        # 对占位文本做 TokenTextSplitter
-        raw_nodes = token_splitter.get_nodes_from_documents(
-            [Document(text=placeholder_text)]
-        )
-
-        # 还原：把占位符替换回表格文本
         result_nodes: list[TextNode] = []
-        for node in raw_nodes:
-            node_text = node.text
-            node_start = node.start_char_idx or 0
+        for start, end, is_table in segments:
+            segment_text = text[start:end]
+            if not segment_text.strip():
+                continue
+            if not is_table:
+                for node in token_splitter.get_nodes_from_documents(
+                    [Document(text=segment_text)]
+                ):
+                    node.start_char_idx = start + (node.start_char_idx or 0)
+                    node.end_char_idx = start + (
+                        node.end_char_idx or len(node.text)
+                    )
+                    result_nodes.append(node)
+                continue
 
-            # 检查 chunk 中是否包含任何占位符
-            found_placeholder = False
-            for placeholder, tbl_text in placeholder_map.items():
-                if placeholder in node_text:
-                    found_placeholder = True
-                    fragments = node_text.split(placeholder)
-                    for idx, fragment in enumerate(fragments):
-                        fragment = fragment.strip()
-                        if fragment:
-                            text_node = TextNode(text=fragment)
-                            text_node.start_char_idx = node_start
-                            text_node.end_char_idx = node_start + len(fragment)
-                            result_nodes.append(text_node)
-
-                        # 在 fragment 之后插入表格 chunk（最后一个后面不插）
-                        if idx < len(fragments) - 1:
-                            tbl_tokens = self._count_tokens(tbl_text)
-                            if tbl_tokens <= limit:
-                                table_node = TextNode(text=tbl_text)
-                                table_node.metadata[CONTENT_TYPE] = "table"
-                                result_nodes.append(table_node)
-                            else:
-                                # 超大表格，带表头重复拆分
-                                for (
-                                    tbl_sub,
-                                    skip_chars,
-                                ) in self._split_table_with_header(tbl_text, limit):
-                                    table_node = TextNode(text=tbl_sub)
-                                    table_node.metadata[CONTENT_TYPE] = "table"
-                                    table_node.metadata[RECONSTRUCTION_SKIP_CHARS] = (
-                                        skip_chars
-                                    )
-                                    result_nodes.append(table_node)
-
-            if not found_placeholder and node_text.strip():
-                result_nodes.append(node)
+            if self._count_tokens(segment_text) <= limit:
+                table_chunks = [(segment_text, 0)]
+            else:
+                table_chunks = self._split_table_with_header(segment_text, limit)
+            for table_text, skip_chars in table_chunks:
+                table_node = TextNode(text=table_text)
+                table_node.start_char_idx = start
+                table_node.end_char_idx = end
+                table_node.metadata[CONTENT_TYPE] = "table"
+                table_node.metadata[RECONSTRUCTION_SKIP_CHARS] = skip_chars
+                result_nodes.append(table_node)
 
         return result_nodes if result_nodes else [TextNode(text=text)]
 

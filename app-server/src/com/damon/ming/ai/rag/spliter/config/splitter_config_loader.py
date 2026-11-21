@@ -72,5 +72,5 @@ class SplitterConfigLoader:
         raw_cfg = load_yaml(self._config_path)
 
         if not isinstance(raw_cfg, dict):
-            raise ValueError("分割器配置必须是 YAML 对象")
+            raise TypeError("分割器配置必须是 YAML 对象")
         return raw_cfg

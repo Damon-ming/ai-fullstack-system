@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/thread_pools.py
+# app-server/src/com/damon/ming/ai/rag/thread_pools/__init__.py
 """RAG 内部线程池的初始化和访问入口。"""
 
 from concurrent.futures import ThreadPoolExecutor

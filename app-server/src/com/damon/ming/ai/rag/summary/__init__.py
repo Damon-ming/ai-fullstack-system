@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/rag/summary/__init__.py
 """RAG 文本摘要能力。"""
 
 from src.com.damon.ming.ai.inference.inference_gateway import RoleInference
