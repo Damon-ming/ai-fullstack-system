@@ -12,7 +12,7 @@ class SummaryConfig:
     """摘要策略参数。"""
 
     system_prompt_template: str
-    context_margin_ratio: float = 0.02
+    context_margin_ratio: float
 
 
 class SummaryConfigLoader:
@@ -41,7 +41,10 @@ class SummaryConfigLoader:
             raise ValueError("summary.context_margin_ratio 必须大于等于 0 且小于 1")
 
         system_prompt_template = raw_config.get("system_prompt_template")
-        if not isinstance(system_prompt_template, str) or not system_prompt_template.strip():
+        if (
+            not isinstance(system_prompt_template, str)
+            or not system_prompt_template.strip()
+        ):
             raise ValueError("summary.system_prompt_template 必须是非空字符串")
         required_placeholders = ("{max_tokens}",)
         if any(
