@@ -13,13 +13,16 @@
 """
 
 import asyncio
-import re
 from math import floor
 
 from src.com.damon.ming.ai.inference.base_inference import ContextWindowExceededError
 from src.com.damon.ming.ai.inference.inference_gateway import RoleInference
 from src.com.damon.ming.ai.rag.summary.config.summary_config_loader import (
     SummaryConfig,
+)
+from src.com.damon.ming.ai.rag.summary.summary_segmenter import (
+    SummarySegment,
+    SummarySegmenter,
 )
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.log import pin
@@ -39,6 +42,11 @@ class SummaryService:
         self.tokenizer = tokenizer
         self.summary_inference = summary_inference
         self.config = config
+        self.segmenter = SummarySegmenter(
+            tokenizer=tokenizer,
+            context_message_template=config.context_message_template,
+            context_overlap_ratio=config.context_overlap_ratio,
+        )
 
     # ── 公开接口 ──────────────────────────────────────────────────────
 
@@ -50,7 +58,7 @@ class SummaryService:
         num_ctx = self.summary_inference.context_window()
         system_prompt = self._build_system_prompt(max_tokens)
         prompt_tokens = self.tokenizer.count_tokens(system_prompt)
-        margin_ratio = self.config.context_margin_ratio
+        margin_ratio = self.config.context_margin_ratio or 0.0
         prompt_limit = floor((num_ctx - max_tokens) / (1 + margin_ratio))
         input_limit = prompt_limit - prompt_tokens
         text_tokens = self.tokenizer.count_tokens(text)
@@ -109,17 +117,30 @@ class SummaryService:
             "{max_tokens}", str(max_tokens), 1
         )
 
-    def _build_messages(self, text: str, max_tokens: int) -> list[dict[str, str]]:
+    def _build_messages(
+        self, text: str, max_tokens: int, context: str = ""
+    ) -> list[dict[str, str]]:
+        user_content = self._build_user_content(text, context)
         return [
             {"role": "system", "content": self._build_system_prompt(max_tokens)},
-            {"role": "user", "content": text},
+            {"role": "user", "content": user_content},
         ]
 
+    def _build_user_content(self, text: str, context: str = "") -> str:
+        if not context:
+            return text
+        return self.segmenter.build_context_message(text, context)
+
     async def _run_single_summary(
-        self, text: str, max_tokens: int, *, fallback_on_error: bool = True
+        self,
+        text: str,
+        max_tokens: int,
+        *,
+        context: str = "",
+        fallback_on_error: bool = True,
     ) -> str:
         """单段摘要，带容错降级。"""
-        messages = self._build_messages(text, max_tokens)
+        messages = self._build_messages(text, max_tokens, context)
         # max_tokens 为通用输出上限键，由推理层按引擎翻译（vLLM 直用 / Ollama → num_predict）。
         # 目标值覆盖角色默认值，保证摘要长度受调用方控制。
         try:
@@ -150,7 +171,7 @@ class SummaryService:
         self, text: str, max_tokens: int, segment_size: int
     ) -> str:
         """将超长文本分段摘要，再合并结果。"""
-        segments = self._split_text_preserving_boundaries(text, segment_size)
+        segments = self.segmenter.split(text, segment_size)
         logger.info(
             f"文本超长({self.tokenizer.count_tokens(text)}tokens)，"
             f"分{len(segments)}段摘要 | segment_size={segment_size}"
@@ -165,7 +186,10 @@ class SummaryService:
         summary_tasks = [
             asyncio.create_task(
                 self._run_single_summary(
-                    segment, output_budget, fallback_on_error=False
+                    segment.content,
+                    output_budget,
+                    context=segment.context,
+                    fallback_on_error=False,
                 )
             )
             for segment, output_budget in zip(segments, output_budgets)
@@ -195,7 +219,7 @@ class SummaryService:
                     len(segments),
                     result,
                 )
-                summaries.append(self.truncate_by_token(segment, output_budget))
+                summaries.append(self.truncate_by_token(segment.content, output_budget))
                 continue
             summaries.append(self.truncate_by_token(result, output_budget))
 
@@ -216,7 +240,7 @@ class SummaryService:
         return combined_summary
 
     def _allocate_output_budgets(
-        self, segments: list[str], max_tokens: int
+        self, segments: list[SummarySegment], max_tokens: int
     ) -> list[int]:
         """按片段输入长度分配输出额度，保证片段数不超过预算时额度总和相等于总预算。"""
         segment_count = len(segments)
@@ -226,7 +250,10 @@ class SummaryService:
             # 每段至少需要一个输出 token；合并后由一次收敛摘要压回总预算。
             return [1] * segment_count
 
-        weights = [max(self.tokenizer.count_tokens(segment), 1) for segment in segments]
+        weights = [
+            max(self.tokenizer.count_tokens(segment.content), 1)
+            for segment in segments
+        ]
         remaining = max_tokens - segment_count
         total_weight = sum(weights)
         shares = [remaining * weight / total_weight for weight in weights]
@@ -240,142 +267,3 @@ class SummaryService:
         for index in order[:leftover]:
             budgets[index] += 1
         return budgets
-
-    def _split_text_preserving_boundaries(
-        self, text: str, max_tokens_per_segment: int
-    ) -> list[str]:
-        """优先按章节、段落和句子拆分，始终从原文切片以保留字符。"""
-        if max_tokens_per_segment <= 0:
-            raise ValueError("分段 token 上限必须大于 0")
-        if self.tokenizer.count_tokens(text) <= max_tokens_per_segment:
-            return [text]
-
-        segments: list[str] = []
-        current = ""
-        for section in self._split_sections(text):
-            if self.tokenizer.count_tokens(section) <= max_tokens_per_segment:
-                if (
-                    current
-                    and self.tokenizer.count_tokens(current + section)
-                    > max_tokens_per_segment
-                ):
-                    segments.append(current)
-                    current = ""
-                current += section
-                continue
-
-            if current:
-                segments.append(current)
-                current = ""
-
-            heading_match = re.match(r"^(【[^\r\n]+】(?:\r?\n)?)", section)
-            heading = heading_match.group(1) if heading_match else ""
-            if (
-                heading
-                and self.tokenizer.count_tokens(heading) < max_tokens_per_segment
-            ):
-                body_segments = self._split_natural_text(
-                    section[len(heading) :],
-                    max_tokens_per_segment - self.tokenizer.count_tokens(heading),
-                )
-                segments.extend(heading + body for body in body_segments)
-            else:
-                segments.extend(
-                    self._split_natural_text(section, max_tokens_per_segment)
-                )
-
-        if current:
-            segments.append(current)
-        return segments
-
-    @staticmethod
-    def _split_sections(text: str) -> list[str]:
-        """按重构阶段使用的章节分隔符切分，并将分隔符保留在前一节。"""
-        sections: list[str] = []
-        start = 0
-        for match in re.finditer(r"\n---\n", text):
-            sections.append(text[start : match.end()])
-            start = match.end()
-        if start < len(text):
-            sections.append(text[start:])
-        return sections or [text]
-
-    def _split_natural_text(self, text: str, max_tokens: int) -> list[str]:
-        """按换行和句末标点拆分，超长句再按词和 Unicode 字符细分。"""
-        boundaries = re.finditer(
-            r"(?:\r?\n)+|[。！？!?]+(?:[”’」』】）》\"']*)|"
-            r"[.]+(?:[”’」』】）》\"']*)(?=\s|$)",
-            text,
-        )
-        units: list[str] = []
-        start = 0
-        for boundary in boundaries:
-            end = boundary.end()
-            if end > start:
-                units.append(text[start:end])
-                start = end
-        if start < len(text):
-            units.append(text[start:])
-        return self._pack_units(units or [text], max_tokens)
-
-    def _pack_units(self, units: list[str], max_tokens: int) -> list[str]:
-        segments: list[str] = []
-        current = ""
-        for unit in units:
-            if self.tokenizer.count_tokens(unit) > max_tokens:
-                if current:
-                    segments.append(current)
-                    current = ""
-                segments.extend(self._split_long_unit(unit, max_tokens))
-            elif current and self.tokenizer.count_tokens(current + unit) > max_tokens:
-                segments.append(current)
-                current = unit
-            else:
-                current += unit
-        if current:
-            segments.append(current)
-        return segments
-
-    def _split_long_unit(self, text: str, max_tokens: int) -> list[str]:
-        """先按空白边界切分，单个超长词再按 Unicode 字符安全切分。"""
-        pieces = re.findall(r"\s+|\S+", text)
-        if not pieces:
-            return [text]
-
-        segments: list[str] = []
-        current = ""
-        for piece in pieces:
-            if self.tokenizer.count_tokens(piece) > max_tokens:
-                if current:
-                    segments.append(current)
-                    current = ""
-                segments.extend(self._split_by_characters(piece, max_tokens))
-            elif current and self.tokenizer.count_tokens(current + piece) > max_tokens:
-                segments.append(current)
-                current = piece
-            else:
-                current += piece
-        if current:
-            segments.append(current)
-        return segments
-
-    def _split_by_characters(self, text: str, max_tokens: int) -> list[str]:
-        """在原始字符串上找 token 预算内的 Unicode 字符切片，不做 token decode。"""
-        segments: list[str] = []
-        start = 0
-        while start < len(text):
-            low, high = start + 1, len(text)
-            best_end = start
-            while low <= high:
-                middle = (low + high) // 2
-                if self.tokenizer.count_tokens(text[start:middle]) <= max_tokens:
-                    best_end = middle
-                    low = middle + 1
-                else:
-                    high = middle - 1
-            if best_end == start:
-                # 单个字符也可能超过极小预算；保留字符完整性并让后端错误走既有兜底。
-                best_end = start + 1
-            segments.append(text[start:best_end])
-            start = best_end
-        return segments
