@@ -10,12 +10,12 @@ from src.com.damon.ming.ai.inference.base_inference import (
     BaseInferenceService,
     InferenceParams,
 )
-from src.com.damon.ming.app.config._yaml import load_yaml
 from src.com.damon.ming.app.config.env import (
     get_inference_api_keys,
     get_inference_gateway_url,
     get_inference_server,
 )
+from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True)

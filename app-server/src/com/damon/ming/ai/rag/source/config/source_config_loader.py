@@ -23,7 +23,7 @@ LocalTextDataSource 通过 SourceConfig 数据类接收参数，不感知配置�
 import os
 from dataclasses import dataclass, field
 
-import yaml
+from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
 
 @dataclass(frozen=True)
@@ -183,10 +183,9 @@ class SourceConfigLoader:
     _cache: SourceConfig | None = None
 
     def __init__(self, config_path: str | None = None):
-        if config_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "source-config.yaml")
-        self._config_path = config_path
+        self._config_path = resolve_yaml_path(
+            config_path if config_path is not None else os.path.dirname(__file__)
+        )
 
     def load(self) -> SourceConfig:
         """加载数据源配置。
@@ -352,10 +351,7 @@ class SourceConfigLoader:
         return self._cache
 
     def _read_yaml(self) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"数据源配置文件不存在: {self._config_path}")
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
+        raw_cfg = load_yaml(self._config_path)
         if raw_cfg is None or not isinstance(raw_cfg, dict):
             raise ValueError("数据源配置文件格式错误：需要顶层键值对")
         return raw_cfg

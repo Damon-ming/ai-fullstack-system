@@ -14,7 +14,6 @@ vector_db/ 模块通过 VectorStoreParams 数据类接收参数，不感知配�
 
 import os
 
-import yaml
 from src.com.damon.ming.ai.vector_db import resolve_store
 from src.com.damon.ming.ai.vector_db.base_vector_db import (
     BaseVectorStore,
@@ -23,6 +22,7 @@ from src.com.damon.ming.ai.vector_db.base_vector_db import (
     SharedVectorStoreParams,
     VectorStoreParams,
 )
+from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
 
 class VectorConfigLoader:
@@ -34,10 +34,9 @@ class VectorConfigLoader:
     _cache: dict[str, BaseVectorStore] = {}
 
     def __init__(self, config_path: str | None = None):
-        if config_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "vector-config.yaml")
-        self._config_path = config_path
+        self._config_path = resolve_yaml_path(
+            config_path if config_path is not None else os.path.dirname(__file__)
+        )
 
     def load(self, engine: str) -> "BaseVectorStore":
         """加载指定引擎的向量存储配置，返回实例。
@@ -91,11 +90,7 @@ class VectorConfigLoader:
     # ---- 私有 -------------------------------------------------------------
 
     def _read_yaml(self, engine: str) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"向量存储配置文件不存在: {self._config_path}")
-
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
+        raw_cfg = load_yaml(self._config_path)
 
         if raw_cfg is None or not isinstance(raw_cfg, dict):
             raise ValueError("配置文件格式错误：顶层必须是键值对")

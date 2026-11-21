@@ -10,7 +10,7 @@
 
 import os
 
-import yaml
+from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
 
 class SplitterConfig:
@@ -47,10 +47,9 @@ class SplitterConfigLoader:
 
     def __init__(self, config_path: str | None = None):
         self._cache: SplitterConfig | None = None
-        if config_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "splitter-config.yaml")
-        self._config_path = config_path
+        self._config_path = resolve_yaml_path(
+            config_path if config_path is not None else os.path.dirname(__file__)
+        )
 
     def load(self) -> SplitterConfig:
         if self._cache is None:
@@ -70,11 +69,7 @@ class SplitterConfigLoader:
             raise ValueError(f"分割器配置缺少必填字段: {e}") from e
 
     def _read_yaml(self) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"分割器配置文件不存在: {self._config_path}")
-
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
+        raw_cfg = load_yaml(self._config_path)
 
         if not isinstance(raw_cfg, dict):
             raise ValueError("分割器配置必须是 YAML 对象")

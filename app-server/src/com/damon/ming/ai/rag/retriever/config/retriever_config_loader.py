@@ -16,7 +16,7 @@ retriever/ 实现通过 RetrieverConfig 数据类接收参数。
 
 import os
 
-import yaml
+from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
 
 class RetrieverConfig:
@@ -80,10 +80,9 @@ class RetrieverConfigLoader:
 
     def __init__(self, config_path: str | None = None):
         self._cache: dict[str, RetrieverConfig] = {}
-        if config_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "retriever-config.yaml")
-        self._config_path = config_path
+        self._config_path = resolve_yaml_path(
+            config_path if config_path is not None else os.path.dirname(__file__)
+        )
 
     def load_all(self) -> dict[str, RetrieverConfig]:
         """一次性加载 YAML 中所有配置的检索器实例。
@@ -117,10 +116,7 @@ class RetrieverConfigLoader:
     # ---- 私有 -------------------------------------------------------------
 
     def _list_names(self) -> list[str]:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"检索器配置文件不存在: {self._config_path}")
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
+        raw_cfg = load_yaml(self._config_path)
         if raw_cfg is None or "retrievers" not in raw_cfg:
             raise ValueError("配置文件格式错误：缺少 'retrievers' 根节点")
         return list(raw_cfg["retrievers"].keys())
@@ -149,11 +145,7 @@ class RetrieverConfigLoader:
             raise ValueError(f"检索器配置 '{name}' 缺少必填字段: {e}") from e
 
     def _read_yaml(self, name: str) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"检索器配置文件不存在: {self._config_path}")
-
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
+        raw_cfg = load_yaml(self._config_path)
 
         if raw_cfg is None or "retrievers" not in raw_cfg:
             raise ValueError("配置文件格式错误：缺少 'retrievers' 根节点")

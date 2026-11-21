@@ -12,7 +12,7 @@ UploadService 通过 UploadConfig 数据类接收参数，不感知配置来源�
 import os
 from dataclasses import dataclass, field
 
-from src.com.damon.ming.app.config._yaml import load_yaml
+from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True)

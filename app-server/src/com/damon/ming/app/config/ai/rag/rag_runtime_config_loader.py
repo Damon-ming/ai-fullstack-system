@@ -8,8 +8,8 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from src.com.damon.ming.app.config._yaml import load_yaml
 from src.com.damon.ming.app.config.i18n.i18n_config_loader import I18nConfigLoader
+from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 # ═══════════════════════════════════════════════════════════════════════
 # 数据类 —— 与 rag-runtime.yaml 的段落一一对应

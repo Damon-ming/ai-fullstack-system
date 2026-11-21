@@ -15,12 +15,12 @@ embedding/ 实现通过 EmbeddingParams 数据类接收参数。
 
 import os
 
-import yaml
 from src.com.damon.ming.ai.rag.embedding import resolve_embedding
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
     EmbeddingParams,
 )
+from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
 
 class EmbeddingConfigLoader:
@@ -32,10 +32,9 @@ class EmbeddingConfigLoader:
     _cache: dict[str, object] = {}
 
     def __init__(self, config_path: str | None = None):
-        if config_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(base_dir, "embedding-config.yaml")
-        self._config_path = config_path
+        self._config_path = resolve_yaml_path(
+            config_path if config_path is not None else os.path.dirname(__file__)
+        )
 
     def load_all(self) -> dict[str, BaseEmbeddingService]:
         """一次性加载 YAML 中所有配置的 embedding 实例。
@@ -69,10 +68,7 @@ class EmbeddingConfigLoader:
     # ---- 私有 -------------------------------------------------------------
 
     def _list_names(self) -> list[str]:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"Embedding 配置文件不存在: {self._config_path}")
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
+        raw_cfg = load_yaml(self._config_path)
         if raw_cfg is None or "embedding_engines" not in raw_cfg:
             raise ValueError("配置文件格式错误：缺少 'embedding_engines' 根节点")
         return list(raw_cfg["embedding_engines"].keys())
@@ -90,11 +86,7 @@ class EmbeddingConfigLoader:
         return embed_class(params)
 
     def _read_yaml(self, engine: str) -> dict:
-        if not os.path.exists(self._config_path):
-            raise FileNotFoundError(f"Embedding 配置文件不存在: {self._config_path}")
-
-        with open(self._config_path, "r", encoding="utf-8") as f:
-            raw_cfg = yaml.safe_load(f)
+        raw_cfg = load_yaml(self._config_path)
 
         if raw_cfg is None or "embedding_engines" not in raw_cfg:
             raise ValueError("配置文件格式错误：缺少 'embedding_engines' 根节点")

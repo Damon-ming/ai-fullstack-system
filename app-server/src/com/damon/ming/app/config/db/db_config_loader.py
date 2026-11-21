@@ -17,8 +17,8 @@ db 模块通过 DbConfig 数据类接收参数，不感知配置来源。
 
 import os
 
-from src.com.damon.ming.app.config._yaml import load_yaml
 from src.com.damon.ming.app.config.env import get_db_override
+from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 class DbConfigLoader:

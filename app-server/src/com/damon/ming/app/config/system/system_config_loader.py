@@ -10,7 +10,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.com.damon.ming.app.config._yaml import load_yaml
+from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True)

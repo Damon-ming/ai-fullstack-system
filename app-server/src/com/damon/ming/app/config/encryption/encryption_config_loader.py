@@ -10,8 +10,8 @@ encryption/ 模块通过 setter 接收参数，不感知配置来源。
 
 import os
 
-from src.com.damon.ming.app.config._yaml import load_yaml
 from src.com.damon.ming.debug import get_env
+from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 class EncryptionConfig:

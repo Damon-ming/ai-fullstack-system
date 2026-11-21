@@ -7,7 +7,7 @@ i18n 配置加载器 —— 从 YAML 读取 supported_locales / default_locale�
 
 import os
 
-from src.com.damon.ming.app.config._yaml import load_yaml
+from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 class I18nConfig:
