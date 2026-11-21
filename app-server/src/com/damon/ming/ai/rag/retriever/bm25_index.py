@@ -4,6 +4,7 @@ import threading
 
 import numpy as np
 from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.rag.index.index_text import node_text_for_search
 from src.com.damon.ming.log import pin
 
 
@@ -46,7 +47,9 @@ class BM25Index:
                 return
 
         # 锁外构建新索引（耗时操作不阻塞读）
-        tokenized_corpus = [self.tokenizer(node.text) for node in nodes]
+        tokenized_corpus = [
+            self.tokenizer(node_text_for_search(node)) for node in nodes
+        ]
         new_index = BM25Okapi(tokenized_corpus)
 
         # 锁内原子替换（微秒级引用赋值），CPython 引用赋值天然原子，

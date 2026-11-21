@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from src.com.damon.ming.ai.rag.index.index_text import node_text_for_search
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import FILE_PATH, FILE_SHA256
 from src.com.damon.ming.ai.rag.source import list_engines, resolve_source
 from src.com.damon.ming.log import pin
@@ -190,7 +191,9 @@ def _write_vectors(
 ) -> None:
     if not nodes:
         return
-    embeddings = embedder.embed_documents([node.text for node in nodes])
+    embeddings = embedder.embed_documents(
+        [node_text_for_search(node) for node in nodes]
+    )
     for node, embedding in zip(nodes, embeddings):
         node.embedding = embedding
     vector_store.add_documents(nodes)

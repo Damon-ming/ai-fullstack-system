@@ -11,6 +11,7 @@ from llama_index.core.schema import Document, TextNode
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
+from src.com.damon.ming.ai.rag.index.index_text import node_text_for_search
 from src.com.damon.ming.ai.rag.knowledge.bootstrap import (
     IndexSyncFailure,
     KnowledgeBootstrapResult,
@@ -118,7 +119,7 @@ class KnowledgeIndexService:
             embeddings = await run_in_pool(
                 self._document_pool,
                 self._embedder.embed_documents,
-                [node.text for node in nodes],
+                [node_text_for_search(node) for node in nodes],
             )
             for node, embedding in zip(nodes, embeddings):
                 node.embedding = embedding

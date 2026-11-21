@@ -23,6 +23,11 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_SHA256,
     PAGE,
     PAGE_INDEX,
+    ROW_END,
+    ROW_START,
+    SECTION_GROUP,
+    SHEET_NAME,
+    SOURCE_CONTEXT,
     SOURCE_REF_ID,
     TOTAL_PAGES,
 )
@@ -138,14 +143,11 @@ class LocalXlsxDataSource(BaseDataSource):
                 for i in range(0, sheet_rows, self._batch_rows):
                     batches.append(df.iloc[i : i + self._batch_rows])
 
-                for batch_df in batches:
+                for batch_index, batch_df in enumerate(batches):
                     table_text = self._format_as_table(batch_df)
                     if not table_text:
                         continue
-
-                    row_start = (
-                        global_page_index // len(batches) if batches else 0
-                    ) * self._batch_rows + 1
+                    row_start = batch_index * self._batch_rows + 1
                     row_end = row_start + len(batch_df) - 1
 
                     doc = Document(
@@ -157,9 +159,11 @@ class LocalXlsxDataSource(BaseDataSource):
                             SOURCE_REF_ID: file_sha256,
                             PAGE: global_page_index + 1,
                             PAGE_INDEX: global_page_index,
-                            "row_start": row_start,
-                            "row_end": row_end,
-                            "sheet_name": sheet_name,
+                            ROW_START: row_start,
+                            ROW_END: row_end,
+                            SHEET_NAME: sheet_name,
+                            SOURCE_CONTEXT: f"工作表 {sheet_name}",
+                            SECTION_GROUP: f"batch:{global_page_index}",
                         },
                     )
                     docs.append(doc)

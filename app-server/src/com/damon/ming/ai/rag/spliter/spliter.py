@@ -7,6 +7,7 @@
 """
 
 import hashlib
+import re
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -30,8 +31,10 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     PAGE_INDEX,
     PAGE_START,
     RECONSTRUCTION_SKIP_CHARS,
+    SECTION_GROUP,
     SECTION_ID,
     SECTION_SEQ,
+    SOURCE_METADATA_KEYS,
     TOKEN_COUNT,
     TOTAL_CHUNKS_IN_SECTION,
     TOTAL_PAGES,
@@ -40,6 +43,11 @@ from src.com.damon.ming.log import pin
 
 from ..tokenizer.base_tokenizer import BaseTokenizer
 from .table_splitter import TableAwareSplitter
+
+_MARKDOWN_HEADING_RE = re.compile(r"(?m)^ {0,3}#{1,6}[ \t]+\S")
+# 显式分组及无标题页面按较小单元重建；自然标题章节保留更多上下文。
+_MAX_GROUPED_CHUNKS_PER_SECTION = 2
+_MAX_HEADED_CHUNKS_PER_SECTION = 5
 
 
 class BaseDocumentSplitter(ABC):
@@ -53,7 +61,7 @@ class BaseDocumentSplitter(ABC):
 
 
 class MarkdownDocumentSplitter(BaseDocumentSplitter):
-    """Markdown 文档分块器，同步处理。
+    """统一文档分块器，按 Markdown 标题及表格边界处理解析后的文本。
 
     上层 RagChoreographer 使用 asyncio.to_thread 将本类的调用提交到线程池。
     """
@@ -91,10 +99,15 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             "errors": 0,
         }
 
-    def _gen_section_id(self, file_sha256: str, node_text: str):
-        seg_hash = hashlib.md5(
-            node_text.encode("utf-8"), usedforsecurity=False
-        ).hexdigest()[:16]
+    def _gen_section_id(
+        self, file_sha256: str, node_text: str, section_group: str | None = None
+    ):
+        identity = (
+            f"{section_group}:{node_text}" if section_group is not None else node_text
+        )
+        seg_hash = hashlib.md5(identity.encode(), usedforsecurity=False).hexdigest()[
+            :16
+        ]
         return f"section_{file_sha256}_{seg_hash}"
 
     def _count_tokens(self, text: str) -> int:
@@ -107,13 +120,13 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
 
     def _merge_documents_by_file(
         self, docs: list[Document]
-    ) -> tuple[list[Document], dict]:
-        """合并同一文件的页面为一个Document"""
+    ) -> tuple[list[Document], dict[tuple[str, str | None], list]]:
+        """按文件及显式分组合并页面；无标题文本按页形成独立章节。"""
         file_groups = defaultdict(list)
         for d in docs:
-            fm5 = d.metadata.get(FILE_SHA256)
-            if fm5:
-                file_groups[fm5].append(d)
+            file_sha256 = d.metadata.get(FILE_SHA256)
+            if file_sha256:
+                file_groups[file_sha256].append(d)
 
         merged_docs = []
         file_page_mapping = {}
@@ -121,39 +134,54 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         sep_len = len(sep)
 
         for file_sha256, page_doc_list in file_groups.items():
-            # 页面按页码排序
             page_doc_list.sort(key=lambda x: x.metadata[PAGE_INDEX])
-            sample_meta = page_doc_list[0].metadata
-
-            text_parts = []
-            offset_records = []
-            current_global_pos = 0
-
+            has_headings = any(
+                _MARKDOWN_HEADING_RE.search(page_doc.text) for page_doc in page_doc_list
+            )
+            logical_groups = defaultdict(list)
             for page_doc in page_doc_list:
-                page_text = page_doc.text
-                page_no = page_doc.metadata[PAGE]
-                text_len = len(page_text)
+                group = page_doc.metadata.get(SECTION_GROUP)
+                if group is None and not has_headings:
+                    group = f"page:{page_doc.metadata[PAGE_INDEX]}"
+                logical_groups[group].append(page_doc)
 
-                offset_records.append(
-                    (current_global_pos, current_global_pos + text_len, page_no)
-                )
-                text_parts.append(page_text)
-                current_global_pos += text_len
-                text_parts.append(sep)
-                current_global_pos += sep_len
+            for group, group_docs in logical_groups.items():
+                sample_meta = group_docs[0].metadata
+                text_parts = []
+                offset_records = []
+                current_global_pos = 0
 
-            merged_full_text = "".join(text_parts)
-            merged_doc = Document(
-                text=merged_full_text.strip(),
-                metadata={
+                for page_doc in group_docs:
+                    page_text = page_doc.text
+                    page_no = page_doc.metadata[PAGE]
+                    text_len = len(page_text)
+                    offset_records.append(
+                        (current_global_pos, current_global_pos + text_len, page_no)
+                    )
+                    text_parts.append(page_text)
+                    current_global_pos += text_len
+                    text_parts.append(sep)
+                    current_global_pos += sep_len
+
+                metadata = {
                     FILE_NAME: sample_meta[FILE_NAME],
                     FILE_SHA256: file_sha256,
                     FILE_PATH: sample_meta[FILE_PATH],
                     TOTAL_PAGES: sample_meta[TOTAL_PAGES],
-                },
-            )
-            merged_docs.append(merged_doc)
-            file_page_mapping[file_sha256] = offset_records
+                }
+                if group is not None:
+                    metadata[SECTION_GROUP] = group
+                metadata.update(
+                    {
+                        key: sample_meta[key]
+                        for key in SOURCE_METADATA_KEYS
+                        if key in sample_meta
+                    }
+                )
+                merged_docs.append(
+                    Document(text="".join(text_parts).strip(), metadata=metadata)
+                )
+                file_page_mapping[(file_sha256, group)] = offset_records
 
         return merged_docs, file_page_mapping
 
@@ -182,6 +210,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
 
         file_sha256 = doc.metadata.get(FILE_SHA256, "unknown")
         file_name = doc.metadata.get(FILE_NAME, "unknown")
+        section_group = doc.metadata.get(SECTION_GROUP)
         doc_total_len = len(doc_text)
 
         # Markdown按标题切章节
@@ -205,7 +234,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             with self._stats_lock:
                 self.stats["total_sections"] += 1
 
-            section_id = self._gen_section_id(file_sha256, section_raw_text)
+            section_id = self._gen_section_id(
+                file_sha256, section_raw_text, section_group
+            )
             section_start = section_node.start_char_idx or 0
             section_end = section_node.end_char_idx or len(section_raw_text)
             section_tokens = self._count_tokens(section_raw_text)
@@ -231,13 +262,45 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                         [Document(text=section_raw_text)]
                     )
 
+                section_chunk_limit = (
+                    _MAX_GROUPED_CHUNKS_PER_SECTION
+                    if section_group is not None
+                    else _MAX_HEADED_CHUNKS_PER_SECTION
+                )
+                bounded = len(sub_nodes) > section_chunk_limit
+                if bounded:
+                    with self._stats_lock:
+                        self.stats["total_sections"] += (
+                            len(sub_nodes) - 1
+                        ) // section_chunk_limit
+
                 previous_node: TextNode | None = None
                 for seq, sub_node in enumerate(sub_nodes):
                     if not sub_node.text.strip():
                         continue
 
+                    if HEADER_PATH in section_node.metadata:
+                        sub_node.metadata.setdefault(
+                            HEADER_PATH, section_node.metadata[HEADER_PATH]
+                        )
+
+                    group_index = seq // section_chunk_limit if bounded else 0
+                    chunk_section_id = (
+                        f"{section_id}_{group_index}" if bounded else section_id
+                    )
+                    chunk_section_seq = seq % section_chunk_limit if bounded else seq
+                    chunks_in_group = (
+                        min(
+                            section_chunk_limit,
+                            len(sub_nodes) - group_index * section_chunk_limit,
+                        )
+                        if bounded
+                        else len(sub_nodes)
+                    )
+
                     if (
                         previous_node is not None
+                        and chunk_section_seq > 0
                         and RECONSTRUCTION_SKIP_CHARS not in sub_node.metadata
                         and previous_node.metadata.get(CONTENT_TYPE) != "table"
                         and sub_node.metadata.get(CONTENT_TYPE) != "table"
@@ -247,6 +310,8 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                                 previous_node.text, sub_node.text, chunk_overlap
                             )
                         )
+                    if bounded and chunk_section_seq == 0:
+                        sub_node.metadata[RECONSTRUCTION_SKIP_CHARS] = 0
 
                     real_start = section_start + (sub_node.start_char_idx or 0)
                     real_end = section_start + (
@@ -262,16 +327,18 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                         node=sub_node,
                         file_sha256=file_sha256,
                         file_name=file_name,
-                        section_id=section_id,
-                        section_seq=seq,
+                        section_id=chunk_section_id,
+                        section_seq=chunk_section_seq,
                         char_start=real_start,
                         char_end=real_end,
-                        total_chunks_in_section=len(sub_nodes),
+                        total_chunks_in_section=chunks_in_group,
                     )
 
                     # 回填页码
                     p_start = self._lookup_page(real_start, page_offset_list)
-                    p_end = self._lookup_page(real_end, page_offset_list)
+                    p_end = self._lookup_page(
+                        max(real_end - 1, real_start), page_offset_list
+                    )
                     if p_start is not None:
                         sub_node.metadata[PAGE_START] = p_start
                     if p_end is not None:
@@ -293,7 +360,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 )
 
                 p_start = self._lookup_page(section_start, page_offset_list)
-                p_end = self._lookup_page(section_end, page_offset_list)
+                p_end = self._lookup_page(
+                    max(section_end - 1, section_start), page_offset_list
+                )
                 if p_start is not None:
                     section_node.metadata[PAGE_START] = p_start
                 if p_end is not None:
@@ -301,6 +370,13 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
 
                 doc_nodes.append(section_node)
 
+        source_details = {
+            key: doc.metadata[key]
+            for key in SOURCE_METADATA_KEYS
+            if key in doc.metadata
+        }
+        for node in doc_nodes:
+            node.metadata.update(source_details)
         return doc_nodes
 
     def split(
@@ -368,7 +444,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             try:
                 nodes = self._process_single_document(
                     doc,
-                    file_page_mapping[doc.metadata[FILE_SHA256]],
+                    file_page_mapping[
+                        (doc.metadata[FILE_SHA256], doc.metadata.get(SECTION_GROUP))
+                    ],
                     effective_size,
                     effective_overlap,
                     token_splitter,

@@ -9,6 +9,9 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.rag.constructor.config.constructor_config_loader import (
+    ConstructorConfigLoader,
+)
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_ID,
     FILE_NAME,
@@ -19,6 +22,8 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     RECONSTRUCTION_SKIP_CHARS,
     SECTION_ID,
     SECTION_SEQ,
+    SOURCE_CONTEXT,
+    SOURCE_METADATA_KEYS,
     SOURCE_REF_ID,
     TOTAL_PAGES,
 )
@@ -37,6 +42,7 @@ _SECTION_METADATA_KEYS = (
     SECTION_ID,
     HEADER_PATH,
     HEADING_PATH,
+    *SOURCE_METADATA_KEYS,
     TOTAL_PAGES,
 )
 
@@ -49,6 +55,7 @@ class SectionReconstructor:
 
     def __init__(self, retrieval_pool: ThreadPoolExecutor) -> None:
         self._executor = retrieval_pool
+        self._config = ConstructorConfigLoader().load()
 
     async def reconstruct_sections_to_nodes(
         self,
@@ -82,22 +89,34 @@ class SectionReconstructor:
     ) -> str:
         """将多个 TextNode 文本拼接为单个字符串。
 
-        每个节点前附加其章节标题链（如有），格式：
-        【性能要求 > 并发指标】
-        节点原文...
-        帮助 LLM 理解每个 chunk 在文档中的层级位置。
+        每个节点前按配置附加来源和标题层级，帮助模型理解内容归属。
         """
         if not nodes:
             return ""
         parts: list[str] = []
         for node in nodes:
+            labels: list[str] = []
+            source_context = node.metadata.get(SOURCE_CONTEXT)
+            if source_context:
+                labels.append(
+                    self._config.source_label_template.replace(
+                        "{value}", str(source_context)
+                    )
+                )
             heading = node.metadata.get(HEADING_PATH, "")
             if heading:
-                # heading_path 格式为 "/父标题/子标题/"，去除首尾 "/" 后用 " > " 连接
-                clean_path = heading.strip("/").replace("/", " > ")
-                parts.append(f"【{clean_path}】\n{node.text}")
-            else:
-                parts.append(node.text)
+                # heading_path 格式为 "/父标题/子标题/"
+                clean_path = heading.strip("/").replace(
+                    "/", self._config.heading_separator
+                )
+                if clean_path:
+                    labels.append(
+                        self._config.heading_label_template.replace(
+                            "{value}", clean_path
+                        )
+                    )
+            prefix = "\n".join(labels) + "\n" if labels else ""
+            parts.append(f"{prefix}{node.text}")
         return section_separator.join(parts)
 
     # ── 私有：合并逻辑 ────────────────────────────────────────────────

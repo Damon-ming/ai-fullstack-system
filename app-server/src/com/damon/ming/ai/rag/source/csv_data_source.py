@@ -9,8 +9,8 @@ CSV 无"页"概念，因此：
   - metadata 携带 row_start / row_end 用于原始行号回溯
 
 与 PDF/MD 的 page 语义对齐：
-  - splitter 按 page_index 排序合并 → CSV 多 batch 按顺序拼接
-  - section_id = section_{file_sha256}_{text_hash}，与格式无关
+  - splitter 按 batch 建立独立章节，避免重建时取回整个 CSV
+  - section_id 由文件、batch 和文本共同确定
   - chunk_id = chunk_{file_sha256}_{chunk_hash}，由章节、序号和文本生成
 """
 
@@ -26,6 +26,9 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_SHA256,
     PAGE,
     PAGE_INDEX,
+    ROW_END,
+    ROW_START,
+    SECTION_GROUP,
     SOURCE_REF_ID,
     TOTAL_PAGES,
 )
@@ -165,8 +168,9 @@ class LocalCsvDataSource(BaseDataSource):
                         PAGE_INDEX: page_index,
                         TOTAL_PAGES: total_pages,
                         # CSV 特有：原始行号回溯
-                        "row_start": row_start,
-                        "row_end": row_end,
+                        ROW_START: row_start,
+                        ROW_END: row_end,
+                        SECTION_GROUP: f"batch:{page_index}",
                     },
                 )
                 docs.append(doc)

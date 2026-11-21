@@ -298,7 +298,10 @@ class LocalDocDataSource(BaseDataSource):
 
             for page_paras in pages:
                 # 合并页面内所有段落
-                page_text = "\n".join(t for t, _ in page_paras)
+                page_text = "\n".join(
+                    f"{'#' * min(level, 6)} {text}" if level else text
+                    for text, level in page_paras
+                )
                 if not page_text.strip():
                     continue
 

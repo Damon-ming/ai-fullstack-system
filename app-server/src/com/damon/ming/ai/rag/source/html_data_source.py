@@ -251,8 +251,7 @@ class LocalHtmlDataSource(BaseDataSource):
                 level = int(child.name[1])
                 text = child.get_text(strip=True)
                 if text:
-                    prefix = "#".ljust(level + 1, "#")  # "## " / "### "
-                    lines.append(f"\n{prefix}{text}\n")
+                    lines.append(f"\n{'#' * level} {text}\n")
                     if min_heading is None or level < min_heading:
                         min_heading = level
                 continue
