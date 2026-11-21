@@ -7,7 +7,6 @@
 """
 
 import hashlib
-import re
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -40,10 +39,7 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 from src.com.damon.ming.log import pin
 
 from ..tokenizer.base_tokenizer import BaseTokenizer
-
-# Markdown 表格正则：匹配表格行和分隔行
-_TABLE_SEP_RE = re.compile(r"^\s*\|[\s\-:|]+\|\s*$")
-_TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
+from .table_splitter import TableAwareSplitter
 
 
 class BaseDocumentSplitter(ABC):
@@ -85,6 +81,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         self.tokenizer = tokenizer
         self.logger = pin("MarkdownDocumentSplitter")
         self.md_parser = MarkdownNodeParser()
+        self._table_splitter = TableAwareSplitter(self._count_tokens)
 
         # 统计信息（线程安全）
         self.stats = {
@@ -224,9 +221,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 )
 
                 # 表格感知分割：检测表格边界，确保表格不被切碎
-                table_blocks = self._find_table_blocks(section_raw_text)
+                table_blocks = self._table_splitter.find_table_blocks(section_raw_text)
                 if table_blocks:
-                    sub_nodes = self._table_aware_split(
+                    sub_nodes = self._table_splitter.split(
                         section_raw_text, table_blocks, limit, token_splitter
                     )
                 else:
@@ -377,11 +374,10 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                     token_splitter,
                 )
                 all_nodes.extend(nodes)
-            except Exception as e:
+            except Exception:
                 self.logger.exception(
                     f"[Splitter] 处理文档失败 | "
-                    f"file={doc.metadata.get(FILE_NAME, 'unknown')} | "
-                    f"error={e}",
+                    f"file={doc.metadata.get(FILE_NAME, 'unknown')}",
                 )
                 with self._stats_lock:
                     self.stats["errors"] += 1
@@ -399,43 +395,6 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         )
 
         return all_nodes
-
-    def _find_table_blocks(self, text: str) -> list[tuple[int, int]]:
-        """检测文本中的所有 markdown 表格区域，返回 [(start, end), ...]。
-
-        表格定义：连续的行，首行为表头行（| col | col |），
-        第二行为分隔行（|---|---|），后续为数据行。
-        表格前后的空行视为表格的一部分（作为间隔）。
-        """
-        lines = text.split("\n")
-        blocks: list[tuple[int, int]] = []
-        i = 0
-        n = len(lines)
-
-        while i < n - 1:
-            # 找表头行：当前行是 |...|，下一行是 |---|---|
-            if _TABLE_ROW_RE.match(lines[i]) and _TABLE_SEP_RE.match(lines[i + 1]):
-                # 找到表格起点：向前吞并一个空行
-                start_line = i
-                if i > 0 and lines[i - 1].strip() == "":
-                    start_line = i - 1
-
-                # 向后找表格结束：连续的 |...| 行
-                j = i + 2
-                while j < n and _TABLE_ROW_RE.match(lines[j]):
-                    j += 1
-
-                # 表格在原文中的字符偏移
-                char_start = sum(len(lines[k]) + 1 for k in range(start_line))
-                char_end = sum(len(lines[k]) + 1 for k in range(j))
-                char_end = min(char_end, len(text))
-
-                blocks.append((char_start, char_end))
-                i = j
-            else:
-                i += 1
-
-        return blocks
 
     def _overlap_prefix_chars(
         self, previous: str, current: str, chunk_overlap: int
@@ -466,106 +425,6 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             matched = prefix[matched - 1]
         return matched
 
-    def _split_table_with_header(
-        self, table_text: str, limit: int
-    ) -> list[tuple[str, int]]:
-        """将超大表格按行切分，每个子表格都带表头行。
-
-        例如 100 行数据的大表会被拆为多个子表，每个子表都包含
-        表头行和分隔行，确保每个 chunk 语义完整可读。
-        """
-        lines = [l for l in table_text.strip().split("\n") if l.strip()]
-        if len(lines) < 3:
-            return [(table_text, 0)]  # 不够表头+分隔+一行数据，不拆
-
-        header = lines[0]
-        separator = lines[1]
-        data_rows = lines[2:]
-        header_block = f"{header}\n{separator}"
-        header_tokens = self._count_tokens(header_block)
-
-        chunks: list[tuple[str, int]] = []
-        current_rows: list[str] = []
-        current_tokens = header_tokens
-
-        for row in data_rows:
-            row_tokens = self._count_tokens(row)
-            if current_tokens + row_tokens > limit and current_rows:
-                # 当前批次已满，组装一个子表格
-                chunks.append(
-                    (
-                        f"{header_block}\n" + "\n".join(current_rows),
-                        0 if not chunks else len(header_block) + 1,
-                    )
-                )
-                current_rows = [row]
-                current_tokens = header_tokens + row_tokens
-            else:
-                current_rows.append(row)
-                current_tokens += row_tokens
-
-        if current_rows:
-            chunks.append(
-                (
-                    f"{header_block}\n" + "\n".join(current_rows),
-                    0 if not chunks else len(header_block) + 1,
-                )
-            )
-
-        return chunks
-
-    def _table_aware_split(
-        self,
-        text: str,
-        table_blocks: list[tuple[int, int]],
-        limit: int,
-        token_splitter: TokenTextSplitter,
-    ) -> list[TextNode]:
-        """表格感知的章节分割。
-
-        普通文本段独立切分，表格段按原位置插入；超大表格按行切分并重复表头。
-        """
-        # 按原文顺序划分普通文本和表格区域
-        segments: list[tuple[int, int, bool]] = []  # (start, end, is_table)
-        cursor = 0
-        for tb_start, tb_end in table_blocks:
-            if tb_start > cursor:
-                segments.append((cursor, tb_start, False))
-            segments.append((tb_start, tb_end, True))
-            cursor = tb_end
-        if cursor < len(text):
-            segments.append((cursor, len(text), False))
-
-        result_nodes: list[TextNode] = []
-        for start, end, is_table in segments:
-            segment_text = text[start:end]
-            if not segment_text.strip():
-                continue
-            if not is_table:
-                for node in token_splitter.get_nodes_from_documents(
-                    [Document(text=segment_text)]
-                ):
-                    node.start_char_idx = start + (node.start_char_idx or 0)
-                    node.end_char_idx = start + (
-                        node.end_char_idx or len(node.text)
-                    )
-                    result_nodes.append(node)
-                continue
-
-            if self._count_tokens(segment_text) <= limit:
-                table_chunks = [(segment_text, 0)]
-            else:
-                table_chunks = self._split_table_with_header(segment_text, limit)
-            for table_text, skip_chars in table_chunks:
-                table_node = TextNode(text=table_text)
-                table_node.start_char_idx = start
-                table_node.end_char_idx = end
-                table_node.metadata[CONTENT_TYPE] = "table"
-                table_node.metadata[RECONSTRUCTION_SKIP_CHARS] = skip_chars
-                result_nodes.append(table_node)
-
-        return result_nodes if result_nodes else [TextNode(text=text)]
-
     def _attach_metadata(
         self,
         node: TextNode,
@@ -578,10 +437,11 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         total_chunks_in_section: int,
     ):
         """附加元数据到节点"""
-        text_hash = hashlib.md5(
-            node.text.encode("utf-8"), usedforsecurity=False
+        chunk_hash = hashlib.md5(
+            f"{section_id}:{section_seq}:{node.text}".encode(),
+            usedforsecurity=False,
         ).hexdigest()[:16]
-        chunk_id = f"chunk_{file_sha256}_{text_hash}"
+        chunk_id = f"chunk_{file_sha256}_{chunk_hash}"
 
         node.node_id = chunk_id
         node.metadata[CHUNK_ID] = chunk_id
@@ -603,40 +463,3 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         """获取分割统计信息"""
         with self._stats_lock:
             return self.stats.copy()
-
-    def verify_chunk_position(
-        self, chunk: TextNode, original_document: Document
-    ) -> bool:
-        """验证chunk位置信息"""
-        try:
-            start = chunk.metadata.get(CHAR_START, -1)
-            end = chunk.metadata.get(CHAR_END, -1)
-
-            if start < 0 or end < 0 or start >= end:
-                self.logger.warning(f"无效的位置信息: start={start}, end={end}")
-                return False
-
-            extracted = original_document.text[start:end]
-            if extracted.strip() != chunk.text.strip():
-                self.logger.warning(
-                    f"位置验证失败！原始切片前100字符: {extracted[:100]}... | "
-                    f"Chunk前100字符: {chunk.text[:100]}..."
-                )
-                return False
-            return True
-
-        except Exception as e:
-            self.logger.error(f"验证位置时出错: {e}")
-            return False
-
-    def reconstruct_section(
-        self, chunks: list[TextNode], section_id: str
-    ) -> str | None:
-        """重建章节"""
-        section_chunks = [c for c in chunks if c.metadata.get(SECTION_ID) == section_id]
-
-        if not section_chunks:
-            return None
-
-        section_chunks.sort(key=lambda x: x.metadata.get(SECTION_SEQ, 0))
-        return "\n".join([c.text for c in section_chunks])

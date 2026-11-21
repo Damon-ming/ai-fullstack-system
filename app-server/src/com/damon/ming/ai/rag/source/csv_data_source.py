@@ -11,7 +11,7 @@ CSV 无"页"概念，因此：
 与 PDF/MD 的 page 语义对齐：
   - splitter 按 page_index 排序合并 → CSV 多 batch 按顺序拼接
   - section_id = section_{file_sha256}_{text_hash}，与格式无关
-  - chunk_id = chunk_{file_sha256}_{text_hash}，与格式无关
+  - chunk_id = chunk_{file_sha256}_{chunk_hash}，由章节、序号和文本生成
 """
 
 import os
