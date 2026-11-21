@@ -6,12 +6,12 @@ from src.com.damon.ming.ai.rag.spliter.spliter import (
 )
 
 
-def create_splitters(tokenizer):
-    """加载配置并创建分割器。"""
+def create_splitters(*, tokenizer, max_input_tokens: int | None = None):
+    """加载 splitter 策略，并应用 embedding 提供的输入上限。"""
     from src.com.damon.ming.ai.rag.spliter.manager import SplitterManager
 
     manager = SplitterManager()
-    manager.initialize(tokenizer)
+    manager.initialize(tokenizer, max_input_tokens)
     return manager
 
 

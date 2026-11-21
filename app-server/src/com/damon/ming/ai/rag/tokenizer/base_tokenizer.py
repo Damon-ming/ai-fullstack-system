@@ -36,7 +36,7 @@ class TokenizerParams:
 
 
 class BaseTokenizer(ABC):
-    """Token ID 级分词器 — 用于 LLM 上下文窗口计数、文本截断"""
+    """Token ID 级接口 — 用于上下文管理和按 token 切分文本。"""
 
     def __init__(self, params: TokenizerParams):
         self.params = params

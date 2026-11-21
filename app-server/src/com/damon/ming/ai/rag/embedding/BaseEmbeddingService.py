@@ -44,6 +44,15 @@ class BaseEmbeddingService(ABC):
     def __init__(self, params: EmbeddingParams):
         self.params = params
 
+    @property
+    def max_input_tokens(self) -> int | None:
+        """单条文档可用的最大输入 token 数；未知时返回 None。"""
+        return None
+
+    def get_tokenizer(self) -> Any | None:
+        """返回模型实际使用的 tokenizer；无法提供时返回 None。"""
+        return None
+
     @abstractmethod
     def embed_query(self, text: str) -> list[float]:
         """单条文本向量化"""

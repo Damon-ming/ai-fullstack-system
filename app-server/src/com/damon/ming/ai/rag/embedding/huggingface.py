@@ -59,6 +59,29 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
         except Exception as e:
             raise RuntimeError(f"HuggingFace embedding failed: {e}")
 
+    @property
+    def max_input_tokens(self) -> int | None:
+        """返回扣除前缀、特殊 token 和边界余量后的正文 token 上限。"""
+        model_limit = getattr(self.model, "max_seq_length", None)
+        if not isinstance(model_limit, int) or model_limit <= 0:
+            return None
+        prefix_tokens = len(
+            self.model.tokenizer.encode(self._passage_prefix, add_special_tokens=False)
+        )
+        special_tokens = self.model.tokenizer.num_special_tokens_to_add(pair=False)
+        # 文本前缀与正文拼接处可能改变少量子词边界，预留 8 token 防止模型静默截断。
+        boundary_margin = 8
+        available_tokens = (
+            model_limit - prefix_tokens - special_tokens - boundary_margin
+        )
+        if available_tokens <= 0:
+            raise ValueError("Embedding 模型窗口不足以容纳前缀、特殊 token 和安全余量")
+        return available_tokens
+
+    def get_tokenizer(self):
+        """返回 SentenceTransformer 实际用于编码的 tokenizer。"""
+        return self.model.tokenizer
+
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """批量推理受 concurrency 信号量限流，每条自动加 passage_prefix。"""
         try:

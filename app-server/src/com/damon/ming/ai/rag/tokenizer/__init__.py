@@ -19,6 +19,7 @@ from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseWordTokenizer,
     TokenizerParams,
 )
+from src.com.damon.ming.ai.rag.tokenizer.embedding_tokenizer import EmbeddingTokenizer
 
 # ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 # 支持两种类型："token_id"（BaseTokenizer）和 "word"（BaseWordTokenizer）
@@ -63,12 +64,12 @@ from src.com.damon.ming.ai.rag.tokenizer.jieba_tokenizer import JiebaTokenizer
 from src.com.damon.ming.ai.rag.tokenizer.tiktoken_tokenizer import TiktokenTokenizer
 
 
-def create_tokenizers():
+def create_tokenizers(*, embedding_tokenizer=None):
     """初始化并返回已加载的分词器集合。"""
     from src.com.damon.ming.ai.rag.tokenizer.manager import RagTokenizers
 
     manager = RagTokenizers()
-    manager.initialize()
+    manager.initialize(embedding_tokenizer=embedding_tokenizer)
     return manager
 
 
@@ -76,6 +77,7 @@ __all__ = [
     "BaseTokenizer",
     "BaseWordTokenizer",
     "JiebaTokenizer",
+    "EmbeddingTokenizer",
     "TiktokenTokenizer",
     "TokenizerParams",
     "create_tokenizers",

@@ -98,15 +98,20 @@ class RagChoreographer:
         self.thread_pools = RagThreadPools()
         self.thread_pools.initialize(pools)
 
-        # 步骤1：全量加载所有分词器（启动时一次性加载，避免响应延迟）
-        self.tokenizer_manager = create_tokenizers()
+        # 步骤1：加载 embedding，供 tokenizer manager 包装其模型 tokenizer
+        self.embedding_manager = create_embedders()
+        self.embedder: BaseEmbeddingService = self.embedding_manager.get_huggingface()
+
+        # 步骤2：加载通用 tokenizer，并注入 embedding 模型实际使用的 tokenizer
+        self.tokenizer_manager = create_tokenizers(
+            embedding_tokenizer=self.embedder.get_tokenizer()
+        )
         self.llm_tokenizer: BaseTokenizer = self.tokenizer_manager.get_llm_tokenizer()
         # BM25 词语分词器（中文关键词检索）
         self.bm25_tokenizer = self.tokenizer_manager.get_bm25_tokenizer()
-
-        # 步骤2：全量加载所有 embedding（启动时一次性加载，避免响应延迟）
-        self.embedding_manager = create_embedders()
-        self.embedder: BaseEmbeddingService = self.embedding_manager.get_huggingface()
+        embedding_tokenizer = (
+            self.tokenizer_manager.get_embedding_tokenizer() or self.llm_tokenizer
+        )
 
         # 步骤3：初始化向量库
         self.vector_store_manager = create_vector_stores()
@@ -137,7 +142,11 @@ class RagChoreographer:
         self.hybrid_retriever = self.retriever_manager.get_hybrid()
 
         # 步骤7：初始化分割器
-        self.splitter_manager = create_splitters(tokenizer=self.llm_tokenizer)
+
+        self.splitter_manager = create_splitters(
+            tokenizer=embedding_tokenizer,
+            max_input_tokens=self.embedder.max_input_tokens,
+        )
         self.splitter = self.splitter_manager.get_structured()
 
         bootstrap_result = bootstrap_knowledge_index(

@@ -417,7 +417,9 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         ):
             raise ValueError("chunk_overlap 必须是小于 max_chunk_size 的非负整数")
         token_splitter = TokenTextSplitter(
-            chunk_size=effective_size, chunk_overlap=effective_overlap
+            chunk_size=effective_size,
+            chunk_overlap=effective_overlap,
+            tokenizer=self.tokenizer.encode,
         )
 
         self.logger.info(f"[Splitter] 开始分割 {len(docs)} 个Document")
