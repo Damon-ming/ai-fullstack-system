@@ -20,11 +20,20 @@ from pathlib import Path
 from llama_index.core import Document
 from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    FILE_NAME,
+    FILE_PATH,
+    FILE_SHA256,
+    PAGE,
+    PAGE_INDEX,
+    SOURCE_REF_ID,
+    TOTAL_PAGES,
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
+from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -195,13 +204,13 @@ class LocalMarkdownDataSource(BaseDataSource):
                 doc = Document(
                     text=chunk_text,
                     metadata={
-                        "file_name": file_name,
-                        "file_path": file_path,
-                        "file_sha256": file_sha256,
-                        "source_refId": file_sha256,
-                        "page": 1,
-                        "page_index": 0,
-                        "total_pages": 1,
+                        FILE_NAME: file_name,
+                        FILE_PATH: file_path,
+                        FILE_SHA256: file_sha256,
+                        SOURCE_REF_ID: file_sha256,
+                        PAGE: 1,
+                        PAGE_INDEX: 0,
+                        TOTAL_PAGES: 1,
                         "pre_chunk_index": idx,
                         "pre_chunk_total": len(chunks_with_meta),
                         **header_meta,

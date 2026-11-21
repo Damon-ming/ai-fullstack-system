@@ -27,11 +27,20 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup, Comment, Tag
 from llama_index.core import Document
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    FILE_NAME,
+    FILE_PATH,
+    FILE_SHA256,
+    PAGE,
+    PAGE_INDEX,
+    SOURCE_REF_ID,
+    TOTAL_PAGES,
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
+from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -429,12 +438,12 @@ class LocalHtmlDataSource(BaseDataSource):
                 doc = Document(
                     text=chunk_text,
                     metadata={
-                        "file_name": file_name,
-                        "file_path": file_path,
-                        "file_sha256": file_sha256,
-                        "source_refId": file_sha256,
-                        "page": idx + 1,
-                        "page_index": idx,
+                        FILE_NAME: file_name,
+                        FILE_PATH: file_path,
+                        FILE_SHA256: file_sha256,
+                        SOURCE_REF_ID: file_sha256,
+                        PAGE: idx + 1,
+                        PAGE_INDEX: idx,
                         "heading_level": heading_level,
                     },
                 )
@@ -442,7 +451,7 @@ class LocalHtmlDataSource(BaseDataSource):
 
             total_pages = len(docs)
             for doc in docs:
-                doc.metadata["total_pages"] = total_pages
+                doc.metadata[TOTAL_PAGES] = total_pages
 
             # 更新统计
             with self._stats_lock:

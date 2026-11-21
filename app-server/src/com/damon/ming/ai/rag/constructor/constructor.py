@@ -9,6 +9,12 @@
 from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    FILE_SHA256,
+    HEADING_PATH,
+    SECTION_ID,
+    SECTION_SEQ,
+)
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
@@ -66,7 +72,7 @@ class SectionReconstructor:
             return ""
         parts: list[str] = []
         for node in nodes:
-            heading = node.metadata.get("heading_path", "")
+            heading = node.metadata.get(HEADING_PATH, "")
             if heading:
                 # heading_path 格式为 "/父标题/子标题/"，去除首尾 "/" 后用 " > " 连接
                 clean_path = heading.strip("/").replace("/", " > ")
@@ -81,8 +87,8 @@ class SectionReconstructor:
         """从节点列表中提取唯一的 (file_sha256, section_id) 键"""
         section_keys = set()
         for node in nodes:
-            file_sha256 = node.metadata.get("file_sha256")
-            section_id = node.metadata.get("section_id")
+            file_sha256 = node.metadata.get(FILE_SHA256)
+            section_id = node.metadata.get(SECTION_ID)
             if file_sha256 and section_id:
                 section_keys.add((file_sha256, section_id))
         return section_keys
@@ -103,7 +109,7 @@ class SectionReconstructor:
             return []
 
         filters = [
-            {"file_sha256": file_sha256, "section_id": section_id}
+            {FILE_SHA256: file_sha256, SECTION_ID: section_id}
             for file_sha256, section_id in section_keys
         ]
 
@@ -124,8 +130,8 @@ class SectionReconstructor:
         """按 (file_sha256, section_id) 分组所有 chunk 分片"""
         group_map: dict[tuple[str, str], list[TextNode]] = {}
         for chunk in chunks:
-            file_sha256 = chunk.metadata.get("file_sha256")
-            section_id = chunk.metadata.get("section_id")
+            file_sha256 = chunk.metadata.get(FILE_SHA256)
+            section_id = chunk.metadata.get(SECTION_ID)
             if file_sha256 is None or section_id is None:
                 continue
             key = (file_sha256, section_id)
@@ -161,5 +167,5 @@ class SectionReconstructor:
         """按 section_seq 排序并拼接同章节的 chunk 文本"""
         if not section_chunks:
             return None
-        section_chunks.sort(key=lambda x: x.metadata.get("section_seq", 0))
+        section_chunks.sort(key=lambda x: x.metadata.get(SECTION_SEQ, 0))
         return "\n".join([node.text for node in section_chunks])

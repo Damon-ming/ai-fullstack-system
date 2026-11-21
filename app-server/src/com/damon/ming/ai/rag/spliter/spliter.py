@@ -15,6 +15,27 @@ from collections import defaultdict
 from llama_index.core import Document
 from llama_index.core.node_parser import MarkdownNodeParser, TokenTextSplitter
 from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    CHAR_END,
+    CHAR_START,
+    CHUNK_ID,
+    CHUNK_LENGTH,
+    CONTENT_TYPE,
+    FILE_NAME,
+    FILE_PATH,
+    FILE_SHA256,
+    HEADER_PATH,
+    HEADING_PATH,
+    PAGE,
+    PAGE_END,
+    PAGE_INDEX,
+    PAGE_START,
+    SECTION_ID,
+    SECTION_SEQ,
+    TOKEN_COUNT,
+    TOTAL_CHUNKS_IN_SECTION,
+    TOTAL_PAGES,
+)
 from src.com.damon.ming.log import pin
 
 from ..tokenizer.base_tokenizer import BaseTokenizer
@@ -86,7 +107,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         """合并同一文件的页面为一个Document"""
         file_groups = defaultdict(list)
         for d in docs:
-            fm5 = d.metadata.get("file_sha256")
+            fm5 = d.metadata.get(FILE_SHA256)
             if fm5:
                 file_groups[fm5].append(d)
 
@@ -97,7 +118,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
 
         for file_sha256, page_doc_list in file_groups.items():
             # 页面按页码排序
-            page_doc_list.sort(key=lambda x: x.metadata["page_index"])
+            page_doc_list.sort(key=lambda x: x.metadata[PAGE_INDEX])
             sample_meta = page_doc_list[0].metadata
 
             text_parts = []
@@ -106,7 +127,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
 
             for page_doc in page_doc_list:
                 page_text = page_doc.text
-                page_no = page_doc.metadata["page"]
+                page_no = page_doc.metadata[PAGE]
                 text_len = len(page_text)
 
                 offset_records.append(
@@ -121,10 +142,10 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             merged_doc = Document(
                 text=merged_full_text.strip(),
                 metadata={
-                    "file_name": sample_meta["file_name"],
-                    "file_sha256": file_sha256,
-                    "file_path": sample_meta["file_path"],
-                    "total_pages": sample_meta["total_pages"],
+                    FILE_NAME: sample_meta[FILE_NAME],
+                    FILE_SHA256: file_sha256,
+                    FILE_PATH: sample_meta[FILE_PATH],
+                    TOTAL_PAGES: sample_meta[TOTAL_PAGES],
                 },
             )
             merged_docs.append(merged_doc)
@@ -150,8 +171,8 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         if not doc_text:
             return doc_nodes
 
-        file_sha256 = doc.metadata.get("file_sha256", "unknown")
-        file_name = doc.metadata.get("file_name", "unknown")
+        file_sha256 = doc.metadata.get(FILE_SHA256, "unknown")
+        file_name = doc.metadata.get(FILE_NAME, "unknown")
         doc_total_len = len(doc_text)
 
         # Markdown按标题切章节
@@ -230,9 +251,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                     p_start = self._lookup_page(real_start, page_offset_list)
                     p_end = self._lookup_page(real_end, page_offset_list)
                     if p_start is not None:
-                        sub_node.metadata["page_start"] = p_start
+                        sub_node.metadata[PAGE_START] = p_start
                     if p_end is not None:
-                        sub_node.metadata["page_end"] = p_end
+                        sub_node.metadata[PAGE_END] = p_end
 
                     doc_nodes.append(sub_node)
             else:
@@ -251,9 +272,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 p_start = self._lookup_page(section_start, page_offset_list)
                 p_end = self._lookup_page(section_end, page_offset_list)
                 if p_start is not None:
-                    section_node.metadata["page_start"] = p_start
+                    section_node.metadata[PAGE_START] = p_start
                 if p_end is not None:
-                    section_node.metadata["page_end"] = p_end
+                    section_node.metadata[PAGE_END] = p_end
 
                 doc_nodes.append(section_node)
 
@@ -306,7 +327,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             try:
                 nodes = self._process_single_document(
                     doc,
-                    file_page_mapping[doc.metadata["file_sha256"]],
+                    file_page_mapping[doc.metadata[FILE_SHA256]],
                     max_chunk_size,
                 )
                 all_nodes.extend(nodes)
@@ -314,7 +335,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 errors += 1
                 self.logger.exception(
                     f"[Splitter] 处理文档失败 | "
-                    f"file={doc.metadata.get('file_name', 'unknown')} | "
+                    f"file={doc.metadata.get(FILE_NAME, 'unknown')} | "
                     f"error={e}",
                 )
                 with self._stats_lock:
@@ -471,7 +492,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                             tbl_tokens = self._count_tokens(tbl_text)
                             if tbl_tokens <= limit:
                                 table_node = TextNode(text=tbl_text)
-                                table_node.metadata["content_type"] = "table"
+                                table_node.metadata[CONTENT_TYPE] = "table"
                                 result_nodes.append(table_node)
                             else:
                                 # 超大表格，带表头重复拆分
@@ -479,7 +500,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                                     tbl_text, limit
                                 ):
                                     table_node = TextNode(text=tbl_sub)
-                                    table_node.metadata["content_type"] = "table"
+                                    table_node.metadata[CONTENT_TYPE] = "table"
                                     result_nodes.append(table_node)
 
             if not found_placeholder and node_text.strip():
@@ -505,19 +526,19 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         chunk_id = f"chunk_{file_sha256}_{text_hash}"
 
         node.node_id = chunk_id
-        node.metadata["chunk_id"] = chunk_id
-        node.metadata["file_name"] = file_name
-        node.metadata["file_sha256"] = file_sha256
-        node.metadata["section_id"] = section_id
-        node.metadata["section_seq"] = section_seq
-        node.metadata["total_chunks_in_section"] = total_chunks_in_section
-        node.metadata["char_start"] = char_start
-        node.metadata["char_end"] = char_end
-        node.metadata["chunk_length"] = len(node.text)
-        node.metadata["token_count"] = self._count_tokens(node.text)
+        node.metadata[CHUNK_ID] = chunk_id
+        node.metadata[FILE_NAME] = file_name
+        node.metadata[FILE_SHA256] = file_sha256
+        node.metadata[SECTION_ID] = section_id
+        node.metadata[SECTION_SEQ] = section_seq
+        node.metadata[TOTAL_CHUNKS_IN_SECTION] = total_chunks_in_section
+        node.metadata[CHAR_START] = char_start
+        node.metadata[CHAR_END] = char_end
+        node.metadata[CHUNK_LENGTH] = len(node.text)
+        node.metadata[TOKEN_COUNT] = self._count_tokens(node.text)
         # 保留 MarkdownNodeParser 自动生成的章节标题链，供 LLM 理解上下文层级
-        if "header_path" in node.metadata:
-            node.metadata["heading_path"] = node.metadata["header_path"]
+        if HEADER_PATH in node.metadata:
+            node.metadata[HEADING_PATH] = node.metadata[HEADER_PATH]
 
     def get_stats(self) -> dict:
         """获取分割统计信息"""
@@ -529,8 +550,8 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
     ) -> bool:
         """验证chunk位置信息"""
         try:
-            start = chunk.metadata.get("char_start", -1)
-            end = chunk.metadata.get("char_end", -1)
+            start = chunk.metadata.get(CHAR_START, -1)
+            end = chunk.metadata.get(CHAR_END, -1)
 
             if start < 0 or end < 0 or start >= end:
                 self.logger.warning(f"无效的位置信息: start={start}, end={end}")
@@ -553,12 +574,10 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         self, chunks: list[TextNode], section_id: str
     ) -> str | None:
         """重建章节"""
-        section_chunks = [
-            c for c in chunks if c.metadata.get("section_id") == section_id
-        ]
+        section_chunks = [c for c in chunks if c.metadata.get(SECTION_ID) == section_id]
 
         if not section_chunks:
             return None
 
-        section_chunks.sort(key=lambda x: x.metadata.get("section_seq", 0))
+        section_chunks.sort(key=lambda x: x.metadata.get(SECTION_SEQ, 0))
         return "\n".join([c.text for c in section_chunks])

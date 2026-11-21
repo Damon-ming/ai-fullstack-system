@@ -10,6 +10,15 @@ import os
 
 import pymupdf4llm
 from llama_index.core import Document
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    FILE_NAME,
+    FILE_PATH,
+    FILE_SHA256,
+    PAGE,
+    PAGE_INDEX,
+    SOURCE_REF_ID,
+    TOTAL_PAGES,
+)
 from src.com.damon.ming.ai.rag.source.image_text_extractor import (
     extract_image_text,
     extract_images_from_pdf_page,
@@ -82,13 +91,13 @@ class TextPdfParser(BasePdfParser):
                 doc = Document(
                     text=full_text,
                     metadata={
-                        "file_name": file_name,
-                        "file_path": file_path,
-                        "file_sha256": file_sha256,
-                        "source_refId": file_sha256,
-                        "page": page_no,
-                        "page_index": page_idx,
-                        "total_pages": total_page_count,
+                        FILE_NAME: file_name,
+                        FILE_PATH: file_path,
+                        FILE_SHA256: file_sha256,
+                        SOURCE_REF_ID: file_sha256,
+                        PAGE: page_no,
+                        PAGE_INDEX: page_idx,
+                        TOTAL_PAGES: total_page_count,
                         "images": image_paths,
                         "parse_method": "text",
                     },

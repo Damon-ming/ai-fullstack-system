@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    FILE_SHA256,
+    SECTION_ID,
+)
 from src.com.damon.ming.ai.vector_db.base_vector_db import VECTOR_SCORE_KEY
 
 
@@ -13,8 +17,8 @@ def _extract_section_key(node: TextNode) -> tuple[str, str] | None:
     Returns:
         (file_sha256, section_id) 元组，元数据缺失时返回 None。
     """
-    file_sha256 = node.metadata.get("file_sha256", "")
-    section_id = node.metadata.get("section_id", "")
+    file_sha256 = node.metadata.get(FILE_SHA256, "")
+    section_id = node.metadata.get(SECTION_ID, "")
     if not file_sha256 or not section_id:
         return None
     return (file_sha256, section_id)

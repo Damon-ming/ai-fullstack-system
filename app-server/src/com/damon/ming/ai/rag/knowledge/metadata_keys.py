@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/rag/knowledge/metadata_keys.py
 """知识库节点 metadata 的共享字段名。"""
 
 FILE_SHA256 = "file_sha256"
@@ -7,3 +8,19 @@ FILE_ID = "file_id"
 SECTION_ID = "section_id"
 CHUNK_ID = "chunk_id"
 SOURCE_REF_ID = "source_refId"
+
+# 数据源、分块和章节重建共用的节点 metadata 字段。
+PAGE = "page"
+PAGE_INDEX = "page_index"
+PAGE_START = "page_start"
+PAGE_END = "page_end"
+TOTAL_PAGES = "total_pages"
+CONTENT_TYPE = "content_type"
+HEADER_PATH = "header_path"
+HEADING_PATH = "heading_path"
+SECTION_SEQ = "section_seq"
+TOTAL_CHUNKS_IN_SECTION = "total_chunks_in_section"
+CHAR_START = "char_start"
+CHAR_END = "char_end"
+CHUNK_LENGTH = "chunk_length"
+TOKEN_COUNT = "token_count"

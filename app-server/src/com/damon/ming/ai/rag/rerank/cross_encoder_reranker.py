@@ -5,6 +5,9 @@ import threading
 
 import torch
 from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    HEADING_PATH,
+)
 from src.com.damon.ming.ai.rag.rerank import register_reranker
 from src.com.damon.ming.ai.rag.rerank.base_reranker import (
     BaseReranker,
@@ -172,7 +175,7 @@ class CrossEncoderReranker(BaseReranker):
         """
         if not self.params.include_heading:
             return ""
-        heading = node.metadata.get("heading_path", "")
+        heading = node.metadata.get(HEADING_PATH, "")
         if not heading:
             return ""
         clean = heading.strip("/").replace("/", " > ")

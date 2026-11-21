@@ -17,11 +17,20 @@ from pathlib import Path
 
 import pandas as pd
 from llama_index.core import Document
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    FILE_NAME,
+    FILE_PATH,
+    FILE_SHA256,
+    PAGE,
+    PAGE_INDEX,
+    SOURCE_REF_ID,
+    TOTAL_PAGES,
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
+from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -142,12 +151,12 @@ class LocalXlsxDataSource(BaseDataSource):
                     doc = Document(
                         text=table_text,
                         metadata={
-                            "file_name": file_name,
-                            "file_path": file_path,
-                            "file_sha256": file_sha256,
-                            "source_refId": file_sha256,
-                            "page": global_page_index + 1,
-                            "page_index": global_page_index,
+                            FILE_NAME: file_name,
+                            FILE_PATH: file_path,
+                            FILE_SHA256: file_sha256,
+                            SOURCE_REF_ID: file_sha256,
+                            PAGE: global_page_index + 1,
+                            PAGE_INDEX: global_page_index,
                             "row_start": row_start,
                             "row_end": row_end,
                             "sheet_name": sheet_name,
@@ -159,7 +168,7 @@ class LocalXlsxDataSource(BaseDataSource):
             total_pages = global_page_index
             # 回填 total_pages
             for doc in docs:
-                doc.metadata["total_pages"] = total_pages
+                doc.metadata[TOTAL_PAGES] = total_pages
 
             with self._stats_lock:
                 self._stats["success_files"] += 1

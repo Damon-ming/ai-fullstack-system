@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 
 from llama_index.core import Document
+from src.com.damon.ming.ai.rag.knowledge.metadata_keys import TOTAL_PAGES
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
 from src.com.damon.ming.ai.rag.source.pdf import route_pdf_parser
@@ -77,7 +78,7 @@ class LocalPDFDataSource(BaseDataSource):
             with self._stats_lock:
                 self._stats["success_files"] += 1
                 self._stats["total_pages"] += sum(
-                    d.metadata.get("total_pages", 1) for d in docs
+                    d.metadata.get(TOTAL_PAGES, 1) for d in docs
                 )
 
             return docs
