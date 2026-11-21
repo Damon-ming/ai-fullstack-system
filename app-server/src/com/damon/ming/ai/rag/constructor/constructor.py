@@ -10,17 +10,35 @@ from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
+    FILE_ID,
+    FILE_NAME,
+    FILE_PATH,
     FILE_SHA256,
+    HEADER_PATH,
     HEADING_PATH,
     RECONSTRUCTION_SKIP_CHARS,
     SECTION_ID,
     SECTION_SEQ,
+    SOURCE_REF_ID,
+    TOTAL_PAGES,
 )
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 
 logger = pin("SectionReconstructor")
+
+_SECTION_METADATA_KEYS = (
+    FILE_ID,
+    FILE_NAME,
+    FILE_PATH,
+    FILE_SHA256,
+    SOURCE_REF_ID,
+    SECTION_ID,
+    HEADER_PATH,
+    HEADING_PATH,
+    TOTAL_PAGES,
+)
 
 
 class SectionReconstructor:
@@ -157,9 +175,14 @@ class SectionReconstructor:
                 continue
 
             first_node = section_nodes[0]
+            metadata = {
+                field: first_node.metadata[field]
+                for field in _SECTION_METADATA_KEYS
+                if field in first_node.metadata
+            }
             merged_node = TextNode(
                 text=full_section,
-                metadata=first_node.metadata.copy(),
+                metadata=metadata,
             )
             result_nodes.append(merged_node)
         return result_nodes
