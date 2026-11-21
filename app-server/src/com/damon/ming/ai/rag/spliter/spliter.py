@@ -6,9 +6,7 @@
 不感知线程池、取消令牌等基础设施。
 """
 
-import hashlib
 import re
-import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
@@ -40,6 +38,7 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     TOTAL_PAGES,
 )
 from src.com.damon.ming.log import pin
+from src.com.damon.ming.security.digest import sha256_hex
 
 from ..tokenizer.base_tokenizer import BaseTokenizer
 from .table_splitter import TableAwareSplitter
@@ -66,9 +65,6 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
     上层 RagChoreographer 使用 asyncio.to_thread 将本类的调用提交到线程池。
     """
 
-    # 类级别锁，用于统计同步
-    _stats_lock = threading.Lock()
-
     def __init__(
         self,
         tokenizer: BaseTokenizer,
@@ -91,23 +87,13 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         self.md_parser = MarkdownNodeParser()
         self._table_splitter = TableAwareSplitter(self._count_tokens)
 
-        # 统计信息（线程安全）
-        self.stats = {
-            "total_chunks": 0,
-            "total_sections": 0,
-            "split_sections": 0,
-            "errors": 0,
-        }
-
     def _gen_section_id(
         self, file_sha256: str, node_text: str, section_group: str | None = None
     ):
         identity = (
             f"{section_group}:{node_text}" if section_group is not None else node_text
         )
-        seg_hash = hashlib.md5(identity.encode(), usedforsecurity=False).hexdigest()[
-            :16
-        ]
+        seg_hash = sha256_hex(identity)[:32]
         return f"section_{file_sha256}_{seg_hash}"
 
     def _count_tokens(self, text: str) -> int:
@@ -199,6 +185,7 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         max_chunk_size: int,
         chunk_overlap: int,
         token_splitter: TokenTextSplitter,
+        stats: dict[str, int],
     ) -> list[TextNode]:
         """处理单个文档（同步）"""
         limit = max_chunk_size
@@ -230,9 +217,7 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
             if not section_raw_text:
                 continue
 
-            # 更新统计（线程安全）
-            with self._stats_lock:
-                self.stats["total_sections"] += 1
+            stats["total_sections"] += 1
 
             section_id = self._gen_section_id(
                 file_sha256, section_raw_text, section_group
@@ -243,8 +228,7 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
 
             if section_tokens > limit:
                 # 触发分割
-                with self._stats_lock:
-                    self.stats["split_sections"] += 1
+                stats["split_sections"] += 1
 
                 self.logger.debug(
                     f"[Splitter] 超大章节触发分割 | file={file_name} | "
@@ -269,10 +253,9 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
                 )
                 bounded = len(sub_nodes) > section_chunk_limit
                 if bounded:
-                    with self._stats_lock:
-                        self.stats["total_sections"] += (
-                            len(sub_nodes) - 1
-                        ) // section_chunk_limit
+                    stats["total_sections"] += (
+                        len(sub_nodes) - 1
+                    ) // section_chunk_limit
 
                 previous_node: TextNode | None = None
                 for seq, sub_node in enumerate(sub_nodes):
@@ -383,7 +366,6 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         self,
         docs: list[Document],
         max_chunk_size: int | None = None,
-        reset_stats: bool = True,
         chunk_overlap: int | None = None,
     ) -> list[TextNode]:
         """分割文档列表（同步）。
@@ -397,7 +379,6 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         Args:
             docs: 待分割的 Document 列表。
             max_chunk_size: 最大 chunk token 大小，None 时使用构造时默认值。
-            reset_stats: True 时重置统计后开始（默认），False 时累加到已有统计。
             chunk_overlap: 本次切分的重叠 token 数，None 时使用配置值，0 时禁用。
         """
         if not docs:
@@ -424,15 +405,11 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
 
         self.logger.info(f"[Splitter] 开始分割 {len(docs)} 个Document")
 
-        # 统计重置（默认行为）或累加（reset_stats=False）
-        if reset_stats:
-            with self._stats_lock:
-                self.stats = {
-                    "total_chunks": 0,
-                    "total_sections": 0,
-                    "split_sections": 0,
-                    "errors": 0,
-                }
+        # 每次调用独立统计，避免并发索引时互相覆盖。
+        stats = {
+            "total_sections": 0,
+            "split_sections": 0,
+        }
 
         # 1. 按文件合并页面
         merged_docs, file_page_mapping = self._merge_documents_by_file(docs)
@@ -452,6 +429,7 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
                     effective_size,
                     effective_overlap,
                     token_splitter,
+                    stats,
                 )
                 all_nodes.extend(nodes)
             except Exception:
@@ -459,19 +437,13 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
                     f"[Splitter] 处理文档失败 | "
                     f"file={doc.metadata.get(FILE_NAME, 'unknown')}",
                 )
-                with self._stats_lock:
-                    self.stats["errors"] += 1
                 raise
-
-        # 更新统计
-        with self._stats_lock:
-            self.stats["total_chunks"] = len(all_nodes)
 
         self.logger.info(
             f"[Splitter] 分割完成 | "
             f"总chunk={len(all_nodes)} | "
-            f"章节数={self.stats['total_sections']} | "
-            f"触发分割={self.stats['split_sections']}"
+            f"章节数={stats['total_sections']} | "
+            f"触发分割={stats['split_sections']}"
         )
 
         return all_nodes
@@ -517,10 +489,7 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         total_chunks_in_section: int,
     ):
         """附加元数据到节点"""
-        chunk_hash = hashlib.md5(
-            f"{section_id}:{section_seq}:{node.text}".encode(),
-            usedforsecurity=False,
-        ).hexdigest()[:16]
+        chunk_hash = sha256_hex(f"{section_id}:{section_seq}:{node.text}")[:32]
         chunk_id = f"chunk_{file_sha256}_{chunk_hash}"
 
         node.node_id = chunk_id
@@ -538,8 +507,3 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         # 保留 MarkdownNodeParser 自动生成的章节标题链，供 LLM 理解上下文层级
         if HEADER_PATH in node.metadata:
             node.metadata[HEADING_PATH] = node.metadata[HEADER_PATH]
-
-    def get_stats(self) -> dict:
-        """获取分割统计信息"""
-        with self._stats_lock:
-            return self.stats.copy()

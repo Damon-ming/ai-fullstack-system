@@ -20,6 +20,7 @@ embedding_engines:
       concurrency: 2              # 本地 GPU 推理并发上限
       device: cpu                 # cpu 或 cuda（本机有 GPU 时改为 cuda）
       normalize_embeddings: true
+      # TODO: 后续从 .env 注入，避免不同部署环境维护缓存路径。
       cache_folder: /models/embedding    # HF Hub 下载缓存目录
       query_prefix: "query: "     # BGE-M3 等模型要求 query 编码加前缀（分布对齐）
       passage_prefix: "passage: " # 文档编码前缀（与训练时一致）
