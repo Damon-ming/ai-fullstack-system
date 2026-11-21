@@ -30,6 +30,7 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     PAGE_END,
     PAGE_INDEX,
     PAGE_START,
+    RECONSTRUCTION_SKIP_CHARS,
     SECTION_ID,
     SECTION_SEQ,
     TOKEN_COUNT,
@@ -68,16 +69,22 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         self,
         tokenizer: BaseTokenizer,
         max_chunk_token_size: int,
-        chunk_overlap: int,
+        chunk_overlap: int | None = None,
     ):
+        if type(max_chunk_token_size) is not int or max_chunk_token_size <= 0:
+            raise ValueError("max_chunk_token_size 必须是正整数")
+        if chunk_overlap is None:
+            chunk_overlap = 0
+        if (
+            type(chunk_overlap) is not int
+            or not 0 <= chunk_overlap < max_chunk_token_size
+        ):
+            raise ValueError("chunk_overlap 必须是小于 max_chunk_token_size 的非负整数")
         self.max_chunk_token_size = max_chunk_token_size
         self.chunk_overlap = chunk_overlap
         self.tokenizer = tokenizer
         self.logger = pin("MarkdownDocumentSplitter")
         self.md_parser = MarkdownNodeParser()
-        self.token_splitter = TokenTextSplitter(
-            chunk_size=max_chunk_token_size, chunk_overlap=chunk_overlap
-        )
 
         # 统计信息（线程安全）
         self.stats = {
@@ -161,10 +168,15 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         return None
 
     def _process_single_document(
-        self, doc: Document, page_offset_list: list, max_chunk_size: int | None = None
+        self,
+        doc: Document,
+        page_offset_list: list,
+        max_chunk_size: int,
+        chunk_overlap: int,
+        token_splitter: TokenTextSplitter,
     ) -> list[TextNode]:
         """处理单个文档（同步）"""
-        limit = max_chunk_size or self.max_chunk_token_size
+        limit = max_chunk_size
         doc_nodes = []
         doc_text = doc.text.strip()
 
@@ -215,16 +227,29 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 table_blocks = self._find_table_blocks(section_raw_text)
                 if table_blocks:
                     sub_nodes = self._table_aware_split(
-                        section_raw_text, table_blocks, limit
+                        section_raw_text, table_blocks, limit, token_splitter
                     )
                 else:
-                    sub_nodes = self.token_splitter.get_nodes_from_documents(
+                    sub_nodes = token_splitter.get_nodes_from_documents(
                         [Document(text=section_raw_text)]
                     )
 
+                previous_node: TextNode | None = None
                 for seq, sub_node in enumerate(sub_nodes):
                     if not sub_node.text.strip():
                         continue
+
+                    if (
+                        previous_node is not None
+                        and RECONSTRUCTION_SKIP_CHARS not in sub_node.metadata
+                        and previous_node.metadata.get(CONTENT_TYPE) != "table"
+                        and sub_node.metadata.get(CONTENT_TYPE) != "table"
+                    ):
+                        sub_node.metadata[RECONSTRUCTION_SKIP_CHARS] = (
+                            self._overlap_prefix_chars(
+                                previous_node.text, sub_node.text, chunk_overlap
+                            )
+                        )
 
                     real_start = section_start + (sub_node.start_char_idx or 0)
                     real_end = section_start + (
@@ -256,6 +281,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                         sub_node.metadata[PAGE_END] = p_end
 
                     doc_nodes.append(sub_node)
+                    previous_node = sub_node
             else:
                 # 不分割
                 self._attach_metadata(
@@ -285,6 +311,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         docs: list[Document],
         max_chunk_size: int | None = None,
         reset_stats: bool = True,
+        chunk_overlap: int | None = None,
     ) -> list[TextNode]:
         """分割文档列表（同步）。
 
@@ -298,9 +325,27 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             docs: 待分割的 Document 列表。
             max_chunk_size: 最大 chunk token 大小，None 时使用构造时默认值。
             reset_stats: True 时重置统计后开始（默认），False 时累加到已有统计。
+            chunk_overlap: 本次切分的重叠 token 数，None 时使用配置值，0 时禁用。
         """
         if not docs:
             return []
+
+        effective_size = (
+            self.max_chunk_token_size if max_chunk_size is None else max_chunk_size
+        )
+        effective_overlap = (
+            self.chunk_overlap if chunk_overlap is None else chunk_overlap
+        )
+        if type(effective_size) is not int or effective_size <= 0:
+            raise ValueError("max_chunk_size 必须是正整数")
+        if (
+            type(effective_overlap) is not int
+            or not 0 <= effective_overlap < effective_size
+        ):
+            raise ValueError("chunk_overlap 必须是小于 max_chunk_size 的非负整数")
+        token_splitter = TokenTextSplitter(
+            chunk_size=effective_size, chunk_overlap=effective_overlap
+        )
 
         self.logger.info(f"[Splitter] 开始分割 {len(docs)} 个Document")
 
@@ -328,7 +373,9 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 nodes = self._process_single_document(
                     doc,
                     file_page_mapping[doc.metadata[FILE_SHA256]],
-                    max_chunk_size,
+                    effective_size,
+                    effective_overlap,
+                    token_splitter,
                 )
                 all_nodes.extend(nodes)
             except Exception as e:
@@ -392,7 +439,38 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
 
         return blocks
 
-    def _split_table_with_header(self, table_text: str, limit: int) -> list[str]:
+    def _overlap_prefix_chars(
+        self, previous: str, current: str, chunk_overlap: int
+    ) -> int:
+        """返回当前块开头与前一块结尾重复的字符数。"""
+        if chunk_overlap <= 0 or not previous or not current:
+            return 0
+
+        # KMP 查找最长的「前块后缀 == 当前块前缀」，避免逐长度比较。
+        prefix = [0] * len(current)
+        matched = 0
+        for i in range(1, len(current)):
+            while matched and current[i] != current[matched]:
+                matched = prefix[matched - 1]
+            if current[i] == current[matched]:
+                matched += 1
+            prefix[i] = matched
+
+        matched = 0
+        for char in previous:
+            while matched and (matched == len(current) or char != current[matched]):
+                matched = prefix[matched - 1]
+            if char == current[matched]:
+                matched += 1
+
+        # 避免将正文中正常重复、却超过配置 overlap 的内容误判为切分重叠。
+        while matched and self._count_tokens(current[:matched]) > chunk_overlap:
+            matched = prefix[matched - 1]
+        return matched
+
+    def _split_table_with_header(
+        self, table_text: str, limit: int
+    ) -> list[tuple[str, int]]:
         """将超大表格按行切分，每个子表格都带表头行。
 
         例如 100 行数据的大表会被拆为多个子表，每个子表都包含
@@ -400,7 +478,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         """
         lines = [l for l in table_text.strip().split("\n") if l.strip()]
         if len(lines) < 3:
-            return [table_text]  # 不够表头+分隔+一行数据，不拆
+            return [(table_text, 0)]  # 不够表头+分隔+一行数据，不拆
 
         header = lines[0]
         separator = lines[1]
@@ -408,7 +486,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         header_block = f"{header}\n{separator}"
         header_tokens = self._count_tokens(header_block)
 
-        chunks: list[str] = []
+        chunks: list[tuple[str, int]] = []
         current_rows: list[str] = []
         current_tokens = header_tokens
 
@@ -416,7 +494,12 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
             row_tokens = self._count_tokens(row)
             if current_tokens + row_tokens > limit and current_rows:
                 # 当前批次已满，组装一个子表格
-                chunks.append(f"{header_block}\n" + "\n".join(current_rows))
+                chunks.append(
+                    (
+                        f"{header_block}\n" + "\n".join(current_rows),
+                        0 if not chunks else len(header_block) + 1,
+                    )
+                )
                 current_rows = [row]
                 current_tokens = header_tokens + row_tokens
             else:
@@ -424,12 +507,21 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                 current_tokens += row_tokens
 
         if current_rows:
-            chunks.append(f"{header_block}\n" + "\n".join(current_rows))
+            chunks.append(
+                (
+                    f"{header_block}\n" + "\n".join(current_rows),
+                    0 if not chunks else len(header_block) + 1,
+                )
+            )
 
         return chunks
 
     def _table_aware_split(
-        self, text: str, table_blocks: list[tuple[int, int]], limit: int
+        self,
+        text: str,
+        table_blocks: list[tuple[int, int]],
+        limit: int,
+        token_splitter: TokenTextSplitter,
     ) -> list[TextNode]:
         """表格感知的章节分割。
 
@@ -463,7 +555,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         placeholder_text = "".join(parts)
 
         # 对占位文本做 TokenTextSplitter
-        raw_nodes = self.token_splitter.get_nodes_from_documents(
+        raw_nodes = token_splitter.get_nodes_from_documents(
             [Document(text=placeholder_text)]
         )
 
@@ -496,11 +588,15 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
                                 result_nodes.append(table_node)
                             else:
                                 # 超大表格，带表头重复拆分
-                                for tbl_sub in self._split_table_with_header(
-                                    tbl_text, limit
-                                ):
+                                for (
+                                    tbl_sub,
+                                    skip_chars,
+                                ) in self._split_table_with_header(tbl_text, limit):
                                     table_node = TextNode(text=tbl_sub)
                                     table_node.metadata[CONTENT_TYPE] = "table"
+                                    table_node.metadata[RECONSTRUCTION_SKIP_CHARS] = (
+                                        skip_chars
+                                    )
                                     result_nodes.append(table_node)
 
             if not found_placeholder and node_text.strip():
@@ -531,6 +627,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         node.metadata[FILE_SHA256] = file_sha256
         node.metadata[SECTION_ID] = section_id
         node.metadata[SECTION_SEQ] = section_seq
+        node.metadata.setdefault(RECONSTRUCTION_SKIP_CHARS, 0)
         node.metadata[TOTAL_CHUNKS_IN_SECTION] = total_chunks_in_section
         node.metadata[CHAR_START] = char_start
         node.metadata[CHAR_END] = char_end

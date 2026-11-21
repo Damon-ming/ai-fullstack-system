@@ -16,7 +16,7 @@ class SplitterManager:
             raise RuntimeError("RAG 分割器已经初始化")
         configs = RagSplitterConfigs()
         configs.initialize()
-        config = configs.get_common()
+        config = configs.get()
         self._markdown = MarkdownDocumentSplitter(
             tokenizer=tokenizer,
             max_chunk_token_size=config.max_chunk_token_size,

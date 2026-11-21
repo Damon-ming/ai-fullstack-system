@@ -12,6 +12,7 @@ from llama_index.core.schema import TextNode
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_SHA256,
     HEADING_PATH,
+    RECONSTRUCTION_SKIP_CHARS,
     SECTION_ID,
     SECTION_SEQ,
 )
@@ -164,8 +165,17 @@ class SectionReconstructor:
         return result_nodes
 
     def _merge_chunks(self, section_chunks: list[TextNode]) -> str | None:
-        """按 section_seq 排序并拼接同章节的 chunk 文本"""
+        """按 section_seq 排序，去掉各块标记的重复前缀后拼接。"""
         if not section_chunks:
             return None
         section_chunks.sort(key=lambda x: x.metadata.get(SECTION_SEQ, 0))
-        return "\n".join([node.text for node in section_chunks])
+        parts = []
+        for node in section_chunks:
+            skip_chars = node.metadata.get(RECONSTRUCTION_SKIP_CHARS, 0)
+            if type(skip_chars) is not int or not 0 <= skip_chars <= len(node.text):
+                logger.warning("章节分片的 reconstruction_skip_chars 无效，保留原文")
+                skip_chars = 0
+            content = node.text[skip_chars:]
+            if content:
+                parts.append(content)
+        return "\n".join(parts)
