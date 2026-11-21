@@ -1,5 +1,5 @@
 """
-分割器配置加载器 —— 从 YAML 读取 MarkdownDocumentSplitter 构造参数。
+分割器配置加载器 —— 从 YAML 读取 StructuredDocumentSplitter 构造参数。
 
 用法：
   loader = SplitterConfigLoader()
@@ -14,7 +14,7 @@ from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
 
 class SplitterConfig:
-    """MarkdownDocumentSplitter 配置参数。
+    """StructuredDocumentSplitter 配置参数。
 
     max_chunk_token_size 必填；chunk_overlap 省略或为 null 时按 0 处理。
     """

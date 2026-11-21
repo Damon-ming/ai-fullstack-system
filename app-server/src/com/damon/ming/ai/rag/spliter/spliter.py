@@ -60,7 +60,7 @@ class BaseDocumentSplitter(ABC):
         pass
 
 
-class MarkdownDocumentSplitter(BaseDocumentSplitter):
+class StructuredDocumentSplitter(BaseDocumentSplitter):
     """统一文档分块器，按 Markdown 标题及表格边界处理解析后的文本。
 
     上层 RagChoreographer 使用 asyncio.to_thread 将本类的调用提交到线程池。
@@ -87,7 +87,7 @@ class MarkdownDocumentSplitter(BaseDocumentSplitter):
         self.max_chunk_token_size = max_chunk_token_size
         self.chunk_overlap = chunk_overlap
         self.tokenizer = tokenizer
-        self.logger = pin("MarkdownDocumentSplitter")
+        self.logger = pin("StructuredDocumentSplitter")
         self.md_parser = MarkdownNodeParser()
         self._table_splitter = TableAwareSplitter(self._count_tokens)
 

@@ -138,8 +138,7 @@ class RagChoreographer:
 
         # 步骤7：初始化分割器
         self.splitter_manager = create_splitters(tokenizer=self.llm_tokenizer)
-        # todo: 为什么这里是固定splitter
-        self.splitter = self.splitter_manager.get_markdown()
+        self.splitter = self.splitter_manager.get_structured()
 
         bootstrap_result = bootstrap_knowledge_index(
             corpus_dir=corpus_path,

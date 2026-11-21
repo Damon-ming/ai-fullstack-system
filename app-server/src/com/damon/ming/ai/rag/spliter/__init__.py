@@ -2,7 +2,7 @@
 
 from src.com.damon.ming.ai.rag.spliter.spliter import (
     BaseDocumentSplitter,
-    MarkdownDocumentSplitter,
+    StructuredDocumentSplitter,
 )
 
 
@@ -17,6 +17,6 @@ def create_splitters(tokenizer):
 
 __all__ = [
     "BaseDocumentSplitter",
-    "MarkdownDocumentSplitter",
+    "StructuredDocumentSplitter",
     "create_splitters",
 ]

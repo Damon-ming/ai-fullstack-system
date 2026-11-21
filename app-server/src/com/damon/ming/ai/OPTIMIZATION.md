@@ -194,7 +194,7 @@ reranker 只能对这 5 个重新排序，无法把排名第 6~20 的候选捞�
 
 ### 问题
 
-`MarkdownDocumentSplitter` 对超大章节（>768 token）使用 LlamaIndex `TokenTextSplitter` 切分，该切分器按空格→换行→字符三级级联分割，**对 markdown 表格结构零感知**。
+`StructuredDocumentSplitter` 对超大章节（>768 token）使用 LlamaIndex `TokenTextSplitter` 切分，该切分器按空格→换行→字符三级级联分割，**对 markdown 表格结构零感知**。
 
 后果：当章节内含超过 chunk_size 的表格时，TokenTextSplitter 在表格行间随机切断，导致：
 - Chunk A 拿到表头 + 前 N 行数据，Chunk B 拿到剩余行（无表头）
@@ -301,7 +301,7 @@ reranker 只能对这 5 个重新排序，无法把排名第 6~20 的候选捞�
 
 `MarkdownNodeParser` 切分 markdown 时，已在每个 node 的 metadata 中自动生成 `header_path`（格式如 `"/性能要求/并发指标/"`），记录该 chunk 在文档中的完整标题层级。
 
-但 `MarkdownDocumentSplitter._attach_metadata()` 覆盖 node.metadata 时未保留该字段，导致：
+但 `StructuredDocumentSplitter._attach_metadata()` 覆盖 node.metadata 时未保留该字段，导致：
 - 向量库中 chunk 无章节归属信息
 - `SectionReconstructor.merge_nodes_to_text()` 拼接的裸文本喂给 LLM 时，LLM 不知道每个 chunk 出自文档哪个章节
 - 多章节文档检索后，LLM 无法区分同名词在不同章节下的语义差异
