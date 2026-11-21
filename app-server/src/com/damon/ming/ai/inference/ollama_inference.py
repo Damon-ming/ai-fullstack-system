@@ -9,6 +9,7 @@ from src.com.damon.ming.ai.inference.base_inference import (
     STREAM_TYPE_CONTENT,
     STREAM_TYPE_REASONING,
     BaseInferenceService,
+    ContextWindowExceededError,
     InferenceParams,
     StreamToken,
     register_engine,
@@ -69,10 +70,18 @@ class OllamaInference(BaseInferenceService):
         # 一次性返回完整响应；只有 stream_generate 使用 Ollama 流式接口。
         ollama_kwargs["stream"] = False
 
-        # 无重试：异常直接抛给上层，由前端自行重试请求
         try:
             response = await self.client.chat(**ollama_kwargs)
             return response.message.content or ""
+        except ollama.ResponseError as exc:
+            message = str(exc.error).lower()
+            if (
+                "the prompt is longer than the context length" in message
+                or "the input length exceeds the context length" in message
+            ):
+                raise ContextWindowExceededError(str(exc)) from exc
+            logger.exception("Ollama推理失败")
+            raise
         except Exception:
             logger.exception("Ollama推理失败")
             raise

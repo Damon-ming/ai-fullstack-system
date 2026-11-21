@@ -1,7 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/summary/config/summary_config_loader.py
 """摘要配置加载器 —— 读取摘要分段策略。"""
 
-import math
 import os
 from dataclasses import dataclass
 
@@ -12,8 +11,8 @@ import yaml
 class SummaryConfig:
     """摘要策略参数。"""
 
-    input_max_ratio: float
-    prompt_template: str
+    system_prompt_template: str
+    context_margin_ratio: float = 0.02
 
 
 class SummaryConfigLoader:
@@ -31,27 +30,29 @@ class SummaryConfigLoader:
             return self._config
 
         raw_config = self._read_yaml()
-        value = raw_config.get("input_max_ratio")
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("summary.input_max_ratio 必须大于 0 且小于 1")
-        ratio = float(value)
-        if not math.isfinite(ratio) or not 0 < ratio < 1:
-            raise ValueError("summary.input_max_ratio 必须大于 0 且小于 1")
-
-        prompt_template = raw_config.get("prompt_template")
-        if not isinstance(prompt_template, str) or not prompt_template.strip():
-            raise ValueError("summary.prompt_template 必须是非空字符串")
-        required_placeholders = ("{max_tokens}", "{content}")
-        if any(
-            placeholder not in prompt_template for placeholder in required_placeholders
+        context_margin_ratio = raw_config.get(
+            "context_margin_ratio", SummaryConfig.context_margin_ratio
+        )
+        if isinstance(context_margin_ratio, bool) or not isinstance(
+            context_margin_ratio, (int, float)
         ):
-            raise ValueError(
-                "summary.prompt_template 必须包含 {max_tokens} 和 {content}"
-            )
+            raise TypeError("summary.context_margin_ratio 必须是数值")
+        if not 0 <= context_margin_ratio < 1:
+            raise ValueError("summary.context_margin_ratio 必须大于等于 0 且小于 1")
+
+        system_prompt_template = raw_config.get("system_prompt_template")
+        if not isinstance(system_prompt_template, str) or not system_prompt_template.strip():
+            raise ValueError("summary.system_prompt_template 必须是非空字符串")
+        required_placeholders = ("{max_tokens}",)
+        if any(
+            placeholder not in system_prompt_template
+            for placeholder in required_placeholders
+        ):
+            raise ValueError("summary.system_prompt_template 必须包含 {max_tokens}")
 
         self._config = SummaryConfig(
-            input_max_ratio=ratio,
-            prompt_template=prompt_template,
+            system_prompt_template=system_prompt_template,
+            context_margin_ratio=float(context_margin_ratio),
         )
         return self._config
 

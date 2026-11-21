@@ -24,6 +24,10 @@ STREAM_TYPE_REASONING = "reasoning"
 STREAM_TYPE_CONTENT = "content"
 
 
+class ContextWindowExceededError(ValueError):
+    """推理后端明确拒绝了超出模型上下文窗口的请求。"""
+
+
 @dataclass
 class StreamToken:
     """流式输出的带标签 token —— 区分 reasoning 与 content。"""

@@ -4,19 +4,18 @@
 
 职责：
   - 单文本摘要（含分段和容错）
-  - rerank 前压缩（操作副本，不碰原数据）
   - 不持有线程池，纯 asyncio 并发
 
 取消策略：
   - 不感知取消——由上层 RagChoreographer 通过 asyncio.CancelledError 统一处理
-  - compress_nodes / run_summary 中的 await 点被 CancelledError 自然中断
+  - run_summary 中的 await 点被 CancelledError 自然中断
   - 中断时直接抛弃所有中间结果（副本、压缩文本等），不做任何保存/恢复
 """
 
 import asyncio
-import copy
+from math import floor
 
-from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.inference.base_inference import ContextWindowExceededError
 from src.com.damon.ming.ai.inference.inference_gateway import RoleInference
 from src.com.damon.ming.ai.rag.summary.config.summary_config_loader import (
     SummaryConfig,
@@ -44,81 +43,43 @@ class SummaryService:
 
     async def run_summary(self, text: str, max_tokens: int) -> str:
         """单文本摘要压缩。超长自动分段，失败降级硬截断。"""
+        if max_tokens <= 0:
+            raise ValueError("摘要输出目标 max_tokens 必须大于 0")
+
         num_ctx = self.summary_inference.context_window()
-        input_limit = int(num_ctx * self.config.input_max_ratio)
+        system_prompt = self._build_system_prompt(max_tokens)
+        prompt_tokens = self.tokenizer.count_tokens(system_prompt)
+        margin_ratio = self.config.context_margin_ratio
+        prompt_limit = floor((num_ctx - max_tokens) / (1 + margin_ratio))
+        input_limit = prompt_limit - prompt_tokens
         text_tokens = self.tokenizer.count_tokens(text)
 
+        if input_limit <= 0:
+            logger.warning(
+                "摘要模型窗口不足，降级到硬截断 | 窗口=%d | 提示词=%d | 输出目标=%d | 余量比例=%.2f%%",
+                num_ctx,
+                prompt_tokens,
+                max_tokens,
+                margin_ratio * 100,
+            )
+            return self.truncate_by_token(text, max_tokens)
+
         if text_tokens > input_limit:
+            logger.info(
+                "摘要选择分段流程 | 输入tokens=%d | 输入上限=%d | 摘要目标=%d",
+                text_tokens,
+                input_limit,
+                max_tokens,
+            )
             return await self._run_segmented_summary(text, max_tokens, input_limit)
 
+        logger.info(
+            "摘要选择单段流程 | 输入tokens=%d | 输入上限=%d | 摘要目标=%d",
+            text_tokens,
+            input_limit,
+            max_tokens,
+        )
         return await self._run_single_summary(text, max_tokens)
-
-    async def compress_nodes(
-        self, nodes: list[TextNode], max_tokens: int
-    ) -> list[TextNode]:
-        """批量压缩超长节点（返回新节点，不修改输入）。
-
-        对超过 max_tokens 的节点并发调用 run_summary 压缩。
-        返回深拷贝节点，避免并发请求间写共享 TextNode。
-
-        取消安全：取消时显式清理所有未完成任务，原始 nodes 不被修改。
-        """
-        # 收集需要压缩的节点索引，避免迭代过程中 nodes 被修改
-        compress_indices: list[int] = []
-        for idx, node in enumerate(nodes):
-            if self.tokenizer.count_tokens(node.text) > max_tokens:
-                compress_indices.append(idx)
-
-        if not compress_indices:
-            return nodes
-
-        # 并发执行所有压缩任务
-        tasks = [
-            asyncio.create_task(
-                self._run_single_summary(text=nodes[idx].text, max_tokens=max_tokens)
-            )
-            for idx in compress_indices
-        ]
-
-        # 收集结果，取消时显式清理孤儿 task
-        compressed_texts: list[str] = []
-        try:
-            compressed_texts = await asyncio.gather(*tasks)
-        except asyncio.CancelledError:
-            # CancelledError 从 gather 直接传播，tasks 已被取消，无需二次 gather
-            for t in tasks:
-                t.cancel()
-            raise
-        except Exception:
-            # 非取消异常（如 LLM 调用失败）：清理已创建的任务
-            for t in tasks:
-                if not t.done():
-                    t.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            raise
-
-        # 所有任务成功：一次性替换节点（原子性，避免部分修改）
-        # 先浅拷贝输入列表，再在新列表上替换，保持输入列表不被修改。
-        result_nodes = list(nodes)
-        for i, idx in enumerate(compress_indices):
-            text = compressed_texts[i]
-            # LLM 输出可能略微超出 max_tokens，截断兜底保证不超限
-            if self.tokenizer.count_tokens(text) > max_tokens:
-                logger.warning(
-                    "LLM摘要后仍超限 | 摘要tokens=%d | max=%d | 截断兜底",
-                    self.tokenizer.count_tokens(text),
-                    max_tokens,
-                )
-                text = self.truncate_by_token(text, max_tokens)
-            new_node = copy.deepcopy(nodes[idx])
-            new_node.text = text
-            result_nodes[idx] = new_node
-        return result_nodes
-
-    # ── 取消说明 ────────────────────────────────────────────────────────
-    # 取消由上层 RagChoreographer 通过 asyncio.CancelledError 统一处理，
-    # compress_nodes / run_summary 中的 await 点被自然中断，
-    # 压缩结果直接丢弃，无需任何清理或恢复操作。
 
     def truncate_by_token(self, text: str, max_tokens: int) -> str:
         """按 token 数硬截断文本。"""
@@ -129,23 +90,35 @@ class SummaryService:
 
     # ── 私有：摘要实现 ────────────────────────────────────────────────
 
+    def _build_system_prompt(self, max_tokens: int) -> str:
+        return self.config.system_prompt_template.replace(
+            "{max_tokens}", str(max_tokens), 1
+        )
+
+    def _build_messages(self, text: str, max_tokens: int) -> list[dict[str, str]]:
+        return [
+            {"role": "system", "content": self._build_system_prompt(max_tokens)},
+            {"role": "user", "content": text},
+        ]
+
     async def _run_single_summary(self, text: str, max_tokens: int) -> str:
         """单段摘要，带容错降级。"""
-        prompt = self.config.prompt_template.replace(
-            "{max_tokens}", str(max_tokens), 1
-        ).replace("{content}", text, 1)
+        messages = self._build_messages(text, max_tokens)
         # max_tokens 为通用输出上限键，由推理层按引擎翻译（vLLM 直用 / Ollama → num_predict）。
         # 目标值覆盖角色默认值，保证摘要长度受调用方控制。
         try:
             return await self.summary_inference.generate(
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 options={"max_tokens": max_tokens},
             )
         except asyncio.CancelledError:
             logger.warning("_run_single_summary | 摘要生成被取消")
             raise
         except Exception as e:
-            logger.warning(f"摘要生成失败，降级到硬截断 | error={e}")
+            if isinstance(e, ContextWindowExceededError):
+                logger.warning("摘要后端返回上下文超限，直接硬截断")
+            else:
+                logger.warning(f"摘要生成失败，降级到硬截断 | error={e}")
             return self.truncate_by_token(text, max_tokens)
 
     async def _run_segmented_summary(
@@ -166,6 +139,8 @@ class SummaryService:
 
         summaries: list[str] = []
         for i, r in enumerate(results):
+            if isinstance(r, asyncio.CancelledError):
+                raise r
             if isinstance(r, Exception):
                 logger.warning(f"第{i + 1}/{len(segments)}段摘要失败，跳过: {r}")
                 continue

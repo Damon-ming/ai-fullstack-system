@@ -1,6 +1,4 @@
-input_max_ratio: 0.6  # 摘要输入最多占摘要模型上下文窗口的比例
-prompt_template: |
+context_margin_ratio: 0.02  # 按估算的完整提示词 token 数预留 2% 余量
+system_prompt_template: |
   你是文本摘要助手，精简下面文档内容，保留全部关键数据、结论、条款，不要冗余描述。
   摘要控制在{max_tokens}token以内，直接输出摘要，不要多余解释：
-  文档内容：
-  {content}

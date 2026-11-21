@@ -5,11 +5,12 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 from src.com.damon.ming.ai.inference.base_inference import (
     STREAM_TYPE_CONTENT,
     STREAM_TYPE_REASONING,
     BaseInferenceService,
+    ContextWindowExceededError,
     InferenceParams,
     StreamToken,
     register_engine,
@@ -70,8 +71,15 @@ class VLLMInference(BaseInferenceService):
             "chat_template_kwargs": {"enable_thinking": reason}
         }
 
-        # 无重试：异常直接抛给上层，由前端自行重试请求
-        resp = await self.client.chat.completions.create(**create_kwargs)
+        try:
+            resp = await self.client.chat.completions.create(**create_kwargs)
+        except BadRequestError as exc:
+            if (
+                exc.code == "context_length_exceeded"
+                or "this model's maximum context length is" in str(exc).lower()
+            ):
+                raise ContextWindowExceededError(str(exc)) from exc
+            raise
         return resp.choices[0].message.content
 
     @asynccontextmanager
