@@ -9,7 +9,8 @@ scripts/download-models.py —— 一键下载所有 AI 模型（Python 版，�
     python scripts/download-models.py --rerank       # 仅 Rerank 模型
 
 环境变量：
-    MODELS_DIR    模型根目录（默认 /root/damon/models，Windows 自动检测为 C:\\models）
+    MODELS_DIR    模型根目录（可选覆盖，默认读取项目根目录 .env 的 DATA_DIR/models）
+    DATA_DIR      宿主机数据根目录；未导出时从项目根目录 .env 读取
     HF_ENDPOINT   镜像站（默认 https://hf-mirror.com）
 """
 
@@ -64,11 +65,44 @@ RERANK_MODELS = [
 
 
 def get_models_dir() -> Path:
-    """获取模型根目录。"""
-    default = "/root/damon/models"
-    if sys.platform == "win32":
-        default = "C:\\models"
-    return Path(os.environ.get("MODELS_DIR", default))
+    """获取宿主机模型目录，默认与 Compose 的 DATA_DIR/models 挂载源一致。"""
+    models_dir = os.environ.get("MODELS_DIR")
+    if models_dir and models_dir.strip():
+        return Path(models_dir).expanduser()
+
+    data_dir = os.environ.get("DATA_DIR") or _read_project_env("DATA_DIR")
+    if not data_dir:
+        raise ValueError(
+            "未找到 DATA_DIR。请在项目根目录 .env 中配置 DATA_DIR，"
+            "或设置 MODELS_DIR 覆盖模型下载目录。"
+        )
+
+    path = Path(data_dir).expanduser()
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[1] / path
+    return path / "models"
+
+
+def _read_project_env(name: str) -> str | None:
+    """读取项目根目录 .env 中的简单 KEY=VALUE 配置。"""
+    env_file = Path(__file__).resolve().parents[1] / ".env"
+    if not env_file.is_file():
+        return None
+
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        if key.strip() != name:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        else:
+            value = value.split(" #", 1)[0].strip()
+        return value or None
+    return None
 
 
 def get_hf_endpoint() -> str:

@@ -9,14 +9,59 @@
 #   bash scripts/download-models.sh --rerank         # 仅 Rerank 模型
 #
 # 环境变量：
-#   MODELS_DIR   模型根目录（默认 /root/damon/models）
+#   MODELS_DIR   模型根目录（可选覆盖，默认读取项目根目录 .env 的 DATA_DIR/models）
+#   DATA_DIR     宿主机数据根目录；未导出时从项目根目录 .env 读取
 #   HF_ENDPOINT  镜像站（默认 https://hf-mirror.com，国内加速）
 # ═══════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
 # ── 配置 ──────────────────────────────────────────────────────────
-MODELS_DIR="${MODELS_DIR:-/root/damon/models}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+read_project_env() {
+    local key="$1"
+    local env_file="$PROJECT_ROOT/.env"
+    local line value
+    [[ -f "$env_file" ]] || return 1
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" =~ ^[[:space:]]*${key}[[:space:]]*= ]] || continue
+        value="${line#*=}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+            value="${value:1:${#value}-2}"
+        elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+            value="${value:1:${#value}-2}"
+        else
+            value="${value%%#*}"
+            value="${value%"${value##*[![:space:]]}"}"
+        fi
+        printf '%s' "$value"
+        return 0
+    done < "$env_file"
+    return 1
+}
+
+if [[ -z "${MODELS_DIR:-}" ]]; then
+    DATA_DIR_VALUE="${DATA_DIR:-}"
+    if [[ -z "$DATA_DIR_VALUE" ]]; then
+        DATA_DIR_VALUE="$(read_project_env DATA_DIR || true)"
+    fi
+    if [[ -z "$DATA_DIR_VALUE" ]]; then
+        printf '%s\n' \
+            "[ERROR] 未找到 DATA_DIR。请在项目根目录 .env 中配置 DATA_DIR，或设置 MODELS_DIR 覆盖模型下载目录。" \
+            >&2
+        exit 1
+    fi
+    if [[ "$DATA_DIR_VALUE" != /* && ! "$DATA_DIR_VALUE" =~ ^[A-Za-z]:[/\\] ]]; then
+        DATA_DIR_VALUE="$PROJECT_ROOT/$DATA_DIR_VALUE"
+    fi
+    MODELS_DIR="$DATA_DIR_VALUE/models"
+fi
 HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 HF_CLI="huggingface-cli"
 
@@ -125,7 +170,7 @@ create_directories() {
 # ── 磁盘空间检查 ──────────────────────────────────────────────────
 check_disk_space() {
     local available_gb
-    available_gb=$(df -BG "$MODEMS_DIR" 2>/dev/null | awk 'NR==2 {print $4+0}' || echo "0")
+    available_gb=$(df -BG "$MODELS_DIR" 2>/dev/null | awk 'NR==2 {print $4+0}' || echo "0")
     # 全部模型约需 80-100GB
     log_info "模型根目录: $MODELS_DIR"
     if command -v df &>/dev/null; then

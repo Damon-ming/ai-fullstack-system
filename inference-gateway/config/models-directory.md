@@ -1,17 +1,17 @@
 # inference-gateway/config/models-directory.md
-# 模型目录结构 —— 所有 AI 模型统一在 /root/damon/models/ 下
+# 模型目录结构 —— 宿主机模型文件统一在 DATA_DIR/models/ 下
 #
-# Docker 挂载: /root/damon/models → /models（所有容器统一入口）
+# Docker 挂载: ${DATA_DIR}/models → ${MODEL_ROOT_DIR}
 #
 # 首次部署前在宿主机执行以下命令创建目录结构：
 #
-#   mkdir -p /root/damon/models/inference
-#   mkdir -p /root/damon/models/embedding
-#   mkdir -p /root/damon/models/rerank
+#   mkdir -p <DATA_DIR>/models/inference
+#   mkdir -p <DATA_DIR>/models/embedding
+#   mkdir -p <DATA_DIR>/models/rerank
 #
 # 目录结构：
-# /root/damon/models/
-# ├── inference/              ← vLLM / Ollama 推理模型（GGUF 或 HF 格式）
+# <DATA_DIR>/models/
+# ├── inference/              ← vLLM 推理模型（HuggingFace 格式）
 # │   ├── Qwen2.5-7B-Instruct/
 # │   ├── Qwen2.5-0.5B-Instruct/
 # │   ├── Qwen2.5-1.8B-Instruct/
@@ -24,7 +24,7 @@
 #     └── bge-reranker-v2-m3/
 #
 # 下载方式：
-#   - vLLM 模型: 手动下载或 hf-cli 下载到 /root/damon/models/inference/
-#   - Ollama 模型: ollama pull 命令（存储在 /root/damon/ollama/.ollama/，独立挂载）
-#   - Embedding: 首次启动自动从 HF Hub 下载到 /models/embedding/
-#   - Rerank: 手动下载到 /root/damon/models/rerank/
+#   - vLLM 模型: 手动下载或 hf-cli 下载到 <DATA_DIR>/models/inference/
+#   - Ollama 模型: ollama pull 命令（存储在 ${DATA_DIR}/ollama/.ollama/，独立挂载）
+#   - Embedding: 首次启动自动从 HF Hub 下载到 ${MODEL_ROOT_DIR}/embedding/
+#   - Rerank: 手动下载到 <DATA_DIR>/models/rerank/

@@ -21,13 +21,13 @@ services:
     expose:
       - "8000"
     volumes:
-      - ${DATA_DIR}/models:/models
+      - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen2.5-0.5B-Instruct
+      --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-0.5B-Instruct
       --served-model-name qwen2.5-0.5B-instruct
       --trust-remote-code
       --gpu-memory-utilization 0.3
@@ -50,13 +50,13 @@ services:
   #   expose:
   #     - "8000"
   #   volumes:
-  #     - ${DATA_DIR}/models:/models
+  #     - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
   #   runtime: nvidia
   #   environment:
   #     NVIDIA_VISIBLE_DEVICES: all
   #   command: >
   #     --host 0.0.0.0 --port 8000
-  #     --model /models/inference/Qwen2.5-0.5B-Instruct
+  #     --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-0.5B-Instruct
   #     --served-model-name qwen2.5-0.5B-instruct
   #     --trust-remote-code
   #     --gpu-memory-utilization 0.3
@@ -78,13 +78,13 @@ services:
   #   expose:
   #     - "8000"
   #   volumes:
-  #     - ${DATA_DIR}/models:/models
+  #     - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
   #   runtime: nvidia
   #   environment:
   #     NVIDIA_VISIBLE_DEVICES: all
   #   command: >
   #     --host 0.0.0.0 --port 8000
-  #     --model /models/inference/Qwen2.5-1.8B-Instruct
+  #     --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-1.8B-Instruct
   #     --served-model-name qwen2.5-1.8B-instruct
   #     --trust-remote-code
   #     --gpu-memory-utilization 0.4
@@ -106,13 +106,13 @@ services:
     expose:
       - "8000"
     volumes:
-      - ${DATA_DIR}/models:/models
+      - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen2.5-0.5B-Instruct
+      --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-0.5B-Instruct
       --served-model-name qwen2.5-0.5B-instruct
       --trust-remote-code
       --gpu-memory-utilization 0.3
@@ -134,13 +134,13 @@ services:
     expose:
       - "8000"
     volumes:
-      - ${DATA_DIR}/models:/models
+      - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
     runtime: nvidia
     environment:
       NVIDIA_VISIBLE_DEVICES: all
     command: >
       --host 0.0.0.0 --port 8000
-      --model /models/inference/Qwen2.5-0.5B-Instruct
+      --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-0.5B-Instruct
       --served-model-name qwen2.5-0.5B-instruct
       --trust-remote-code
       --gpu-memory-utilization 0.3

@@ -42,14 +42,14 @@ services:
       dockerfile: Dockerfile
       args:
         SERVER_BUILD_ENV: ${SERVER_BUILD_ENV:-0}
-    container_name: app-server
+    container_name: ${APP_NAME}
     restart: always
     expose:
       - "8000"
     volumes:
-      - ${DATA_DIR}/logs/app-server:/app-server/logs
-      - ${DATA_DIR}/chroma:/app-server/chroma
-      - ${DATA_DIR}/corpus:/app-server/corpus
+      - ${DATA_DIR}/logs/${APP_NAME}:/${APP_NAME}/logs
+      - ${DATA_DIR}/chroma:/${APP_NAME}/chroma
+      - ${DATA_DIR}/corpus:/${APP_NAME}/corpus
       - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -83,5 +83,5 @@ services:
       inference-gateway:
         condition: service_healthy
     command: >
-      sh -c "mkdir -p /app-server/logs \
-        && python3 -m src.com.damon.ming.main > /app-server/logs/app.log 2>&1"
+      sh -c "mkdir -p /${APP_NAME}/logs \
+        && python3 -m src.com.damon.ming.main > /${APP_NAME}/logs/app.log 2>&1"
