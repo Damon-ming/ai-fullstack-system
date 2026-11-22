@@ -44,6 +44,7 @@ from ..tokenizer.base_tokenizer import BaseTokenizer
 from .table_splitter import TableAwareSplitter
 
 _MARKDOWN_HEADING_RE = re.compile(r"(?m)^ {0,3}#{1,6}[ \t]+\S")
+_UNKNOWN_VALUE = "unknown"
 # 显式分组及无标题页面按较小单元重建；自然标题章节保留更多上下文。
 _MAX_GROUPED_CHUNKS_PER_SECTION = 2
 _MAX_HEADED_CHUNKS_PER_SECTION = 5
@@ -195,8 +196,8 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         if not doc_text:
             return doc_nodes
 
-        file_sha256 = doc.metadata.get(FILE_SHA256, "unknown")
-        file_name = doc.metadata.get(FILE_NAME, "unknown")
+        file_sha256 = doc.metadata.get(FILE_SHA256, _UNKNOWN_VALUE)
+        file_name = doc.metadata.get(FILE_NAME, _UNKNOWN_VALUE)
         section_group = doc.metadata.get(SECTION_GROUP)
         doc_total_len = len(doc_text)
 
@@ -435,7 +436,7 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
             except Exception:
                 self.logger.exception(
                     f"[Splitter] 处理文档失败 | "
-                    f"file={doc.metadata.get(FILE_NAME, 'unknown')}",
+                    f"file={doc.metadata.get(FILE_NAME, _UNKNOWN_VALUE)}",
                 )
                 raise
 
