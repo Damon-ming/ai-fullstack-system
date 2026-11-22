@@ -9,11 +9,12 @@ rerank/ 模块通过 RerankerParams 数据类接收参数，不感知配置来�
 
 用法：
   loader = RerankerConfigLoader()
-  rerankers = loader.load_all()          # dict[str, BaseReranker]
+  rerankers = loader.load_all(model_root_dir)  # dict[str, BaseReranker]
   rerankers["zh_primary"].rerank(...)
 """
 
 import os
+from pathlib import Path
 
 from src.com.damon.ming.ai.rag.rerank import resolve_reranker
 from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker, RerankerParams
@@ -33,7 +34,7 @@ class RerankerConfigLoader:
             config_path if config_path is not None else os.path.dirname(__file__)
         )
 
-    def load_all(self) -> dict[str, BaseReranker]:
+    def load_all(self, model_root_dir: Path) -> dict[str, BaseReranker]:
         """一次性加载 YAML 中所有配置的重排器实例。
 
         Returns:
@@ -43,10 +44,10 @@ class RerankerConfigLoader:
             return self._cache  # type: ignore[return-value]
 
         for name in self._list_names():
-            self._cache[name] = self._build_one(name)
+            self._cache[name] = self._build_one(name, model_root_dir)
         return self._cache  # type: ignore[return-value]
 
-    def load(self, name: str) -> BaseReranker:
+    def load(self, name: str, model_root_dir: Path) -> BaseReranker:
         """加载指定名称的重排器，未缓存则构建。
 
         Args:
@@ -58,7 +59,7 @@ class RerankerConfigLoader:
         if name in self._cache:
             return self._cache[name]  # type: ignore[return-value]
 
-        instance = self._build_one(name)
+        instance = self._build_one(name, model_root_dir)
         self._cache[name] = instance
         return instance
 
@@ -70,9 +71,12 @@ class RerankerConfigLoader:
             raise ValueError("配置文件格式错误：缺少 'rerankers' 根节点")
         return list(raw_cfg["rerankers"].keys())
 
-    def _build_one(self, name: str) -> BaseReranker:
+    def _build_one(self, name: str, model_root_dir: Path) -> BaseReranker:
         raw = self._read_yaml(name)
         params_raw = raw.get("params", {})
+        model_path = Path(params_raw["model_name"])
+        if not model_path.is_absolute():
+            params_raw["model_name"] = str(model_root_dir / "rerank" / model_path)
 
         known_fields = {f.name for f in RerankerParams.__dataclass_fields__.values()}
         base_kwargs = {k: v for k, v in params_raw.items() if k in known_fields}

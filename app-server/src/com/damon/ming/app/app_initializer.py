@@ -98,6 +98,7 @@ class AppInitializer:
                 rag_sem=self.rag_sem,
                 execution_timeout_seconds=self.execution_timeout_seconds,
                 retry_ms=self.rag_retry_ms,
+                model_root_dir=self.model_root_dir,
                 locales=self.rag_locales,
                 choreographer=self.rag_choreographer,
             ),
@@ -409,6 +410,7 @@ class AppInitializer:
         self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
         self.execution_timeout_seconds = rag.execution_timeout_seconds
         self.rag_retry_ms = rag.retry_ms
+        self.model_root_dir = rag.model_root_dir
         # 多 locale 文本配置：locale → LocaleConfig
         self.rag_locales = rag.locales
 
@@ -429,6 +431,7 @@ class AppInitializer:
         self.rag_choreographer = get_rag_choreographer(
             pools=get_rag_pool_group(),
             corpus_dir=self.system_config.corpus_dir,
+            model_root_dir=self.model_root_dir,
             inference_gateway=self.inference_gateway,
         )
 

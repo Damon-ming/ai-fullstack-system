@@ -56,6 +56,7 @@ _rag_choreographer_lock = threading.Lock()
 def get_rag_choreographer(
     pools: ThreadPoolGroup,
     corpus_dir: str,
+    model_root_dir: str,
     inference_gateway: InferenceGateway,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
@@ -63,6 +64,7 @@ def get_rag_choreographer(
     Args:
         pools: 仅限 RAG 资源组的线程池能力，由 AppInitializer 注入。
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
+        model_root_dir: 本地模型统一目录（由 RagRuntime 环境配置注入）。
         inference_gateway: 启动时装配的统一推理入口（必填）。
     """
     global _rag_choreographer_instance
@@ -72,6 +74,7 @@ def get_rag_choreographer(
                 _rag_choreographer_instance = RagChoreographer(
                     pools=pools,
                     corpus_dir=corpus_dir,
+                    model_root_dir=model_root_dir,
                     inference_gateway=inference_gateway,
                 )
     return _rag_choreographer_instance
@@ -83,6 +86,7 @@ class RagChoreographer:
         self,
         pools: ThreadPoolGroup,
         corpus_dir: str = "",
+        model_root_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
     ):
         logger.info("RAG 容器初始化开始")
@@ -92,6 +96,10 @@ class RagChoreographer:
             raise ValueError("RagChoreographer 初始化失败：corpus_dir 不能为空")
         corpus_path = Path(corpus_dir)
 
+        if not model_root_dir:
+            raise ValueError("RagChoreographer 初始化失败：model_root_dir 不能为空")
+        model_root_path = Path(model_root_dir)
+
         if inference_gateway is None:
             raise ValueError("RagChoreographer 初始化失败：inference_gateway 不能为空")
 
@@ -99,7 +107,9 @@ class RagChoreographer:
         self.thread_pools.initialize(pools)
 
         # 步骤1：初始化当前 RAG 使用的 embedding 引擎
-        self.embedding_manager = create_embedders(EmbeddingEngine.HUGGINGFACE)
+        self.embedding_manager = create_embedders(
+            EmbeddingEngine.HUGGINGFACE, model_root_path
+        )
         self.embedder: BaseEmbeddingService = self.embedding_manager.get_embedding()
 
         # 步骤2：加载通用 tokenizer，并注入 embedding 模型实际使用的 tokenizer
@@ -127,7 +137,7 @@ class RagChoreographer:
         )
 
         # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）
-        self.reranker_manager = create_rerankers()
+        self.reranker_manager = create_rerankers(model_root_path)
         self.primary_reranker: BaseReranker = self.reranker_manager.get_zh_primary()
 
         # 步骤6：BM25 索引由知识库和稀疏检索器共享。

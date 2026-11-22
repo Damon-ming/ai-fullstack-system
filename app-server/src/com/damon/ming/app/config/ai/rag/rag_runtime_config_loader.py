@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+from src.com.damon.ming.app.config.env import get_model_root_dir
 from src.com.damon.ming.app.config.i18n.i18n_config_loader import I18nConfigLoader
 from src.com.damon.ming.utils.yaml_loader import load_yaml
 
@@ -33,6 +34,7 @@ class RagConfig:
     execution_timeout_seconds: float  # 检索、上下文构造和主推理预算（秒），不含护栏
     rag_max_concurrency: int
     retry_ms: int
+    model_root_dir: str
     locales: dict[str, LocaleConfig]
 
 
@@ -94,6 +96,7 @@ class RagConfigLoader:
                     "rag.retry_ms",
                     minimum=0,
                 ),
+                model_root_dir=get_model_root_dir(),
                 locales=self._load_rag_locales(rag.get("locales")),
             )
         except KeyError as e:

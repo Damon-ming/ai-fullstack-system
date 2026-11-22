@@ -14,6 +14,7 @@ RagTool 选择引擎后，本加载器合并 common 与对应引擎配置并构�
 """
 
 import os
+from pathlib import Path
 
 from src.com.damon.ming.ai.rag.embedding import resolve_embedding
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
@@ -37,7 +38,9 @@ class EmbeddingConfigLoader:
             config_path if config_path is not None else os.path.dirname(__file__)
         )
 
-    def load(self, engine: EmbeddingEngine) -> BaseEmbeddingService:
+    def load(
+        self, engine: EmbeddingEngine, model_root_dir: Path
+    ) -> BaseEmbeddingService:
         """加载指定引擎的 embedding 实例，未缓存则构建。
 
         Args:
@@ -50,17 +53,19 @@ class EmbeddingConfigLoader:
         if engine_name in self._cache:
             return self._cache[engine_name]  # type: ignore[return-value]
 
-        instance = self._build_one(engine_name)
+        instance = self._build_one(engine_name, model_root_dir)
         self._cache[engine_name] = instance
         return instance
 
     # ---- 私有 -------------------------------------------------------------
 
-    def _build_one(self, engine: str) -> BaseEmbeddingService:
+    def _build_one(self, engine: str, model_root_dir: Path) -> BaseEmbeddingService:
         raw = self._read_yaml(engine)
         model_name = raw.pop("model_name", None)
         if not isinstance(model_name, str) or not model_name.strip():
             raise ValueError(f"Embedding 引擎 {engine} 缺少有效的 model_name")
+        if engine == EmbeddingEngine.HUGGINGFACE.value:
+            raw["cache_folder"] = str(model_root_dir / "embedding")
         params = EmbeddingParams(model_name=model_name, extra=raw)
 
         embed_class = resolve_embedding(engine)

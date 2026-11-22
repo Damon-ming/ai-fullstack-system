@@ -14,6 +14,8 @@
 引擎注册表由各实现类通过 @register_reranker 自动注册。
 """
 
+from pathlib import Path
+
 from src.com.damon.ming.ai.rag.rerank.base_reranker import (
     BaseReranker,
     RerankerParams,
@@ -52,12 +54,12 @@ def list_engines() -> list[str]:
 from src.com.damon.ming.ai.rag.rerank.cross_encoder_reranker import CrossEncoderReranker
 
 
-def create_rerankers():
+def create_rerankers(model_root_dir: Path):
     """初始化并返回已加载的重排模型集合。"""
     from src.com.damon.ming.ai.rag.rerank.manager import RagRerankers
 
     manager = RagRerankers()
-    manager.initialize()
+    manager.initialize(model_root_dir)
     return manager
 
 

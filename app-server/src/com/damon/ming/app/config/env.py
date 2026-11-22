@@ -14,6 +14,7 @@
 import ipaddress
 import json
 import os
+from pathlib import Path
 
 # ── 变量名（集中定义，唯一出处）────────────────────────────────────────
 _VAR_MASTER_KEY = "MASTER_KEY"
@@ -26,6 +27,7 @@ _VAR_INFERENCE_GATEWAY_URL = "INFERENCE_GATEWAY_URL"
 _VAR_INFERENCE_API_KEYS = "INFERENCE_API_KEYS"
 _VAR_INFERENCE_API_KEY_PREFIX = "INFERENCE_API_KEY_"
 _VAR_TRUSTED_PROXY_CIDRS = "TRUSTED_PROXY_CIDRS"
+_VAR_MODEL_ROOT_DIR = "MODEL_ROOT_DIR"
 
 # APP_ENV 取值
 ENV_DEBUG = "debug"
@@ -60,6 +62,14 @@ def get_log_level() -> str:
     默认 INFO，已归一化为大写。未知值由调用方（log 模块）回退处理。
     """
     return os.environ.get(_VAR_LOG_LEVEL, DEFAULT_LOG_LEVEL).upper()
+
+
+def get_model_root_dir() -> str:
+    """本地 AI 模型统一存储根目录（必填）。"""
+    value = os.environ.get(_VAR_MODEL_ROOT_DIR)
+    if value is None or not value.strip():
+        raise ValueError(f"环境变量 {_VAR_MODEL_ROOT_DIR} 不能为空")
+    return str(Path(value).expanduser().resolve())
 
 
 def get_trusted_proxy_networks() -> tuple[

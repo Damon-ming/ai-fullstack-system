@@ -11,6 +11,8 @@ Embedding 服务抽象层 —— 纯技术模块。
 配置加载见 embedding/config/，由本模块的 manager 负责装配。
 """
 
+from pathlib import Path
+
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
     EmbeddingParams,
@@ -56,19 +58,19 @@ from src.com.damon.ming.ai.rag.embedding.huggingface import HuggingFaceEmbedding
 from src.com.damon.ming.ai.rag.embedding.ollama import OllamaEmbedding
 
 
-def create_embedders(engine: EmbeddingEngine):
+def create_embedders(engine: EmbeddingEngine, model_root_dir: Path):
     """初始化调用方选定的 embedding 引擎。"""
     from src.com.damon.ming.ai.rag.embedding.manager import RagEmbedders
 
     manager = RagEmbedders()
-    manager.initialize(engine)
+    manager.initialize(engine, model_root_dir)
     return manager
 
 
 __all__ = [
     "BaseEmbeddingService",
-    "EmbeddingParams",
     "EmbeddingEngine",
+    "EmbeddingParams",
     "HuggingFaceEmbedding",
     "OllamaEmbedding",
     "create_embedders",

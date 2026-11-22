@@ -13,8 +13,6 @@ huggingface:
     concurrency: 2              # 本地 GPU 推理并发上限
     device: cpu                 # cpu 或 cuda（本机有 GPU 时改为 cuda）
     normalize_embeddings: true
-    # TODO: 后续从 .env 注入，避免不同部署环境维护缓存路径。
-    cache_folder: /models/embedding    # HF Hub 下载缓存目录
 
 # Ollama 是可选引擎；启用时由 RagTool 选择 ollama，并填写服务地址和模型名。
 ollama:
