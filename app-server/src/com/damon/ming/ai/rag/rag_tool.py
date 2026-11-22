@@ -27,7 +27,7 @@ from pathlib import Path
 
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
 from src.com.damon.ming.ai.rag.constructor.constructor import SectionReconstructor
-from src.com.damon.ming.ai.rag.embedding import create_embedders
+from src.com.damon.ming.ai.rag.embedding import EmbeddingEngine, create_embedders
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
@@ -98,9 +98,9 @@ class RagChoreographer:
         self.thread_pools = RagThreadPools()
         self.thread_pools.initialize(pools)
 
-        # 步骤1：加载 embedding，供 tokenizer manager 包装其模型 tokenizer
-        self.embedding_manager = create_embedders()
-        self.embedder: BaseEmbeddingService = self.embedding_manager.get_huggingface()
+        # 步骤1：初始化当前 RAG 使用的 embedding 引擎
+        self.embedding_manager = create_embedders(EmbeddingEngine.HUGGINGFACE)
+        self.embedder: BaseEmbeddingService = self.embedding_manager.get_embedding()
 
         # 步骤2：加载通用 tokenizer，并注入 embedding 模型实际使用的 tokenizer
         self.tokenizer_manager = create_tokenizers(

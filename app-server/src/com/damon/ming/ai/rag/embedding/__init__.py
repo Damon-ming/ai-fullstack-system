@@ -15,6 +15,7 @@ from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
     EmbeddingParams,
 )
+from src.com.damon.ming.ai.rag.embedding.embedding_engine import EmbeddingEngine
 
 # ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 _name_to_class: dict[str, type] = {}
@@ -55,18 +56,19 @@ from src.com.damon.ming.ai.rag.embedding.huggingface import HuggingFaceEmbedding
 from src.com.damon.ming.ai.rag.embedding.ollama import OllamaEmbedding
 
 
-def create_embedders():
-    """初始化并返回已加载的 embedding 模型集合。"""
+def create_embedders(engine: EmbeddingEngine):
+    """初始化调用方选定的 embedding 引擎。"""
     from src.com.damon.ming.ai.rag.embedding.manager import RagEmbedders
 
     manager = RagEmbedders()
-    manager.initialize()
+    manager.initialize(engine)
     return manager
 
 
 __all__ = [
     "BaseEmbeddingService",
     "EmbeddingParams",
+    "EmbeddingEngine",
     "HuggingFaceEmbedding",
     "OllamaEmbedding",
     "create_embedders",

@@ -37,10 +37,12 @@ class OllamaEmbedding(BaseEmbeddingService):
         except ImportError:
             raise ImportError("请安装 ollama: pip install ollama")
 
-        self.client = ollama.Client(host=params.base_url, timeout=params.timeout)
+        self._base_url = params.extra["base_url"]
+        self._timeout = params.extra["timeout"]
+        self.client = ollama.Client(host=self._base_url, timeout=self._timeout)
         self._cache: OrderedDict[str, list[float]] = OrderedDict()
         self._cache_lock = threading.Lock()
-        # LRU 上限（YAML embedding-config.yaml params.cache_max 透传，默认 2000 条）
+        # LRU 上限（model_config.cache_max 透传，默认 2000 条）
         self._cache_max = params.extra.get("cache_max", 2000)
         # BGE-M3 等模型要求的编码前缀（与训练分布对齐）
         self._query_prefix = params.extra.get("query_prefix", "")
@@ -53,7 +55,7 @@ class OllamaEmbedding(BaseEmbeddingService):
                 "[OllamaEmbedding] 初始化成功 | model=%s | url=%s | "
                 "query_prefix=%r | passage_prefix=%r",
                 params.model_name,
-                params.base_url,
+                self._base_url,
                 self._query_prefix,
                 self._passage_prefix,
             )
@@ -82,7 +84,7 @@ class OllamaEmbedding(BaseEmbeddingService):
         return {
             "provider": "ollama",
             "model": self.params.model_name,
-            "base_url": self.params.base_url,
+            "base_url": self._base_url,
             "dimension": None,
             "cache_size": cache_size,
             "cache_max": self._cache_max,

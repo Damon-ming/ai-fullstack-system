@@ -4,7 +4,7 @@ Embedding 服务抽象层 —— 纯技术模块。
 
 提供：
   - BaseEmbeddingService:  抽象接口
-  - EmbeddingParams:       纯数据类，参数由上层配置注入
+  - EmbeddingParams:       通用参数数据类；引擎专属参数放在 extra
 
 配置加载见 embedding/config/，由本模块的 manager 负责装配。
 
@@ -23,18 +23,9 @@ from typing import Any
 
 @dataclass(frozen=True)
 class EmbeddingParams:
-    """Embedding 参数（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
+    """Embedding 通用参数；引擎专属参数由 extra 承载。"""
 
     model_name: str
-    base_url: str
-    timeout: int
-    max_retries: int
-    device: str
-    normalize_embeddings: bool
-    cache_folder: str
-    concurrency: int
-    """本地推理并发上限（HuggingFace 等线程不安全模型的 batch 并发控制）。
-       远程服务（如 Ollama）忽略此值，仅用于线程锁粒度控制。"""
     extra: dict[str, Any] = field(default_factory=dict)
 
 

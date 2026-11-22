@@ -19,7 +19,7 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
     并发控制：
       - embed_query（单条）无锁：PyTorch no_grad 推理在单条场景下线程安全，
         锁会串行化 retrieval 池的全部并发能力。
-      - embed_documents（批量）用 threading.Semaphore(params.concurrency) 限流：
+      - embed_documents（批量）用 threading.Semaphore(concurrency) 限流：
         多个 batch 同时 GPU 推理会争抢 CUDA context，并发上限由 YAML 配置透传。
     """
 
@@ -34,17 +34,19 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
 
         self.model = SentenceTransformer(
             params.model_name,
-            device=params.device,
-            cache_folder=params.cache_folder or None,
+            device=params.extra["device"],
+            cache_folder=params.extra.get("cache_folder") or None,
         )
-        # BGE-M3 等模型要求的编码前缀（与训练分布对齐）
+        # 可选的 query/document 编码前缀；当前 BGE-M3 配置不使用前缀。
         self._query_prefix = params.extra.get("query_prefix", "")
         self._passage_prefix = params.extra.get("passage_prefix", "")
+        self._normalize_embeddings = params.extra["normalize_embeddings"]
+        concurrency = params.extra["concurrency"]
         # 批量推理并发控制（仅 batch 模式使用，单条 embed_query 无锁）
-        self._batch_sem = threading.Semaphore(params.concurrency)
+        self._batch_sem = threading.Semaphore(concurrency)
         logger.info(
             f"[HuggingFaceEmbedding] 初始化成功 | model={params.model_name} | "
-            f"device={params.device} | concurrency={params.concurrency} | "
+            f"device={params.extra['device']} | concurrency={concurrency} | "
             f"query_prefix={self._query_prefix!r} | passage_prefix={self._passage_prefix!r}"
         )
 
@@ -53,7 +55,7 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
         try:
             text = self._query_prefix + text
             embedding = self.model.encode(
-                text, normalize_embeddings=self.params.normalize_embeddings
+                text, normalize_embeddings=self._normalize_embeddings
             )
             return embedding.tolist()
         except Exception as e:
@@ -89,7 +91,7 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
             with self._batch_sem:
                 embeddings = self.model.encode(
                     texts,
-                    normalize_embeddings=self.params.normalize_embeddings,
+                    normalize_embeddings=self._normalize_embeddings,
                     show_progress_bar=False,
                 )
             return embeddings.tolist()
@@ -100,9 +102,9 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
         return {
             "provider": "huggingface",
             "model": self.params.model_name,
-            "device": self.params.device,
+            "device": self.params.extra["device"],
             "dimension": self.model.get_sentence_embedding_dimension(),
-            "normalize": self.params.normalize_embeddings,
+            "normalize": self._normalize_embeddings,
             "query_prefix": self._query_prefix,
             "passage_prefix": self._passage_prefix,
         }
