@@ -27,9 +27,8 @@ from pathlib import Path
 
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
 from src.com.damon.ming.ai.rag.constructor.constructor import SectionReconstructor
-from src.com.damon.ming.ai.rag.embedding import EmbeddingEngine, create_embedders
-from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
-    BaseEmbeddingService,
+from src.com.damon.ming.ai.rag.embedding import (
+    EmbeddingGateway,
 )
 from src.com.damon.ming.ai.rag.knowledge.bootstrap import bootstrap_knowledge_index
 from src.com.damon.ming.ai.rag.knowledge.index_service import KnowledgeIndexService
@@ -58,6 +57,7 @@ def get_rag_choreographer(
     corpus_dir: str,
     model_root_dir: str,
     inference_gateway: InferenceGateway,
+    embedding_gateway: EmbeddingGateway,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
@@ -66,6 +66,7 @@ def get_rag_choreographer(
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
         model_root_dir: 本地模型统一目录（由 RagRuntime 环境配置注入）。
         inference_gateway: 启动时装配的统一推理入口（必填）。
+        embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
     """
     global _rag_choreographer_instance
     if _rag_choreographer_instance is None:
@@ -76,6 +77,7 @@ def get_rag_choreographer(
                     corpus_dir=corpus_dir,
                     model_root_dir=model_root_dir,
                     inference_gateway=inference_gateway,
+                    embedding_gateway=embedding_gateway,
                 )
     return _rag_choreographer_instance
 
@@ -88,6 +90,7 @@ class RagChoreographer:
         corpus_dir: str = "",
         model_root_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
+        embedding_gateway: EmbeddingGateway | None = None,
     ):
         logger.info("RAG 容器初始化开始")
 
@@ -103,14 +106,15 @@ class RagChoreographer:
         if inference_gateway is None:
             raise ValueError("RagChoreographer 初始化失败：inference_gateway 不能为空")
 
+        if embedding_gateway is None:
+            raise ValueError("RagChoreographer 初始化失败：embedding_gateway 不能为空")
+
         self.thread_pools = RagThreadPools()
         self.thread_pools.initialize(pools)
 
-        # 步骤1：初始化当前 RAG 使用的 embedding 引擎
-        self.embedding_manager = create_embedders(
-            EmbeddingEngine.HUGGINGFACE, model_root_path
-        )
-        self.embedder: BaseEmbeddingService = self.embedding_manager.get_embedding()
+        # 步骤1：使用 AppInitializer 装配并注入的 embedding gateway。
+        self.embedding_gateway = embedding_gateway
+        self.embedder = self.embedding_gateway.get_bge_m3()
 
         # 步骤2：加载通用 tokenizer，并注入 embedding 模型实际使用的 tokenizer
         self.tokenizer_manager = create_tokenizers(

@@ -15,7 +15,7 @@ COPY gateway.py .
 RUN useradd -r -u 1000 gateway && chown -R gateway /gateway
 USER gateway
 
-# SECURITY: gateway.yaml 包含明文路由 key（ak_pool_*），不烘焙进镜像层。
+# SECURITY: gateway.yaml 包含明文路由 key（ak_inference_* / ak_embedding），不烘焙进镜像层。
 # 通过 docker-compose.yaml 的 bind mount 在运行时以只读方式挂载，
 # 防止 key 随镜像分发（docker push / docker save）泄露。
 # 若恢复 COPY，请先评估镜像是否会上传公共/共享仓库。

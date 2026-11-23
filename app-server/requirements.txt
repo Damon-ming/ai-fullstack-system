@@ -20,7 +20,7 @@ ollama==0.6.1
 openai==2.16.0
 tiktoken==0.12.0
 
-# ── ML / Embedding ───────────────────────────────────────────
+# ── ML / Embedding / Rerank ──────────────────────────────────
 torch==2.8.0
 transformers==4.57.1
 sentence-transformers==5.1.2

@@ -2,7 +2,6 @@
 
 import threading
 
-from src.com.damon.ming.ai.rag.embedding import register_engine
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
     EmbeddingParams,
@@ -12,7 +11,6 @@ from src.com.damon.ming.log import pin
 logger = pin("HuggingFaceEmbedding")
 
 
-@register_engine("huggingface")
 class HuggingFaceEmbedding(BaseEmbeddingService):
     """HuggingFace embedding — 适用于本地 GPU/CPU 推理的 SentenceTransformer 模型。
 

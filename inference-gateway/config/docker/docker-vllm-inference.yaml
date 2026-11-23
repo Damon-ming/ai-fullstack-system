@@ -1,0 +1,76 @@
+# inference-gateway/config/docker/docker-vllm-inference.yaml
+# vLLM 文本生成实例池 —— INFERENCE_SERVER=vllm 时启动
+#
+# 架构：app-server → inference-gateway (按 api_key 路由) → 主推理池 / 摘要池 / 护栏池
+# 路由层不感知业务语义，只认 api_key → upstream 映射。
+#
+# 新增实例：添加服务并在 gateway.yaml 添加对应 route
+#
+# 使用 vLLM 0.17.0：Qwen3Guard-Gen 要求 vLLM >=0.9.0。
+
+x-vllm-inference-common: &vllm-inference-common
+  image: vllm/vllm-openai:v0.17.0
+  restart: always
+  expose: ["8000"]
+  volumes:
+    - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
+  runtime: nvidia
+  environment:
+    NVIDIA_VISIBLE_DEVICES: all
+  networks:
+    - ai-network
+
+x-vllm-inference-healthcheck: &vllm-inference-healthcheck
+  test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+  interval: 15s
+  timeout: 10s
+  retries: 3
+
+services:
+  # ── vLLM 实例池 ──────────────────────────────────────────────────
+  # 主推理池：服务常规 inference 请求。
+  vllm-inferences-001:
+    <<: *vllm-inference-common
+    container_name: vllm-inferences-001
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-1.8B-Instruct
+      --served-model-name qwen2.5-1.8B-instruct
+      --gpu-memory-utilization 0.4
+      --max-model-len 4096
+      --api-key uk_inference_001
+    healthcheck:
+      <<: *vllm-inference-healthcheck
+      start_period: 300s
+
+  # 摘要池：与主推理池隔离，避免摘要请求占用主推理并发。
+  vllm-inferences-002:
+    <<: *vllm-inference-common
+    container_name: vllm-inferences-002
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-0.5B-Instruct
+      --served-model-name qwen2.5-0.5B-instruct
+      --gpu-memory-utilization 0.3
+      --max-model-len 2048
+      --api-key uk_inference_002
+    healthcheck:
+      <<: *vllm-inference-healthcheck
+      start_period: 120s
+
+  # 独立护栏池：专用 Qwen3Guard-Gen 模型，与主推理模型实例隔离。
+  vllm-guardrail:
+    <<: *vllm-inference-common
+    container_name: vllm-guardrail
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model ${MODEL_ROOT_DIR}/inference/Qwen3Guard-Gen-0.6B
+      --served-model-name qwen3guard-gen-0.6b
+      --max-model-len 4096
+      --gpu-memory-utilization 0.1
+      --api-key uk_guardrail
+    healthcheck:
+      <<: *vllm-inference-healthcheck
+      start_period: 180s
+
+

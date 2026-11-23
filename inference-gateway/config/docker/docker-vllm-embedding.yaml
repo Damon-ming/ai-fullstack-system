@@ -1,0 +1,32 @@
+  # ── RAG embedding 服务 ────────────────────────────────────────────
+  # BGE-M3 pooling / OpenAI-compatible /v1/embeddings
+  # 独立使用新版本，避免升级现有生成模型池造成兼容性变化。
+services:
+  vllm-embedding:
+    image: vllm/vllm-openai:v0.17.0
+    container_name: vllm-embedding
+    restart: always
+    expose:
+      - "8000"
+    volumes:
+      - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      HF_HUB_CACHE: ${MODEL_ROOT_DIR}/embedding
+    command: >
+      --host 0.0.0.0 --port 8000
+      --model BAAI/bge-m3
+      --runner pooling
+      --hf-overrides '{"architectures":["BgeM3EmbeddingModel"]}'
+      --max-model-len 8192
+      --gpu-memory-utilization ${EMBEDDING_GPU_MEMORY_UTILIZATION:-0.1}
+      --api-key uk_embedding
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    networks:
+      - ai-network

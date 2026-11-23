@@ -1,14 +1,14 @@
 # inference-gateway/config/gateway.yaml
-# 推理网关路由表 —— INFERENCE_SERVER=vllm 时使用
+# 推理与 embedding 网关路由表
 #
 # 路由层不感知业务语义，只认 api_key → upstream 映射。
 # 各 vLLM 实例只加载一个模型，路由表决定哪张"门禁卡"进哪个实例。
 #
 # SECURITY: 每个 vLLM 实例使用独立的 upstream_key，
-# 避免单密钥泄露导致全部 5 个实例沦陷（P0-4 修复）。
-# upstream_key 与 docker-vllm.yaml 中的 --api-key 一一对应。
+# 主推理、摘要、护栏和 embedding 使用独立 upstream key 与服务池。
+# upstream_key 与 docker-vllm-inference.yaml / docker-vllm-embedding.yaml 中的 --api-key 一一对应。
 #
-# SECURITY: P1-21 网关→上游全明文 HTTP（http://vllm-pool-N:8000）。
+# SECURITY: P1-21 网关→上游全明文 HTTP（http://vllm-inferences-NNN:8000）。
 # 通信限于 Docker ai-network 内部，不经过宿主机/公网网卡。
 # 当前可接受：
 #   - 上游 key 为 per-pool 独立，单 key 泄露不扩散
@@ -16,31 +16,27 @@
 #   - 攻击者拿 key 只能消耗 GPU 算力，有请求日志可追溯
 # 上公网 / 多租户场景考虑 mTLS 或服务网格（如 Istio/Linkerd）。
 #
-# INFERENCE_SERVER=vllm  → 使用本文件
-# INFERENCE_SERVER=ollama → 不使用 gateway
+# INFERENCE_SERVER=vllm  → 生成推理和 embedding 使用本文件
+# INFERENCE_SERVER=ollama → 生成推理走 Ollama；embedding 仍使用本文件
 
-# 当前最小模式：5 个角色 → 3 个 pool
-# TODO: 启用 pool-2 (Qwen2.5-0B) 和 pool-3 (Qwen2.5-1.8B) 后，将 ak_pool_002/003 改回对应 upstream
+# 当前路由：主推理、摘要、guardrail 和 embedding 各自使用独立路由。
 routes:
-  # inference 角色（原 chat）：与 app-server 的 INFERENCE_API_KEYS 映射对应
-  ak_pool_001:
-    upstream: http://vllm-pool-1:8000
-    upstream_key: uk_pool_001
+  # 主推理服务
+  ak_inference_001:
+    upstream: http://vllm-inferences-001:8000
+    upstream_key: uk_inference_001
 
-  ak_pool_002:
-    # TODO: 完整模式改回 vllm-pool-2
-    upstream: http://vllm-pool-1:8000
-    upstream_key: uk_pool_001
+  # summary 单独使用摘要 key 和摘要池
+  ak_inference_002:
+    upstream: http://vllm-inferences-002:8000
+    upstream_key: uk_inference_002
 
-  ak_pool_003:
-    # TODO: 完整模式改回 vllm-pool-3
-    upstream: http://vllm-pool-1:8000
-    upstream_key: uk_pool_001
+  # Qwen3Guard 独立模型服务
+  ak_guardrail:
+    upstream: http://vllm-guardrail:8000
+    upstream_key: uk_guardrail
 
-  ak_pool_004:
-    upstream: http://vllm-pool-4:8000
-    upstream_key: uk_pool_004
-
-  ak_pool_005:
-    upstream: http://vllm-pool-5:8000
-    upstream_key: uk_pool_005
+  # RAG embedding 独立服务，与文本生成模型池分离
+  ak_embedding:
+    upstream: http://vllm-embedding:8000
+    upstream_key: uk_embedding

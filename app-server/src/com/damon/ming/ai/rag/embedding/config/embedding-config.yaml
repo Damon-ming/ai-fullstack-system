@@ -1,22 +1,5 @@
 # app-server/src/com/damon/ming/ai/rag/embedding/config/embedding-config.yaml
-# Embedding 配置 —— 由 EmbeddingConfigLoader 读取，注入 embedding 模块。
-# embedding 模块本身不包含任何配置文件，纯参数化调用。
-#
-# RagTool 选择引擎；loader 合并 common 与对应引擎的 model_config。
+# RAG embedding 的查询与文档文本前缀。
 common:
   query_prefix: ""
   passage_prefix: ""
-
-huggingface:
-  model_config:
-    model_name: BAAI/bge-m3
-    concurrency: 2              # 本地 GPU 推理并发上限
-    device: cpu                 # cpu 或 cuda（本机有 GPU 时改为 cuda）
-    normalize_embeddings: true
-
-# Ollama 是可选引擎；启用时由 RagTool 选择 ollama，并填写服务地址和模型名。
-ollama:
-  model_config:
-    model_name: bge-m3
-    base_url: http://localhost:11434
-    timeout: 30

@@ -14,9 +14,10 @@
 #  以下仅容器内访问（expose，不映射宿主机）：
 #  8000                    app-server             8000    后端API
 #  8080                    inference-gateway      8080    网关
-#  8000×5                  vllm-pool-{1-5}        8000    推理实例
+#  8000×2                  vllm-inferences-001/002  8000 主推理和摘要实例
+#  8000                    vllm-embedding         8000    RAG embedding
 #
-# 推理后端通过 INFERENCE_SERVER 环境变量选择（唯一开关）：
+# 生成推理后端选择；embedding 固定使用独立 vLLM 服务：
 #   INFERENCE_SERVER=ollama  → 启动 Ollama 容器（默认）
 #   INFERENCE_SERVER=vllm    → 启动 vLLM 集群 + Gateway
 #
@@ -25,10 +26,10 @@
 #
 # 可直接执行的命令：
 #
-#   开发（Ollama）:
+#   开发（Ollama 推理 + vLLM embedding，需 GPU）:
 #     SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 docker compose up -d --build
 #
-#   开发（vLLM）:
+#   部署（vLLM 推理 + vLLM embedding）:
 #     SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 INFERENCE_SERVER=vllm docker compose up -d --build
 #
 #   停止:
@@ -38,12 +39,13 @@
 #   1. 新建 inference-gateway/config/docker/docker-sglang.yaml（容器编排）
 #   2. inference-gateway/config/gateway.yaml 加路由条目
 #   3. app-server/docker-compose.yaml 的 INFERENCE_API_KEYS 加映射
-#   4. app-server inference-runtime.yaml 加 roles 参数
+#   4. app-server/src/com/damon/ming/app/config/ai/inference/inference-config.yaml 加 roles 参数
 #   5. 部署时 INFERENCE_SERVER=sglang
 # ═══════════════════════════════════════════════════════════════════
 
 include:
-  - inference-gateway/config/docker/docker-${INFERENCE_SERVER:-ollama}.yaml
+  - inference-gateway/config/docker/docker-${INFERENCE_SERVER:-ollama}-inference.yaml
+  - inference-gateway/config/docker/docker-vllm-embedding.yaml
   - inference-gateway/docker-compose.yaml
   - app-server/docker-compose.yaml
   - web-app/docker-compose.yaml

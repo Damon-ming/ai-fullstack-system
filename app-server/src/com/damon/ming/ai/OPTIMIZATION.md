@@ -464,7 +464,7 @@ query："数据库连接超时时间默认是多少？"
 
 **思路**：升级为 bge-m3（1024 维，中英文双语）提升 dense recall。
 
-**结论**：**前提不成立，已完成**。当前 `embedding-config.yaml` 已是 `BAAI/bge-m3`（1024 维），并正确配置了 `query_prefix` / `passage_prefix` / `normalize_embeddings`；pgvector `embedding_dimension: 1024` 一致。全库仅此一个 embedding 引擎在用。
+**结论**：**前提不成立，已完成**。`app/config/ai/embedding/embedding-config.yaml` 配置 `BAAI/bge-m3`（1024 维）；`ai/rag/embedding/config/embedding-config.yaml` 配置 `query_prefix` / `passage_prefix`。pgvector `embedding_dimension: 1024` 一致。
 
 **剩余可挖掘方向**（非"换模型"）：
 

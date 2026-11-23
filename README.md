@@ -106,8 +106,9 @@ ai-fullstack-system/
 │   ├── config/
 │   │   ├── gateway.yaml         # 路由表
 │   │   └── docker/
-│   │       ├── docker-vllm.yaml # vLLM 实例编排
-│   │       └── docker-ollama.yaml
+│   │       ├── docker-vllm-inference.yaml # vLLM 文本生成实例
+│   │       ├── docker-vllm-embedding.yaml # vLLM embedding 实例
+│   │       └── docker-ollama-inference.yaml
 │   └── requirements.txt
 ├── web-app/                     # React 前端
 │   ├── Dockerfile
@@ -126,14 +127,15 @@ ai-fullstack-system/
 |------|---------|------|
 | Docker Engine | 20.10+ | 容器运行时 |
 | Docker Compose | v2.0+ | 编排工具（`docker compose` 非 `docker-compose`） |
-| NVIDIA Driver | 525+ | vLLM 模式需要 |
+| NVIDIA Driver | 535+（推荐 575.51+） | vLLM 0.17.0 embedding 镜像使用 CUDA 12.9 |
 | NVIDIA Container Toolkit | v1.14+ | GPU 容器调度 |
 
 ### 硬件要求（Ollama 模式）
 
 | 资源 | 最低 | 推荐 | 说明 |
 |------|------|------|------|
-| CPU | 4 核 | 8 核+ | 推理 + 检索 + 嵌入 |
+| GPU | 支持 vLLM 的 NVIDIA GPU | 按模型与并发规划显存 | embedding 固定由 vLLM 运行 |
+| CPU | 4 核 | 8 核+ | Ollama 推理 + 检索 |
 | 内存 | 8 GB | 16 GB+ | 7B 模型约需 6GB |
 | 磁盘 | 20 GB | 50 GB+ | 模型 + 知识库 + 日志 |
 
@@ -141,22 +143,23 @@ ai-fullstack-system/
 
 | 资源 | 最低 | 推荐 | 说明 |
 |------|------|------|------|
-| GPU | 1× 16GB VRAM | 5× 16GB+ VRAM | 5 个独立推理实例 |
+| GPU | 1× 16GB VRAM | 1× 24GB+ VRAM | 主推理、摘要、护栏与 embedding 共用 |
 | GPU 型号 | RTX 3090 / A4000 | A100 / H100 | 支持 CUDA + Tensor Core |
 | CPU | 8 核 | 16 核+ | 多路推理调度 |
-| 内存 | 32 GB | 64 GB+ | 5 个模型实例共享 |
-| 磁盘 | 100 GB | 200 GB+ | 5 个模型权重 + 知识库 |
+| 内存 | 16 GB | 32 GB+ | 多个 vLLM 进程共享 |
+| 磁盘 | 50 GB | 100 GB+ | 模型权重 + 知识库 |
 
 ### GPU 显存分配（vLLM 模式）
 
-| 实例 | 模型 | gpu-memory-utilization | 预估显存 |
-|------|------|----------------------|----------|
-| vllm-pool-1 | Qwen2.5-7B-Instruct | 0.7 | ~11 GB |
-| vllm-pool-2 | Qwen2.5-0.5B-Instruct | 0.3 | ~3 GB |
-| vllm-pool-3 | Qwen2.5-1.8B-Instruct | 0.4 | ~5 GB |
-| vllm-pool-4 | Qwen2.5-1.5B-Instruct | 0.4 | ~5 GB |
-| vllm-pool-5 | Qwen3Guard-Gen-4B | 0.3 | ~5 GB |
-| **合计** | | | **~29 GB** |
+| 实例 | 模型 | gpu-memory-utilization | 16 GB GPU 的配置预算 |
+|------|------|----------------------|-------------------|
+| vllm-inferences-001（主推理） | Qwen2.5-1.8B-Instruct | 0.4 | ~6.4 GB |
+| vllm-inferences-002（摘要） | Qwen2.5-0.5B-Instruct | 0.3 | ~4.8 GB |
+| vllm-guardrail | Qwen3Guard-Gen-0.6B | 0.1 | ~1.6 GB |
+| vllm-embedding | BAAI/bge-m3 | 0.1（可配置） | ~1.6 GB |
+| **合计** | | **0.9** | **~14.4 GB** |
+
+主推理、摘要、护栏和 embedding 分别使用独立 vLLM 服务。四个 vLLM 进程共用 GPU，需为驱动、CUDA context 和其他进程留出空间。embedding 服务可通过 `.env` 中的 `EMBEDDING_GPU_MEMORY_UTILIZATION` 调整。
 
 ### 宿主机目录结构
 
@@ -170,7 +173,7 @@ ${DATA_DIR}/                          # 默认 /root/damon
 │       ├── Qwen2.5-0.5B-Instruct/
 │       ├── Qwen2.5-1.8B-Instruct/
 │       ├── Qwen2.5-1.5B-Instruct/
-│       └── Qwen3Guard-Gen-4B/
+│       └── Qwen3Guard-Gen-0.6B/
 ├── chroma/                           # Chroma 向量缓存
 ├── knowledge/                       # 上传知识库文件
 └── logs/
@@ -187,7 +190,8 @@ ${DATA_DIR}/                          # 默认 /root/damon
 | web-app (serve) | nginx:alpine | — | 前端静态资源 |
 | postgres | postgres:16-alpine | — | 数据库 |
 | ollama | ollama/ollama:0.32.14 | — | Ollama 后端 |
-| vllm-{1-5} | vllm/vllm-openai:latest | — | 推理实例 |
+| vllm-inferences-001/002、vllm-guardrail | vllm/vllm-openai:v0.17.0 | — | 主推理池 / 摘要池 / 护栏池 |
+| vllm-embedding | vllm/vllm-openai:v0.17.0 | — | BGE-M3 pooling embedding |
 
 ### 健康检查
 
@@ -198,7 +202,9 @@ ${DATA_DIR}/                          # 默认 /root/damon
 | postgres | `pg_isready` | 5s | 3s | 10 | 10s |
 | app-server | `GET /ping` | 10s | 5s | 5 | 30s |
 | inference-gateway | `GET /docs` | 10s | 5s | 3 | — |
-| vllm-pool-{1-5} | `GET /health` | 15s | 10s | 3 | 120~300s |
+| vllm-inferences-001/002 | `GET /health` | 15s | 10s | 3 | 120~300s |
+| vllm-guardrail | `GET /health` | 15s | 10s | 3 | 180s |
+| vllm-embedding | `GET /health` | 15s | 10s | 3 | 300s |
 
 vLLM 实例的 `start_period` 根据模型大小设定（7B 模型 300s，小模型 120s），确保模型加载期间不被判定为不健康。
 
@@ -207,7 +213,7 @@ vLLM 实例的 `start_period` 根据模型大小设定（7B 模型 300s，小模
 ```
 postgres (healthy)
     ↓
-inference-gateway (healthy) ←── vllm-pool-{1-5} 独立启动，无 depends_on
+inference-gateway (healthy) ←── vLLM pools 独立启动，无 depends_on
     ↓
 app-server (depends_on: postgres + inference-gateway)
     ↓
@@ -234,10 +240,10 @@ git clone <repo-url> && cd ai-fullstack-system
 cp .env.example .env
 # 编辑 .env，设置 DB_PASSWORD、MASTER_KEY 等
 
-# 3. 部署（Ollama 模式，适合开发）
+# 3. 部署（Ollama 推理 + vLLM embedding，需要 GPU）
 docker compose up -d --build
 
-# 4. 或部署 vLLM 模式（生产，需要 GPU）
+# 4. 或部署 vLLM 推理与 embedding
 INFERENCE_SERVER=vllm docker compose up -d --build
 
 # 5. 查看日志
@@ -258,7 +264,7 @@ docker compose down
 以下仅容器内访问（不映射宿主机）：
 - `8000` — app-server
 - `8080` — inference-gateway
-- `8000×5` — vllm-pool-1 ~ 5
+- `8000` — vLLM inference、summary、guardrail、embedding pools（仅容器网络可访问）
 
 ## 推理后端切换
 
@@ -266,11 +272,13 @@ docker compose down
 
 | 值 | 适用场景 | 需要 GPU |
 |---|---|---|
-| `ollama`（默认） | 本地开发 / 轻量部署 | ❌ |
+| `ollama`（默认） | 本地开发 / 轻量部署 | ✅（embedding） |
 | `vllm` | 高性能生产 | ✅ |
 | `sglang` | 预留扩展 | ✅ |
 
 切换只需改 `.env` 后重新 `docker compose up -d --build`。
+
+Embedding 固定由独立的 vLLM 服务运行，并通过 inference-gateway 路由；`INFERENCE_SERVER` 只选择生成推理后端。
 
 ## API 概览
 
@@ -410,7 +418,7 @@ max_model_len ≥ system_prompt + labels + max_context_tokens + query + 模板�
 
 | 参数 | 当前值 | 配置位置 | 作用 |
 |---|---|---|---|
-| `max_model_len` | 2048 | `inference-gateway/config/docker/docker-vllm.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
+| `max_model_len` | 2048 | `inference-gateway/config/docker/docker-vllm-inference.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
 | `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/rag/rag-runtime.yaml` → `rag.roles.inference.options.max_tokens` | 主推理的**输出** token 上限 |
 | `max_context_tokens` | 512 | `app-server/src/com/damon/ming/router/rag/rag_router.py` → `MAX_CONTEXT_TOKEN_BUDGET` | RAG 检索上下文的**输入** token 上限（章节拼接 + 全局摘要后的最终值） |
 
@@ -634,7 +642,7 @@ data: {"code": 200005001, "message": "请求超时"}
 | 前端 | React 18 + TypeScript + Tailwind CSS v4 + TanStack Query |
 | 后端 | FastAPI + SQLAlchemy + Pydantic |
 | 数据库 | PostgreSQL + pgvector |
-| 检索 | BM25 + HuggingFace Embedding + Hybrid |
+| 检索 | BM25 + vLLM BGE-M3 Embedding + Hybrid |
 | 推理 | Ollama / vLLM / SGLang（可切换） |
 | 加密 | cryptography (RSA-OAEP + AES-GCM + HMAC) |
 | 部署 | Docker Compose + Nginx |

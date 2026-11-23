@@ -45,14 +45,6 @@ class InferenceGateway:
         """获取摘要模型的推理入口。"""
         return self.get("summary")
 
-    def get_intent(self) -> RoleInference:
-        """获取意图识别模型的推理入口。"""
-        return self.get("intent")
-
-    def get_rewrite(self) -> RoleInference:
-        """获取查询改写模型的推理入口。"""
-        return self.get("rewrite")
-
     def _resolve(self, role: str) -> tuple[BaseInferenceService, str, dict[str, Any]]:
         try:
             entry = self._roles[role]

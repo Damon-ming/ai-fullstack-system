@@ -6,14 +6,11 @@ Embedding 服务抽象层 —— 纯技术模块。
   - BaseEmbeddingService:  抽象接口
   - EmbeddingParams:       通用参数数据类；引擎专属参数放在 extra
 
-配置加载见 embedding/config/，由本模块的 manager 负责装配。
+Gateway 角色配置位于 app/config/ai/embedding，RAG 参数位于本模块 config/。
+后端通过 EmbeddingParams 接收装配后的参数。
 
-用法：
-  from src.com.damon.ming.ai.rag.embedding import BaseEmbeddingService, EmbeddingParams, register_engine
-
-  @register_engine("ollama")
-  class OllamaEmbedding(BaseEmbeddingService):
-      ...
+当前 RAG 使用 VllmEmbedding；HuggingFaceEmbedding 可用于本地推理，
+由 EmbeddingGateway 按角色提供具体实现。
 """
 
 from abc import ABC, abstractmethod

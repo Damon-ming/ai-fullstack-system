@@ -12,6 +12,7 @@
 """
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from src.com.damon.ming.app.config.env import get_master_key
 from src.com.damon.ming.log import pin
@@ -42,6 +43,7 @@ class AppInitializer:
         self.pool_mgr = None
         self.rag_choreographer = None
         self.inference_gateway = None
+        self.embedding_gateway = None
 
         # 上传改为逐文件同步入库，无需后台任务
 
@@ -391,7 +393,11 @@ class AppInitializer:
         import asyncio
 
         from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
+        from src.com.damon.ming.ai.rag.embedding import EmbeddingGateway
         from src.com.damon.ming.ai.rag.rag_tool import get_rag_choreographer
+        from src.com.damon.ming.app.config.ai.embedding.embedding_config_loader import (
+            EmbeddingConfigLoader,
+        )
         from src.com.damon.ming.app.config.ai.inference.inference_config_loader import (
             InferenceConfigLoader,
         )
@@ -428,18 +434,23 @@ class AppInitializer:
             asyncio.Semaphore(inference_config.max_concurrency),
         )
 
+        self.embedding_gateway = EmbeddingGateway(
+            EmbeddingConfigLoader().load(Path(self.model_root_dir))
+        )
+
         self.rag_choreographer = get_rag_choreographer(
             pools=get_rag_pool_group(),
             corpus_dir=self.system_config.corpus_dir,
             model_root_dir=self.model_root_dir,
             inference_gateway=self.inference_gateway,
+            embedding_gateway=self.embedding_gateway,
         )
 
         UploadRecoveryService.recover_startup(
             self.rag_choreographer.knowledge_index_service
         )
 
-        logger.info("RAG 容器与推理 Gateway 初始化完成")
+        logger.info("RAG 容器、推理 Gateway 与 Embedding Gateway 初始化完成")
 
 
 # ---------------------------------------------------------------------------

@@ -46,9 +46,9 @@ class InferenceConfigLoader:
     def load(self) -> InferenceConfig:
         if self._config is not None:
             return self._config
-        raw = load_yaml(self._config_dir).get("inference")
+        raw = load_yaml(self._config_dir)
         if not isinstance(raw, dict):
-            raise ValueError("推理配置缺少 inference 段")
+            raise TypeError("推理配置必须是 YAML 对象")
         try:
             timeout = raw["transport"]["timeout_seconds"]
             concurrency = raw["max_concurrency"]
@@ -60,9 +60,9 @@ class InferenceConfigLoader:
             or not math.isfinite(timeout)
             or timeout <= 0
         ):
-            raise ValueError("inference.transport.timeout_seconds 必须是有限正数")
+            raise ValueError("transport.timeout_seconds 必须是有限正数")
         if type(concurrency) is not int or concurrency < 1:
-            raise ValueError("inference.max_concurrency 必须是正整数")
+            raise ValueError("max_concurrency 必须是正整数")
         roles = self._read_roles(raw.get("roles"))
         keys = get_inference_api_keys()
         missing = [role for role in roles if role not in keys]
@@ -75,7 +75,7 @@ class InferenceConfigLoader:
         if engine_options is None:
             engine_options = {}
         if not isinstance(engine_options, dict):
-            raise TypeError("inference.engine_options 必须是键值对")
+            raise TypeError("engine_options 必须是键值对")
         engines: dict[str, BaseInferenceService] = {}
         entries: dict[str, ModelEntry] = {}
         for role, config in roles.items():
@@ -104,12 +104,12 @@ class InferenceConfigLoader:
     @staticmethod
     def _read_roles(roles: Any) -> dict[str, dict[str, Any]]:
         if not isinstance(roles, dict) or not roles:
-            raise ValueError("推理配置缺少 inference.roles 段")
+            raise ValueError("推理配置缺少 roles 段")
         cleaned = {}
         for role, params in roles.items():
             if not isinstance(params, dict):
                 raise TypeError(f"角色 '{role}' 配置格式错误")
-            path = f"inference.roles.{role}"
+            path = f"roles.{role}"
             name = params.get("model_name")
             options = params.get("options", {})
             if options is None:

@@ -14,14 +14,13 @@
 """
 
 import asyncio
+import re
 
 import httpx
 from openai import APITimeoutError
-from pydantic import BaseModel
 from src.com.damon.ming.exception.error_codes import ErrorCode
-from src.com.damon.ming.i18n import get_locale, t
+from src.com.damon.ming.i18n import t
 from src.com.damon.ming.i18n.constants import I18nKey
-from src.com.damon.ming.i18n.locale_negotiator import get_default_locale
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.router.rag.failure import chat_failure
 from src.com.damon.ming.router.rag.schemas.response import BaseLLMFailedResponse
@@ -33,9 +32,8 @@ logger = pin("chat.preflight")
 _input_validator = InputValidator()
 
 
-class _GuardrailResponse(BaseModel):
-    safe: bool
-    reason: str = ""
+_GUARDRAIL_LABEL_RE = re.compile(r"(?im)^\s*Safety:\s*(Safe|Unsafe|Controversial)\s*$")
+_GUARDRAIL_CATEGORIES_RE = re.compile(r"(?im)^[ \t]*Categories:[ \t]*([^\r\n]*)")
 
 
 def check_input(query: str) -> BaseLLMFailedResponse | None:
@@ -58,27 +56,32 @@ def check_input(query: str) -> BaseLLMFailedResponse | None:
 
 async def check_guardrail(app_state, query: str) -> BaseLLMFailedResponse | None:
     """执行护栏检测，超时返回错误，其他异常交由路由层处理。"""
-    locales = app_state.ai.rag.locales
-    locale_config = locales.get(get_locale()) or locales[get_default_locale()]
     try:
         raw = await app_state.ai.inference.gateway.get_guardrail().generate(
-            messages=[
-                {"role": "system", "content": locale_config.guardrail_prompt},
-                {"role": "user", "content": query},
-            ],
-            response_schema=_GuardrailResponse.model_json_schema(),
+            messages=[{"role": "user", "content": query}],
         )
     except asyncio.CancelledError:
         raise
     except (TimeoutError, APITimeoutError, httpx.TimeoutException):
         logger.warning("护栏检测超时，返回超时错误")
         return chat_failure(ErrorCode.CHAT.TIMEOUT, t(I18nKey.CHAT_TIMEOUT))
-    result = _GuardrailResponse.model_validate_json(raw)
 
-    if not result.safe:
-        logger.warning("护栏拦截用户输入 | reason=%s", result.reason)
+    label_match = _GUARDRAIL_LABEL_RE.search(raw)
+    if label_match is None:
+        logger.error("Qwen3Guard 返回内容缺少可识别的 Safety 标签")
+        raise ValueError("护栏模型返回格式无效")
+
+    safety_label = label_match.group(1)
+    if safety_label.casefold() != "safe":
+        categories_match = _GUARDRAIL_CATEGORIES_RE.search(raw)
+        categories = categories_match.group(1) if categories_match else "unknown"
+        logger.warning(
+            "护栏拦截用户输入 | safety=%s | categories=%s",
+            safety_label,
+            categories,
+        )
         return chat_failure(
             ErrorCode.CHAT.GUARDRAIL_BLOCKED,
-            result.reason or t(I18nKey.GUARDRAIL_BLOCKED),
+            t(I18nKey.GUARDRAIL_BLOCKED),
         )
     return None

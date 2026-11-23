@@ -1,0 +1,10 @@
+# app-server/src/com/damon/ming/app/config/ai/embedding/embedding-config.yaml
+# Embedding Gateway 超时与模型角色；网关地址从 INFERENCE_GATEWAY_URL 读取。
+transport:
+  timeout_seconds: 60
+roles:
+  bge_m3:
+    model_name: BAAI/bge-m3
+    api_key: ak_embedding
+    max_input_tokens: 8182  # BGE-M3 上限 8192，预留特殊 token 与安全余量
+    dimension: 1024

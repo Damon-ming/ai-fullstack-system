@@ -2,17 +2,17 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
-from src.com.damon.ming.ai.rag.retriever.config.retriever_config_loader import (
-    RetrieverConfig,
-)
-from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
-    BaseEmbeddingService,
+from src.com.damon.ming.ai.rag.embedding.gateway import (
+    EmbeddingGateway,
 )
 from src.com.damon.ming.ai.rag.retriever.base_retriever import (
     DenseRetriever,
     SparseRetriever,
 )
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
+from src.com.damon.ming.ai.rag.retriever.config.retriever_config_loader import (
+    RetrieverConfig,
+)
 from src.com.damon.ming.ai.rag.retriever.config_manager import RagRetrieverConfigs
 from src.com.damon.ming.ai.rag.retriever.hybrid_retriever import HybridRetriever
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
@@ -30,7 +30,7 @@ class RetrieverManager:
     def initialize(
         self,
         vector_store: BaseVectorStore,
-        embedder: BaseEmbeddingService,
+        embedder: EmbeddingGateway,
         bm25_index: BM25Index,
         retrieval_pool: ThreadPoolExecutor,
     ) -> None:

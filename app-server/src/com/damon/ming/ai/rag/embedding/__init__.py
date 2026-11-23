@@ -1,80 +1,23 @@
 # app-server/src/com/damon/ming/ai/rag/embedding/__init__.py
 """
-Embedding 服务抽象层 —— 纯技术模块。
+Embedding 服务抽象层与 vLLM、本地 HuggingFace 实现。
 
-提供：
-  - BaseEmbeddingService: 抽象接口
-  - EmbeddingParams:      纯数据类，参数由上层配置注入
-  - register_engine:      引擎注册装饰器
-  - resolve_embedding:    根据引擎名称解析实现类
-
-配置加载见 embedding/config/，由本模块的 manager 负责装配。
+Gateway 角色配置在 app/config/ai/embedding；RAG 参数在本模块 config/。
+后端装配由 AppInitializer 调用配置加载器完成。
 """
-
-from pathlib import Path
 
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
     EmbeddingParams,
 )
-from src.com.damon.ming.ai.rag.embedding.embedding_engine import EmbeddingEngine
-
-# ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
-_name_to_class: dict[str, type] = {}
-
-
-def register_engine(name: str):
-    """装饰器：将实现类注册到引擎注册表。
-
-    用法：
-        @register_engine("ollama")
-        class OllamaEmbedding(BaseEmbeddingService): ...
-    """
-
-    def decorator(cls):
-        if not issubclass(cls, BaseEmbeddingService):
-            raise TypeError(f"{cls} 必须继承 BaseEmbeddingService")
-        _name_to_class[name] = cls
-        return cls
-
-    return decorator
-
-
-def resolve_embedding(engine: str) -> type:
-    """根据引擎名称解析对应的实现类。"""
-    if engine not in _name_to_class:
-        available = list(_name_to_class.keys())
-        raise ValueError(f"未知 embedding 引擎: '{engine}'. 可用: {available}")
-    return _name_to_class[engine]
-
-
-def list_engines() -> list[str]:
-    """列出所有已注册的引擎名称"""
-    return list(_name_to_class.keys())
-
-
-# ── 触发注册（必须放在注册器定义之后）──────────────────────────────
+from src.com.damon.ming.ai.rag.embedding.gateway import EmbeddingGateway
 from src.com.damon.ming.ai.rag.embedding.huggingface import HuggingFaceEmbedding
-from src.com.damon.ming.ai.rag.embedding.ollama import OllamaEmbedding
-
-
-def create_embedders(engine: EmbeddingEngine, model_root_dir: Path):
-    """初始化调用方选定的 embedding 引擎。"""
-    from src.com.damon.ming.ai.rag.embedding.manager import RagEmbedders
-
-    manager = RagEmbedders()
-    manager.initialize(engine, model_root_dir)
-    return manager
-
+from src.com.damon.ming.ai.rag.embedding.vllm import VllmEmbedding
 
 __all__ = [
     "BaseEmbeddingService",
-    "EmbeddingEngine",
+    "EmbeddingGateway",
     "EmbeddingParams",
     "HuggingFaceEmbedding",
-    "OllamaEmbedding",
-    "create_embedders",
-    "list_engines",
-    "register_engine",
-    "resolve_embedding",
+    "VllmEmbedding",
 ]

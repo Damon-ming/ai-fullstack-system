@@ -24,7 +24,6 @@ class LocaleConfig:
     ref_label: str
     query_label: str
     system_prompt: str
-    guardrail_prompt: str
 
 
 @dataclass(frozen=True)
@@ -136,10 +135,6 @@ class RagConfigLoader:
                 )
             try:
                 locales[locale] = LocaleConfig(
-                    guardrail_prompt=self._text(
-                        section["guardrail_prompt"],
-                        f"rag.locales.{locale}.guardrail_prompt",
-                    ),
                     ref_label=self._text(
                         section["ref_label"], f"rag.locales.{locale}.ref_label"
                     ),
