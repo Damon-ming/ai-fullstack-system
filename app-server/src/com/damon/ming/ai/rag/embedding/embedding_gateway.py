@@ -12,18 +12,12 @@ from src.com.damon.ming.ai.rag.embedding.config.embedding_config_loader import (
 class EmbeddingGateway:
     """统一 embedding 入口，后端由启动配置装配。"""
 
-    def __init__(self, models: dict[str, BaseEmbeddingService]) -> None:
-        if not models:
-            raise ValueError("EmbeddingGateway 至少需要一个已装配模型")
-        self._models = dict(models)
-
-    @classmethod
-    def from_config(cls, roles: dict[str, dict]) -> "EmbeddingGateway":
-        """合并应用与业务配置后装配 embedding 后端。"""
+    def __init__(self, roles: dict[str, dict]) -> None:
+        """合并业务配置并按角色装配 embedding 引擎。"""
         from src.com.damon.ming.ai.rag.embedding.vllm_embedding import VllmEmbedding
 
         params = EmbeddingBusinessConfigLoader().load(roles)
-        return cls({role: VllmEmbedding(config) for role, config in params.items()})
+        self._models = {role: VllmEmbedding(config) for role, config in params.items()}
 
     def _resolve(self, role: str) -> BaseEmbeddingService:
         try:

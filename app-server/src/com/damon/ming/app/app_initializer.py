@@ -12,7 +12,6 @@
 """
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from src.com.damon.ming.app.config.env import get_master_key
 from src.com.damon.ming.log import pin
@@ -411,6 +410,7 @@ class AppInitializer:
 
         rag = RagConfigLoader().load().rag
         inference_config = InferenceConfigLoader().load()
+        embedding_config = EmbeddingConfigLoader().load()
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
         self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
@@ -434,10 +434,7 @@ class AppInitializer:
             asyncio.Semaphore(inference_config.max_concurrency),
         )
 
-        # TODO 需要解决路径问题
-        self.embedding_gateway = EmbeddingGateway.from_config(
-            EmbeddingConfigLoader().load(Path(self.model_root_dir))
-        )
+        self.embedding_gateway = EmbeddingGateway(embedding_config)
 
         self.rag_choreographer = get_rag_choreographer(
             pools=get_rag_pool_group(),

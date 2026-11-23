@@ -3,7 +3,10 @@
 
 from pathlib import Path
 
-from src.com.damon.ming.app.config.env import get_inference_gateway_url
+from src.com.damon.ming.app.config.env import (
+    get_embedding_tokenizer_cache_dir,
+    get_inference_gateway_url,
+)
 from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
 
@@ -14,7 +17,7 @@ class EmbeddingConfigLoader:
         directory = config_path or str(Path(__file__).resolve().parent)
         self._config_path = resolve_yaml_path(directory)
 
-    def load(self, model_root_dir: Path) -> dict[str, dict]:
+    def load(self) -> dict[str, dict]:
         """按角色名返回经过校验的模型配置。"""
         raw = load_yaml(self._config_path)
         if not isinstance(raw, dict):
@@ -27,6 +30,7 @@ class EmbeddingConfigLoader:
             raise ValueError("Embedding Gateway 配置缺少 roles")
 
         base_url = get_inference_gateway_url()
+        cache_folder = get_embedding_tokenizer_cache_dir()
         loaded: dict[str, dict] = {}
         for role, entry in roles.items():
             if not isinstance(entry, dict):
@@ -60,7 +64,7 @@ class EmbeddingConfigLoader:
                 "timeout": timeout,
                 "max_input_tokens": max_tokens,
                 "dimension": dimension,
-                "cache_folder": str(model_root_dir / "embedding"),
+                "cache_folder": cache_folder,
             }
             loaded[role] = params
         return loaded
