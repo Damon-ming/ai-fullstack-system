@@ -493,6 +493,28 @@ ThreadPoolManager（进程单例）
 
 ## RAG 流水线
 
+### 文档分块层级
+
+知识文件进入索引前，会先按来源边界或 Markdown 标题组织，再切成可独立嵌入的 chunk：
+
+```mermaid
+flowchart TD
+    F[文件] --> P[来源文档 / 页面]
+    P --> G[有 section_group 时<br/>按 slide、batch 等来源边界分组]
+    P --> U[没有 section_group 时<br/>有标题按标题组织，无标题按页分组]
+    G --> H[Markdown 标题章节或整段文本]
+    U --> H
+    H --> S[section_id 分组]
+    S --> C1[chunk_id：单个 chunk]
+    S --> C2[chunk_id：单个 chunk]
+    S --> C3[chunk_id：单个 chunk]
+```
+
+- `section_group` 是数据源提供的边界，例如 PPT 的 slide 或 XLSX/CSV 的 batch；它不是标题。没有该标记时，Splitter 使用 Markdown 标题；没有标题时按页分组。
+- `section_id` 是重建文本时归并 chunk 的分组标识。同一个 `section_group` 或标题章节可以对应多个 `section_id`。
+- `chunk_id` 唯一标识一个 chunk；`section_seq` 表示它在所属 `section_id` 中的顺序。
+- `max_grouped_chunks_per_section` 和 `max_headed_chunks_per_section` 配置每个 `section_id` 最多归并的 chunk 数，当前分别为 2 和 5，配置文件位于 `app-server/src/com/damon/ming/ai/rag/spliter/config/splitter-config.yaml`。
+
 ```
 用户查询
    │

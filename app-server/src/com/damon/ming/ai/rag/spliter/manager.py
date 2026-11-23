@@ -30,6 +30,8 @@ class SplitterManager:
             tokenizer=tokenizer,
             max_chunk_token_size=chunk_size,
             chunk_overlap=overlap,
+            max_grouped_chunks_per_section=config.max_grouped_chunks_per_section,
+            max_headed_chunks_per_section=config.max_headed_chunks_per_section,
         )
 
     def get_structured(self) -> StructuredDocumentSplitter:

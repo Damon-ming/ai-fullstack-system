@@ -41,14 +41,10 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_hex
 
 from ..tokenizer.base_tokenizer import BaseTokenizer
-from .overlap import overlap_prefix_chars
 from .table_splitter import TableAwareSplitter
 
 _MARKDOWN_HEADING_RE = re.compile(r"(?m)^ {0,3}#{1,6}[ \t]+\S")
 _UNKNOWN_VALUE = "unknown"
-# 显式分组及无标题页面按较小单元重建；自然标题章节保留更多上下文。
-_MAX_GROUPED_CHUNKS_PER_SECTION = 2
-_MAX_HEADED_CHUNKS_PER_SECTION = 5
 
 
 class BaseDocumentSplitter(ABC):
@@ -69,6 +65,8 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         self,
         tokenizer: BaseTokenizer,
         max_chunk_token_size: int,
+        max_grouped_chunks_per_section: int,
+        max_headed_chunks_per_section: int,
         chunk_overlap: int | None = None,
     ):
         if type(max_chunk_token_size) is not int or max_chunk_token_size <= 0:
@@ -80,8 +78,20 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
             or not 0 <= chunk_overlap < max_chunk_token_size
         ):
             raise ValueError("chunk_overlap 必须是小于 max_chunk_token_size 的非负整数")
+        if (
+            type(max_grouped_chunks_per_section) is not int
+            or max_grouped_chunks_per_section <= 0
+        ):
+            raise ValueError("max_grouped_chunks_per_section 必须是正整数")
+        if (
+            type(max_headed_chunks_per_section) is not int
+            or max_headed_chunks_per_section <= 0
+        ):
+            raise ValueError("max_headed_chunks_per_section 必须是正整数")
         self.max_chunk_token_size = max_chunk_token_size
         self.chunk_overlap = chunk_overlap
+        self.max_grouped_chunks_per_section = max_grouped_chunks_per_section
+        self.max_headed_chunks_per_section = max_headed_chunks_per_section
         self.tokenizer = tokenizer
         self.logger = pin("StructuredDocumentSplitter")
         self.md_parser = MarkdownNodeParser()
@@ -183,7 +193,6 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         doc: Document,
         page_offset_list: list,
         max_chunk_size: int,
-        chunk_overlap: int,
         token_splitter: TokenTextSplitter,
         stats: dict[str, int],
     ) -> list[TextNode]:
@@ -247,9 +256,9 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
                     )
 
                 section_chunk_limit = (
-                    _MAX_GROUPED_CHUNKS_PER_SECTION
+                    self.max_grouped_chunks_per_section
                     if section_group is not None
-                    else _MAX_HEADED_CHUNKS_PER_SECTION
+                    else self.max_headed_chunks_per_section
                 )
                 bounded = len(sub_nodes) > section_chunk_limit
                 if bounded:
@@ -289,11 +298,11 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
                         and sub_node.metadata.get(CONTENT_TYPE) != "table"
                     ):
                         sub_node.metadata[RECONSTRUCTION_SKIP_CHARS] = (
-                            overlap_prefix_chars(
+                            self._overlap_prefix_chars(
                                 previous_node.text,
+                                previous_node.end_char_idx,
                                 sub_node.text,
-                                chunk_overlap,
-                                self._count_tokens,
+                                sub_node.start_char_idx,
                             )
                         )
                     if bounded and chunk_section_seq == 0:
@@ -422,7 +431,6 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
                         (doc.metadata[FILE_SHA256], doc.metadata.get(SECTION_GROUP))
                     ],
                     effective_size,
-                    effective_overlap,
                     token_splitter,
                     stats,
                 )
@@ -442,6 +450,60 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         )
 
         return all_nodes
+
+    def _overlap_prefix_chars(
+        self,
+        previous_text: str,
+        previous_end_char_idx: int | None,
+        current_text: str,
+        current_start_char_idx: int | None,
+    ) -> int:
+        """根据 splitter 的字符偏移计算相邻 chunk 的实际重叠长度。"""
+        if not previous_text or not current_text:
+            self.logger.warning(
+                "[Overlap] 无法计算字符重叠：文本为空 | "
+                "previous_len=%d | current_len=%d",
+                len(previous_text),
+                len(current_text),
+            )
+            return 0
+
+        if (
+            type(previous_end_char_idx) is not int
+            or type(current_start_char_idx) is not int
+        ):
+            self.logger.warning(
+                "[Overlap] 无法计算字符重叠：字符偏移无效 | "
+                "previous_end=%r | current_start=%r",
+                previous_end_char_idx,
+                current_start_char_idx,
+            )
+            return 0
+
+        overlap = previous_end_char_idx - current_start_char_idx
+        if overlap <= 0:
+            return 0
+        if overlap > min(len(previous_text), len(current_text)):
+            self.logger.warning(
+                "[Overlap] 字符偏移超出 chunk 长度 | overlap=%d | "
+                "previous_len=%d | current_len=%d",
+                overlap,
+                len(previous_text),
+                len(current_text),
+            )
+            return 0
+
+        # 校验偏移计算出的区间确实对应文本重叠，防止错误地跳过正文。
+        if previous_text[-overlap:] != current_text[:overlap]:
+            self.logger.warning(
+                "[Overlap] 字符偏移与 chunk 文本不匹配 | overlap=%d | "
+                "previous_end=%d | current_start=%d",
+                overlap,
+                previous_end_char_idx,
+                current_start_char_idx,
+            )
+            return 0
+        return overlap
 
     def _attach_metadata(
         self,
