@@ -17,34 +17,30 @@ scripts/download-models.py —— 一键下载所有 AI 模型（Python 版，�
 import argparse
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 # ── 模型清单 ──────────────────────────────────────────────────────
 # 格式: (HuggingFace repo_id, 本地子目录, 描述)
 
-# 跑通模式：3 个 pool 全部复用 Qwen2.5-0.5B（~1GB 下载，单卡 16GB 能装）
-# 完整模式：取消注释下方大模型，同时调整 docker-vllm.yaml 和 gateway.yaml
+# 与 inference-gateway/config/docker/docker-vllm-inference.yaml 保持一致。
 VLLM_MODELS = [
+    (
+        "Qwen/Qwen2.5-1.8B-Instruct",
+        "inference/Qwen2.5-1.8B-Instruct",
+        "主推理模型 (1.8B)",
+    ),
     (
         "Qwen/Qwen2.5-0.5B-Instruct",
         "inference/Qwen2.5-0.5B-Instruct",
-        "通用推理模型 (0.5B) - chat/intent/rewrite/summary/guardrail 复用",
+        "摘要模型 (0.5B)",
     ),
+    ("Qwen/Qwen3Guard-Gen-0.6B", "inference/Qwen3Guard-Gen-0.6B", "护栏模型 (0.6B)"),
 ]
 
-# ═══ 完整模式模型（跑通后按需启用）═══
-# VLLM_MODELS = [
-#     ("Qwen/Qwen2.5-7B-Instruct",    "inference/Qwen2.5-7B-Instruct",    "聊天主模型 (7B)"),
-#     ("Qwen/Qwen2.5-0.5B-Instruct",  "inference/Qwen2.5-0.5B-Instruct",  "意图识别模型 (0.5B)"),
-#     ("Qwen/Qwen2.5-1.8B-Instruct",  "inference/Qwen2.5-1.8B-Instruct",  "查询改写模型 (1.8B)"),
-#     ("Qwen/Qwen2.5-1.5B-Instruct",  "inference/Qwen2.5-1.5B-Instruct",  "摘要模型 (1.5B)"),
-#     ("Qwen/Qwen3Guard-Gen-4B",      "inference/Qwen3Guard-Gen-4B",     "护栏安全模型 (4B)"),
-# ]
-
+# embedding 写入 Hub 缓存目录，供容器中的 model ID 与 tokenizer 复用。
 EMBEDDING_MODELS = [
-    ("BAAI/bge-m3", "embedding/BAAI/bge-m3", "BGE-M3 多语言嵌入"),
+    ("BAAI/bge-m3", "embedding", "BGE-M3 多语言嵌入"),
 ]
 
 RERANK_MODELS = [
@@ -109,60 +105,25 @@ def get_hf_endpoint() -> str:
     return os.environ.get("HF_ENDPOINT", "https://hf-mirror.com")
 
 
-def dir_exists_and_nonempty(path: Path) -> bool:
-    """检查目录存在且非空。"""
-    return path.is_dir() and any(path.iterdir())
-
-
 def download_hf_model(
-    repo_id: str, local_subdir: str, desc: str, models_dir: Path
+    repo_id: str, local_subdir: str, desc: str, models_dir: Path, *, cache: bool = False
 ) -> bool:
-    """通过 huggingface-cli 下载模型。"""
-    local_path = models_dir / local_subdir
-
-    if dir_exists_and_nonempty(local_path):
-        print(f"  [SKIP] {desc}（已存在: {local_path}）")
-        return True
-
-    print(f"  [下载] {desc}")
-    print(f"        repo: {repo_id}")
-    print(f"        dest: {local_path}")
-
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-
-    env = os.environ.copy()
-    env["HF_ENDPOINT"] = get_hf_endpoint()
-
+    """下载或恢复模型；embedding 使用 Hub 缓存，其他模型使用固定目录。"""
+    target = models_dir / local_subdir
+    print(f"  [下载] {desc}\n        repo: {repo_id}\n        dest: {target}")
     try:
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "huggingface_hub",
-                "download",
-                repo_id,
-                "--local-dir",
-                str(local_path),
-                "--local-dir-use-symlinks",
-                "False",
-                "--resume-download",
-            ],
-            env=env,
-            check=True,
-        )
+        from huggingface_hub import snapshot_download
+
+        options = {"cache_dir" if cache else "local_dir": str(target)}
+        snapshot_download(repo_id=repo_id, endpoint=get_hf_endpoint(), **options)
         print(f"  [完成] {desc}")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"  [失败] {desc}: {e}")
+    except ImportError:
+        print("  [失败] 请先安装依赖：python -m pip install huggingface-hub")
         return False
-    except FileNotFoundError:
-        # huggingface_hub 未安装，尝试 pip install
-        print("  [安装] huggingface-hub 未安装，正在安装...")
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-q", "huggingface-hub"],
-            check=True,
-        )
-        return download_hf_model(repo_id, local_subdir, desc, models_dir)
+    except Exception as exc:
+        print(f"  [失败] {desc}: {exc}")
+        return False
 
 
 def print_disk_space(path: Path) -> None:
@@ -197,6 +158,7 @@ def download_category(title: str, models, download_fn) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="AI Fullstack System 模型下载脚本")
+    parser.add_argument("--all", action="store_true", help="下载所有模型")
     parser.add_argument("--vllm", action="store_true", help="仅下载 vLLM 推理模型")
     parser.add_argument(
         "--embedding", action="store_true", help="仅下载 Embedding 模型"
@@ -208,7 +170,7 @@ def main():
     models_dir = Path(args.models_dir) if args.models_dir else get_models_dir()
 
     # 如果没有任何 --xxx 标记，下载全部
-    no_filter = not (args.vllm or args.embedding or args.rerank)
+    no_filter = args.all or not (args.vllm or args.embedding or args.rerank)
 
     print("=" * 60)
     print("  AI Fullstack System —— 模型一键下载")
@@ -222,23 +184,28 @@ def main():
 
     print_disk_space(models_dir)
 
-    results = {"success": 0, "skip": 0, "fail": 0}
+    results = {"success": 0, "fail": 0}
 
     # 定义下载器
-    def _dl_vllm(repo, subdir, desc):
-        r = download_hf_model(repo, subdir, desc, models_dir)
+    def _download(repo, subdir, desc, *, cache=False):
+        r = download_hf_model(repo, subdir, desc, models_dir, cache=cache)
         results["success" if r else "fail"] += 1
 
     if no_filter or args.embedding:
-        download_category("Embedding 模型", EMBEDDING_MODELS, _dl_vllm)
+        download_category(
+            "Embedding 模型",
+            EMBEDDING_MODELS,
+            lambda *args: _download(*args, cache=True),
+        )
     if no_filter or args.rerank:
-        download_category("Rerank 模型", RERANK_MODELS, _dl_vllm)
+        download_category("Rerank 模型", RERANK_MODELS, _download)
     if no_filter or args.vllm:
-        download_category("vLLM 推理模型", VLLM_MODELS, _dl_vllm)
+        download_category("vLLM 推理模型", VLLM_MODELS, _download)
     print(f"\n{'=' * 60}")
     print(f"  下载完毕 —— 成功: {results['success']}  失败: {results['fail']}")
     print(f"{'=' * 60}")
+    return 1 if results["fail"] else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -2,8 +2,8 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
-from src.com.damon.ming.ai.rag.embedding.embedding_gateway import (
-    EmbeddingGateway,
+from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
+    BaseEmbeddingService,
 )
 from src.com.damon.ming.ai.rag.retriever.base_retriever import (
     DenseRetriever,
@@ -30,7 +30,7 @@ class RetrieverManager:
     def initialize(
         self,
         vector_store: BaseVectorStore,
-        embedder: EmbeddingGateway,
+        embedder: BaseEmbeddingService,
         bm25_index: BM25Index,
         retrieval_pool: ThreadPoolExecutor,
     ) -> None:

@@ -434,7 +434,8 @@ class AppInitializer:
             asyncio.Semaphore(inference_config.max_concurrency),
         )
 
-        self.embedding_gateway = EmbeddingGateway(
+        # TODO 需要解决路径问题
+        self.embedding_gateway = EmbeddingGateway.from_config(
             EmbeddingConfigLoader().load(Path(self.model_root_dir))
         )
 

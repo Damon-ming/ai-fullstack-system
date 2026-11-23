@@ -1,5 +1,7 @@
 # app-server/src/com/damon/ming/ai/rag/embedding/config/embedding-config.yaml
 # RAG embedding 的查询与文档文本前缀。
-common:
-  query_prefix: ""
-  passage_prefix: ""
+query_prefix: ""
+passage_prefix: ""
+
+# 每次向 embedding 服务发送的文档数量上限。
+batch_size: 32

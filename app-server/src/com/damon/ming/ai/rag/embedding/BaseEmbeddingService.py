@@ -4,7 +4,7 @@ Embedding 服务抽象层 —— 纯技术模块。
 
 提供：
   - BaseEmbeddingService:  抽象接口
-  - EmbeddingParams:       通用参数数据类；引擎专属参数放在 extra
+  - EmbeddingParams:       参数基类；各引擎使用专门的参数子类
 
 Gateway 角色配置位于 app/config/ai/embedding，RAG 参数位于本模块 config/。
 后端通过 EmbeddingParams 接收装配后的参数。
@@ -14,16 +14,9 @@ Gateway 角色配置位于 app/config/ai/embedding，RAG 参数位于本模块 c
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from typing import Any
 
-
-@dataclass(frozen=True)
-class EmbeddingParams:
-    """Embedding 通用参数；引擎专属参数由 extra 承载。"""
-
-    model_name: str
-    extra: dict[str, Any] = field(default_factory=dict)
+from src.com.damon.ming.ai.rag.embedding.model_config import EmbeddingParams
 
 
 class BaseEmbeddingService(ABC):

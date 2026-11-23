@@ -1,12 +1,12 @@
-# app-server/src/com/damon/ming/ai/rag/embedding/vllm.py
+# app-server/src/com/damon/ming/ai/rag/embedding/vllm_embedding.py
 """通过 OpenAI 兼容接口调用 vLLM pooling embedding 服务。"""
 
 from typing import Any
 
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
-    EmbeddingParams,
 )
+from src.com.damon.ming.ai.rag.embedding.model_config import VLLMEmbeddingParams
 from src.com.damon.ming.log import pin
 
 logger = pin("VllmEmbedding")
@@ -15,23 +15,21 @@ logger = pin("VllmEmbedding")
 class VllmEmbedding(BaseEmbeddingService):
     """将 embedding 请求转发到独立的 vLLM 服务。"""
 
-    def __init__(self, params: EmbeddingParams):
+    def __init__(self, params: VLLMEmbeddingParams):
         super().__init__(params)
         try:
             from openai import OpenAI
         except ImportError as e:
             raise ImportError("vLLM embedding 需要 openai Python SDK") from e
 
-        self._base_url = params.extra["base_url"]
-        self._api_key = params.extra["api_key"]
-        self._timeout = params.extra["timeout"]
-        self._max_input_tokens = params.extra["max_input_tokens"]
-        self._dimension = params.extra.get("dimension")
-        self._query_prefix = params.extra.get("query_prefix", "")
-        self._passage_prefix = params.extra.get("passage_prefix", "")
+        self._base_url = params.base_url
+        self._api_key = params.api_key
+        self._timeout = params.timeout
+        self._max_input_tokens = params.max_input_tokens
+        self._dimension = params.dimension
         self._tokenizer = self._load_tokenizer(
             params.model_name,
-            params.extra.get("cache_folder"),
+            params.cache_folder,
         )
         self._client = OpenAI(
             base_url=self._base_url,
@@ -66,12 +64,12 @@ class VllmEmbedding(BaseEmbeddingService):
         return self._tokenizer
 
     def embed_query(self, text: str) -> list[float]:
-        return self._embed_one(self._query_prefix + text)
+        return self._embed_one(text)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        inputs = [self._passage_prefix + text for text in texts]
+        inputs = texts
         try:
             response = self._client.embeddings.create(
                 model=self.params.model_name,
@@ -92,8 +90,6 @@ class VllmEmbedding(BaseEmbeddingService):
             "base_url": self._base_url,
             "dimension": self._dimension,
             "max_input_tokens": self._max_input_tokens,
-            "query_prefix": self._query_prefix,
-            "passage_prefix": self._passage_prefix,
         }
 
     def _embed_one(self, text: str) -> list[float]:
