@@ -41,6 +41,7 @@ from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_hex
 
 from ..tokenizer.base_tokenizer import BaseTokenizer
+from .overlap import overlap_prefix_chars
 from .table_splitter import TableAwareSplitter
 
 _MARKDOWN_HEADING_RE = re.compile(r"(?m)^ {0,3}#{1,6}[ \t]+\S")
@@ -54,9 +55,7 @@ class BaseDocumentSplitter(ABC):
     """文档分割器抽象接口"""
 
     @abstractmethod
-    def split(
-        self, docs: list[Document], max_chunk_size: int | None = None
-    ) -> list[TextNode]:
+    def split(self, docs: list[Document]) -> list[TextNode]:
         pass
 
 
@@ -290,8 +289,11 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
                         and sub_node.metadata.get(CONTENT_TYPE) != "table"
                     ):
                         sub_node.metadata[RECONSTRUCTION_SKIP_CHARS] = (
-                            self._overlap_prefix_chars(
-                                previous_node.text, sub_node.text, chunk_overlap
+                            overlap_prefix_chars(
+                                previous_node.text,
+                                sub_node.text,
+                                chunk_overlap,
+                                self._count_tokens,
                             )
                         )
                     if bounded and chunk_section_seq == 0:
@@ -366,8 +368,6 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
     def split(
         self,
         docs: list[Document],
-        max_chunk_size: int | None = None,
-        chunk_overlap: int | None = None,
     ) -> list[TextNode]:
         """分割文档列表（同步）。
 
@@ -379,18 +379,12 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
 
         Args:
             docs: 待分割的 Document 列表。
-            max_chunk_size: 最大 chunk token 大小，None 时使用构造时默认值。
-            chunk_overlap: 本次切分的重叠 token 数，None 时使用配置值，0 时禁用。
         """
         if not docs:
             return []
 
-        effective_size = (
-            self.max_chunk_token_size if max_chunk_size is None else max_chunk_size
-        )
-        effective_overlap = (
-            self.chunk_overlap if chunk_overlap is None else chunk_overlap
-        )
+        effective_size = self.max_chunk_token_size
+        effective_overlap = self.chunk_overlap
         if type(effective_size) is not int or effective_size <= 0:
             raise ValueError("max_chunk_size 必须是正整数")
         if (
@@ -448,35 +442,6 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         )
 
         return all_nodes
-
-    def _overlap_prefix_chars(
-        self, previous: str, current: str, chunk_overlap: int
-    ) -> int:
-        """返回当前块开头与前一块结尾重复的字符数。"""
-        if chunk_overlap <= 0 or not previous or not current:
-            return 0
-
-        # KMP 查找最长的「前块后缀 == 当前块前缀」，避免逐长度比较。
-        prefix = [0] * len(current)
-        matched = 0
-        for i in range(1, len(current)):
-            while matched and current[i] != current[matched]:
-                matched = prefix[matched - 1]
-            if current[i] == current[matched]:
-                matched += 1
-            prefix[i] = matched
-
-        matched = 0
-        for char in previous:
-            while matched and (matched == len(current) or char != current[matched]):
-                matched = prefix[matched - 1]
-            if char == current[matched]:
-                matched += 1
-
-        # 避免将正文中正常重复、却超过配置 overlap 的内容误判为切分重叠。
-        while matched and self._count_tokens(current[:matched]) > chunk_overlap:
-            matched = prefix[matched - 1]
-        return matched
 
     def _attach_metadata(
         self,

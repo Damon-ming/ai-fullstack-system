@@ -139,9 +139,7 @@ class TableAwareSplitter:
                     [Document(text=segment_text)]
                 ):
                     node.start_char_idx = start + (node.start_char_idx or 0)
-                    node.end_char_idx = start + (
-                        node.end_char_idx or len(node.text)
-                    )
+                    node.end_char_idx = start + (node.end_char_idx or len(node.text))
                     result_nodes.append(node)
                 continue
 
@@ -158,4 +156,3 @@ class TableAwareSplitter:
                 result_nodes.append(table_node)
 
         return result_nodes if result_nodes else [TextNode(text=text)]
-
