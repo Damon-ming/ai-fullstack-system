@@ -1,0 +1,18 @@
+# vLLM 容器公共配置；仅供其他 Compose 文件通过 extends 引用。
+services:
+  vllm-base:
+    image: vllm/vllm-openai:v0.17.0
+    restart: always
+    expose: ["8000"]
+    volumes:
+      - ${DATA_DIR}/models:${MODEL_ROOT_DIR}
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
