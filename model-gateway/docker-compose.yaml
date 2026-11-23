@@ -1,4 +1,4 @@
-# inference-gateway/docker-compose.yaml
+# model-gateway/docker-compose.yaml
 # 推理与 embedding 路由网关 + 推理后端容器 —— 独立子系统
 #
 # 通过 INFERENCE_SERVER 环境变量选择推理后端：

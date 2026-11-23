@@ -99,7 +99,7 @@ ai-fullstack-system/
 │       ├── thread/              # 线程池管理器
 │       ├── utils/               # 工具函数
 │       └── vector_db/           # PGVector 存储
-├── inference-gateway/           # 推理网关
+├── model-gateway/           # 推理网关
 │   ├── Dockerfile
 │   ├── docker-compose.yaml
 │   ├── gateway.py               # 路由代理（190 行）
@@ -382,7 +382,7 @@ UA 指纹来自客户端提供的信息。SHA-256 让摘要难以直接反推，
 | 线程池预算 | `config/thread/thread-pool-config.yaml` | 配置全局及 RAG、数据库等资源组 worker 上限 |
 | AI 线程池分配 | `ai/config/thread/ai-thread-pool-config.yaml` | 配置 AI 资源组内部各命名线程池的 worker 分配 |
 | 推理网络超时 | `config/rag/rag-runtime.yaml` → `rag.transport.inference.timeout_seconds` | 推理客户端网络超时，独立于流水线执行预算 |
-| 网关路由 | `inference-gateway/config/gateway.yaml` | api_key → upstream 映射 |
+| 网关路由 | `model-gateway/config/gateway.yaml` | api_key → upstream 映射 |
 
 环境变量覆盖：
 - `INFERENCE_SERVER` — 推理后端选择
@@ -400,7 +400,7 @@ max_model_len ≥ system_prompt + labels + max_context_tokens + query + 模板�
 
 | 参数 | 当前值 | 配置位置 | 作用 |
 |---|---|---|---|
-| `max_model_len` | 2048 | `inference-gateway/config/docker/docker-vllm-inference.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
+| `max_model_len` | 2048 | `model-gateway/config/docker/docker-vllm-inference.yaml` → `--max-model-len` | vLLM 单次请求的总长度上限（prompt + 输出），硬约束 |
 | `max_tokens` | 1024 | `app-server/src/com/damon/ming/app/config/rag/rag-runtime.yaml` → `rag.roles.inference.options.max_tokens` | 主推理的**输出** token 上限 |
 | `max_context_tokens` | 512 | `app-server/src/com/damon/ming/router/rag/rag_router.py` → `MAX_CONTEXT_TOKEN_BUDGET` | RAG 检索上下文的**输入** token 上限（章节拼接 + 全局摘要后的最终值） |
 
@@ -433,14 +433,14 @@ pnpm build        # 生产构建
 ### 网关（inference-gateway）
 
 ```bash
-cd inference-gateway
+cd model-gateway
 pip install -r requirements.txt
 python gateway.py
 ```
 
 ### 添加新推理后端
 
-1. 新建 `inference-gateway/config/docker/docker-{name}.yaml`（容器编排）
+1. 新建 `model-gateway/config/docker/docker-{name}.yaml`（容器编排）
 2. `gateway.yaml` 添加路由条目
 3. `.env` 设置 `INFERENCE_API_KEYS` 映射
 4. `rag-runtime.yaml` 的 `rag.roles` 添加角色的 `model_name` 和 `options` 参数

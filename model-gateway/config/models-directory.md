@@ -1,4 +1,4 @@
-# inference-gateway/config/models-directory.md
+# model-gateway/config/models-directory.md
 # 模型目录结构 —— 宿主机模型文件统一在 DATA_DIR/models/ 下
 #
 # Docker 挂载: ${DATA_DIR}/models → ${MODEL_ROOT_DIR}

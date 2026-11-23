@@ -1,4 +1,4 @@
-  # inference-gateway/config/docker/docker-vllm-embedding.yaml
+  # model-gateway/config/docker/docker-vllm-embedding.yaml
   # ── RAG embedding 服务 ────────────────────────────────────────────
   # BGE-M3 pooling / OpenAI-compatible /v1/embeddings
   # 独立使用新版本，避免升级现有生成模型池造成兼容性变化。

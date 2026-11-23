@@ -34,17 +34,17 @@
 #     docker compose down
 #
 # 新增推理后端（如 sglang）：
-#   1. 新建 inference-gateway/config/docker/docker-sglang.yaml（容器编排）
-#   2. inference-gateway/config/gateway.yaml 加路由条目
+#   1. 新建 model-gateway/config/docker/docker-sglang.yaml（容器编排）
+#   2. model-gateway/config/gateway.yaml 加路由条目
 #   3. 配置推理角色与网关路由密钥
 #   4. app-server/src/com/damon/ming/app/config/ai/inference/inference-config.yaml 加 roles 参数
 #   5. 部署时 INFERENCE_SERVER=sglang
 # ═══════════════════════════════════════════════════════════════════
 
 include:
-  - inference-gateway/config/docker/docker-${INFERENCE_SERVER:-vllm}-inference.yaml
-  - inference-gateway/config/docker/docker-vllm-embedding.yaml
-  - inference-gateway/docker-compose.yaml
+  - model-gateway/config/docker/docker-${INFERENCE_SERVER:-vllm}-inference.yaml
+  - model-gateway/config/docker/docker-vllm-embedding.yaml
+  - model-gateway/docker-compose.yaml
   - app-server/docker-compose.yaml
   - web-app/docker-compose.yaml
 

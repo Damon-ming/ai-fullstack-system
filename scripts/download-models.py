@@ -23,7 +23,7 @@ from pathlib import Path
 # ── 模型清单 ──────────────────────────────────────────────────────
 # 格式: (HuggingFace repo_id, 本地子目录, 描述)
 
-# 与 inference-gateway/config/docker/docker-vllm-inference.yaml 保持一致。
+# 与 model-gateway/config/docker/docker-vllm-inference.yaml 保持一致。
 VLLM_MODELS = [
     (
         "Qwen/Qwen2.5-1.8B-Instruct",

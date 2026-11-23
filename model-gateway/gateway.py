@@ -1,4 +1,4 @@
-# inference-gateway/gateway.py
+# model-gateway/gateway.py
 """
 vLLM API Gateway —— 按 API key 路由推理请求。
 

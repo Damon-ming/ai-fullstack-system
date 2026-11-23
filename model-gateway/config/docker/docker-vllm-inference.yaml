@@ -1,4 +1,4 @@
-# inference-gateway/config/docker/docker-vllm-inference.yaml
+# model-gateway/config/docker/docker-vllm-inference.yaml
 # vLLM 文本生成实例池 —— INFERENCE_SERVER=vllm 时启动
 #
 # 架构：app-server → inference-gateway (按 api_key 路由) → 主推理池 / 摘要池 / 护栏池

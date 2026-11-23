@@ -1,4 +1,4 @@
-# inference-gateway/config/gateway.yaml
+# model-gateway/config/gateway.yaml
 # 推理与 embedding 网关路由表
 #
 # 路由层不感知业务语义，只认 api_key → upstream 映射。
