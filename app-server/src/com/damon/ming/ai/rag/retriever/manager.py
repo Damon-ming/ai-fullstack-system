@@ -2,7 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
-from src.com.damon.ming.ai.rag.embedding.gateway import (
+from src.com.damon.ming.ai.rag.embedding.embedding_gateway import (
     EmbeddingGateway,
 )
 from src.com.damon.ming.ai.rag.retriever.base_retriever import (

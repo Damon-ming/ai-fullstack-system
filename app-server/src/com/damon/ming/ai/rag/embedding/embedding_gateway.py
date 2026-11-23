@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/embedding/gateway.py
+# app-server/src/com/damon/ming/ai/rag/embedding/embedding_gateway.py
 """RAG embedding 统一调用入口。"""
 
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (

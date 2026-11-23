@@ -10,7 +10,7 @@ from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
     EmbeddingParams,
 )
-from src.com.damon.ming.ai.rag.embedding.gateway import EmbeddingGateway
+from src.com.damon.ming.ai.rag.embedding.embedding_gateway import EmbeddingGateway
 from src.com.damon.ming.ai.rag.embedding.huggingface import HuggingFaceEmbedding
 from src.com.damon.ming.ai.rag.embedding.vllm import VllmEmbedding
 
