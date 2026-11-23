@@ -33,8 +33,5 @@ ARG SERVER_BUILD_ENV=0
 # 在镜像构建的时候生成一个代码文件。
 RUN printf 'SERVER_BUILD_ENV = %s\n' "$SERVER_BUILD_ENV" > src/com/damon/ming/debug/build_info.py
 
-# 容器内部访问ollama地址：http://ollama-server:11434
-# ENV OLLAMA_BASE_URL=http://ollama-server:11434
-
 # 启动入口，根据你项目实际启动文件修改
 # CMD ["python3", "-m", "src.com.damon.ming.main"]

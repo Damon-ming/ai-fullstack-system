@@ -53,7 +53,7 @@
 - **端到端加密**：RSA-OAEP + AES-GCM，HMAC-SHA256 签名，nonce 重放防护
 - **多用户并发**：三层并发控制（信号量 + 模块锁 + 线程池），多用户共享知识库
 - **混合检索**：Dense (pgvector) + Sparse (BM25) + Hybrid，section 级去重
-- **推理后端热切换**：Ollama / vLLM / SGLang，改环境变量即可
+- **推理后端**：vLLM；可扩展其他后端
 - **多语言 i18n**：react-i18next 前端 + 后端 X-Language 协商
 - **流式 SSE**：W3C EventSource 协议，start/delta/done/error 事件
 - **护栏系统**：独立小模型实时安全检测，超时 fail-open
@@ -108,7 +108,6 @@ ai-fullstack-system/
 │   │   └── docker/
 │   │       ├── docker-vllm-inference.yaml # vLLM 文本生成实例
 │   │       ├── docker-vllm-embedding.yaml # vLLM embedding 实例
-│   │       └── docker-ollama-inference.yaml
 │   └── requirements.txt
 ├── web-app/                     # React 前端
 │   ├── Dockerfile
@@ -129,15 +128,6 @@ ai-fullstack-system/
 | Docker Compose | v2.0+ | 编排工具（`docker compose` 非 `docker-compose`） |
 | NVIDIA Driver | 535+（推荐 575.51+） | vLLM 0.17.0 embedding 镜像使用 CUDA 12.9 |
 | NVIDIA Container Toolkit | v1.14+ | GPU 容器调度 |
-
-### 硬件要求（Ollama 模式）
-
-| 资源 | 最低 | 推荐 | 说明 |
-|------|------|------|------|
-| GPU | 支持 vLLM 的 NVIDIA GPU | 按模型与并发规划显存 | embedding 固定由 vLLM 运行 |
-| CPU | 4 核 | 8 核+ | Ollama 推理 + 检索 |
-| 内存 | 8 GB | 16 GB+ | 7B 模型约需 6GB |
-| 磁盘 | 20 GB | 50 GB+ | 模型 + 知识库 + 日志 |
 
 ### 硬件要求（vLLM 模式）
 
@@ -166,7 +156,6 @@ ai-fullstack-system/
 ```
 ${DATA_DIR}/                          # 默认 /root/damon
 ├── postgres/                         # PostgreSQL 数据目录
-├── ollama/.ollama/                   # Ollama 模型缓存（ollama 模式）
 ├── models/                           # vLLM 模型权重（vLLM 模式）
 │   └── inference/
 │       ├── Qwen2.5-7B-Instruct/
@@ -189,7 +178,6 @@ ${DATA_DIR}/                          # 默认 /root/damon
 | web-app (builder) | node:22-alpine | — | 前端构建 |
 | web-app (serve) | nginx:alpine | — | 前端静态资源 |
 | postgres | postgres:16-alpine | — | 数据库 |
-| ollama | ollama/ollama:0.32.14 | — | Ollama 后端 |
 | vllm-inferences-001/002、vllm-guardrail | vllm/vllm-openai:v0.17.0 | — | 主推理池 / 摘要池 / 护栏池 |
 | vllm-embedding | vllm/vllm-openai:v0.17.0 | — | BGE-M3 pooling embedding |
 
@@ -240,11 +228,8 @@ git clone <repo-url> && cd ai-fullstack-system
 cp .env.example .env
 # 编辑 .env，设置 DB_PASSWORD、MASTER_KEY 等
 
-# 3. 部署（Ollama 推理 + vLLM embedding，需要 GPU）
+# 3. 部署（vLLM 推理 + vLLM embedding，需要 GPU）
 docker compose up -d --build
-
-# 4. 或部署 vLLM 推理与 embedding
-INFERENCE_SERVER=vllm docker compose up -d --build
 
 # 5. 查看日志
 docker compose logs -f app-server
@@ -259,7 +244,6 @@ docker compose down
 |-----------|------|-----------|------|
 | 80 | web-app | 80 | 前端入口 |
 | 5432 | postgres | 5432 | 数据库（可选暴露） |
-| 11434 | ollama-server | 11434 | Ollama 直连（ollama 模式） |
 
 以下仅容器内访问（不映射宿主机）：
 - `8000` — app-server
@@ -272,8 +256,7 @@ docker compose down
 
 | 值 | 适用场景 | 需要 GPU |
 |---|---|---|
-| `ollama`（默认） | 本地开发 / 轻量部署 | ✅（embedding） |
-| `vllm` | 高性能生产 | ✅ |
+| `vllm`（默认） | 推理与 embedding | ✅ |
 | `sglang` | 预留扩展 | ✅ |
 
 切换只需改 `.env` 后重新 `docker compose up -d --build`。
@@ -383,8 +366,7 @@ UA 指纹来自客户端提供的信息。SHA-256 让摘要难以直接反推，
 
 `rag-runtime.yaml` 的每个角色使用 `model_name` 指定上游接受的模型名称，
 `options` 保存生成参数。当前短名称为 `qwen2.5-0.5B-instruct`；vLLM 的
-`--served-model-name` 已与其对应。切换 Ollama 时，需要保证 Ollama 中已存在
-同名模型或别名，或将 `model_name` 改成 Ollama 已安装模型的名称。
+`--served-model-name` 已与其对应。
 网关只按 API key 路由，不会改写请求中的模型名。
 
 所有配置通过 YAML 文件管理，零硬编码：
@@ -643,7 +625,7 @@ data: {"code": 200005001, "message": "请求超时"}
 | 后端 | FastAPI + SQLAlchemy + Pydantic |
 | 数据库 | PostgreSQL + pgvector |
 | 检索 | BM25 + vLLM BGE-M3 Embedding + Hybrid |
-| 推理 | Ollama / vLLM / SGLang（可切换） |
+| 推理 | vLLM，其他后端可扩展 |
 | 加密 | cryptography (RSA-OAEP + AES-GCM + HMAC) |
 | 部署 | Docker Compose + Nginx |
 | i18n | react-i18next + 后端 X-Language 协商 |

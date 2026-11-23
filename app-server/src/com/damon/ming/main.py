@@ -8,7 +8,7 @@
 
 【必须设置】
   MASTER_KEY              加密主密钥（≥32 字符，见 encryption/constants.py）
-  INFERENCE_SERVER        推理后端：ollama / vllm / sglang，无默认值
+  INFERENCE_SERVER        推理后端：vllm / sglang，无默认值
   INFERENCE_GATEWAY_URL   推理网关地址，无默认值
 
 【可选（本地开发用，生产镜像通过 build_info.py 固化）】

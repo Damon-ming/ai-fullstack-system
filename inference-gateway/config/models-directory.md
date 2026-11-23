@@ -25,6 +25,5 @@
 #
 # 下载方式：
 #   - vLLM 模型: 手动下载或 hf-cli 下载到 <DATA_DIR>/models/inference/
-#   - Ollama 模型: ollama pull 命令（存储在 ${DATA_DIR}/ollama/.ollama/，独立挂载）
 #   - Embedding: 首次启动自动从 HF Hub 下载到 ${MODEL_ROOT_DIR}/embedding/
 #   - Rerank: 手动下载到 <DATA_DIR>/models/rerank/
