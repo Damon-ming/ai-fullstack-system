@@ -11,7 +11,6 @@ from src.com.damon.ming.ai.inference.base_inference import (
     InferenceParams,
 )
 from src.com.damon.ming.app.config.env import (
-    get_inference_api_keys,
     get_inference_gateway_url,
     get_inference_server,
 )
@@ -64,10 +63,6 @@ class InferenceConfigLoader:
         if type(concurrency) is not int or concurrency < 1:
             raise ValueError("max_concurrency 必须是正整数")
         roles = self._read_roles(raw.get("roles"))
-        keys = get_inference_api_keys()
-        missing = [role for role in roles if role not in keys]
-        if missing:
-            raise RuntimeError(f"以下推理角色缺少 api_key 配置: {', '.join(missing)}")
         engine_type = get_inference_server()
         base_url = get_inference_gateway_url()
         impl = resolve_engine(engine_type)
@@ -79,7 +74,7 @@ class InferenceConfigLoader:
         engines: dict[str, BaseInferenceService] = {}
         entries: dict[str, ModelEntry] = {}
         for role, config in roles.items():
-            key = keys[role]
+            key = config["api_key"]
             if key not in engines:
                 engines[key] = impl(
                     InferenceParams(
@@ -110,6 +105,9 @@ class InferenceConfigLoader:
             if not isinstance(params, dict):
                 raise TypeError(f"角色 '{role}' 配置格式错误")
             path = f"roles.{role}"
+            api_key = params.get("api_key")
+            if not isinstance(api_key, str) or not api_key.strip():
+                raise ValueError(f"{path}.api_key 必须是非空字符串")
             name = params.get("model_name")
             options = params.get("options", {})
             if options is None:
@@ -149,6 +147,7 @@ class InferenceConfigLoader:
                     ):
                         raise ValueError(f"{path}.options.{field} 超出有效数值范围")
             cleaned[role] = {
+                "api_key": api_key,
                 "model_name": name,
                 "options": dict(options),
                 "context_window_tokens": context_window,

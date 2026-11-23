@@ -12,7 +12,6 @@
 """
 
 import ipaddress
-import json
 import os
 from pathlib import Path
 
@@ -24,8 +23,6 @@ _VAR_LOG_LEVEL = "LOG_LEVEL"
 _VAR_DB_PREFIX = "DB_"
 _VAR_INFERENCE_SERVER = "INFERENCE_SERVER"
 _VAR_INFERENCE_GATEWAY_URL = "INFERENCE_GATEWAY_URL"
-_VAR_INFERENCE_API_KEYS = "INFERENCE_API_KEYS"
-_VAR_INFERENCE_API_KEY_PREFIX = "INFERENCE_API_KEY_"
 _VAR_TRUSTED_PROXY_CIDRS = "TRUSTED_PROXY_CIDRS"
 _VAR_MODEL_ROOT_DIR = "MODEL_ROOT_DIR"
 
@@ -116,21 +113,3 @@ def get_inference_gateway_url() -> str:
     return value
 
 
-def get_inference_api_keys() -> dict[str, str]:
-    """解析角色密钥：非空单角色变量优先于批量 JSON，不设置默认密钥。
-
-    保持既有行为：JSON 语法错误时忽略批量值，缺失角色由 loader 校验。
-    """
-    keys: dict[str, str] = {}
-    json_str = os.environ.get(_VAR_INFERENCE_API_KEYS, "")
-    if json_str:
-        try:
-            keys.update(json.loads(json_str))
-        except json.JSONDecodeError:
-            pass
-
-    for env_key, env_val in os.environ.items():
-        if env_key.startswith(_VAR_INFERENCE_API_KEY_PREFIX) and env_val:
-            role = env_key[len(_VAR_INFERENCE_API_KEY_PREFIX) :].lower()
-            keys[role] = env_val
-    return keys

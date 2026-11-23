@@ -8,7 +8,6 @@
 
 【必须设置】
   MASTER_KEY              加密主密钥（≥32 字符，见 encryption/constants.py）
-  INFERENCE_API_KEYS      各角色 api_key 映射 JSON（须覆盖 roles 段全部角色，缺失则启动报错）
   INFERENCE_SERVER        推理后端：ollama / vllm / sglang，无默认值
   INFERENCE_GATEWAY_URL   推理网关地址，无默认值
 

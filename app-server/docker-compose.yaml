@@ -55,7 +55,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - INFERENCE_SERVER=${INFERENCE_SERVER:-ollama}
       - INFERENCE_GATEWAY_URL=http://inference-gateway:8080/v1
-      - INFERENCE_API_KEYS={"inference":"ak_inference_001","summary":"ak_inference_002","guardrail":"ak_guardrail"}
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
