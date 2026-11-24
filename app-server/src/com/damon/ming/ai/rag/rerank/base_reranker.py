@@ -31,6 +31,8 @@ class RerankerParams:
     max_windows_per_node: int
     # 打分时是否附加章节标题链（heading_path），必须由 YAML 显式声明
     include_heading: bool
+    # 标题路径前缀模板，必须包含 {heading_path} 占位符
+    heading_prefix_template: str
     device: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -50,6 +52,13 @@ class RerankerParams:
             raise ValueError("max_windows_per_node 必须是正整数")
         if not isinstance(self.include_heading, bool):
             raise TypeError("include_heading 必须是布尔值")
+        if (
+            not isinstance(self.heading_prefix_template, str)
+            or "{heading_path}" not in self.heading_prefix_template
+        ):
+            raise ValueError(
+                "heading_prefix_template 必须是包含 {heading_path} 的字符串"
+            )
 
 
 class BaseReranker(ABC):

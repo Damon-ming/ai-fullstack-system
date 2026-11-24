@@ -58,7 +58,7 @@ class CrossEncoderModel:
         )
         self.model.to(self.device)
         self.model.eval()
-        # PyTorch 模型推理非线程安全，加锁串行化多线程并发 rerank
+        # 多个请求共享同一 GPU 模型；串行执行 batch，控制并发显存峰值
         self._infer_lock = threading.Lock()
 
     def score_pairs(
@@ -146,7 +146,7 @@ class CrossEncoderReranker(BaseReranker):
             node_window_counts.append(len(windows))
             all_texts.extend(windows)
 
-        # score_pairs 内部持 _infer_lock 保护 PyTorch 推理，返回后锁已释放
+        # score_pairs 按 batch 共享 GPU 推理资源，返回后锁已释放
         scores = self.model.score_pairs(query, all_texts, cancel_event)
 
         # 取消时 score_pairs 返回空列表，直接短路
@@ -196,8 +196,16 @@ class CrossEncoderReranker(BaseReranker):
         heading = node.metadata.get(HEADING_PATH, "")
         if not heading:
             return ""
-        clean = heading.strip("/").replace("/", " > ")
-        return f"【{clean}】\n"
+        heading_parts = [part for part in heading.strip("/").split("/") if part]
+        if not heading_parts:
+            return ""
+        normalized_heading_path = " > ".join(heading_parts)
+        return (
+            self.params.heading_prefix_template.format(
+                heading_path=normalized_heading_path
+            )
+            + "\n"
+        )
 
     def _split_into_windows(
         self,
