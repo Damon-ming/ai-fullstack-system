@@ -9,7 +9,7 @@
 import os
 from pathlib import Path
 
-import fitz  # pymupdf
+import fitz
 from llama_index.core import Document
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_NAME,

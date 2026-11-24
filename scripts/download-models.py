@@ -45,14 +45,9 @@ EMBEDDING_MODELS = [
 
 RERANK_MODELS = [
     (
-        "BAAI/bge-reranker-v2-gemma",
-        "rerank/bge-reranker-v2-gemma",
-        "BGE-Reranker v2 Gemma（中文主力）",
-    ),
-    (
         "BAAI/bge-reranker-v2-m3",
         "rerank/bge-reranker-v2-m3",
-        "BGE-Reranker v2 M3（轻量/降级）",
+        "BGE-Reranker v2 M3（中英文重排）",
     ),
 ]
 

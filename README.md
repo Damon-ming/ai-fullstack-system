@@ -125,7 +125,7 @@ ai-fullstack-system/
 | 组件 | 最低版本 | 说明 |
 |------|---------|------|
 | Docker Engine | 20.10+ | 容器运行时 |
-| Docker Compose | v2.0+ | 编排工具（`docker compose` 非 `docker-compose`） |
+| Docker Compose | v2.20.3+ | 根 Compose 使用 `include`（`docker compose`，非 `docker-compose`） |
 | NVIDIA Driver | 535+（推荐 575.51+） | vLLM 0.17.0 embedding 镜像使用 CUDA 12.9 |
 | NVIDIA Container Toolkit | v1.14+ | GPU 容器调度 |
 
@@ -158,10 +158,8 @@ ${DATA_DIR}/                          # 默认 /root/damon
 ├── postgres/                         # PostgreSQL 数据目录
 ├── models/                           # vLLM 模型权重（vLLM 模式）
 │   └── inference/
-│       ├── Qwen2.5-7B-Instruct/
 │       ├── Qwen2.5-0.5B-Instruct/
 │       ├── Qwen2.5-1.8B-Instruct/
-│       ├── Qwen2.5-1.5B-Instruct/
 │       └── Qwen3Guard-Gen-0.6B/
 ├── chroma/                           # Chroma 向量缓存
 ├── knowledge/                       # 上传知识库文件
@@ -174,7 +172,7 @@ ${DATA_DIR}/                          # 默认 /root/damon
 | 服务 | 基础镜像 | Python | 说明 |
 |------|---------|--------|------|
 | app-server | python:3.11-slim | 3.11 | FastAPI 后端 |
-| inference-gateway | python:3.11-slim | 3.11 | 推理网关 |
+| model-gateway | python:3.11-slim | 3.11 | 模型推理与 embedding 网关 |
 | web-app (builder) | node:22-alpine | — | 前端构建 |
 | web-app (serve) | nginx:alpine | — | 前端静态资源 |
 | postgres | postgres:16-alpine | — | 数据库 |
@@ -189,7 +187,7 @@ ${DATA_DIR}/                          # 默认 /root/damon
 |------|---------|------|------|------|-----------|
 | postgres | `pg_isready` | 5s | 3s | 10 | 10s |
 | app-server | `GET /ping` | 10s | 5s | 5 | 30s |
-| inference-gateway | `GET /docs` | 10s | 5s | 3 | — |
+| model-gateway | `GET /docs` | 10s | 5s | 3 | — |
 | vllm-inferences-001/002 | `GET /health` | 15s | 10s | 3 | 120~300s |
 | vllm-guardrail | `GET /health` | 15s | 10s | 3 | 180s |
 | vllm-embedding | `GET /health` | 15s | 10s | 3 | 300s |
@@ -201,9 +199,9 @@ vLLM 实例的 `start_period` 根据模型大小设定（7B 模型 300s，小模
 ```
 postgres (healthy)
     ↓
-inference-gateway (healthy) ←── vLLM pools 独立启动，无 depends_on
+model-gateway (healthy) ←── vLLM pools 独立启动，无 depends_on
     ↓
-app-server (depends_on: postgres + inference-gateway)
+app-server (depends_on: postgres + model-gateway)
     ↓
 web-app (depends_on: app-server)
 ```
@@ -215,7 +213,7 @@ vLLM 实例不参与 Docker `depends_on`——它们通过 gateway 的 api_key �
 ### 前置条件
 
 - Docker Engine 20.10+
-- Docker Compose v2.0+
+- Docker Compose v2.20.3+
 - NVIDIA Container Toolkit（vLLM 模式需要）
 
 ### 部署步骤
@@ -228,7 +226,11 @@ git clone <repo-url> && cd ai-fullstack-system
 cp .env.example .env
 # 编辑 .env，设置 DB_PASSWORD、MASTER_KEY 等
 
-# 3. 部署（vLLM 推理 + vLLM embedding，需要 GPU）
+# 3. 在宿主机安装模型下载工具并下载当前部署所需模型
+python -m pip install huggingface-hub
+python scripts/download-models.py
+
+# 4. 部署（vLLM 推理 + vLLM embedding，需要 GPU）
 docker compose up -d --build
 
 # 5. 查看日志
@@ -247,7 +249,7 @@ docker compose down
 
 以下仅容器内访问（不映射宿主机）：
 - `8000` — app-server
-- `8080` — inference-gateway
+- `8080` — model-gateway
 - `8000` — vLLM inference、summary、guardrail、embedding pools（仅容器网络可访问）
 
 ## 推理后端切换
@@ -261,7 +263,7 @@ docker compose down
 
 切换只需改 `.env` 后重新 `docker compose up -d --build`。
 
-Embedding 固定由独立的 vLLM 服务运行，并通过 inference-gateway 路由；`INFERENCE_SERVER` 只选择生成推理后端。
+Embedding 固定由独立的 vLLM 服务运行，并通过 model-gateway 路由；`INFERENCE_SERVER` 只选择生成推理后端。
 
 ## API 概览
 
@@ -430,7 +432,7 @@ pnpm dev          # 开发服务器
 pnpm build        # 生产构建
 ```
 
-### 网关（inference-gateway）
+### 网关（model-gateway）
 
 ```bash
 cd model-gateway

@@ -12,7 +12,7 @@
 #
 #  以下仅容器内访问（expose，不映射宿主机）：
 #  8000                    app-server             8000    后端API
-#  8080                    inference-gateway      8080    网关
+#  8080                    model-gateway         8080    网关
 #  8000×2                  vllm-inferences-001/002  8000 主推理和摘要实例
 #  8000                    vllm-embedding         8000    RAG embedding
 #

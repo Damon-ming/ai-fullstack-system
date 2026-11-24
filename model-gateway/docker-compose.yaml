@@ -14,11 +14,11 @@
 services:
   # ── API Gateway ──────────────────────────────────────────────────
   # 按 api_key 路由到对应推理实例，透传 OpenAI 兼容接口
-  inference-gateway:
+  model-gateway:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: inference-gateway
+    container_name: model-gateway
     restart: always
     expose:
       - "8080"
