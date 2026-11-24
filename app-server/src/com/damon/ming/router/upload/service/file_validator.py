@@ -9,6 +9,16 @@ _OFFICE_REQUIRED_ENTRIES = {
     ".pptx": "ppt/presentation.xml",
 }
 _TEXT_EXTENSIONS = {".md", ".txt", ".csv", ".html", ".htm"}
+_LEGACY_OFFICE_EXTENSIONS = {".doc", ".ppt", ".xls"}
+_LEGACY_OFFICE_SIGNATURE = bytes.fromhex("D0CF11E0A1B11AE1")
+_IMAGE_SIGNATURES = {
+    ".bmp": (b"BM",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".tif": (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+"),
+    ".tiff": (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+"),
+}
 
 
 def validate_upload_content(suffix: str, content: bytes) -> None:
@@ -20,6 +30,23 @@ def validate_upload_content(suffix: str, content: bytes) -> None:
         # PDF 头通常在文件开头；允许头部前存在少量兼容性字节。
         if b"%PDF-" not in content[:1024]:
             raise ValueError("PDF 文件头无效")
+        return
+
+    if suffix in _LEGACY_OFFICE_EXTENSIONS:
+        is_rtf_word_document = suffix == ".doc" and content.lstrip().startswith(
+            b"{\\rtf"
+        )
+        if (
+            not content.startswith(_LEGACY_OFFICE_SIGNATURE)
+            and not is_rtf_word_document
+        ):
+            raise ValueError("旧版 Office 文件头无效")
+        return
+
+    image_signatures = _IMAGE_SIGNATURES.get(suffix)
+    if image_signatures:
+        if not any(content.startswith(signature) for signature in image_signatures):
+            raise ValueError("图片文件内容与扩展名不匹配")
         return
 
     required_entry = _OFFICE_REQUIRED_ENTRIES.get(suffix)

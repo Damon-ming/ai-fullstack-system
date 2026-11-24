@@ -1,4 +1,5 @@
 import React from "react";
+import { UPLOAD_ACCEPT } from "@ming/feature-upload-api";
 import { useDrawerHeaderHook } from "../hook/useDrawerHeaderHook";
 import { useDrawerSearchHook } from "../hook/useDrawerSearchHook";
 import { useDrawerNewChatHook } from "../hook/useDrawerNewChatHook";
@@ -57,7 +58,7 @@ export const DrawerCollapsed: React.FC = () => {
           hidden
           multiple
           type="file"
-          accept=".pdf,.md,.txt,.csv,.xlsx,.docx,.pptx,.html,.htm"
+          accept={UPLOAD_ACCEPT}
           onChange={(event) => handleUpload(event.target.files)}
         />
       </label>

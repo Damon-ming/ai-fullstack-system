@@ -1,4 +1,5 @@
 import React from "react";
+import { UPLOAD_ACCEPT } from "@ming/feature-upload-api";
 import { useDrawerUploadHook } from "../hook/useDrawerUploadHook";
 
 export const DrawerUpload: React.FC = () => {
@@ -26,7 +27,7 @@ export const DrawerUpload: React.FC = () => {
         <input
           hidden
           multiple
-          accept=".pdf,.md,.txt,.csv,.xlsx,.docx,.pptx,.html,.htm"
+          accept={UPLOAD_ACCEPT}
           type="file"
           onChange={(event) => handleUpload(event.target.files)}
         />

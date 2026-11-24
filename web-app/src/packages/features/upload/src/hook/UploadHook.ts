@@ -7,26 +7,40 @@ const log = createLogger("upload/hook");
 
 // ── 上传限制常量（与后端 upload-config.yaml 保持一致）─────────────────
 const MAX_FILES_PER_REQUEST = 10;
+const MAX_TOTAL_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 
 // 各类型文件大小上限（字节），与后端 allowed_types 一一对应
 const FILE_TYPE_LIMITS: Record<string, number> = {
-  pdf: 50 * 1024 * 1024, // 50MB
+  pdf: 10 * 1024 * 1024, // 10MB
   md: 10 * 1024 * 1024, // 10MB
   txt: 10 * 1024 * 1024, // 10MB
   csv: 10 * 1024 * 1024, // 10MB
-  xlsx: 50 * 1024 * 1024, // 50MB
-  docx: 20 * 1024 * 1024, // 20MB
-  pptx: 50 * 1024 * 1024, // 50MB
-  html: 5 * 1024 * 1024, // 5MB
-  htm: 5 * 1024 * 1024, // 5MB
+  xlsx: 10 * 1024 * 1024, // 10MB
+  xls: 10 * 1024 * 1024, // 10MB
+  docx: 10 * 1024 * 1024, // 10MB
+  doc: 10 * 1024 * 1024, // 10MB
+  pptx: 10 * 1024 * 1024, // 10MB
+  ppt: 10 * 1024 * 1024, // 10MB
+  html: 10 * 1024 * 1024, // 10MB
+  htm: 10 * 1024 * 1024, // 10MB
+  bmp: 5 * 1024 * 1024, // 5MB
+  jpeg: 5 * 1024 * 1024, // 5MB
+  jpg: 5 * 1024 * 1024, // 5MB
+  png: 5 * 1024 * 1024, // 5MB
+  tif: 5 * 1024 * 1024, // 5MB
+  tiff: 5 * 1024 * 1024, // 5MB
 };
 
-// 支持的扩展名正则
-const ALLOWED_EXTENSIONS = /\.(pdf|md|txt|csv|xlsx|docx|pptx|html|htm)$/i;
+const ALLOWED_EXTENSIONS = new RegExp(
+  `\\.(${Object.keys(FILE_TYPE_LIMITS).join("|")})$`,
+  "i",
+);
 
-// 允许的扩展名列表（用于错误提示）
-const ALLOWED_EXTENSIONS_LIST =
-  ".pdf, .md, .txt, .csv, .xlsx, .docx, .pptx, .html, .htm";
+export const UPLOAD_ACCEPT = Object.keys(FILE_TYPE_LIMITS)
+  .map((extension) => `.${extension}`)
+  .join(",");
+
+const ALLOWED_EXTENSIONS_LIST = UPLOAD_ACCEPT.split(",").join(", ");
 
 function createUploadRequest(files: File[]): UploadRequest {
   if (!files.length) throw new Error("至少选择一个文件");
@@ -35,6 +49,11 @@ function createUploadRequest(files: File[]): UploadRequest {
     throw new Error(
       `单次最多上传 ${MAX_FILES_PER_REQUEST} 个文件，当前 ${files.length} 个`,
     );
+  }
+
+  const totalSize = files.reduce((total, file) => total + file.size, 0);
+  if (totalSize > MAX_TOTAL_UPLOAD_SIZE) {
+    throw new Error("单次上传文件总大小不能超过 50MB");
   }
 
   if (files.some((file) => !ALLOWED_EXTENSIONS.test(file.name))) {

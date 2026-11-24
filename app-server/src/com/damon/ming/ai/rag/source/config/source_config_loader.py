@@ -96,6 +96,13 @@ class OcrConfig:
 
 
 @dataclass(frozen=True)
+class LegacyOfficeSourceConfig:
+    """旧版 Office 转换配置。"""
+
+    conversion_timeout_seconds: int
+
+
+@dataclass(frozen=True)
 class MarkdownSourceConfig:
     """Markdown 数据源配置（纯数据类）。"""
 
@@ -169,6 +176,9 @@ class SourceConfig:
     # OCR 推理配置（PDF、Office 内嵌图片和独立图片共用）
     ocr: OcrConfig
 
+    # 旧版 Office 转换配置
+    legacy_office_source: LegacyOfficeSourceConfig
+
     # 文本数据源配置
     text_source: TextSourceConfig
 
@@ -215,6 +225,7 @@ class SourceConfigLoader:
         xlsx_section = self._required_section(raw, "xlsx_source")
         image_section = self._required_section(raw, "image_source")
         ocr_section = self._required_section(raw, "ocr")
+        legacy_office_section = self._required_section(raw, "legacy_office_source")
         text_section = self._required_section(raw, "text_source")
         markdown_section = self._required_section(raw, "markdown_source")
         pdf_section = self._required_section(raw, "pdf_source")
@@ -283,6 +294,13 @@ class SourceConfigLoader:
             ),
             image_source=ImageSourceConfig(extensions=set(image_extensions_raw)),
             ocr=OcrConfig(device=ocr_device),
+            legacy_office_source=LegacyOfficeSourceConfig(
+                conversion_timeout_seconds=self._required_positive_int(
+                    legacy_office_section,
+                    "conversion_timeout_seconds",
+                    "legacy_office_source",
+                ),
+            ),
             text_source=TextSourceConfig(
                 extensions=set(extensions_raw),
                 pre_chunk=self._parse_pre_chunk(text_section, "text_source"),

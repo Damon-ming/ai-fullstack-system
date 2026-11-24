@@ -1,1 +1,1 @@
-export { uploadFiles } from "./api/upload-api.api"
+export { uploadFiles, UPLOAD_ACCEPT } from "./api/upload-api.api";

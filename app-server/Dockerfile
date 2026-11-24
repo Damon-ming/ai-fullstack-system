@@ -1,3 +1,4 @@
+# app-server/Dockerfile
 # 基础镜像：以官方python3.11 slim轻量镜像作为基底
 FROM python:3.11-slim
 
@@ -10,8 +11,12 @@ WORKDIR /app-server
 # 作用：有些 Python 库（比如 numpy、pandas、pyarrow、某些向量库）需要本地 C 语言编译，就必须要有 gcc。
 # 删除 apt 下载的软件源缓存文件。
 # `rm -rf /var/lib/apt/lists/` 会下载一大堆索引缓存，占用镜像空间，构建完立刻删掉，**减少最终镜像大小**。
-RUN apt update && apt install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libreoffice-calc \
+    libreoffice-impress \
+    libreoffice-writer \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制项目依赖
@@ -21,8 +26,9 @@ COPY requirements.txt .
 # `.whl` 是 Python 的**轮子包（wheel）**文件后缀
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制全部业务代码
-COPY . .
+# 仅复制运行所需的应用代码和版本配置
+COPY src/ ./src/
+COPY project.toml ./
 
 # ── 构建时注入 ─────────────────────────────────────────────────────
 # ARG: 用来声明 **构建参数**

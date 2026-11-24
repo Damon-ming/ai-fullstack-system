@@ -1,1 +1,5 @@
-export { uploadFiles, uploadFiles as uploadFile } from "./UploadHook";
+export {
+  uploadFiles,
+  uploadFiles as uploadFile,
+  UPLOAD_ACCEPT,
+} from "./UploadHook";

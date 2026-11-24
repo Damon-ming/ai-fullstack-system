@@ -10,13 +10,13 @@
 max_files_per_request: 10
 
 # 单次请求总大小上限（所有文件合计，字节）
-max_total_upload_size: 524288000  # 500MB —— 防内存溢出
+max_total_upload_size: 52428800   # 50MB —— 防内存溢出
 
 # 支持的文件类型及各自大小上限（字节）
 # 扩展名不带点号，大小写不敏感
 allowed_types:
   pdf:
-    max_size_bytes: 52428800   # 50MB —— PDF 知识库文档
+    max_size_bytes: 10485760   # 10MB —— PDF 知识库文档
     description: "PDF 文档"
   md:
     max_size_bytes: 10485760   # 10MB —— Markdown 文档
@@ -28,17 +28,44 @@ allowed_types:
     max_size_bytes: 10485760   # 10MB —— CSV 表格数据
     description: "CSV 表格"
   xlsx:
-    max_size_bytes: 52428800   # 50MB —— Excel 多 sheet 数据
+    max_size_bytes: 10485760   # 10MB —— Excel 多 sheet 数据
     description: "Excel 表格"
+  xls:
+    max_size_bytes: 10485760   # 10MB —— 旧版 Excel，上传后转换为 XLSX
+    description: "旧版 Excel 表格"
   docx:
-    max_size_bytes: 20971520   # 20MB —— Word 文档（含嵌入图片）
+    max_size_bytes: 10485760   # 10MB —— Word 文档（含嵌入图片）
     description: "Word 文档"
+  doc:
+    max_size_bytes: 10485760   # 10MB —— 旧版 Word，上传后转换为 DOCX
+    description: "旧版 Word 文档"
   pptx:
-    max_size_bytes: 52428800   # 50MB —— PPT 演示文稿（含图表）
+    max_size_bytes: 10485760   # 10MB —— PPT 演示文稿（含图表）
     description: "PPT 演示文稿"
+  ppt:
+    max_size_bytes: 10485760   # 10MB —— 旧版 PPT，上传后转换为 PPTX
+    description: "旧版 PPT 演示文稿"
+  bmp:
+    max_size_bytes: 5242880    # 5MB —— 图片 OCR
+    description: "BMP 图片"
+  jpeg:
+    max_size_bytes: 5242880    # 5MB —— 图片 OCR
+    description: "JPEG 图片"
+  jpg:
+    max_size_bytes: 5242880    # 5MB —— 图片 OCR
+    description: "JPG 图片"
+  png:
+    max_size_bytes: 5242880    # 5MB —— 图片 OCR
+    description: "PNG 图片"
+  tif:
+    max_size_bytes: 5242880    # 5MB —— 图片 OCR
+    description: "TIFF 图片"
+  tiff:
+    max_size_bytes: 5242880    # 5MB —— 图片 OCR
+    description: "TIFF 图片"
   html:
-    max_size_bytes: 5242880    # 5MB —— 网页文件
+    max_size_bytes: 10485760   # 10MB —— 网页文件
     description: "HTML 网页"
   htm:
-    max_size_bytes: 5242880    # 5MB —— 网页文件
+    max_size_bytes: 10485760   # 10MB —— 网页文件
     description: "HTML 网页"

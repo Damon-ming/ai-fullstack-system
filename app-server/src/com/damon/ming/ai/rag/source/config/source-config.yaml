@@ -13,6 +13,10 @@
 #   - chunk_chars: 标题段落超过此长度时触发二次切分
 #   - boundaries: 二次切分边界优先级
 
+legacy_office_source:
+  # 单个旧版 Office 文件转换超时（秒）
+  conversion_timeout_seconds: 60
+
 csv_source:
   # 每个 Document 包含的数据行数（不含表头）
   batch_rows: 50
