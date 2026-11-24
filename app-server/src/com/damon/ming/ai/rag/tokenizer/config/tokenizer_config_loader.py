@@ -15,9 +15,13 @@ tokenizer/ 实现通过 TokenizerParams 数据类接收参数。
 """
 
 import os
+from pathlib import Path
 
 from src.com.damon.ming.ai.rag.tokenizer import resolve_tokenizer
-from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import TokenizerParams
+from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
+    JiebaTokenizerParams,
+    TiktokenTokenizerParams,
+)
 from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
 
@@ -27,12 +31,11 @@ class TokenizerConfigLoader:
     启动时全量加载，所有分词器在服务启动阶段初始化完毕。
     """
 
-    _cache: dict[str, object] = {}
-
     def __init__(self, config_path: str | None = None):
         self._config_path = resolve_yaml_path(
             config_path if config_path is not None else os.path.dirname(__file__)
         )
+        self._cache: dict[str, object] = {}
 
     def load_all(self) -> dict[str, object]:
         """一次性加载 YAML 中所有配置的分词器实例。
@@ -51,7 +54,7 @@ class TokenizerConfigLoader:
         """加载指定名称的分词器，未缓存则构建。
 
         Args:
-            name: tokenizers 下的键名
+            name: 配置文件顶层的 tokenizer 实例名
 
         Returns:
             BaseTokenizer 或 BaseWordTokenizer 实例
@@ -67,48 +70,64 @@ class TokenizerConfigLoader:
 
     def _list_names(self) -> list[str]:
         raw_cfg = load_yaml(self._config_path)
-        if raw_cfg is None or "tokenizers" not in raw_cfg:
-            raise ValueError("配置文件格式错误：缺少 'tokenizers' 根节点")
-        return list(raw_cfg["tokenizers"].keys())
+        return list(raw_cfg.keys())
 
     def _build_one(self, name: str):
         raw = self._read_yaml(name)
-        params_raw = raw.get("params", {})
-
-        known_fields = {f.name for f in TokenizerParams.__dataclass_fields__.values()}
-        base_kwargs = {k: v for k, v in params_raw.items() if k in known_fields}
-        extra_kwargs = {k: v for k, v in params_raw.items() if k not in known_fields}
-
-        # 将 dicts_base_dir 相对路径解析为绝对路径（锚定 tokenizer-config.yaml 位置）
-        if base_kwargs.get("dicts_base_dir") and not os.path.isabs(
-            base_kwargs["dicts_base_dir"]
-        ):
-            config_dir = os.path.dirname(os.path.abspath(self._config_path))
-            src_root = os.path.abspath(
-                os.path.join(config_dir, "..", "..", "..", "..", "..", "..", "..")
-            )
-            base_kwargs["dicts_base_dir"] = os.path.abspath(
-                os.path.join(src_root, base_kwargs["dicts_base_dir"])
-            )
-
-        params = TokenizerParams(**base_kwargs, extra=extra_kwargs)
-
         engine = raw.get("tokenizer_engine")
         if not engine:
             raise ValueError("配置缺少 tokenizer_engine 字段")
+
+        params_raw = raw.get("params", {})
+        if not isinstance(params_raw, dict):
+            raise TypeError(f"分词器 '{name}' 的 params 必须是键值对象")
+
+        if engine == "tiktoken":
+            encoding_name = params_raw.get("encoding_name")
+            if not isinstance(encoding_name, str) or not encoding_name.strip():
+                raise ValueError(f"分词器 '{name}' 缺少有效的 params.encoding_name")
+            params = TiktokenTokenizerParams(encoding_name=encoding_name)
+        elif engine == "jieba":
+            params = JiebaTokenizerParams(
+                user_dict_paths=self._discover_jieba_dict_paths(params_raw, name)
+            )
+        else:
+            raise ValueError(f"分词器引擎 '{engine}' 尚未配置对应的参数解析器")
+
         tokenizer_class = resolve_tokenizer(engine)
 
         return tokenizer_class(params)
 
+    def _discover_jieba_dict_paths(self, params: dict, name: str) -> tuple[str, ...]:
+        """查找 tokenizer/ 下词典目录中的全部 .txt 文件。"""
+        dicts_dir_name = params.get("dicts_dir")
+        if dicts_dir_name is None or dicts_dir_name == "":
+            return ()
+        if not isinstance(dicts_dir_name, str):
+            raise TypeError(f"分词器 '{name}' 的 params.dicts_dir 必须是字符串")
+        dicts_dir_name = dicts_dir_name.strip()
+        if not dicts_dir_name:
+            return ()
+
+        tokenizer_dir = Path(__file__).resolve().parent.parent
+        dicts_dir = (tokenizer_dir / dicts_dir_name).resolve()
+        if not dicts_dir.is_dir():
+            raise FileNotFoundError(f"分词器 '{name}' 的词典目录不存在: {dicts_dir}")
+
+        return tuple(
+            str(path.resolve())
+            for path in sorted(dicts_dir.glob("*.txt"))
+            if path.is_file()
+        )
+
     def _read_yaml(self, name: str) -> dict:
         raw_cfg = load_yaml(self._config_path)
 
-        if raw_cfg is None or "tokenizers" not in raw_cfg:
-            raise ValueError("配置文件格式错误：缺少 'tokenizers' 根节点")
-
-        section = raw_cfg["tokenizers"]
-        if name not in section:
+        if name not in raw_cfg:
             raise ValueError(
-                f"未找到分词器配置: '{name}'. 可用: {list(section.keys())}"
+                f"未找到分词器配置: '{name}'. 可用: {list(raw_cfg.keys())}"
             )
-        return section[name]
+        section = raw_cfg[name]
+        if not isinstance(section, dict):
+            raise TypeError(f"分词器配置 '{name}' 必须是键值对象")
+        return section

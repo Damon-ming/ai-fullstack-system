@@ -17,6 +17,9 @@
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseTokenizer,
     BaseWordTokenizer,
+    EmbeddingTokenizerParams,
+    JiebaTokenizerParams,
+    TiktokenTokenizerParams,
     TokenizerParams,
 )
 from src.com.damon.ming.ai.rag.tokenizer.embedding_tokenizer import EmbeddingTokenizer
@@ -76,9 +79,12 @@ def create_tokenizers(*, embedding_tokenizer=None):
 __all__ = [
     "BaseTokenizer",
     "BaseWordTokenizer",
-    "JiebaTokenizer",
     "EmbeddingTokenizer",
+    "EmbeddingTokenizerParams",
+    "JiebaTokenizer",
+    "JiebaTokenizerParams",
     "TiktokenTokenizer",
+    "TiktokenTokenizerParams",
     "TokenizerParams",
     "create_tokenizers",
     "list_engines",

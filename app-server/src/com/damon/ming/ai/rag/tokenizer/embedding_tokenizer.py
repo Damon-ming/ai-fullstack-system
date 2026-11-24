@@ -2,7 +2,7 @@
 
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseTokenizer,
-    TokenizerParams,
+    EmbeddingTokenizerParams,
 )
 
 
@@ -13,7 +13,9 @@ class EmbeddingTokenizer(BaseTokenizer):
     """
 
     def __init__(self, tokenizer):
-        super().__init__(TokenizerParams(encoding_name=tokenizer.__class__.__name__))
+        super().__init__(
+            EmbeddingTokenizerParams(encoding_name=tokenizer.__class__.__name__)
+        )
         self._tokenizer = tokenizer
 
     def encode(self, text: str) -> list[int]:

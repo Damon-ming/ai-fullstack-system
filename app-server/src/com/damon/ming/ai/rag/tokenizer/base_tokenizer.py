@@ -17,19 +17,35 @@
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 # ── 参数数据类 ──────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
 class TokenizerParams:
-    """分词器参数（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
+    """Tokenizer 实例的参数基类。"""
+
+
+@dataclass(frozen=True)
+class TiktokenTokenizerParams(TokenizerParams):
+    """tiktoken 编码规则参数。"""
 
     encoding_name: str
-    dicts_base_dir: str = ""  # 词典目录（已由 loader 解析为绝对路径）
-    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class JiebaTokenizerParams(TokenizerParams):
+    """jieba 已解析的用户词典路径。"""
+
+    user_dict_paths: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class EmbeddingTokenizerParams(TokenizerParams):
+    """包装 embedding 模型 tokenizer 时使用的名称。"""
+
+    encoding_name: str
 
 
 # ── Token ID 级（用于 LLM 上下文管理）──────────────────────────────

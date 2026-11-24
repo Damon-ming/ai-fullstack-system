@@ -1,42 +1,16 @@
 # app-server/src/com/damon/ming/ai/rag/tokenizer/config/tokenizer-config.yaml
-# 分词器配置 —— 支持多个分词器实例，各组件按需选用。
-#
-# Token ID 级（LLM 上下文管理）：
-#   tiktoken: OpenAI/GPT 系列 token 计数
-# TODO: 生成模型切换时按模型配置选择对应 tokenizer，避免上下文预算
-# 继续用固定 cl100k_base 估算而与实际 token 数偏离。
-#
-# 词语级（关键词检索）：
-#   jieba: 中文词语切分，用于 BM25
-#
-# 引擎名称与实现类的映射在 tokenizer/__init__.py 中通过 @register_engine 维护。
-#
-# 新增分词器只需：写实现类 → 加 @register_engine("name") → 在下方添加配置
+# 分词器实例配置。每个顶层键是实例名，tokenizer_engine 选择实现。
+# llm_counter 当前固定使用 cl100k_base；生成模型变更后应改为与模型匹配的 tokenizer。
+# TODO: 从生成模型配置选择 tokenizer，避免换模型时手动同步。
 
-tokenizers:
-  # LLM token 计数（用于上下文窗口管理）
-  llm_counter:
-    tokenizer_engine: tiktoken
-    params:
-      encoding_name: cl100k_base
+# LLM token 计数（用于上下文窗口管理）
+llm_counter:
+  tokenizer_engine: tiktoken
+  params:
+    encoding_name: cl100k_base
 
-  # BM25 中文词语切分（用于关键词检索）
-  bm25_searcher:
-    tokenizer_engine: jieba
-    params:
-      encoding_name: none
-      dicts_base_dir: "com/damon/ming/ai/rag/tokenizer/config/dicts"  # 词典目录（相对路径，基于 src/）
-      dict_paths:
-        - tech_terms.txt  # 相对于 dicts_base_dir
-
-  # 备用 GPT-3.5 编码（与 GPT-4 的 cl100k 不同）
-  # gpt35_counter:
-  #   tokenizer_engine: tiktoken
-  #   params:
-  #     encoding_name: p50k_base
-
-  # HuggingFace 分词器（与特定模型对齐）
-  # qwen_counter:
-  #   tokenizer_engine: huggingface
-  #   params:
-  #     model_name: Qwen/Qwen2.5-7B
+# BM25 中文词语切分（用于关键词检索）
+bm25_searcher:
+  tokenizer_engine: jieba
+  params:
+    dicts_dir: dicts  # 相对于 tokenizer/ 目录；自动加载其中所有 .txt 词典

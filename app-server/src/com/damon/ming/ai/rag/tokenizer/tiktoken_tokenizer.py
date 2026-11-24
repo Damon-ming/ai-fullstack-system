@@ -4,7 +4,7 @@ import tiktoken
 from src.com.damon.ming.ai.rag.tokenizer import register_engine
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseTokenizer,
-    TokenizerParams,
+    TiktokenTokenizerParams,
 )
 from src.com.damon.ming.log import pin
 
@@ -15,7 +15,7 @@ logger = pin("TiktokenTokenizer")
 class TiktokenTokenizer(BaseTokenizer):
     """tiktoken 分词器 — 适用于 OpenAI/GPT 系列模型的 token 计数"""
 
-    def __init__(self, params: TokenizerParams):
+    def __init__(self, params: TiktokenTokenizerParams):
         super().__init__(params)
         self.enc = tiktoken.get_encoding(params.encoding_name)
 
