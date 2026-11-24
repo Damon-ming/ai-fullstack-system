@@ -10,8 +10,8 @@ retriever/ 实现通过 RetrieverConfig 数据类接收参数。
 用法：
   loader = RetrieverConfigLoader()
   configs = loader.load_all()          # dict[str, RetrieverConfig]
-  configs["primary"].top_k             # 检索时的 top_k
-  configs["primary"].dense_weight      # HybridRetriever 构造参数
+  configs["hybrid"].top_k             # 检索时的 top_k
+  configs["hybrid"].dense_weight      # HybridRetriever 构造参数
 """
 
 import os
@@ -101,7 +101,7 @@ class RetrieverConfigLoader:
         """加载指定名称的检索器配置，未缓存则构建。
 
         Args:
-            name: retrievers 下的键名
+            name: 配置文件顶层的检索器配置名
 
         Returns:
             RetrieverConfig 实例
@@ -117,9 +117,9 @@ class RetrieverConfigLoader:
 
     def _list_names(self) -> list[str]:
         raw_cfg = load_yaml(self._config_path)
-        if raw_cfg is None or "retrievers" not in raw_cfg:
-            raise ValueError("配置文件格式错误：缺少 'retrievers' 根节点")
-        return list(raw_cfg["retrievers"].keys())
+        if not isinstance(raw_cfg, dict):
+            raise TypeError("检索器配置文件必须是键值对象")
+        return list(raw_cfg.keys())
 
     def _build_one(self, name: str) -> RetrieverConfig:
         raw = self._read_yaml(name)
@@ -147,12 +147,14 @@ class RetrieverConfigLoader:
     def _read_yaml(self, name: str) -> dict:
         raw_cfg = load_yaml(self._config_path)
 
-        if raw_cfg is None or "retrievers" not in raw_cfg:
-            raise ValueError("配置文件格式错误：缺少 'retrievers' 根节点")
+        if not isinstance(raw_cfg, dict):
+            raise TypeError("检索器配置文件必须是键值对象")
 
-        section = raw_cfg["retrievers"]
-        if name not in section:
+        if name not in raw_cfg:
             raise ValueError(
-                f"未找到检索器配置: '{name}'. 可用: {list(section.keys())}"
+                f"未找到检索器配置: '{name}'. 可用: {list(raw_cfg.keys())}"
             )
-        return section[name]
+        section = raw_cfg[name]
+        if not isinstance(section, dict):
+            raise TypeError(f"检索器配置 '{name}' 必须是键值对象")
+        return section

@@ -38,7 +38,7 @@ class RetrieverManager:
             raise RuntimeError("RAG 检索器已经初始化")
         configs = RagRetrieverConfigs()
         configs.initialize()
-        config = configs.get_common()
+        config = configs.get_hybrid()
         dense = DenseRetriever(vector_store=vector_store, embedding_service=embedder)
         sparse = SparseRetriever(bm25_index=bm25_index)
         hybrid = HybridRetriever(
@@ -56,7 +56,7 @@ class RetrieverManager:
         self._sparse = sparse
         self._hybrid = hybrid
 
-    def get_common_config(self) -> RetrieverConfig:
+    def get_hybrid_config(self) -> RetrieverConfig:
         if self._config is None:
             raise RuntimeError("RAG 检索器尚未初始化")
         return self._config

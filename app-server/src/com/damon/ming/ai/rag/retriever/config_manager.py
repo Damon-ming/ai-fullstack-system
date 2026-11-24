@@ -15,10 +15,10 @@ class RagRetrieverConfigs:
             raise RuntimeError("RAG 检索器已经初始化")
         self._items = RetrieverConfigLoader().load_all()
 
-    def get_common(self) -> RetrieverConfig:
+    def get_hybrid(self) -> RetrieverConfig:
         if self._items is None:
             raise RuntimeError("RAG 检索器尚未初始化")
         try:
-            return self._items["common"]
+            return self._items["hybrid"]
         except KeyError as exc:
-            raise ValueError("缺少 RAG 检索器配置: common") from exc
+            raise ValueError("缺少 RAG 检索器配置: hybrid") from exc

@@ -142,9 +142,7 @@ class RagChoreographer:
 
         # 步骤5：启动时加载 BGE-Reranker-v2-M3，避免首次请求时产生加载延迟
         self.reranker_manager = create_rerankers(model_root_path)
-        self.reranker: BaseReranker = (
-            self.reranker_manager.get_bge_reranker_v2_m3()
-        )
+        self.reranker: BaseReranker = self.reranker_manager.get_bge_reranker_v2_m3()
 
         # 步骤6：BM25 索引由知识库和稀疏检索器共享。
         self.bm25_index = BM25Index(tokenizer=self.bm25_tokenizer.tokenize)
@@ -154,7 +152,7 @@ class RagChoreographer:
             bm25_index=self.bm25_index,
             retrieval_pool=self.thread_pools.get_retrieval_pool(),
         )
-        self.retriever_config = self.retriever_manager.get_common_config()
+        self.retriever_config = self.retriever_manager.get_hybrid_config()
         self.hybrid_retriever = self.retriever_manager.get_hybrid()
 
         # 步骤7：初始化分割器
@@ -172,7 +170,7 @@ class RagChoreographer:
             embedder=self.embedder,
             vector_store=self._vector_store,
         )
-        
+
         self.knowledge_index_service = KnowledgeIndexService(
             corpus_dir=corpus_path,
             document_pool=self.thread_pools.get_document_pool(),
