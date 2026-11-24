@@ -17,23 +17,23 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 import httpx
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
+from starlette.background import BackgroundTask
 
 logger = logging.getLogger("gateway")
 
-# ── 配置路径 ──────────────────────────────────────────────────────
-_CONFIG_PATH = os.environ.get(
-    "GATEWAY_CONFIG_PATH",
-    "/etc/gateway/gateway.yaml",
-)
-_MAX_BODY_SIZE = int(os.environ.get("GATEWAY_MAX_BODY_SIZE", "10485760"))  # 10MB
+# ── 固定配置 ──────────────────────────────────────────────────────
+_CONFIG_PATH = "/etc/gateway/gateway.yaml"
+_MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MiB
+_DEFAULT_TIMEOUT_SECONDS = 30
 
-# api_key → {upstream_base, upstream_key}（每实例独立密钥，P0-4 修复）
-ROUTING_TABLE: dict[str, dict] = {}
+# api_key → {upstream, upstream_key}
+ROUTING_TABLE: dict[str, dict[str, str]] = {}
 
 # ── 共享连接池 ────────────────────────────────────────────────────
 _http_client: httpx.AsyncClient | None = None
@@ -47,22 +47,53 @@ def _load_config() -> None:
     with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
-    if not cfg or "routes" not in cfg:
+    if not isinstance(cfg, dict):
+        raise TypeError(f"配置格式错误，根节点必须是映射: {_CONFIG_PATH}")
+
+    routes = cfg.get("routes")
+    if not isinstance(routes, dict) or not routes:
         raise ValueError(f"配置格式错误，缺少 routes: {_CONFIG_PATH}")
 
-    for api_key, route_cfg in cfg["routes"].items():
-        upstream = route_cfg.get("upstream", "")
-        upstream_key = route_cfg.get("upstream_key", "")
-        if api_key and upstream:
-            if not upstream_key:
-                raise ValueError(
-                    f"路由 {api_key} 缺少 upstream_key，"
-                    f"每个实例必须配置独立密钥（P0-4 安全要求）"
-                )
-            ROUTING_TABLE[api_key] = {
-                "upstream": upstream,
-                "upstream_key": upstream_key,
-            }
+    loaded_routes: dict[str, dict[str, str]] = {}
+    for route_index, (api_key, route_cfg) in enumerate(routes.items(), start=1):
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise ValueError("路由配置中的 api_key 必须是非空字符串")
+        api_key = api_key.strip()
+        if api_key in loaded_routes:
+            raise ValueError("路由配置中的 api_key 去除首尾空格后重复")
+        if not isinstance(route_cfg, dict):
+            raise TypeError(f"第 {route_index} 条路由配置必须是映射")
+
+        upstream = route_cfg.get("upstream")
+        upstream_key = route_cfg.get("upstream_key")
+        if not isinstance(upstream, str) or not upstream.strip():
+            raise ValueError(f"第 {route_index} 条路由缺少有效的 upstream")
+        upstream = upstream.strip().rstrip("/")
+        parsed_upstream = urlsplit(upstream)
+        if (
+            parsed_upstream.scheme not in {"http", "https"}
+            or not parsed_upstream.netloc
+            or parsed_upstream.username
+            or parsed_upstream.password
+            or parsed_upstream.query
+            or parsed_upstream.fragment
+        ):
+            raise ValueError(
+                f"第 {route_index} 条路由的 upstream 必须是有效的 HTTP(S) 基础地址"
+            )
+        if not isinstance(upstream_key, str) or not upstream_key.strip():
+            raise ValueError(
+                f"第 {route_index} 条路由缺少 upstream_key，"
+                "每个实例必须配置独立密钥（P0-4 安全要求）"
+            )
+
+        loaded_routes[api_key] = {
+            "upstream": upstream,
+            "upstream_key": upstream_key.strip(),
+        }
+
+    ROUTING_TABLE.clear()
+    ROUTING_TABLE.update(loaded_routes)
 
 
 _load_config()
@@ -74,10 +105,15 @@ async def lifespan(app: FastAPI):
     global _http_client
     _http_client = httpx.AsyncClient(
         limits=httpx.Limits(max_connections=200, max_keepalive_connections=50),
-        timeout=float(os.environ.get("GATEWAY_TIMEOUT", "180")),
+        timeout=_DEFAULT_TIMEOUT_SECONDS,
     )
-    yield
-    await _http_client.aclose()
+    try:
+        yield
+    finally:
+        client = _http_client
+        _http_client = None
+        if client is not None:
+            await client.aclose()
 
 
 # SECURITY: P1-24 FastAPI 默认暴露 /docs (Swagger UI) + /redoc，泄露路由/schema/版本信息。
@@ -100,6 +136,200 @@ def _extract_api_key(request: Request) -> str | None:
     return None
 
 
+async def _read_request_body(request: Request) -> bytes:
+    """在读取时限制请求体大小，避免超限请求先被完整缓冲到内存。"""
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > _MAX_BODY_SIZE:
+                raise HTTPException(status_code=413, detail="请求体过大")
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail="无效的 Content-Length"
+            ) from None
+
+    chunks: list[bytes] = []
+    total_size = 0
+    async for chunk in request.stream():
+        total_size += len(chunk)
+        if total_size > _MAX_BODY_SIZE:
+            raise HTTPException(status_code=413, detail="请求体过大")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _build_target_url(upstream_base: str, request: Request) -> str:
+    target_url = f"{upstream_base}{request.url.path}"
+    if request.url.query:
+        target_url = f"{target_url}?{request.url.query}"
+    return target_url
+
+
+def _build_upstream_headers(request: Request, upstream_key: str) -> dict[str, str]:
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    headers.pop("content-length", None)
+    headers.pop("authorization", None)
+    headers["Authorization"] = f"Bearer {upstream_key}"
+    return headers
+
+
+def _is_stream_request(method: str, body: bytes) -> bool:
+    if method != "POST" or not body:
+        return False
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return False
+    return isinstance(payload, dict) and payload.get("stream") is True
+
+
+def _filter_response_headers(headers: httpx.Headers) -> dict[str, str]:
+    connection_tokens = {
+        value.strip().lower()
+        for value in headers.get("connection", "").split(",")
+        if value.strip()
+    }
+    excluded_headers = {
+        "connection",
+        "content-encoding",
+        "content-length",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+    } | connection_tokens
+    return {
+        name: value
+        for name, value in headers.items()
+        if name.lower() not in excluded_headers
+    }
+
+
+async def _forward_stream(
+    client: httpx.AsyncClient,
+    request: Request,
+    target_url: str,
+    body: bytes,
+    upstream_headers: dict[str, str],
+    upstream_base: str,
+) -> StreamingResponse:
+    """建立上游流式响应，并透传状态、响应头和响应体。"""
+    try:
+        upstream_request = client.build_request(
+            method=request.method,
+            url=target_url,
+            content=body,
+            headers=upstream_headers,
+        )
+        upstream_response = await client.send(upstream_request, stream=True)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="上游服务超时") from None
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "流式上游请求失败 | upstream=%s | error_type=%s",
+            upstream_base,
+            type(exc).__name__,
+        )
+        raise HTTPException(status_code=502, detail="上游服务异常") from None
+
+    response_headers = _filter_response_headers(upstream_response.headers)
+    is_sse_response = "text/event-stream" in upstream_response.headers.get(
+        "content-type", ""
+    ).lower()
+
+    async def stream_generator():
+        try:
+            try:
+                async for chunk in upstream_response.aiter_bytes():
+                    yield chunk
+            except httpx.TimeoutException:
+                logger.warning(
+                    "流式上游读取超时 | upstream=%s | path=%s",
+                    upstream_base,
+                    request.url.path,
+                )
+                if is_sse_response:
+                    yield 'event: error\ndata: {"type":"upstream_timeout","message":"上游服务响应超时，请重试"}\n\n'.encode()
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "流式上游读取失败 | upstream=%s | error_type=%s",
+                    upstream_base,
+                    type(exc).__name__,
+                )
+                if is_sse_response:
+                    yield 'event: error\ndata: {"type":"upstream_error","message":"上游服务异常"}\n\n'.encode()
+            except Exception:
+                logger.exception(
+                    "流式转发未知异常 | upstream=%s | path=%s",
+                    upstream_base,
+                    request.url.path,
+                )
+                if is_sse_response:
+                    yield 'event: error\ndata: {"type":"gateway_error","message":"网关内部错误"}\n\n'.encode()
+        finally:
+            await upstream_response.aclose()
+
+    return StreamingResponse(
+        stream_generator(),
+        status_code=upstream_response.status_code,
+        headers=response_headers,
+        background=BackgroundTask(upstream_response.aclose),
+    )
+
+
+async def _forward_buffered(
+    client: httpx.AsyncClient,
+    request: Request,
+    target_url: str,
+    body: bytes,
+    upstream_headers: dict[str, str],
+    upstream_base: str,
+) -> Response:
+    """转发普通请求，失败时返回合适的网关错误状态码。"""
+    upstream_response: httpx.Response | None = None
+    for attempt in range(2):
+        try:
+            upstream_response = await client.request(
+                method=request.method,
+                url=target_url,
+                content=body,
+                headers=upstream_headers,
+            )
+            break
+        except httpx.ConnectError as exc:
+            logger.warning(
+                "上游连接失败 | upstream=%s | attempt=%s | error_type=%s",
+                upstream_base,
+                attempt + 1,
+                type(exc).__name__,
+            )
+            if attempt == 0:
+                continue
+            raise HTTPException(status_code=502, detail="上游服务不可达") from None
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="上游服务超时") from None
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "上游请求失败 | upstream=%s | error_type=%s",
+                upstream_base,
+                type(exc).__name__,
+            )
+            raise HTTPException(status_code=502, detail="上游服务异常") from None
+
+    if upstream_response is None:
+        raise HTTPException(status_code=502, detail="上游服务异常")
+
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers=_filter_response_headers(upstream_response.headers),
+    )
+
+
 @app.api_route(
     "/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
@@ -107,7 +337,8 @@ def _extract_api_key(request: Request) -> str | None:
 async def proxy(request: Request):
     """全路径透传代理。"""
 
-    if _http_client is None:
+    client = _http_client
+    if client is None:
         raise HTTPException(status_code=503, detail="网关未就绪")
 
     api_key = _extract_api_key(request)
@@ -116,104 +347,25 @@ async def proxy(request: Request):
 
     route = ROUTING_TABLE[api_key]
     upstream_base = route["upstream"]
-    upstream_key = route["upstream_key"]
+    target_url = _build_target_url(upstream_base, request)
+    body = await _read_request_body(request)
+    upstream_headers = _build_upstream_headers(request, route["upstream_key"])
 
-    target_url = f"{upstream_base}{request.url.path}"
-    if request.url.query:
-        target_url = f"{target_url}?{request.url.query}"
+    if _is_stream_request(request.method, body):
+        return await _forward_stream(
+            client,
+            request,
+            target_url,
+            body,
+            upstream_headers,
+            upstream_base,
+        )
 
-    body = await request.body()
-    if len(body) > _MAX_BODY_SIZE:
-        raise HTTPException(status_code=413, detail="请求体过大")
-
-    upstream_headers = dict(request.headers)
-    upstream_headers.pop("host", None)
-    upstream_headers.pop("content-length", None)
-    upstream_headers.pop("authorization", None)
-    upstream_headers["Authorization"] = f"Bearer {upstream_key}"
-
-    is_stream = False
-    if request.method == "POST" and body:
-        try:
-            is_stream = json.loads(body).get("stream", False)
-        except (json.JSONDecodeError, AttributeError):
-            # 非 JSON body 或 JSON 不是 dict → 默认非流式
-            pass
-
-    if is_stream:
-        # SECURITY: P1-20 流式路径无总时长/字节上限。
-        # httpx timeout=180 是 per-read timeout（字节间隔），非总超时。
-        # 当前可接受：上游为受信任的 vLLM/Ollama，且 max_tokens/上下文窗口天然约束输出长度。
-        # 上公网前加总超时（asyncio.wait_for）+ 响应字节上限，防 slow loris 变体耗尽连接。
-
-        async def stream_generator():
-            try:
-                async with _http_client.stream(
-                    method=request.method,
-                    url=target_url,
-                    content=body,
-                    headers=upstream_headers,
-                ) as resp:
-                    async for chunk in resp.aiter_bytes():
-                        yield chunk
-            except (httpx.TimeoutException, httpx.ReadTimeout):
-                logger.warning(
-                    "流式上游超时 | upstream=%s | path=%s",
-                    upstream_base,
-                    request.url.path,
-                )
-                yield 'event: error\ndata: {"type":"upstream_timeout","message":"上游服务响应超时，请重试"}\n\n'.encode()
-            except httpx.HTTPError as e:
-                logger.warning(
-                    "流式上游异常 | upstream=%s | error=%s", upstream_base, e
-                )
-                # SECURITY: P1-19 e!s 可能含内部地址/URL，替换为固定文本。
-                # 完整错误已在流式上游异常日志中记录（upstream=%s, error=%s）。
-                yield 'event: error\ndata: {"type":"upstream_error","message":"上游服务异常"}\n\n'.encode()
-            except Exception as e:
-                logger.error(
-                    "流式转发未知异常 | upstream=%s | error=%s", upstream_base, e
-                )
-                yield 'event: error\ndata: {"type":"gateway_error","message":"网关内部错误"}\n\n'.encode()
-
-        return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
-    # 非流式：连接失败时重试 1 次。
-    # SECURITY: P1-18 无退避无熔断。
-    # 当前架构下可接受：upstream 数量少（≤5 vLLM / 1 Ollama），故障不会级联扩散；
-    # vLLM 内部有排队（max_num_seqs），Ollama 单模型串行推理，不会雪崩。
-    # 上公网或 upstream 扩容时考虑加指数退避 + 熔断器（连续 N 次失败后 fast-fail）。
-    for attempt in range(2):
-        try:
-            resp = await _http_client.request(
-                method=request.method,
-                url=target_url,
-                content=body,
-                headers=upstream_headers,
-            )
-            break
-        except httpx.ConnectError:
-            if attempt == 0:
-                continue
-            # SECURITY: P1-19 不暴露 upstream_base 到客户端（防内网拓扑泄露）。
-            # 诊断信息已在连接失败日志中记录（upstream=%s）。
-            raise HTTPException(status_code=502, detail="上游服务不可达")
-        except httpx.TimeoutException:
-            raise HTTPException(status_code=504, detail="上游服务超时")
-
-    excluded_headers = {"transfer-encoding", "connection", "content-length"}
-    response_headers = {
-        k: v for k, v in resp.headers.items() if k.lower() not in excluded_headers
-    }
-
-    content_type = resp.headers.get("content-type", "")
-    try:
-        content = resp.json() if "json" in content_type else resp.text
-    except Exception:
-        content = resp.text
-
-    return JSONResponse(
-        content=content,
-        status_code=resp.status_code,
-        headers=response_headers,
+    return await _forward_buffered(
+        client,
+        request,
+        target_url,
+        body,
+        upstream_headers,
+        upstream_base,
     )
