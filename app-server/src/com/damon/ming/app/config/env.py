@@ -69,11 +69,6 @@ def get_model_root_dir() -> str:
     return str(Path(value).expanduser().resolve())
 
 
-def get_embedding_tokenizer_cache_dir() -> str:
-    """Embedding tokenizer 缓存位于统一模型目录下。"""
-    return str(Path(get_model_root_dir()) / "embedding")
-
-
 def get_trusted_proxy_networks() -> tuple[
     ipaddress.IPv4Network | ipaddress.IPv6Network, ...
 ]:

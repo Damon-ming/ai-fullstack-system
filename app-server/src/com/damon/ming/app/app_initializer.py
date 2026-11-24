@@ -390,6 +390,7 @@ class AppInitializer:
     def _init_ai(self) -> None:
         """加载 AI 配置，初始化 RAG 容器和统一推理入口。"""
         import asyncio
+        from pathlib import Path
 
         from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag.embedding import EmbeddingGateway
@@ -410,13 +411,13 @@ class AppInitializer:
 
         rag = RagConfigLoader().load().rag
         inference_config = InferenceConfigLoader().load()
-        embedding_config = EmbeddingConfigLoader().load()
+        self.model_root_dir = rag.model_root_dir
+        embedding_config = EmbeddingConfigLoader().load(Path(self.model_root_dir))
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
         self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
         self.execution_timeout_seconds = rag.execution_timeout_seconds
         self.rag_retry_ms = rag.retry_ms
-        self.model_root_dir = rag.model_root_dir
         # 多 locale 文本配置：locale → LocaleConfig
         self.rag_locales = rag.locales
 
