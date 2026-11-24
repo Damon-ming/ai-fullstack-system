@@ -1,7 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/config/source-config.yaml
 # 数据源配置 —— 各数据源类型的可配置参数。
 #
-# PDF 数据源参数通过构造函数注入（无额外配置需求）。
 # 文本数据源和 Markdown 数据源分别配置。
 #
 # 文本数据源预分块规则：
@@ -44,6 +43,10 @@ markdown_source:
       - "\\n\\n"
       - "\\n"
       - ""
+
+pdf_source:
+  # 是否从文本型 PDF 的嵌入图片中 OCR 提取文字
+  enable_image_extract: true
 
 doc_source:
   # 是否提取 Word 表格为 Markdown 表格（true 时每个表格生成独立 Document）

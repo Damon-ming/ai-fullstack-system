@@ -93,6 +93,14 @@ class MarkdownSourceConfig:
 
 
 @dataclass(frozen=True)
+class PdfSourceConfig:
+    """PDF 数据源配置（纯数据类）。"""
+
+    # 是否从文本型 PDF 的嵌入图片中提取文字
+    enable_image_extract: bool
+
+
+@dataclass(frozen=True)
 class DocSourceConfig:
     """DOC/DOCX 数据源配置（纯数据类）。"""
 
@@ -149,6 +157,9 @@ class SourceConfig:
 
     # Markdown 数据源配置
     markdown_source: MarkdownSourceConfig
+
+    # PDF 数据源配置
+    pdf_source: PdfSourceConfig
 
     # DOC/DOCX 数据源配置
     doc_source: DocSourceConfig
@@ -222,6 +233,16 @@ class SourceConfigLoader:
             chunk_chars=md_pre_chunk_section.get("chunk_chars", 800),
             boundaries=md_boundaries,
         )
+
+        # 解析 pdf_source
+        pdf_section = source_section.get("pdf_source", {})
+        if not pdf_section:
+            raise ValueError("缺少 pdf_source 配置项")
+        pdf_enable_image_extract = pdf_section.get("enable_image_extract")
+        if pdf_enable_image_extract is None:
+            raise ValueError("缺少 pdf_source.enable_image_extract 配置项")
+        if not isinstance(pdf_enable_image_extract, bool):
+            raise TypeError("pdf_source.enable_image_extract 必须是布尔值")
 
         # 解析 doc_source
         doc_section = source_section.get("doc_source", {})
@@ -299,6 +320,9 @@ class SourceConfigLoader:
             ),
             markdown_source=MarkdownSourceConfig(
                 pre_chunk=md_pre_chunk,
+            ),
+            pdf_source=PdfSourceConfig(
+                enable_image_extract=pdf_enable_image_extract,
             ),
             doc_source=DocSourceConfig(
                 pre_chunk=doc_pre_chunk,

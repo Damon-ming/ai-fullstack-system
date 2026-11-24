@@ -102,6 +102,9 @@ class DataSourceManager:
                 "include_notes": config.pptx_source.include_notes,
                 "extract_images": config.pptx_source.extract_images,
             },
+            "pdf": {
+                "enable_image_extract": config.pdf_source.enable_image_extract,
+            },
             "text": {
                 "supported_extensions": config.text_source.extensions,
                 "pre_chunk_config": config.text_source.pre_chunk,
