@@ -11,6 +11,7 @@
 引擎注册表由各实现类通过 @register_reranker 自动注册。
 """
 
+import math
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -33,6 +34,8 @@ class RerankerParams:
     include_heading: bool
     # 标题路径前缀模板，必须包含 {heading_path} 占位符
     heading_prefix_template: str
+    # 最低重排分数；None 表示不按分数过滤
+    score_threshold: float | None = None
     device: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -45,10 +48,7 @@ class RerankerParams:
             raise ValueError("batch_size 必须是正整数")
         if type(self.window_overlap) is not int or self.window_overlap < 0:
             raise ValueError("window_overlap 必须是非负整数")
-        if (
-            type(self.max_windows_per_node) is not int
-            or self.max_windows_per_node <= 0
-        ):
+        if type(self.max_windows_per_node) is not int or self.max_windows_per_node <= 0:
             raise ValueError("max_windows_per_node 必须是正整数")
         if not isinstance(self.include_heading, bool):
             raise TypeError("include_heading 必须是布尔值")
@@ -59,6 +59,12 @@ class RerankerParams:
             raise ValueError(
                 "heading_prefix_template 必须是包含 {heading_path} 的字符串"
             )
+        if self.score_threshold is not None and (
+            isinstance(self.score_threshold, bool)
+            or not isinstance(self.score_threshold, (int, float))
+            or not math.isfinite(self.score_threshold)
+        ):
+            raise ValueError("score_threshold 必须是有限数值或 None")
 
 
 class BaseReranker(ABC):

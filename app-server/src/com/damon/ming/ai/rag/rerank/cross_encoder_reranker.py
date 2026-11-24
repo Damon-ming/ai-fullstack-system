@@ -167,6 +167,12 @@ class CrossEncoderReranker(BaseReranker):
             key=lambda x: x[1],
             reverse=True,
         )
+        if self.params.score_threshold is not None:
+            scored_pairs = [
+                (node, score)
+                for node, score in scored_pairs
+                if score >= self.params.score_threshold
+            ]
 
         out_nodes = []
         for node, score in scored_pairs:

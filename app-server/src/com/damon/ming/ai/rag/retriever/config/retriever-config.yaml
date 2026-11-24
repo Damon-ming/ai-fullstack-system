@@ -10,6 +10,8 @@ hybrid:
   dense_weight: 0.7
   sparse_weight: 0.3
   fuse_k: 40
+  # dense 和 sparse 两路检索的总等待上限（秒）
+  retrieval_timeout_seconds: 30
   params:
     # section 去重不足时的最大放大倍数（循环扩大检索范围上限）
     max_section_oversample_multiplier: 5

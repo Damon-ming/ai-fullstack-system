@@ -24,7 +24,8 @@ class RetrieverConfig:
 
     包含构造参数（dense_weight, sparse_weight, fuse_k）、检索参数
     （top_k, retrieve_top_k, dense_top_k, sparse_top_k, dedup_by_section）
-    和去重调优参数（max_section_oversample_multiplier, rrf_oversample_multiplier）。
+    去重调优参数（max_section_oversample_multiplier, rrf_oversample_multiplier）
+    以及 dense/sparse 并发检索的总等待上限（retrieval_timeout_seconds）。
 
     top_k 与 retrieve_top_k 语义分离：
       - retrieve_top_k：候选池大小，检索器返回多少 section 给 reranker
@@ -38,6 +39,7 @@ class RetrieverConfig:
         "fuse_k",
         "max_section_oversample_multiplier",
         "name",
+        "retrieval_timeout_seconds",
         "retrieve_top_k",
         "rrf_oversample_multiplier",
         "sparse_top_k",
@@ -56,6 +58,7 @@ class RetrieverConfig:
         dense_weight: float,
         sparse_weight: float,
         fuse_k: int,
+        retrieval_timeout_seconds: float,
         max_section_oversample_multiplier: int = 5,
         rrf_oversample_multiplier: int = 3,
     ):
@@ -68,6 +71,7 @@ class RetrieverConfig:
         self.dense_weight = dense_weight
         self.sparse_weight = sparse_weight
         self.fuse_k = fuse_k
+        self.retrieval_timeout_seconds = retrieval_timeout_seconds
         self.max_section_oversample_multiplier = max_section_oversample_multiplier
         self.rrf_oversample_multiplier = rrf_oversample_multiplier
 
@@ -124,6 +128,15 @@ class RetrieverConfigLoader:
     def _build_one(self, name: str) -> RetrieverConfig:
         raw = self._read_yaml(name)
         params = raw.get("params", {})
+        timeout = raw.get("retrieval_timeout_seconds")
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or timeout <= 0
+        ):
+            raise ValueError(
+                f"检索器配置 '{name}' 的 retrieval_timeout_seconds 必须是正数"
+            )
 
         try:
             return RetrieverConfig(
@@ -136,6 +149,7 @@ class RetrieverConfigLoader:
                 dense_weight=raw["dense_weight"],
                 sparse_weight=raw["sparse_weight"],
                 fuse_k=raw["fuse_k"],
+                retrieval_timeout_seconds=timeout,
                 max_section_oversample_multiplier=params.get(
                     "max_section_oversample_multiplier", 5
                 ),

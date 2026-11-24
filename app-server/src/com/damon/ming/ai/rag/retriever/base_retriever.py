@@ -1,5 +1,4 @@
 # app-server/src/com/damon/ming/ai/rag/retriever/base_retriever.py
-import time
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -99,8 +98,8 @@ class DenseRetriever(BaseRetriever):
         dedup_by_section: bool,
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[tuple[TextNode, float]]:
-        # 1. 生成查询向量（短退避重试，避免阻塞线程过久）
-        query_vector = self._embed_with_retry(query)
+        # 1. 生成查询向量
+        query_vector = self.embedding_service.embed_query(query)
 
         # 2. 向量检索，透传 filter 到向量库
         nodes = self.vector_store.similarity_search_by_vector(
@@ -112,23 +111,6 @@ class DenseRetriever(BaseRetriever):
         if dedup_by_section:
             return self.dedup_by_section(scored, top_k)
         return scored
-
-    def _embed_with_retry(self, query: str, max_attempts: int = 2) -> list[float]:
-        """短退避重试 embedding 调用。
-
-        OllamaEmbedding.embed_query 自身不做 sleep 重试（快速失败），
-        由本方法在 worker 线程内做短退避（最大 0.5s），
-        远低于原来的 2^attempt 退避（最大 3s），减少线程阻塞。
-        """
-        last_error: Exception | None = None
-        for attempt in range(max_attempts):
-            try:
-                return self.embedding_service.embed_query(query)
-            except RuntimeError as e:
-                last_error = e
-                if attempt == 0:
-                    time.sleep(0.5)  # 仅首次失败后短暂退避
-        raise last_error
 
 
 class SparseRetriever(BaseRetriever):

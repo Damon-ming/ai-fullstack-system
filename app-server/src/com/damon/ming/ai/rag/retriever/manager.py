@@ -12,8 +12,8 @@ from src.com.damon.ming.ai.rag.retriever.base_retriever import (
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
 from src.com.damon.ming.ai.rag.retriever.config.retriever_config_loader import (
     RetrieverConfig,
+    RetrieverConfigLoader,
 )
-from src.com.damon.ming.ai.rag.retriever.config_manager import RagRetrieverConfigs
 from src.com.damon.ming.ai.rag.retriever.hybrid_retriever import HybridRetriever
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 
@@ -36,9 +36,7 @@ class RetrieverManager:
     ) -> None:
         if self._hybrid is not None:
             raise RuntimeError("RAG 检索器已经初始化")
-        configs = RagRetrieverConfigs()
-        configs.initialize()
-        config = configs.get_hybrid()
+        config = RetrieverConfigLoader().load("hybrid")
         dense = DenseRetriever(vector_store=vector_store, embedding_service=embedder)
         sparse = SparseRetriever(bm25_index=bm25_index)
         hybrid = HybridRetriever(
@@ -49,6 +47,7 @@ class RetrieverManager:
             fuse_k=config.fuse_k,
             max_section_oversample_multiplier=config.max_section_oversample_multiplier,
             rrf_oversample_multiplier=config.rrf_oversample_multiplier,
+            retrieval_timeout_seconds=config.retrieval_timeout_seconds,
             retrieval_pool=retrieval_pool,
         )
         self._config = config

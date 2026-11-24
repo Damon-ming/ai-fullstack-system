@@ -1,5 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/retriever/bm25_index.py
 
+from collections.abc import Callable
 import threading
 
 import numpy as np
@@ -17,17 +18,13 @@ class BM25Index:
     避免 ingest 重建 BM25 过程中查询读到不一致状态。
     """
 
-    def __init__(self, tokenizer=None):
-        self.tokenizer = tokenizer or self._default_tokenizer
+    def __init__(self, tokenizer: Callable[[str], list[str]]):
+        self.tokenizer = tokenizer
         self.index = None
         self.corpus: list[TextNode] = []
         self.logger = pin("BM25Index")
         # 保护 build() 的原子替换：锁外构建 + 锁内原子赋值（微秒级）
         self._build_lock = threading.Lock()
-
-    def _default_tokenizer(self, text: str) -> list[str]:
-        """默认简单空格分词，中文场景建议外部传入jieba等分词器"""
-        return text.lower().split()
 
     def build(self, nodes: list[TextNode]):
         """构建 BM25 内存索引（锁内顺序赋值 + 版本校验，不阻塞并发查询）。

@@ -21,6 +21,7 @@ class HybridRetriever:
     线程模型：
       - 使用调用方注入的 retrieval 池。
       - 稠密和稀疏检索通过内部持有的池并发提交。
+      - 共用 retrieval_timeout_seconds 作为本轮并发检索的总等待上限。
       - 稠密检索完成后检查 cancel_event，已取消则跳过稀疏检索提前返回。
 
     纯业务逻辑：本类只做检索 + RRF 融合，不管理线程生命周期。
@@ -42,6 +43,7 @@ class HybridRetriever:
         fuse_k: int,
         max_section_oversample_multiplier: int,
         rrf_oversample_multiplier: int,
+        retrieval_timeout_seconds: float,
         retrieval_pool: ThreadPoolExecutor,
     ):
         self.dense_retriever = dense_retriever
@@ -51,6 +53,7 @@ class HybridRetriever:
         self.fuser = ReciprocalRankFusion(k=fuse_k)
         self.max_section_oversample_multiplier = max_section_oversample_multiplier
         self.rrf_oversample_multiplier = rrf_oversample_multiplier
+        self.retrieval_timeout_seconds = retrieval_timeout_seconds
         self._executor = retrieval_pool
         self.logger = pin("HybridRetriever")
 
@@ -129,6 +132,7 @@ class HybridRetriever:
                 dedup_by_section,
                 metadata_filter,
             )
+
             sparse_future = submit_to_pool(
                 executor,
                 self.sparse_retriever.retrieve_with_score,
@@ -141,38 +145,73 @@ class HybridRetriever:
             dense_results: list = []
             sparse_results: list = []
 
+            dense_async_future = asyncio.wrap_future(dense_future)
+            sparse_async_future = asyncio.wrap_future(sparse_future)
+            pending = {dense_async_future, sparse_async_future}
+            completed = set()
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + self.retrieval_timeout_seconds
+
             try:
-                dense_results = await asyncio.wait_for(
-                    asyncio.wrap_future(dense_future), timeout=30
-                )
-                self.logger.info(
-                    f"[HybridRetriever] 稠密检索完成 | 返回 {len(dense_results)} 个结果"
-                )
+                while pending:
+                    remaining = max(deadline - loop.time(), 0)
+                    finished, pending = await asyncio.wait(
+                        pending,
+                        timeout=remaining,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if not finished:
+                        break
+                    completed.update(finished)
+                    if (
+                        dense_async_future in finished
+                        and cancel_event is not None
+                        and cancel_event.is_set()
+                    ):
+                        sparse_future.cancel()
+                        sparse_async_future.cancel()
+                        self.logger.info(
+                            "[HybridRetriever] 检测到取消信号，放弃稀疏检索"
+                        )
+                        return []
             except asyncio.CancelledError:
                 dense_future.cancel()
                 sparse_future.cancel()
+                dense_async_future.cancel()
+                sparse_async_future.cancel()
                 raise
-            except Exception as e:
-                self.logger.error(f"[HybridRetriever] 稠密检索失败: {e}")
 
-            # 协作取消：稠密检索完成后检查信号，已取消则放弃稀疏检索
-            if cancel_event is not None and cancel_event.is_set():
-                sparse_future.cancel()
-                self.logger.info("[HybridRetriever] 检测到取消信号，放弃稀疏检索")
-                return []
+            if dense_async_future in completed:
+                try:
+                    dense_results = dense_async_future.result()
+                    self.logger.info(
+                        f"[HybridRetriever] 稠密检索完成 | 返回 {len(dense_results)} 个结果"
+                    )
+                except Exception as e:
+                    self.logger.error(f"[HybridRetriever] 稠密检索失败: {e}")
+            else:
+                dense_future.cancel()
+                dense_async_future.cancel()
+                self.logger.error(
+                    "[HybridRetriever] 稠密检索超时 "
+                    f"(总等待上限 {self.retrieval_timeout_seconds} 秒)"
+                )
 
-            try:
-                sparse_results = await asyncio.wait_for(
-                    asyncio.wrap_future(sparse_future), timeout=30
-                )
-                self.logger.info(
-                    f"[HybridRetriever] 稀疏检索完成 | 返回 {len(sparse_results)} 个结果"
-                )
-            except asyncio.CancelledError:
+            if sparse_async_future in completed:
+                try:
+                    sparse_results = sparse_async_future.result()
+                    self.logger.info(
+                        f"[HybridRetriever] 稀疏检索完成 | 返回 {len(sparse_results)} 个结果"
+                    )
+                except Exception as e:
+                    self.logger.error(f"[HybridRetriever] 稀疏检索失败: {e}")
+            else:
                 sparse_future.cancel()
-                raise
-            except Exception as e:
-                self.logger.error(f"[HybridRetriever] 稀疏检索失败: {e}")
+                sparse_async_future.cancel()
+                self.logger.error(
+                    "[HybridRetriever] 稀疏检索超时 "
+                    f"(总等待上限 {self.retrieval_timeout_seconds} 秒)"
+                )
 
             # 如果都失败了，返回空
             if not dense_results and not sparse_results:
@@ -199,7 +238,7 @@ class HybridRetriever:
                 return [node for node, _ in fused_results[:top_k]]
 
             # ④ section 去重（处理跨检索器的 section 重复）
-            deduped = self._dedup_by_section(fused_results, top_k)
+            deduped = BaseRetriever.dedup_by_section(fused_results, top_k)
 
             # ⑤ 够了就返回
             if len(deduped) >= top_k:
@@ -220,16 +259,3 @@ class HybridRetriever:
             f"[HybridRetriever] 达到最大放大倍数 | 返回 {len(deduped)} 个不同 section"
         )
         return [node for node, _ in deduped[:top_k]]
-
-    # ── section 去重 ─────────────────────────────────────────────────
-
-    @staticmethod
-    def _dedup_by_section(
-        scored_nodes: list[tuple[TextNode, float]], top_k: int
-    ) -> list[tuple[TextNode, float]]:
-        """按 (file_sha256, section_id) 去重，保留 RRF 排序靠前的 chunk。
-
-        委托给 BaseRetriever.dedup_by_section 统一实现，避免逻辑分散。
-        输入输出均为 (node, score) 元组列表，不修改原节点 metadata。
-        """
-        return BaseRetriever.dedup_by_section(scored_nodes, top_k)
