@@ -41,7 +41,7 @@ async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
     # RAG 上下文处理在推理信号量外执行，由 rag_sem 做反压。
     async with app_state.ai.rag.rag_sem:
         logger.debug("开始执行 RAG 检索")
-        ref_content = await app_state.ai.rag.choreographer.query_rag(
+        ref_content = await app_state.ai.rag.choreographer.build_rag_context(
             query,
             max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
         )

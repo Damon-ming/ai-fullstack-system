@@ -131,7 +131,7 @@ cross-encoder 注意力 O(n²)，滑动窗口保持 `max_seq_len=1024` 最优：
 数据流（修改前，`top_k=None` 走 YAML 默认值 5）：
 
 ```
-rag_router.query_rag()  →  effective_top_k = 5
+rag_router.build_rag_context()  →  effective_top_k = 5
   → hybrid_retriever.retrieve(top_k=5, dense=10, sparse=10)
       → RRF top_k = 5 × 3 = 15
       → section 去重 → 5
@@ -143,7 +143,7 @@ reranker 只能对这 5 个重新排序，无法把排名第 6~20 的候选捞�
 
 ### 方案
 
-将 `top_k` 拆分为两个独立参数，**全部由 YAML 配置驱动**（去掉 `query_rag` 的 `top_k` 入参，避免与 YAML 的 `top_k` 同名歧义）：
+将 `top_k` 拆分为两个独立参数，**全部由 YAML 配置驱动**（去掉 `build_rag_context` 的 `top_k` 入参，避免与 YAML 的 `top_k` 同名歧义）：
 
 | 参数 | 语义 | 值 |
 |---|---|---|
@@ -158,7 +158,7 @@ reranker 只能对这 5 个重新排序，无法把排名第 6~20 的候选捞�
 |---|---|
 | `config/retriever/retriever-config.yaml` | 新增 `retrieve_top_k: 20`；`dense_top_k`/`sparse_top_k` 10→30；`rrf_oversample_multiplier` 3→2 |
 | `config/retriever/retriever_config_loader.py` | `RetrieverConfig` 新增 `retrieve_top_k` 字段（`__slots__` + `__init__` + `_build_one`） |
-| `rag_tool.py` | 删除 `query_rag` 的 `top_k` 入参；`effective_top_k` 拆为 `retrieve_top_k`（YAML）/ `rerank_top_k`（YAML `top_k`）；retrieve 传前者，rerank 传后者；日志输出两个值 |
+| `rag_tool.py` | 删除 `build_rag_context` 的 `top_k` 入参；`effective_top_k` 拆为 `retrieve_top_k`（YAML）/ `rerank_top_k`（YAML `top_k`）；retrieve 传前者，rerank 传后者；日志输出两个值 |
 
 ### 改动量
 

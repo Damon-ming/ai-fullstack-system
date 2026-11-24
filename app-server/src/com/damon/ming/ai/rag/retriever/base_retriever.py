@@ -128,7 +128,7 @@ class DenseRetriever(BaseRetriever):
                 last_error = e
                 if attempt == 0:
                     time.sleep(0.5)  # 仅首次失败后短暂退避
-        raise last_error  # type: ignore[misc]
+        raise last_error
 
 
 class SparseRetriever(BaseRetriever):

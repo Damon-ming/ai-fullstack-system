@@ -183,7 +183,7 @@ class RagChoreographer:
         )
         logger.info("RAG 容器初始化完成")
 
-    async def query_rag(
+    async def build_rag_context(
         self,
         query: str,
         max_context_tokens: int,
