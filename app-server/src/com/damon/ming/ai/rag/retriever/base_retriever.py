@@ -142,8 +142,33 @@ class SparseRetriever(BaseRetriever):
         if top_k < 1:
             return []
 
-        # 使用 get_top_k 保证 corpus 访问在锁内完成，避免并发 build 导致的索引错位
-        candidates = self.bm25_index.get_top_k(query, top_k)
+        ranked_candidates = self.get_ranked_candidates(query, top_k)
+        return self.prepare_candidates(
+            ranked_candidates,
+            top_k,
+            dedup_by_section,
+            metadata_filter,
+        )
+
+    def get_ranked_candidates(
+        self, query: str, top_k: int
+    ) -> list[tuple[TextNode, float]]:
+        """计算并返回 BM25 排序前 top_k 个原始候选，不做过滤或去重。"""
+        return self.bm25_index.get_top_k(query, top_k)
+
+    def prepare_candidates(
+        self,
+        ranked_candidates: list[tuple[TextNode, float]],
+        top_k: int,
+        dedup_by_section: bool,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> list[tuple[TextNode, float]]:
+        """截取本轮候选范围后，按原检索顺序执行过滤和 section 去重。"""
+        if top_k < 1:
+            return []
+
+        # 先截取本轮原始排名范围，再过滤和去重，保持逐轮扩大的原有语义。
+        candidates = ranked_candidates[:top_k]
 
         # 元数据过滤：BM25 内存索引只能检索后过滤
         if metadata_filter:

@@ -1,7 +1,7 @@
 # app-server/src/com/damon/ming/ai/rag/retriever/bm25_index.py
 
-from collections.abc import Callable
 import threading
+from collections.abc import Callable
 
 import numpy as np
 from llama_index.core.schema import TextNode

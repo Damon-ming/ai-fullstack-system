@@ -21,6 +21,7 @@ class HybridRetriever:
     线程模型：
       - 使用调用方注入的 retrieval 池。
       - 稠密和稀疏检索通过内部持有的池并发提交。
+      - BM25 每次查询只计算并排序一次，扩大轮次复用候选排名。
       - 共用 retrieval_timeout_seconds 作为本轮并发检索的总等待上限。
       - 稠密检索完成后检查 cancel_event，已取消则跳过稀疏检索提前返回。
 
@@ -117,13 +118,15 @@ class HybridRetriever:
         max_mult = max(self.max_section_oversample_multiplier, 1)
 
         deduped: list[TextNode] = []
+        sparse_ranked_candidates: list[tuple[TextNode, float]] = []
+        sparse_candidates_loaded = False
         multiplier = 1
 
         while multiplier <= max_mult:
             cur_dense_top_k = dense_top_k * multiplier
             cur_sparse_top_k = sparse_top_k * multiplier
 
-            # ① 并发提交稠密 + 稀疏检索（dedup_by_section 透传）
+            # ① 提交稠密检索；BM25 在首轮取到最大候选集，后续轮次复用其排名。
             dense_future = submit_to_pool(
                 executor,
                 self.dense_retriever.retrieve_with_score,
@@ -133,21 +136,30 @@ class HybridRetriever:
                 metadata_filter,
             )
 
-            sparse_future = submit_to_pool(
-                executor,
-                self.sparse_retriever.retrieve_with_score,
-                query,
-                cur_sparse_top_k,
-                dedup_by_section,
-                metadata_filter,
-            )
+            sparse_future = None
+            if not sparse_candidates_loaded:
+                max_sparse_top_k = sparse_top_k * (
+                    max_mult if dedup_by_section else 1
+                )
+                sparse_future = submit_to_pool(
+                    executor,
+                    self.sparse_retriever.get_ranked_candidates,
+                    query,
+                    max_sparse_top_k,
+                )
 
             dense_results: list = []
             sparse_results: list = []
 
             dense_async_future = asyncio.wrap_future(dense_future)
-            sparse_async_future = asyncio.wrap_future(sparse_future)
-            pending = {dense_async_future, sparse_async_future}
+            sparse_async_future = (
+                asyncio.wrap_future(sparse_future)
+                if sparse_future is not None
+                else None
+            )
+            pending = {dense_async_future}
+            if sparse_async_future is not None:
+                pending.add(sparse_async_future)
             completed = set()
             loop = asyncio.get_running_loop()
             deadline = loop.time() + self.retrieval_timeout_seconds
@@ -168,17 +180,21 @@ class HybridRetriever:
                         and cancel_event is not None
                         and cancel_event.is_set()
                     ):
-                        sparse_future.cancel()
-                        sparse_async_future.cancel()
+                        if sparse_future is not None:
+                            sparse_future.cancel()
+                        if sparse_async_future is not None:
+                            sparse_async_future.cancel()
                         self.logger.info(
                             "[HybridRetriever] 检测到取消信号，放弃稀疏检索"
                         )
                         return []
             except asyncio.CancelledError:
                 dense_future.cancel()
-                sparse_future.cancel()
                 dense_async_future.cancel()
-                sparse_async_future.cancel()
+                if sparse_future is not None:
+                    sparse_future.cancel()
+                if sparse_async_future is not None:
+                    sparse_async_future.cancel()
                 raise
 
             if dense_async_future in completed:
@@ -197,20 +213,31 @@ class HybridRetriever:
                     f"(总等待上限 {self.retrieval_timeout_seconds} 秒)"
                 )
 
-            if sparse_async_future in completed:
-                try:
-                    sparse_results = sparse_async_future.result()
-                    self.logger.info(
-                        f"[HybridRetriever] 稀疏检索完成 | 返回 {len(sparse_results)} 个结果"
+            if sparse_async_future is not None:
+                if sparse_async_future in completed:
+                    try:
+                        sparse_ranked_candidates = sparse_async_future.result()
+                        sparse_candidates_loaded = True
+                    except Exception as e:
+                        self.logger.error(f"[HybridRetriever] 稀疏检索失败: {e}")
+                else:
+                    sparse_future.cancel()
+                    sparse_async_future.cancel()
+                    # 保持原有失败重试行为；cancel() 无法停止已运行的线程任务。
+                    self.logger.error(
+                        "[HybridRetriever] 稀疏检索超时 "
+                        f"(总等待上限 {self.retrieval_timeout_seconds} 秒)"
                     )
-                except Exception as e:
-                    self.logger.error(f"[HybridRetriever] 稀疏检索失败: {e}")
-            else:
-                sparse_future.cancel()
-                sparse_async_future.cancel()
-                self.logger.error(
-                    "[HybridRetriever] 稀疏检索超时 "
-                    f"(总等待上限 {self.retrieval_timeout_seconds} 秒)"
+
+            if sparse_candidates_loaded and sparse_ranked_candidates:
+                sparse_results = self.sparse_retriever.prepare_candidates(
+                    sparse_ranked_candidates,
+                    cur_sparse_top_k,
+                    dedup_by_section,
+                    metadata_filter,
+                )
+                self.logger.info(
+                    f"[HybridRetriever] 稀疏检索完成 | 返回 {len(sparse_results)} 个结果"
                 )
 
             # 如果都失败了，返回空
