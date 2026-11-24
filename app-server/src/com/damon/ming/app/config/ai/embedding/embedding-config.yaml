@@ -1,5 +1,7 @@
 # app-server/src/com/damon/ming/app/config/ai/embedding/embedding-config.yaml
 # Embedding Gateway 超时与模型角色；网关地址从 INFERENCE_GATEWAY_URL 读取。
+# TODO: 从统一模型配置动态读取 model_name、max_input_tokens 和 dimension；
+# 同时校验 vLLM 的 --max-model-len 与向量库维度，避免换模型时逐处手改。
 transport:
   timeout_seconds: 60
 roles:

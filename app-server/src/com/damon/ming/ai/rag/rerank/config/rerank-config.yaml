@@ -9,6 +9,8 @@
 #   5. 主备降级：主力 GPU 模型 + CPU 轻量 fallback
 #
 # 模型目录位于 MODEL_ROOT_DIR/rerank/ 下，配置只填写模型目录名。
+# TODO: 从统一模型配置读取模型名与支持的最大长度；按模型能力校验
+# max_seq_len，batch_size 和 window_overlap 保留为可调的运行策略。
 #
 # 上层通过 RerankerConfigLoader().load("<name>", model_root_dir) 获取指定实例。
 rerankers:

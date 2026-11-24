@@ -1,6 +1,8 @@
   # model-gateway/config/docker/docker-vllm-embedding.yaml
   # ── RAG embedding 服务 ────────────────────────────────────────────
   # BGE-M3 pooling / OpenAI-compatible /v1/embeddings
+# TODO: 部署时从统一模型配置生成模型名、runner、模型专属参数及窗口，
+# 并与 app-server 的 embedding 输入上限和维度校验。
   # 独立使用新版本，避免升级现有生成模型池造成兼容性变化。
 services:
   vllm-embedding:

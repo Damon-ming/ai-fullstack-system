@@ -18,10 +18,10 @@ from src.com.damon.ming.log import pin
 
 logger = pin("chat.core")
 
-# RAG 检索上下文 token 上限（与 vLLM max-model-len 对齐）
-# 约束：system(~200) + context_budget + query(~50) + max_tokens(1024) ≤ 2048
-# 跑通模式：budget=512 → 总占用 ~1826 ≤ 2048
-# 完整模式：换大模型后同步调高（max-model-len 4096 → budget 可设 2048）
+# TODO: 根据主推理角色的实际窗口、输出上限和提示词 token 数动态计算
+# RAG 上下文预算，并保留业务上限；换模型时无需修改这里的常量。
+# 当前参考资料业务上限为 512 token；主推理部署窗口为 4096，输出上限为 1024。
+# 实际可用空间还受 system、query 和消息模板的 token 数影响。
 MAX_CONTEXT_TOKEN_BUDGET = 512
 
 

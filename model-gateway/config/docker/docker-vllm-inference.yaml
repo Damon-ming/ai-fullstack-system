@@ -5,6 +5,8 @@
 # 路由层不感知业务语义，只认 api_key → upstream 映射。
 #
 # 新增实例：添加服务并在 gateway.yaml 添加对应 route
+# TODO: 部署时从统一模型配置生成各实例的 --model、--served-model-name
+# 与 --max-model-len，并与 app-server 角色配置校验，避免手动同步。
 #
 # 使用 vLLM 0.17.0：Qwen3Guard-Gen 要求 vLLM >=0.9.0。
 

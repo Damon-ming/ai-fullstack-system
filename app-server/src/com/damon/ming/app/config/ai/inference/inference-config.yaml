@@ -1,6 +1,8 @@
 # app-server/src/com/damon/ming/app/config/ai/inference/inference-config.yaml
 # 推理网关连接超时、共享并发上限和各用途模型配置。
 # 引擎与网关地址从环境变量加载；各角色 API key 在此配置。
+# TODO: 从统一模型配置动态读取各角色的模型名和实际部署窗口，
+# 并据此校验 max_tokens 与提示词预算，避免换模型时逐处手改。
 transport:
   timeout_seconds: 180
 max_concurrency: 16  # 所有 role 共享的推理并发上限

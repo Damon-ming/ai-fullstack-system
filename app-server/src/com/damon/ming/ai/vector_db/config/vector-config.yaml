@@ -1,5 +1,7 @@
 # app-server/src/com/damon/ming/ai/vector_db/config/vector-config.yaml
 # 向量存储配置 —— 由 VectorConfigLoader 读取，注入 vector_db 模块。
+# TODO: embedding_dimension 从统一模型配置读取并在启动时校验；
+# 切换 embedding 模型时迁移向量表并重新生成已有文档向量。
 
 # chroma:
 #   table_name: rag_documents  # Chroma 会将其用作 collection 名称
