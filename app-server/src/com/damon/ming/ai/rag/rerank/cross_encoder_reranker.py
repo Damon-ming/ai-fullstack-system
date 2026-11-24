@@ -16,15 +16,14 @@ from src.com.damon.ming.ai.rag.rerank.base_reranker import (
 from src.com.damon.ming.log import pin
 
 
-def _uniform_sample(items: list[str], k: int) -> list[str]:
-    """从列表中均匀采样 k 个元素，保留首尾。用于窗口数超上限时的降级。"""
-    n = len(items)
+def _uniform_sample_indices(n: int, k: int) -> list[int]:
+    """从 n 个窗口位置中均匀采样 k 个索引，保留首尾。"""
     if k >= n:
-        return items
+        return list(range(n))
     if k <= 1:
-        return [items[0]]
+        return [0]
     indices = [round(i * (n - 1) / (k - 1)) for i in range(k)]
-    return [items[i] for i in indices]
+    return indices
 
 
 class CrossEncoderModel:
@@ -51,6 +50,9 @@ class CrossEncoderModel:
             f"加载Rerank模型: {params.model_name}, device={self.device}, max_seq_len={params.max_seq_len}"
         )
         self.tokenizer = AutoTokenizer.from_pretrained(params.model_name)
+        self.pair_special_token_count = self.tokenizer.num_special_tokens_to_add(
+            pair=True
+        )
         self.model = AutoModelForSequenceClassification.from_pretrained(
             params.model_name
         )
@@ -87,7 +89,7 @@ class CrossEncoderModel:
                     return_tensors="pt",
                 ).to(self.device)
 
-                with torch.no_grad():
+                with torch.inference_mode():
                     outputs = self.model(**inputs)
                     scores = outputs.logits[:, 0].float()
 
@@ -115,16 +117,32 @@ class CrossEncoderReranker(BaseReranker):
         top_k: int | None = None,
         cancel_event: threading.Event | None = None,
     ) -> list[TextNode]:
-        if not nodes:
+        if not nodes or (top_k is not None and top_k <= 0):
+            return []
+        if cancel_event is not None and cancel_event.is_set():
             return []
 
         # 长节点滑动窗口展开：每个 node → 1+ 个窗口文本
         # include_heading 开启时打分文本附带章节标题链，让 reranker 感知上下文层级
         all_texts: list[str] = []
         node_window_counts: list[int] = []
+        query_token_count = (
+            len(self.model.tokenizer.encode(query, add_special_tokens=False))
+            if self.params.window_overlap > 0
+            else 0
+        )
         for node in nodes:
+            if cancel_event is not None and cancel_event.is_set():
+                return []
             prefix = self._heading_prefix(node)
-            windows = self._split_into_windows(query, node.text, prefix)
+            windows = self._split_into_windows(
+                node.text,
+                prefix,
+                query_token_count,
+                cancel_event,
+            )
+            if cancel_event is not None and cancel_event.is_set():
+                return []
             node_window_counts.append(len(windows))
             all_texts.extend(windows)
 
@@ -132,7 +150,7 @@ class CrossEncoderReranker(BaseReranker):
         scores = self.model.score_pairs(query, all_texts, cancel_event)
 
         # 取消时 score_pairs 返回空列表，直接短路
-        if not scores:
+        if not scores or (cancel_event is not None and cancel_event.is_set()):
             return []
 
         # 按 node 聚合窗口分数（取 max）：任一部分高度相关即认为 node 相关
@@ -181,11 +199,17 @@ class CrossEncoderReranker(BaseReranker):
         clean = heading.strip("/").replace("/", " > ")
         return f"【{clean}】\n"
 
-    def _split_into_windows(self, query: str, text: str, prefix: str) -> list[str]:
+    def _split_into_windows(
+        self,
+        text: str,
+        prefix: str,
+        query_token_count: int,
+        cancel_event: threading.Event | None = None,
+    ) -> list[str]:
         """将长文本切分为滑动窗口，短文本直接返回原文。
 
         prefix（章节标题链）附加到每个窗口，保证各窗口打分语境一致；
-        从窗口预算中扣除 prefix 的 token，避免超出 max_seq_len 被截断。
+        根据 tokenizer 的 pair special token 数计算窗口预算，避免超长截断。
         window_overlap=0 时退化为整段返回（由 score_pairs 内部 truncate 兜底）。
         """
         if self.params.window_overlap <= 0:
@@ -196,34 +220,41 @@ class CrossEncoderReranker(BaseReranker):
             if prefix
             else 0
         )
-        window_size = max(self._compute_window_size(query) - prefix_tokens, 1)
+        window_size = self._compute_window_size(query_token_count, prefix_tokens)
         token_ids = self.model.tokenizer.encode(text, add_special_tokens=False)
 
         if len(token_ids) <= window_size:
             return [f"{prefix}{text}"] if prefix else [text]
 
         step = max(window_size - self.params.window_overlap, 1)
+        window_count = (len(token_ids) - window_size + step - 1) // step + 1
+        max_windows = self.params.max_windows_per_node
+        if window_count > max_windows:
+            self.logger.warning(
+                f"[Rerank] 窗口数超限降级 | section_tokens:{len(token_ids)} | "
+                f"原始窗口数:{window_count} | 上限:{max_windows} | 已均匀采样保留首尾"
+            )
+        window_indices = _uniform_sample_indices(window_count, max_windows)
+
         windows: list[str] = []
-        for start in range(0, len(token_ids), step):
+        for window_index in window_indices:
+            if cancel_event is not None and cancel_event.is_set():
+                return []
+            start = window_index * step
             end = min(start + window_size, len(token_ids))
             windows.append(
                 f"{prefix}{self.model.tokenizer.decode(token_ids[start:end])}"
             )
-            if end >= len(token_ids):
-                break
-
-        # 安全上限：窗口数超限时均匀采样，保留首尾覆盖
-        max_windows = self.params.max_windows_per_node
-        if len(windows) > max_windows:
-            self.logger.warning(
-                f"[Rerank] 窗口数超限降级 | section_tokens:{len(token_ids)} | "
-                f"原始窗口数:{len(windows)} | 上限:{max_windows} | 已均匀采样保留首尾"
-            )
-            windows = _uniform_sample(windows, max_windows)
         return windows
 
-    def _compute_window_size(self, query: str) -> int:
+    def _compute_window_size(
+        self, query_token_count: int, prefix_token_count: int
+    ) -> int:
         """计算窗口 token 数：max_seq_len 扣除 query 和 special tokens。"""
-        query_tokens = len(self.model.tokenizer.encode(query, add_special_tokens=False))
-        # [CLS] + query + [SEP] + document + [SEP]
-        return max(self.params.max_seq_len - query_tokens - 3, 1)
+        return max(
+            self.params.max_seq_len
+            - query_token_count
+            - prefix_token_count
+            - self.model.pair_special_token_count,
+            1,
+        )

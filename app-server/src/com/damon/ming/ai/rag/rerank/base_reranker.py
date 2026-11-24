@@ -21,7 +21,7 @@ from llama_index.core.schema import TextNode
 
 @dataclass(frozen=True)
 class RerankerParams:
-    """重排器参数（纯数据类）。所有参数必须由 YAML 显式声明，无内置默认值。"""
+    """重排器参数（纯数据类）。"""
 
     model_name: str
     max_seq_len: int
@@ -33,6 +33,23 @@ class RerankerParams:
     include_heading: bool
     device: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.model_name, str) or not self.model_name.strip():
+            raise ValueError("model_name 必须是非空字符串")
+        if type(self.max_seq_len) is not int or self.max_seq_len <= 0:
+            raise ValueError("max_seq_len 必须是正整数")
+        if type(self.batch_size) is not int or self.batch_size <= 0:
+            raise ValueError("batch_size 必须是正整数")
+        if type(self.window_overlap) is not int or self.window_overlap < 0:
+            raise ValueError("window_overlap 必须是非负整数")
+        if (
+            type(self.max_windows_per_node) is not int
+            or self.max_windows_per_node <= 0
+        ):
+            raise ValueError("max_windows_per_node 必须是正整数")
+        if not isinstance(self.include_heading, bool):
+            raise TypeError("include_heading 必须是布尔值")
 
 
 class BaseReranker(ABC):

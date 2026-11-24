@@ -172,6 +172,7 @@ class RagChoreographer:
             embedder=self.embedder,
             vector_store=self._vector_store,
         )
+        
         self.knowledge_index_service = KnowledgeIndexService(
             corpus_dir=corpus_path,
             document_pool=self.thread_pools.get_document_pool(),
