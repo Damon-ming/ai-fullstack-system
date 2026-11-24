@@ -206,7 +206,8 @@ app-server (depends_on: postgres + model-gateway)
 web-app (depends_on: app-server)
 ```
 
-vLLM 实例不参与 Docker `depends_on`——它们通过 gateway 的 api_key 路由注册，启动时间由 gateway 的路由表决定，不阻塞其他服务启动。
+model-config 只提供配置文件与共享启动模板，不运行独立容器。
+每个 vLLM 容器在加载模型前自行读取并校验配置；网关和 app-server 无需等待配置服务。
 
 ## 一键部署
 
@@ -215,6 +216,10 @@ vLLM 实例不参与 Docker `depends_on`——它们通过 gateway 的 api_key �
 - Docker Engine 20.10+
 - Docker Compose v2.20.3+
 - NVIDIA Container Toolkit（vLLM 模式需要）
+
+完成 `.env` 配置和模型下载后，执行 `docker compose up -d --build` 一键启动。
+app-server、model-gateway 继承 model-config 的共享库模板，直接使用 `from model_config import get_model_config`。
+模型容器继承该模块的启动适配模板，通过同一个接口读取配置；无需宿主机配置启动脚本。
 
 ### 部署步骤
 
@@ -230,7 +235,7 @@ cp .env.example .env
 python -m pip install huggingface-hub
 python scripts/download-models.py
 
-# 4. 部署（vLLM 推理 + vLLM embedding，需要 GPU）
+# 4. 一键部署（需要 GPU，模型容器在加载模型前校验配置）
 docker compose up -d --build
 
 # 5. 查看日志
@@ -261,7 +266,11 @@ docker compose down
 | `vllm`（默认） | 推理与 embedding | ✅ |
 | `sglang` | 预留扩展 | ✅ |
 
-切换只需改 `.env` 后重新 `docker compose up -d --build`。
+切换推理后端通过 `.env` 配置；当前模型窗口入口仅接入现有 vLLM 配置，其他后端需补充对应的读取规则。
+
+vLLM 的 `--max-model-len` 统一从 `model-config/models.yaml` 读取，按实例的模型名匹配 `max-model-len`。
+修改后执行 `docker compose up -d --force-recreate`，确保重新校验配置并重启模型进程读取新窗口。
+模型配置入口和字段说明见 [model-config/README.md](model-config/README.md)。app-server 的窗口及业务预算尚未接入。
 
 Embedding 固定由独立的 vLLM 服务运行，并通过 model-gateway 路由；`INFERENCE_SERVER` 只选择生成推理后端。
 

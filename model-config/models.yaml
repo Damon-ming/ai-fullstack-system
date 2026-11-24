@@ -1,0 +1,23 @@
+# model-config/models.yaml
+# 共享模型配置目录：按模型类型分组，每个模型使用现有接口模型名作为唯一键。
+# 模型键：与 app-server 的 model_name、vLLM 的 --served-model-name 完全一致；
+# embedding 未显式设置 --served-model-name 时，与当前 --model 对应。
+# max-model-len：token 窗口，字段名称与 vLLM 启动参数一致。
+# 当前 max-model-len 取自现有部署配置，仅作为初始化记录，尚未核实为模型官方上限。
+# 对外通过 get_model_config(模型名) 读取；Docker 适配器使用同一接口。
+# app-server 和 gateway 已可导入共享库，既有业务配置加载器尚未迁移。
+
+inference:
+  qwen2.5-1.8B-instruct:
+    max-model-len: 4096
+
+  qwen2.5-0.5B-instruct:
+    max-model-len: 2048
+
+  qwen3guard-gen-0.6b:
+    max-model-len: 4096
+
+embedding:
+  BAAI/bge-m3:
+    max-model-len: 8192
+    dimension: 1024

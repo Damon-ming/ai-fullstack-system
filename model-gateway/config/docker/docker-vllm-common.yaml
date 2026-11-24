@@ -1,3 +1,4 @@
+# model-gateway/config/docker/docker-vllm-common.yaml
 # vLLM 容器公共配置；仅供其他 Compose 文件通过 extends 引用。
 services:
   vllm-base:

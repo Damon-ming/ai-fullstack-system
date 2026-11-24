@@ -1,0 +1,12 @@
+# model-config/docker-compose.yaml
+# 共享配置库模板：仅通过 extends 使用，不创建独立容器。
+# 调用方只继承模板并 import model_config，无需知道 YAML 或内部文件路径。
+services:
+  model-library:
+    volumes:
+      - type: bind
+        source: .
+        target: /opt/model_config
+        read_only: true
+    environment:
+      PYTHONPATH: /opt
