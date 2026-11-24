@@ -1,7 +1,9 @@
 # app-server/src/com/damon/ming/ai/rag/embedding/config/embedding-config.yaml
-# RAG embedding 的查询与文档文本前缀。
-query_prefix: ""
-passage_prefix: ""
-
-# 每次向 embedding 服务发送的文档数量上限。
-batch_size: 32
+# 按 app/config/ai/embedding/embedding-config.yaml 的同名 role 配置文本规则。
+roles:
+  bge_m3:
+    # 不需要前缀的模型保持空字符串。
+    query_prefix: ""
+    passage_prefix: ""
+    # 每次向 embedding 服务发送的文档数量上限。
+    batch_size: 32

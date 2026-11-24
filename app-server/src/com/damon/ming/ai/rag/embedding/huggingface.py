@@ -5,6 +5,7 @@ import threading
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
+from src.com.damon.ming.ai.rag.embedding.input_policy import EmbeddingInputPolicy
 from src.com.damon.ming.ai.rag.embedding.model_config import HuggingFaceEmbeddingParams
 from src.com.damon.ming.log import pin
 
@@ -23,6 +24,7 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
 
     def __init__(self, params: HuggingFaceEmbeddingParams):
         super().__init__(params)
+        self._input_policy = EmbeddingInputPolicy(params)
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError:
@@ -45,7 +47,10 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
         )
 
     def embed_query(self, text: str) -> list[float]:
-        """单条推理无锁。"""
+        return self._input_policy.embed_query(text, self._embed_query)
+
+    def _embed_query(self, text: str) -> list[float]:
+        """单条推理无锁，文本前缀已由输入策略添加。"""
         try:
             embedding = self.model.encode(
                 text, normalize_embeddings=self._normalize_embeddings
@@ -66,14 +71,19 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
         available_tokens = model_limit - special_tokens - boundary_margin
         if available_tokens <= 0:
             raise ValueError("Embedding 模型窗口不足以容纳前缀、特殊 token 和安全余量")
-        return available_tokens
+        return self._input_policy.available_document_tokens(
+            available_tokens, self.model.tokenizer
+        )
 
     def get_tokenizer(self):
         """返回 SentenceTransformer 实际用于编码的 tokenizer。"""
         return self.model.tokenizer
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """批量推理受 concurrency 信号量限流。"""
+        return self._input_policy.embed_documents(texts, self._embed_documents_batch)
+
+    def _embed_documents_batch(self, texts: list[str]) -> list[list[float]]:
+        """单批推理受 concurrency 信号量限流。"""
         try:
             with self._batch_sem:
                 embeddings = self.model.encode(
@@ -92,4 +102,6 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
             "device": self.params.device,
             "dimension": self.model.get_sentence_embedding_dimension(),
             "normalize": self._normalize_embeddings,
+            "query_prefix": self.params.query_prefix,
+            "passage_prefix": self.params.passage_prefix,
         }

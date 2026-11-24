@@ -6,6 +6,7 @@ from typing import Any
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
+from src.com.damon.ming.ai.rag.embedding.input_policy import EmbeddingInputPolicy
 from src.com.damon.ming.ai.rag.embedding.model_config import VLLMEmbeddingParams
 from src.com.damon.ming.log import pin
 
@@ -17,6 +18,7 @@ class VllmEmbedding(BaseEmbeddingService):
 
     def __init__(self, params: VLLMEmbeddingParams):
         super().__init__(params)
+        self._input_policy = EmbeddingInputPolicy(params)
         try:
             from openai import OpenAI
         except ImportError as e:
@@ -58,22 +60,35 @@ class VllmEmbedding(BaseEmbeddingService):
 
     @property
     def max_input_tokens(self) -> int:
-        return self._max_input_tokens
+        return self._input_policy.available_document_tokens(
+            self._max_input_tokens, self._tokenizer
+        )
 
     def get_tokenizer(self) -> Any:
         return self._tokenizer
 
     def embed_query(self, text: str) -> list[float]:
-        return self._embed_one(text)
+        return self._input_policy.embed_query(text, self._embed_query)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        inputs = texts
+        return self._input_policy.embed_documents(texts, self._embed_documents_batch)
+
+    def _embed_query(self, text: str) -> list[float]:
         try:
             response = self._client.embeddings.create(
                 model=self.params.model_name,
-                input=inputs,
+                input=text,
+                encoding_format="float",
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            raise RuntimeError(f"vLLM embedding failed: {e}") from e
+
+    def _embed_documents_batch(self, texts: list[str]) -> list[list[float]]:
+        try:
+            response = self._client.embeddings.create(
+                model=self.params.model_name,
+                input=texts,
                 encoding_format="float",
             )
             return [
@@ -90,15 +105,6 @@ class VllmEmbedding(BaseEmbeddingService):
             "base_url": self._base_url,
             "dimension": self._dimension,
             "max_input_tokens": self._max_input_tokens,
+            "query_prefix": self.params.query_prefix,
+            "passage_prefix": self.params.passage_prefix,
         }
-
-    def _embed_one(self, text: str) -> list[float]:
-        try:
-            response = self._client.embeddings.create(
-                model=self.params.model_name,
-                input=text,
-                encoding_format="float",
-            )
-            return response.data[0].embedding
-        except Exception as e:
-            raise RuntimeError(f"vLLM embedding failed: {e}") from e
