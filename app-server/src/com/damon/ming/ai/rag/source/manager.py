@@ -18,12 +18,12 @@ class DataSourceManager:
 
     _FIXED_EXTENSIONS: ClassVar[dict[str, frozenset[str]]] = {
         "csv": frozenset({".csv"}),
-        "doc": frozenset({".doc", ".docx"}),
+        "doc": frozenset({".docx"}),
         "html": frozenset({".htm", ".html"}),
         "md": frozenset({".md"}),
         "pdf": frozenset({".pdf"}),
-        "pptx": frozenset({".ppt", ".pptx"}),
-        "xlsx": frozenset({".xls", ".xlsx"}),
+        "pptx": frozenset({".pptx"}),
+        "xlsx": frozenset({".xlsx"}),
     }
 
     def __init__(self) -> None:
@@ -70,6 +70,7 @@ class DataSourceManager:
     ) -> dict[str, list[str]]:
         extensions_by_engine = {
             **self._FIXED_EXTENSIONS,
+            "image": config.image_source.extensions,
             "text": config.text_source.extensions,
         }
         grouped: dict[str, list[str]] = {}
@@ -95,6 +96,7 @@ class DataSourceManager:
                 "include_links": config.html_source.include_links,
                 "include_tables": config.html_source.include_tables,
             },
+            "image": {"supported_extensions": config.image_source.extensions},
             "md": {"pre_chunk_config": config.markdown_source.pre_chunk},
             "pptx": {
                 "pre_chunk_config": config.pptx_source.pre_chunk,

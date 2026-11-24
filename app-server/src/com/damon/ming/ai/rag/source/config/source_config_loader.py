@@ -19,7 +19,7 @@ LocalTextDataSource 通过 SourceConfig 数据类接收参数，不感知配置�
 """
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from src.com.damon.ming.utils.yaml_loader import load_yaml, resolve_yaml_path
 
@@ -36,10 +36,10 @@ class PreChunkConfig:
     """
 
     # 是否启用预分块
-    enabled: bool = True
+    enabled: bool
 
     # 每个预分块的目标字符数（超过此长度会触发切分）
-    chunk_chars: int = 500
+    chunk_chars: int
 
     # 切分边界优先级列表（从高到低尝试）
     # 空字符串 "" 兜底表示"按固定长度硬切"
@@ -50,11 +50,7 @@ class PreChunkConfig:
     #   ".,!?"   → 英文句末标点
     #   " "      → 空格
     #   ""       → 字符级兜底
-    boundaries: tuple[str, ...] = (
-        "\n\n",
-        "\n",
-        "",
-    )
+    boundaries: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -62,10 +58,10 @@ class TextSourceConfig:
     """文本数据源配置（纯数据类）。"""
 
     # 支持的文件扩展名（带点号，小写）
-    extensions: set[str] = field(default_factory=set)
+    extensions: set[str]
 
     # 大文件预分块配置
-    pre_chunk: PreChunkConfig = field(default_factory=PreChunkConfig)
+    pre_chunk: PreChunkConfig
 
 
 @dataclass(frozen=True)
@@ -85,11 +81,26 @@ class XlsxSourceConfig:
 
 
 @dataclass(frozen=True)
+class ImageSourceConfig:
+    """独立图片数据源配置。"""
+
+    # 支持的图片文件扩展名（带点号，小写）
+    extensions: set[str]
+
+
+@dataclass(frozen=True)
+class OcrConfig:
+    """OCR 推理设备配置。"""
+
+    device: str
+
+
+@dataclass(frozen=True)
 class MarkdownSourceConfig:
     """Markdown 数据源配置（纯数据类）。"""
 
     # 超大标题段落的二次切分配置
-    pre_chunk: PreChunkConfig = field(default_factory=PreChunkConfig)
+    pre_chunk: PreChunkConfig
 
 
 @dataclass(frozen=True)
@@ -102,7 +113,7 @@ class PdfSourceConfig:
 
 @dataclass(frozen=True)
 class DocSourceConfig:
-    """DOC/DOCX 数据源配置（纯数据类）。"""
+    """DOCX 数据源配置（纯数据类）。"""
 
     # 预分块配置（超大段落按自然边界切分）
     pre_chunk: PreChunkConfig
@@ -152,6 +163,12 @@ class SourceConfig:
     # XLSX 数据源配置
     xlsx_source: XlsxSourceConfig
 
+    # 图片数据源配置
+    image_source: ImageSourceConfig
+
+    # OCR 推理配置（PDF、Office 内嵌图片和独立图片共用）
+    ocr: OcrConfig
+
     # 文本数据源配置
     text_source: TextSourceConfig
 
@@ -194,153 +211,156 @@ class SourceConfigLoader:
             return self._cache
 
         raw = self._read_yaml()
-        source_section = raw
+        csv_section = self._required_section(raw, "csv_source")
+        xlsx_section = self._required_section(raw, "xlsx_source")
+        image_section = self._required_section(raw, "image_source")
+        ocr_section = self._required_section(raw, "ocr")
+        text_section = self._required_section(raw, "text_source")
+        markdown_section = self._required_section(raw, "markdown_source")
+        pdf_section = self._required_section(raw, "pdf_source")
+        doc_section = self._required_section(raw, "doc_source")
+        pptx_section = self._required_section(raw, "pptx_source")
+        html_section = self._required_section(raw, "html_source")
 
-        # 解析 csv_source
-        csv_section = source_section.get("csv_source", {})
-        csv_batch_rows = csv_section.get("batch_rows")
-        if csv_batch_rows is None:
-            raise ValueError("缺少 csv_source.batch_rows 配置项")
+        extensions_raw = self._required_value(text_section, "extensions", "text_source")
+        if not isinstance(extensions_raw, list) or not all(
+            isinstance(extension, str) for extension in extensions_raw
+        ):
+            raise TypeError("text_source.extensions 必须是字符串列表")
+        image_extensions_raw = self._required_value(
+            image_section, "extensions", "image_source"
+        )
+        if not isinstance(image_extensions_raw, list) or not all(
+            isinstance(extension, str) for extension in image_extensions_raw
+        ):
+            raise TypeError("image_source.extensions 必须是字符串列表")
+        if not image_extensions_raw:
+            raise ValueError("image_source.extensions 不能为空")
+        ocr_device = self._required_value(ocr_section, "device", "ocr")
+        if not isinstance(ocr_device, str) or ocr_device not in {"cpu", "gpu"}:
+            raise ValueError("ocr.device 只支持 'cpu' 或 'gpu'")
 
-        # 解析 xlsx_source
-        xlsx_section = source_section.get("xlsx_source", {})
-        xlsx_batch_rows = xlsx_section.get("batch_rows")
-        if xlsx_batch_rows is None:
-            raise ValueError("缺少 xlsx_source.batch_rows 配置项")
-
-        text_section = source_section.get("text_source", {})
-
-        # 解析 extensions 为 set
-        ext_list = text_section.get("extensions", [])
-        extensions = set(ext_list) if ext_list else set()
-
-        # 解析 pre_chunk
-        pre_chunk_section = text_section.get("pre_chunk", {})
-        boundaries_raw = pre_chunk_section.get("boundaries", [])
-        boundaries = tuple(boundaries_raw) if boundaries_raw else tuple()
-        pre_chunk = PreChunkConfig(
-            enabled=pre_chunk_section.get("enabled", True),
-            chunk_chars=pre_chunk_section.get("chunk_chars", 500),
-            boundaries=boundaries,
+        pdf_enable_image_extract = self._required_value(
+            pdf_section, "enable_image_extract", "pdf_source"
+        )
+        doc_include_tables = self._required_value(
+            doc_section, "include_tables", "doc_source"
+        )
+        pptx_include_tables = self._required_value(
+            pptx_section, "include_tables", "pptx_source"
+        )
+        pptx_include_notes = self._required_value(
+            pptx_section, "include_notes", "pptx_source"
+        )
+        pptx_extract_images = self._required_value(
+            pptx_section, "extract_images", "pptx_source"
+        )
+        html_include_links = self._required_value(
+            html_section, "include_links", "html_source"
+        )
+        html_include_tables = self._required_value(
+            html_section, "include_tables", "html_source"
         )
 
-        # 解析 markdown_source
-        md_section = source_section.get("markdown_source", {})
-        md_pre_chunk_section = md_section.get("pre_chunk", [])
-        md_boundaries_raw = md_pre_chunk_section.get("boundaries", [])
-        md_boundaries = tuple(md_boundaries_raw) if md_boundaries_raw else tuple()
-        md_pre_chunk = PreChunkConfig(
-            chunk_chars=md_pre_chunk_section.get("chunk_chars", 800),
-            boundaries=md_boundaries,
-        )
-
-        # 解析 pdf_source
-        pdf_section = source_section.get("pdf_source", {})
-        if not pdf_section:
-            raise ValueError("缺少 pdf_source 配置项")
-        pdf_enable_image_extract = pdf_section.get("enable_image_extract")
-        if pdf_enable_image_extract is None:
-            raise ValueError("缺少 pdf_source.enable_image_extract 配置项")
-        if not isinstance(pdf_enable_image_extract, bool):
-            raise TypeError("pdf_source.enable_image_extract 必须是布尔值")
-
-        # 解析 doc_source
-        doc_section = source_section.get("doc_source", {})
-        if not doc_section:
-            raise ValueError("缺少 doc_source 配置项")
-        doc_pre_chunk_section = doc_section.get("pre_chunk", {})
-        if not doc_pre_chunk_section:
-            raise ValueError("缺少 doc_source.pre_chunk 配置项")
-        doc_boundaries_raw = doc_pre_chunk_section.get("boundaries", [])
-        doc_boundaries = tuple(doc_boundaries_raw) if doc_boundaries_raw else tuple()
-        doc_pre_chunk = PreChunkConfig(
-            enabled=doc_pre_chunk_section.get("enabled", True),
-            chunk_chars=doc_pre_chunk_section.get("chunk_chars", 600),
-            boundaries=doc_boundaries,
-        )
-        doc_include_tables = doc_section.get("include_tables")
-        if doc_include_tables is None:
-            raise ValueError("缺少 doc_source.include_tables 配置项")
-
-        # 解析 pptx_source
-        pptx_section = source_section.get("pptx_source", {})
-        if not pptx_section:
-            raise ValueError("缺少 pptx_source 配置项")
-        pptx_pre_chunk_section = pptx_section.get("pre_chunk", {})
-        if not pptx_pre_chunk_section:
-            raise ValueError("缺少 pptx_source.pre_chunk 配置项")
-        pptx_boundaries_raw = pptx_pre_chunk_section.get("boundaries", [])
-        pptx_boundaries = tuple(pptx_boundaries_raw) if pptx_boundaries_raw else tuple()
-        pptx_pre_chunk = PreChunkConfig(
-            enabled=pptx_pre_chunk_section.get("enabled", True),
-            chunk_chars=pptx_pre_chunk_section.get("chunk_chars", 500),
-            boundaries=pptx_boundaries,
-        )
-        pptx_include_tables = pptx_section.get("include_tables")
-        if pptx_include_tables is None:
-            raise ValueError("缺少 pptx_source.include_tables 配置项")
-        pptx_include_notes = pptx_section.get("include_notes")
-        if pptx_include_notes is None:
-            raise ValueError("缺少 pptx_source.include_notes 配置项")
-        pptx_extract_images = pptx_section.get("extract_images")
-        if pptx_extract_images is None:
-            raise ValueError("缺少 pptx_source.extract_images 配置项")
-
-        # 解析 html_source
-        html_section = source_section.get("html_source", {})
-        if not html_section:
-            raise ValueError("缺少 html_source 配置项")
-        html_pre_chunk_section = html_section.get("pre_chunk", {})
-        if not html_pre_chunk_section:
-            raise ValueError("缺少 html_source.pre_chunk 配置项")
-        html_boundaries_raw = html_pre_chunk_section.get("boundaries", [])
-        html_boundaries = tuple(html_boundaries_raw) if html_boundaries_raw else tuple()
-        html_pre_chunk = PreChunkConfig(
-            enabled=html_pre_chunk_section.get("enabled", True),
-            chunk_chars=html_pre_chunk_section.get("chunk_chars", 800),
-            boundaries=html_boundaries,
-        )
-        html_include_links = html_section.get("include_links")
-        if html_include_links is None:
-            raise ValueError("缺少 html_source.include_links 配置项")
-        html_include_tables = html_section.get("include_tables")
-        if html_include_tables is None:
-            raise ValueError("缺少 html_source.include_tables 配置项")
+        self._validate_bool(pdf_enable_image_extract, "pdf_source.enable_image_extract")
+        self._validate_bool(doc_include_tables, "doc_source.include_tables")
+        self._validate_bool(pptx_include_tables, "pptx_source.include_tables")
+        self._validate_bool(pptx_include_notes, "pptx_source.include_notes")
+        self._validate_bool(pptx_extract_images, "pptx_source.extract_images")
+        self._validate_bool(html_include_links, "html_source.include_links")
+        self._validate_bool(html_include_tables, "html_source.include_tables")
 
         self._cache = SourceConfig(
             csv_source=CsvSourceConfig(
-                batch_rows=csv_batch_rows,
+                batch_rows=self._required_positive_int(
+                    csv_section, "batch_rows", "csv_source"
+                ),
             ),
             xlsx_source=XlsxSourceConfig(
-                batch_rows=xlsx_batch_rows,
+                batch_rows=self._required_positive_int(
+                    xlsx_section, "batch_rows", "xlsx_source"
+                ),
             ),
+            image_source=ImageSourceConfig(extensions=set(image_extensions_raw)),
+            ocr=OcrConfig(device=ocr_device),
             text_source=TextSourceConfig(
-                extensions=extensions,
-                pre_chunk=pre_chunk,
+                extensions=set(extensions_raw),
+                pre_chunk=self._parse_pre_chunk(text_section, "text_source"),
             ),
             markdown_source=MarkdownSourceConfig(
-                pre_chunk=md_pre_chunk,
+                pre_chunk=self._parse_pre_chunk(markdown_section, "markdown_source"),
             ),
             pdf_source=PdfSourceConfig(
                 enable_image_extract=pdf_enable_image_extract,
             ),
             doc_source=DocSourceConfig(
-                pre_chunk=doc_pre_chunk,
+                pre_chunk=self._parse_pre_chunk(doc_section, "doc_source"),
                 include_tables=doc_include_tables,
             ),
             pptx_source=PptxSourceConfig(
-                pre_chunk=pptx_pre_chunk,
+                pre_chunk=self._parse_pre_chunk(pptx_section, "pptx_source"),
                 include_tables=pptx_include_tables,
                 include_notes=pptx_include_notes,
                 extract_images=pptx_extract_images,
             ),
             html_source=HtmlSourceConfig(
-                pre_chunk=html_pre_chunk,
+                pre_chunk=self._parse_pre_chunk(html_section, "html_source"),
                 include_links=html_include_links,
                 include_tables=html_include_tables,
             ),
         )
         return self._cache
+
+    @staticmethod
+    def _required_section(parent: dict, key: str) -> dict:
+        section = parent.get(key)
+        if not isinstance(section, dict):
+            raise ValueError(f"缺少有效的 {key} 配置项")
+        return section
+
+    @staticmethod
+    def _required_value(section: dict, key: str, section_name: str):
+        if key not in section or section[key] is None:
+            raise ValueError(f"缺少 {section_name}.{key} 配置项")
+        return section[key]
+
+    @classmethod
+    def _parse_pre_chunk(cls, source_section: dict, source_name: str) -> PreChunkConfig:
+        section = cls._required_section(source_section, "pre_chunk")
+        enabled = cls._required_value(section, "enabled", f"{source_name}.pre_chunk")
+        chunk_chars = cls._required_value(
+            section, "chunk_chars", f"{source_name}.pre_chunk"
+        )
+        boundaries_raw = cls._required_value(
+            section, "boundaries", f"{source_name}.pre_chunk"
+        )
+        cls._validate_bool(enabled, f"{source_name}.pre_chunk.enabled")
+        if type(chunk_chars) is not int or chunk_chars <= 0:
+            raise ValueError(f"{source_name}.pre_chunk.chunk_chars 必须是正整数")
+        if not isinstance(boundaries_raw, list) or not all(
+            isinstance(boundary, str) for boundary in boundaries_raw
+        ):
+            raise TypeError(f"{source_name}.pre_chunk.boundaries 必须是字符串列表")
+        if not boundaries_raw:
+            raise ValueError(f"{source_name}.pre_chunk.boundaries 不能为空")
+
+        return PreChunkConfig(
+            enabled=enabled,
+            chunk_chars=chunk_chars,
+            boundaries=tuple(boundaries_raw),
+        )
+
+    @classmethod
+    def _required_positive_int(cls, section: dict, key: str, section_name: str) -> int:
+        value = cls._required_value(section, key, section_name)
+        if type(value) is not int or value <= 0:
+            raise ValueError(f"{section_name}.{key} 必须是正整数")
+        return value
+
+    @staticmethod
+    def _validate_bool(value, config_path: str) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(f"{config_path} 必须是布尔值")
 
     def _read_yaml(self) -> dict:
         raw_cfg = load_yaml(self._config_path)

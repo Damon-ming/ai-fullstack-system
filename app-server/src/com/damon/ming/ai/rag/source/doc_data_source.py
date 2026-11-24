@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/ai/rag/source/doc_data_source.py
 """
-DOC/DOCX 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
+DOCX 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer 负责。
 
 使用 python-docx 提取 .docx 文件的文本和表格内容。
 旧版 .doc（BIFF 格式）无法直接读取，需先转换为 .docx。
@@ -52,7 +52,7 @@ _HEADING_PATTERN = re.compile(r"^Heading\s+(\d+)$", re.IGNORECASE)
 
 @register_engine("doc")
 class LocalDocDataSource(BaseDataSource):
-    """DOC/DOCX 文件加载实现，同步处理。
+    """DOCX 文件加载实现，同步处理。
 
     上层 RagChoreographer 使用 asyncio.to_thread 或 ThreadPoolExecutor
     将本类的调用提交到线程池，本类不感知线程环境。
@@ -229,7 +229,7 @@ class LocalDocDataSource(BaseDataSource):
         return end
 
     def _process_single_file(self, file_path: str) -> list[Document]:
-        """处理单个 DOC/DOCX 文件"""
+        """处理单个 DOCX 文件"""
         file_name = os.path.basename(file_path)
         suffix = Path(file_path).suffix.lower()
 
@@ -387,18 +387,18 @@ class LocalDocDataSource(BaseDataSource):
             return []
 
     def load_documents(self, reset_stats: bool = True) -> list[Document]:
-        """加载目录下所有 DOC/DOCX 文件（同步）"""
+        """加载目录下所有 DOCX 文件（同步）"""
         self.logger.info(f"[DocDataSource] 开始加载目录: {self.folder_path}")
 
         doc_files = []
         for root, _, files in os.walk(self.folder_path):
             for fname in files:
-                if fname.lower().endswith((".docx", ".doc")):
+                if fname.lower().endswith(".docx"):
                     doc_files.append(os.path.abspath(os.path.join(root, fname)))
 
         if not doc_files:
             self.logger.warning(
-                f"[DocDataSource] 目录中没有 DOC/DOCX 文件: {self.folder_path}"
+                f"[DocDataSource] 目录中没有 DOCX 文件: {self.folder_path}"
             )
             return []
 
@@ -433,16 +433,16 @@ class LocalDocDataSource(BaseDataSource):
     def load_specific_files(
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
-        """加载指定的 DOC/DOCX 文件列表，用于增量上传（同步）"""
+        """加载指定的 DOCX 文件列表，用于增量上传（同步）"""
         self.logger.info(f"[DocDataSource] 加载指定文件 count={len(file_paths)}")
 
         doc_files = []
         for fp in file_paths:
             p = Path(fp).resolve()
-            if p.exists() and p.suffix.lower() in (".docx", ".doc"):
+            if p.exists() and p.suffix.lower() == ".docx":
                 doc_files.append(str(p))
             else:
-                self.logger.warning(f"[DocDataSource] 跳过非DOC/不存在文件: {fp}")
+                self.logger.warning(f"[DocDataSource] 跳过不支持的格式/不存在文件: {fp}")
 
         if not doc_files:
             return []

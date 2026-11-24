@@ -58,6 +58,7 @@ def list_engines() -> list[str]:
 from src.com.damon.ming.ai.rag.source.csv_data_source import LocalCsvDataSource
 from src.com.damon.ming.ai.rag.source.doc_data_source import LocalDocDataSource
 from src.com.damon.ming.ai.rag.source.html_data_source import LocalHtmlDataSource
+from src.com.damon.ming.ai.rag.source.image_data_source import LocalImageDataSource
 from src.com.damon.ming.ai.rag.source.markdown_data_source import (
     LocalMarkdownDataSource,
 )
@@ -71,6 +72,7 @@ __all__ = [
     "LocalCsvDataSource",
     "LocalDocDataSource",
     "LocalHtmlDataSource",
+    "LocalImageDataSource",
     "LocalMarkdownDataSource",
     "LocalPDFDataSource",
     "LocalPptxDataSource",

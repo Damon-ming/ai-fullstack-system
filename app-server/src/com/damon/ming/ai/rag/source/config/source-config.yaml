@@ -21,6 +21,20 @@ xlsx_source:
   # 每个 Document 包含的数据行数（不含表头）
   batch_rows: 50
 
+ocr:
+  # OCR 推理设备：cpu 或 gpu；GPU 需要安装兼容 CUDA 的 Paddle 版本
+  device: cpu
+
+image_source:
+  # 独立图片 OCR 支持的文件扩展名（带点号，小写）
+  extensions:
+    - ".bmp"
+    - ".jpeg"
+    - ".jpg"
+    - ".png"
+    - ".tif"
+    - ".tiff"
+
 text_source:
   # 纯文本数据源支持的文件扩展名（不含 Markdown）
   extensions:
@@ -38,6 +52,7 @@ text_source:
 markdown_source:
   # 超大标题段落的二次切分配置
   pre_chunk:
+    enabled: true
     chunk_chars: 800
     boundaries:
       - "\\n\\n"

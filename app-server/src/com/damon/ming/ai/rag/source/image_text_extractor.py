@@ -19,7 +19,11 @@ from pathlib import Path
 
 import fitz  # pymupdf
 import ollama
+import paddle
 from paddleocr import PaddleOCR
+from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
+    SourceConfigLoader,
+)
 from src.com.damon.ming.log import pin
 
 logger = pin("ImageTextExtractor")
@@ -38,11 +42,20 @@ def _get_ocr() -> PaddleOCR:
     if _ocr_instance is None:
         with _ocr_lock:
             if _ocr_instance is None:
-                logger.info("[ImageTextExtractor] 初始化 PaddleOCR...")
+                device = SourceConfigLoader().load().ocr.device
+                use_gpu = device == "gpu"
+                if use_gpu and not paddle.is_compiled_with_cuda():
+                    raise RuntimeError(
+                        "配置了 ocr.device=gpu，但当前 Paddle 未编译 CUDA 支持；"
+                        "请安装兼容 CUDA 的 GPU 版 Paddle，或将配置改为 cpu"
+                    )
+
+                logger.info(f"[ImageTextExtractor] 初始化 PaddleOCR | device={device}")
                 _ocr_instance = PaddleOCR(
                     use_angle_cls=True,
                     lang="ch",  # 中英文混合
                     show_log=False,
+                    use_gpu=use_gpu,
                 )
                 logger.info("[ImageTextExtractor] PaddleOCR 初始化完成")
     return _ocr_instance
@@ -74,8 +87,8 @@ def extract_image_text(image_path: str, vlm_model: str | None = None) -> str:
 
 def _ocr_extract(image_path: str) -> str:
     """PaddleOCR 提取图片文字。"""
+    ocr = _get_ocr()
     try:
-        ocr = _get_ocr()
         result = ocr.ocr(image_path, cls=True)
 
         if not result or not result[0]:

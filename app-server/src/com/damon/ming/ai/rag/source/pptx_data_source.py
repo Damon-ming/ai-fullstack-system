@@ -424,7 +424,7 @@ class LocalPptxDataSource(BaseDataSource):
         pptx_files = []
         for root, _, files in os.walk(self.folder_path):
             for fname in files:
-                if fname.lower().endswith((".pptx", ".ppt")):
+                if fname.lower().endswith(".pptx"):
                     pptx_files.append(os.path.abspath(os.path.join(root, fname)))
 
         if not pptx_files:
@@ -471,10 +471,12 @@ class LocalPptxDataSource(BaseDataSource):
         pptx_files = []
         for fp in file_paths:
             p = Path(fp).resolve()
-            if p.exists() and p.suffix.lower() in (".pptx", ".ppt"):
+            if p.exists() and p.suffix.lower() == ".pptx":
                 pptx_files.append(str(p))
             else:
-                self.logger.warning(f"[PptxDataSource] 跳过非PPTX/不存在文件: {fp}")
+                self.logger.warning(
+                    f"[PptxDataSource] 跳过不支持的格式/不存在文件: {fp}"
+                )
 
         if not pptx_files:
             return []

@@ -202,7 +202,7 @@ class LocalXlsxDataSource(BaseDataSource):
         xlsx_files = []
         for root, _, files in os.walk(self.folder_path):
             for fname in files:
-                if fname.lower().endswith((".xlsx", ".xls")):
+                if fname.lower().endswith(".xlsx"):
                     xlsx_files.append(os.path.abspath(os.path.join(root, fname)))
 
         if not xlsx_files:
@@ -247,7 +247,7 @@ class LocalXlsxDataSource(BaseDataSource):
         xlsx_files = []
         for fp in file_paths:
             p = Path(fp).resolve()
-            if p.exists() and p.suffix.lower() in (".xlsx", ".xls"):
+            if p.exists() and p.suffix.lower() == ".xlsx":
                 xlsx_files.append(str(p))
             else:
                 self.logger.warning(f"[XlsxDataSource] 跳过非Excel/不存在文件: {fp}")
