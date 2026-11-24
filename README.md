@@ -206,8 +206,8 @@ app-server (depends_on: postgres + model-gateway)
 web-app (depends_on: app-server)
 ```
 
-model-config 只提供配置文件与共享启动模板，不运行独立容器。
-每个 vLLM 容器在加载模型前自行读取并校验配置；网关和 app-server 无需等待配置服务。
+model-config 将 models.yaml 导出为根目录 model-config.env，不运行独立容器。
+Compose 在解析启动参数时读取该文件，app-server 和 model-gateway 通过服务 env_file 接收同一份模型变量。
 
 ## 一键部署
 
@@ -218,8 +218,9 @@ model-config 只提供配置文件与共享启动模板，不运行独立容器�
 - NVIDIA Container Toolkit（vLLM 模式需要）
 
 完成 `.env` 配置和模型下载后，执行 `docker compose up -d --build` 一键启动。
-app-server、model-gateway 继承 model-config 的共享库模板，直接使用 `from model_config import get_model_config`。
-模型容器继承该模块的启动适配模板，通过同一个接口读取配置；无需宿主机配置启动脚本。
+根 Compose 保持 include 结构，通过 include.env_file 提供模型参数替换。
+app-server 和 model-gateway 在各自服务下通过 env_file 注入容器环境；启动命令无需追加 --env-file。
+修改模型配置后，先执行 `python model-config/export_env.py` 更新根目录 model-config.env，再运行 Compose。
 
 ### 部署步骤
 
@@ -235,13 +236,17 @@ cp .env.example .env
 python -m pip install huggingface-hub
 python scripts/download-models.py
 
-# 4. 一键部署（需要 GPU，模型容器在加载模型前校验配置）
+# 4. 准备配置导出依赖并生成根目录 model-config.env
+python -m pip install -e ./model-config
+python model-config/export_env.py
+
+# 5. 一键部署（需要 GPU）
 docker compose up -d --build
 
-# 5. 查看日志
+# 6. 查看日志
 docker compose logs -f app-server
 
-# 6. 停止所有服务
+# 7. 停止所有服务
 docker compose down
 ```
 
@@ -268,8 +273,8 @@ docker compose down
 
 切换推理后端通过 `.env` 配置；当前模型窗口入口仅接入现有 vLLM 配置，其他后端需补充对应的读取规则。
 
-vLLM 的 `--max-model-len` 统一从 `model-config/models.yaml` 读取，按实例的模型名匹配 `max-model-len`。
-修改后执行 `docker compose up -d --force-recreate`，确保重新校验配置并重启模型进程读取新窗口。
+vLLM 的 `--max-model-len` 使用标准 `${模型变量}` 引用根目录 model-config.env，数值由 model-config/models.yaml 导出。
+修改 YAML 后重新导出，再执行 `docker compose up -d`，让 Compose 应用新的参数和容器环境。
 模型配置入口和字段说明见 [model-config/README.md](model-config/README.md)。app-server 的窗口及业务预算尚未接入。
 
 Embedding 固定由独立的 vLLM 服务运行，并通过 model-gateway 路由；`INFERENCE_SERVER` 只选择生成推理后端。

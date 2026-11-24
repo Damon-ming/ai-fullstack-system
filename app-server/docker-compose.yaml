@@ -5,7 +5,7 @@
 #   INFERENCE_SERVER  推理后端类型：vllm / sglang（决定连接配置）
 #   INFERENCE_GATEWAY_URL 网关地址（在本文件中显式注入）
 #
-# 环境变量全部来自根目录 .env，不在此文件重复定义
+# 部署环境变量来自根目录 .env，服务 env_file 将模型常量注入容器。
 
 services:
   # ── PostgreSQL ─────────────────────────────────────────────────────
@@ -37,6 +37,8 @@ services:
 
   # ── FastAPI 后端 ───────────────────────────────────────────────────
   app-server:
+    env_file:
+      - ../model-config.env
     build:
       context: .
       dockerfile: Dockerfile

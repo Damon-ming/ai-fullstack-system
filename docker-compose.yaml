@@ -23,7 +23,8 @@
 # 建议始终在 .env 中设置 INFERENCE_SERVER，或命令行显式传入
 #
 # 一键启动：docker compose up -d --build。
-# 每个模型容器在加载模型前读取并校验模型配置，无独立的配置容器。
+# 修改 models.yaml 后先执行 python model-config/export_env.py，生成根目录 model-config.env。
+# Compose 原生读取生成文件，无需 --env-file 启动参数或自定义模型入口。
 #
 #   开发（vLLM 推理 + vLLM embedding，需 GPU）:
 #     SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 docker compose up -d --build
@@ -42,12 +43,15 @@
 #   5. 部署时 INFERENCE_SERVER=sglang
 # ═══════════════════════════════════════════════════════════════════
 
-# 各 Python 服务通过 extends 使用 model-config 配置库；模板不作为独立服务 include。
+# include.env_file 用于 Compose 参数替换；容器内部环境由各服务的 env_file 注入。
 include:
-  - model-gateway/config/docker/docker-${INFERENCE_SERVER:-vllm}-inference.yaml
-  - model-gateway/config/docker/docker-vllm-embedding.yaml
+  - path: app-server/docker-compose.yaml
+    env_file: ./model-config.env
+  - path: model-gateway/config/docker/docker-${INFERENCE_SERVER:-vllm}-inference.yaml
+    env_file: ./model-config.env
+  - path: model-gateway/config/docker/docker-vllm-embedding.yaml
+    env_file: ./model-config.env
   - model-gateway/docker-compose.yaml
-  - app-server/docker-compose.yaml
   - web-app/docker-compose.yaml
 
 # SECURITY: P1-27 全 compose 无 CPU/内存 limits。

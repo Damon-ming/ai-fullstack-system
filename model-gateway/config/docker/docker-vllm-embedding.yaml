@@ -1,8 +1,8 @@
   # model-gateway/config/docker/docker-vllm-embedding.yaml
   # ── RAG embedding 服务 ────────────────────────────────────────────
   # BGE-M3 pooling / OpenAI-compatible /v1/embeddings
-# TODO: 部署时从统一模型配置生成模型名、runner、模型专属参数及窗口，
-# 并与 app-server 的 embedding 输入上限和维度校验。
+# --max-model-len 来自根目录 model-config.env，由 models.yaml 自动生成。
+# TODO: 后续接入模型专属参数与 app-server 的输入上限、维度校验。
   # 独立使用新版本，避免升级现有生成模型池造成兼容性变化。
 services:
   vllm-embedding:
@@ -17,7 +17,7 @@ services:
       --model BAAI/bge-m3
       --runner pooling
       --hf-overrides '{"architectures":["BgeM3EmbeddingModel"]}'
-      --max-model-len 8192
+      --max-model-len ${BGE_M3_MAX_MODEL_LEN}
       --gpu-memory-utilization ${EMBEDDING_GPU_MEMORY_UTILIZATION:-0.1}
       --api-key uk_embedding
     healthcheck:

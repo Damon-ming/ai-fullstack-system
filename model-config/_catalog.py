@@ -21,14 +21,14 @@ class ModelConfig:
     dimension: int | None = None
 
 
-def _read_catalog(path: Path) -> Mapping[str, ModelConfig]:
+def _read_model_values(path: Path) -> dict:
     try:
         models = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
         raise ModelConfigError(f"模型配置读取失败: {exc}") from exc
     if not isinstance(models, dict):
         raise ModelConfigError("模型配置必须是 YAML 映射")
-    result = {}
+    names = set()
     for group in ("inference", "embedding"):
         entries = models.get(group)
         if not isinstance(entries, dict) or not entries:
@@ -36,7 +36,7 @@ def _read_catalog(path: Path) -> Mapping[str, ModelConfig]:
         for name, entry in entries.items():
             if not isinstance(name, str) or not name.strip() or not isinstance(entry, dict):
                 raise ModelConfigError(f"{group} 的模型名称和参数格式无效")
-            if name in result:
+            if name in names:
                 raise ModelConfigError(f"模型 {name!r} 出现在多个分组，模型 key 必须唯一")
             window = entry.get("max-model-len")
             if type(window) is not int or window <= 0:
@@ -45,8 +45,17 @@ def _read_catalog(path: Path) -> Mapping[str, ModelConfig]:
             if group == "embedding" or dimension is not None:
                 if type(dimension) is not int or dimension <= 0:
                     raise ModelConfigError(f"{name}.dimension 必须是正整数")
-            result[name] = ModelConfig(name, group, window, dimension)
-    return MappingProxyType(result)
+            names.add(name)
+    return models
+
+
+def _read_catalog(path: Path) -> Mapping[str, ModelConfig]:
+    models = _read_model_values(path)
+    return MappingProxyType({
+        name: ModelConfig(name, group, entry["max-model-len"], entry.get("dimension"))
+        for group in ("inference", "embedding")
+        for name, entry in models[group].items()
+    })
 
 
 @lru_cache(maxsize=1)
