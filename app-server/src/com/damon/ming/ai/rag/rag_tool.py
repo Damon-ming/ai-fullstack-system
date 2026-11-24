@@ -140,9 +140,11 @@ class RagChoreographer:
             summary_inference=inference_gateway.get_summary(),
         )
 
-        # 步骤5：全量加载所有重排器（启动时一次性加载，避免响应延迟）
+        # 步骤5：启动时加载 BGE-Reranker-v2-M3，避免首次请求时产生加载延迟
         self.reranker_manager = create_rerankers(model_root_path)
-        self.primary_reranker: BaseReranker = self.reranker_manager.get_zh_primary()
+        self.reranker: BaseReranker = (
+            self.reranker_manager.get_bge_reranker_v2_m3()
+        )
 
         # 步骤6：BM25 索引由知识库和稀疏检索器共享。
         self.bm25_index = BM25Index(tokenizer=self.bm25_tokenizer.tokenize)
@@ -260,7 +262,7 @@ class RagChoreographer:
             # 传入 cancel_event，使 rerank 内部可在取消信号下提前退出
             ranked_nodes = await run_in_pool(
                 self.thread_pools.get_rerank_pool(),
-                self.primary_reranker.rerank,
+                self.reranker.rerank,
                 query,
                 reconstructed_nodes,
                 rerank_top_k,

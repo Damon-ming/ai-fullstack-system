@@ -53,11 +53,11 @@
 
 滑动窗口参数（**必填，无默认值，全部 YAML 显式声明**）：
 
-| 参数 | zh_primary | zh_light / cpu_fallback | 说明 |
-|---|---|---|---|
-| `window_overlap` | 128 | 64 | 窗口重叠 token 数，避免关键内容被切在边界 |
-| `max_windows_per_node` | 5 | 5 | 单 node 窗口数上限，超限时均匀采样保留首尾覆盖 |
-| `max_seq_len` | 1024（不变） | 512 | O(n²) 注意力，小窗口总计算量更低 |
+| 参数 | 当前单一重排器 | 说明 |
+|---|---|---|
+| `window_overlap` | 128 | 窗口重叠 token 数，避免关键内容被切在边界 |
+| `max_windows_per_node` | 5 | 单 node 窗口数上限，超限时均匀采样保留首尾覆盖 |
+| `max_seq_len` | 1024 | O(n²) 注意力，限制单窗口计算量 |
 
 ### 改动文件
 
@@ -65,7 +65,7 @@
 |---|---|
 | `rerank/base_reranker.py` | `RerankerParams` 新增必填参数 `window_overlap` / `max_windows_per_node`（无默认值，全部 YAML 显式声明） |
 | `rerank/cross_encoder_reranker.py` | `rerank()` 改为先展开窗口再按 max 聚合；新增 `_split_into_windows()` / `_compute_window_size()`；新增模块级 `_uniform_sample()`；窗口数超 `max_windows_per_node` 时 `logger.warning` 记录原始 token 数与窗口数，便于后期统计降级频率 |
-| `config/rerank/rerank-config.yaml` | `zh_primary` 新增 `window_overlap: 128` / `max_windows_per_node: 5` |
+| `config/rerank/rerank-config.yaml` | 增加 `window_overlap: 128` / `max_windows_per_node: 5` |
 | `rag_tool.py` | 删除阶段 3（rerank 前 LLM 压缩）和阶段 5（恢复原文）；阶段重编号；docstring 同步更新 |
 
 ### 改动量
@@ -391,7 +391,7 @@ reranker 输入只有 section 正文。当多个 section 正文结构相似、�
 | 文件 | 改动 |
 |---|---|
 | `rerank/base_reranker.py` | `RerankerParams` 新增必填参数 `include_heading: bool`（无默认值） |
-| `config/rerank/rerank-config.yaml` | `zh_primary` / `zh_light` / `cpu_fallback` 三个 profile 各加 `include_heading: true` |
+| `config/rerank/rerank-config.yaml` | 增加 `include_heading: true` |
 | `rerank/cross_encoder_reranker.py` | 新增 `_heading_prefix()`；`_split_into_windows()` 加 `prefix` 参数；`rerank()` 调用处拼接 |
 
 ### 改动量

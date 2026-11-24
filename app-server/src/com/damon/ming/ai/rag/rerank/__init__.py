@@ -55,10 +55,10 @@ from src.com.damon.ming.ai.rag.rerank.cross_encoder_reranker import CrossEncoder
 
 
 def create_rerankers(model_root_dir: Path):
-    """初始化并返回已加载的重排模型集合。"""
-    from src.com.damon.ming.ai.rag.rerank.manager import RagRerankers
+    """初始化并返回重排器管理器。"""
+    from src.com.damon.ming.ai.rag.rerank.manager import RerankersManager
 
-    manager = RagRerankers()
+    manager = RerankersManager()
     manager.initialize(model_root_dir)
     return manager
 
