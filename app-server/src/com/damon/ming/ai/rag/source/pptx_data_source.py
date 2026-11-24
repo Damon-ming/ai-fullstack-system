@@ -71,27 +71,24 @@ class LocalPptxDataSource(BaseDataSource):
         self._images_dir = os.path.join(folder_path, "images")
         self.vlm_model = vlm_model
 
-        cfg = SourceConfigLoader().load()
-        self._pre_chunk_config = (
-            pre_chunk_config
-            if pre_chunk_config is not None
-            else cfg.pptx_source.pre_chunk
-        )
-        self._include_tables = (
-            include_tables
-            if include_tables is not None
-            else cfg.pptx_source.include_tables
-        )
-        self._include_notes = (
-            include_notes
-            if include_notes is not None
-            else cfg.pptx_source.include_notes
-        )
-        self._extract_images = (
-            extract_images
-            if extract_images is not None
-            else cfg.pptx_source.extract_images
-        )
+        if (
+            pre_chunk_config is None
+            or include_tables is None
+            or include_notes is None
+            or extract_images is None
+        ):
+            cfg = SourceConfigLoader().load()
+            pre_chunk_config = pre_chunk_config or cfg.pptx_source.pre_chunk
+            if include_tables is None:
+                include_tables = cfg.pptx_source.include_tables
+            if include_notes is None:
+                include_notes = cfg.pptx_source.include_notes
+            if extract_images is None:
+                extract_images = cfg.pptx_source.extract_images
+        self._pre_chunk_config = pre_chunk_config
+        self._include_tables = include_tables
+        self._include_notes = include_notes
+        self._extract_images = extract_images
 
         # 实例级别锁
         self._stats_lock = threading.Lock()
@@ -469,7 +466,7 @@ class LocalPptxDataSource(BaseDataSource):
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
         """加载指定的 PPTX 文件列表，用于增量上传（同步）"""
-        self.logger.info(f"[PptxDataSource] 增量加载指定文件 count={len(file_paths)}")
+        self.logger.info(f"[PptxDataSource] 加载指定文件 count={len(file_paths)}")
 
         pptx_files = []
         for fp in file_paths:
@@ -500,7 +497,7 @@ class LocalPptxDataSource(BaseDataSource):
 
         with self._stats_lock:
             self.logger.info(
-                f"[PptxDataSource] 增量加载完成 | "
+                f"[PptxDataSource] 指定文件加载完成 | "
                 f"总文件={self._stats['total_files']} | "
                 f"成功={self._stats['success_files']} | "
                 f"失败={self._stats['failed_files']} | "

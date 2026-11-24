@@ -9,7 +9,6 @@ Markdown 数据源 —— 纯同步实现，线程编排由上层 RagChoreograph
   - 超过 chunk_chars 的叶子节点按自然边界二次切分。
 
 可配置项复用 SourceConfigLoader：
-  - markdown_source.encoding_fallbacks: 编码尝试顺序
   - markdown_source.pre_chunk: 二次切分配置（边界优先级 + 块大小）
 """
 
@@ -47,7 +46,6 @@ class LocalMarkdownDataSource(BaseDataSource):
     def __init__(
         self,
         folder_path: str,
-        encoding_fallbacks: tuple[str, ...] | None = None,
         pre_chunk_config=None,
     ):
         super().__init__(folder_path)
@@ -55,20 +53,14 @@ class LocalMarkdownDataSource(BaseDataSource):
         self._ensure_dir_exists()
 
         # 从 YAML 加载配置
-        if encoding_fallbacks is None or pre_chunk_config is None:
+        if pre_chunk_config is None:
             cfg = SourceConfigLoader().load()
-            self._encoding_fallbacks = (
-                encoding_fallbacks
-                if encoding_fallbacks is not None
-                else cfg.markdown_source.encoding_fallbacks
-            )
             self._pre_chunk_config = (
                 pre_chunk_config
                 if pre_chunk_config is not None
                 else cfg.markdown_source.pre_chunk
             )
         else:
-            self._encoding_fallbacks = encoding_fallbacks
             self._pre_chunk_config = pre_chunk_config
 
         # AST 解析器（线程安全，可复用）
@@ -94,14 +86,8 @@ class LocalMarkdownDataSource(BaseDataSource):
         return sha256_file(file_path)
 
     def _read_text(self, file_path: str) -> str:
-        """读取文件，按配置编码顺序尝试。"""
-        for encoding in self._encoding_fallbacks:
-            try:
-                with open(file_path, "r", encoding=encoding) as f:
-                    return f.read()
-            except UnicodeDecodeError:
-                continue
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        """按 UTF-8 读取 Markdown；解码失败由单文件处理逻辑记录为失败。"""
+        with open(file_path, "r", encoding="utf-8-sig") as f:
             return f.read()
 
     def _pre_chunk_text(self, text: str) -> list[tuple[str, dict]]:
@@ -279,7 +265,7 @@ class LocalMarkdownDataSource(BaseDataSource):
     ) -> list[Document]:
         """加载指定的 Markdown 文件列表，用于增量上传（同步）"""
         self.logger.info(
-            f"[MarkdownDataSource] 增量加载指定文件 count={len(file_paths)}"
+            f"[MarkdownDataSource] 加载指定文件 count={len(file_paths)}"
         )
         md_files = []
         for fp in file_paths:
@@ -305,7 +291,7 @@ class LocalMarkdownDataSource(BaseDataSource):
 
         with self._stats_lock:
             self.logger.info(
-                f"[MarkdownDataSource] 增量加载完成 | "
+                f"[MarkdownDataSource] 指定文件加载完成 | "
                 f"总文件={self._stats['total_files']} | "
                 f"成功={self._stats['success_files']} | "
                 f"失败={self._stats['failed_files']} | "

@@ -51,22 +51,14 @@ class LocalCsvDataSource(BaseDataSource):
         self,
         folder_path: str,
         batch_rows: int | None = None,
-        encoding_fallbacks: tuple[str, ...] | None = None,
     ):
         super().__init__(folder_path)
         self.logger = pin("LocalCsvDataSource")
         self._ensure_dir_exists()
 
-        cfg = SourceConfigLoader().load()
-        self._batch_rows = (
-            batch_rows if batch_rows is not None else cfg.csv_source.batch_rows
-        )
-        self._encoding_fallbacks = (
-            encoding_fallbacks
-            if encoding_fallbacks is not None
-            else cfg.csv_source.encoding_fallbacks
-        )
-
+        if batch_rows is None:
+            batch_rows = SourceConfigLoader().load().csv_source.batch_rows
+        self._batch_rows = batch_rows
         # 实例级别锁
         self._stats_lock = threading.Lock()
 
@@ -88,21 +80,9 @@ class LocalCsvDataSource(BaseDataSource):
         return sha256_file(file_path)
 
     def _read_csv(self, file_path: str) -> pd.DataFrame:
-        """用 pandas 读取 CSV，编码失败时按配置的降级链重试。
-
-        配置链已包含 latin-1 兜底（不会抛 UnicodeDecodeError），
-        循环一定能成功返回。
-        pandas 自动处理引号转义、换行字段、BOM、不规则列数、空值。
-        """
-        for encoding in self._encoding_fallbacks:
-            try:
-                df = pd.read_csv(file_path, dtype=str, encoding=encoding)
-                return df if not df.empty else pd.DataFrame()
-            except UnicodeDecodeError:
-                self.logger.debug(f"CSV 编码 {encoding} 失败，尝试下一个: {file_path}")
-                continue
-        # 不可达：latin-1 在配置链末尾，不会抛 UnicodeDecodeError
-        return pd.DataFrame()
+        """按 UTF-8 读取 CSV；解码失败由单文件处理逻辑记录为失败。"""
+        df = pd.read_csv(file_path, dtype=str, encoding="utf-8-sig")
+        return df if not df.empty else pd.DataFrame()
 
     def _format_as_table(self, df: pd.DataFrame) -> str:
         """将 DataFrame 批次格式化为 Markdown 表格文本。
@@ -239,7 +219,7 @@ class LocalCsvDataSource(BaseDataSource):
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
         """加载指定的 CSV 文件列表，用于增量上传（同步）"""
-        self.logger.info(f"[CsvDataSource] 增量加载指定文件 count={len(file_paths)}")
+        self.logger.info(f"[CsvDataSource] 加载指定文件 count={len(file_paths)}")
         csv_files = []
         for fp in file_paths:
             p = Path(fp).resolve()
@@ -265,7 +245,7 @@ class LocalCsvDataSource(BaseDataSource):
 
         with self._stats_lock:
             self.logger.info(
-                f"[CsvDataSource] 增量加载完成 | "
+                f"[CsvDataSource] 指定文件加载完成 | "
                 f"总文件={self._stats['total_files']} | "
                 f"成功={self._stats['success_files']} | "
                 f"失败={self._stats['failed_files']} | "

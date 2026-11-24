@@ -11,7 +11,6 @@
 
 可配置项通过 SourceConfigLoader 从 YAML 读取：
   - text_source.extensions: 文本数据源支持的文件扩展名
-  - text_source.encoding_fallbacks: 文本编码尝试顺序
   - text_source.pre_chunk: 预分块配置（边界优先级 + 块大小 + 重叠）
 
 Markdown 文件由独立的 markdown_data_source.py 处理。
@@ -54,7 +53,6 @@ class LocalTextDataSource(BaseDataSource):
         self,
         folder_path: str,
         supported_extensions: set[str] | None = None,
-        encoding_fallbacks: tuple[str, ...] | None = None,
         pre_chunk_config=None,
     ):
         super().__init__(folder_path)
@@ -62,21 +60,12 @@ class LocalTextDataSource(BaseDataSource):
         self._ensure_dir_exists()
 
         # 从 YAML 加载配置（未提供参数时使用配置值）
-        if (
-            supported_extensions is None
-            or encoding_fallbacks is None
-            or pre_chunk_config is None
-        ):
+        if supported_extensions is None or pre_chunk_config is None:
             cfg = SourceConfigLoader().load()
             self._supported_extensions = (
                 supported_extensions
                 if supported_extensions is not None
                 else cfg.text_source.extensions
-            )
-            self._encoding_fallbacks = (
-                encoding_fallbacks
-                if encoding_fallbacks is not None
-                else cfg.text_source.encoding_fallbacks
             )
             self._pre_chunk_config = (
                 pre_chunk_config
@@ -85,7 +74,6 @@ class LocalTextDataSource(BaseDataSource):
             )
         else:
             self._supported_extensions = supported_extensions
-            self._encoding_fallbacks = encoding_fallbacks
             self._pre_chunk_config = pre_chunk_config
 
         # 实例级别锁
@@ -108,15 +96,8 @@ class LocalTextDataSource(BaseDataSource):
         return sha256_file(file_path)
 
     def _read_text(self, file_path: str) -> str:
-        """读取文本文件，按配置编码顺序尝试。"""
-        for encoding in self._encoding_fallbacks:
-            try:
-                with open(file_path, "r", encoding=encoding) as f:
-                    return f.read()
-            except UnicodeDecodeError:
-                continue
-        # 最终兜底：utf-8 忽略错误
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        """按 UTF-8 读取文本；解码失败由单文件处理逻辑记录为失败。"""
+        with open(file_path, "r", encoding="utf-8-sig") as f:
             return f.read()
 
     def _pre_chunk_text(self, text: str) -> list[str]:
@@ -296,7 +277,7 @@ class LocalTextDataSource(BaseDataSource):
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
         """加载指定的文本文件列表，用于增量上传（同步）"""
-        self.logger.info(f"[TextDataSource] 增量加载指定文件 count={len(file_paths)}")
+        self.logger.info(f"[TextDataSource] 加载指定文件 count={len(file_paths)}")
         text_files = []
         for fp in file_paths:
             p = Path(fp).resolve()
@@ -321,7 +302,7 @@ class LocalTextDataSource(BaseDataSource):
 
         with self._stats_lock:
             self.logger.info(
-                f"[TextDataSource] 增量加载完成 | "
+                f"[TextDataSource] 指定文件加载完成 | "
                 f"总文件={self._stats['total_files']} | "
                 f"成功={self._stats['success_files']} | "
                 f"失败={self._stats['failed_files']} | "

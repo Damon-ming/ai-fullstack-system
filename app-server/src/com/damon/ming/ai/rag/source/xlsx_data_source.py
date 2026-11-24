@@ -243,7 +243,7 @@ class LocalXlsxDataSource(BaseDataSource):
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
         """加载指定的 XLSX 文件列表，用于增量上传（同步）"""
-        self.logger.info(f"[XlsxDataSource] 增量加载指定文件 count={len(file_paths)}")
+        self.logger.info(f"[XlsxDataSource] 加载指定文件 count={len(file_paths)}")
         xlsx_files = []
         for fp in file_paths:
             p = Path(fp).resolve()
@@ -272,7 +272,7 @@ class LocalXlsxDataSource(BaseDataSource):
 
         with self._stats_lock:
             self.logger.info(
-                f"[XlsxDataSource] 增量加载完成 | "
+                f"[XlsxDataSource] 指定文件加载完成 | "
                 f"总文件={self._stats['total_files']} | "
                 f"成功={self._stats['success_files']} | "
                 f"失败={self._stats['failed_files']} | "

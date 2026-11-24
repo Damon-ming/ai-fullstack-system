@@ -36,6 +36,7 @@ from src.com.damon.ming.ai.rag.rerank import create_rerankers
 from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker
 from src.com.damon.ming.ai.rag.retriever import create_retrievers
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
+from src.com.damon.ming.ai.rag.source.manager import DataSourceManager
 from src.com.damon.ming.ai.rag.spliter import create_splitters
 from src.com.damon.ming.ai.rag.summary import create_summary_service
 from src.com.damon.ming.ai.rag.thread_pools import RagThreadPools
@@ -163,8 +164,11 @@ class RagChoreographer:
         )
         self.splitter = self.splitter_manager.get_structured()
 
+        self.source_manager = DataSourceManager()
+        self.source_manager.initialize(corpus_path)
+
         bootstrap_result = bootstrap_knowledge_index(
-            corpus_dir=corpus_path,
+            source_manager=self.source_manager,
             splitter=self.splitter,
             bm25_index=self.bm25_index,
             embedder=self.embedder,
@@ -179,6 +183,7 @@ class RagChoreographer:
             embedder=self.embedder,
             vector_store=self._vector_store,
             bm25_index=self.bm25_index,
+            source_manager=self.source_manager,
             bootstrap_result=bootstrap_result,
         )
         logger.info("RAG 容器初始化完成")

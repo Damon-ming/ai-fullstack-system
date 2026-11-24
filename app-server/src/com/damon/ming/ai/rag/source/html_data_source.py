@@ -13,7 +13,6 @@ HTML 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer �
   - 预分块：超大正文按自然边界切分
 
 可配置项通过 SourceConfigLoader 从 YAML 读取：
-  - html_source.encoding_fallbacks: 编码尝试顺序
   - html_source.pre_chunk: 预分块配置
   - html_source.include_links: 是否保留超链接 URL
   - html_source.include_tables: 是否提取 HTML 表格
@@ -91,7 +90,6 @@ class LocalHtmlDataSource(BaseDataSource):
     def __init__(
         self,
         folder_path: str,
-        encoding_fallbacks: tuple[str, ...] | None = None,
         pre_chunk_config=None,
         include_links: bool | None = None,
         include_tables: bool | None = None,
@@ -100,27 +98,20 @@ class LocalHtmlDataSource(BaseDataSource):
         self.logger = pin("LocalHtmlDataSource")
         self._ensure_dir_exists()
 
-        cfg = SourceConfigLoader().load()
-        self._encoding_fallbacks = (
-            encoding_fallbacks
-            if encoding_fallbacks is not None
-            else cfg.html_source.encoding_fallbacks
-        )
-        self._pre_chunk_config = (
-            pre_chunk_config
-            if pre_chunk_config is not None
-            else cfg.html_source.pre_chunk
-        )
-        self._include_links = (
-            include_links
-            if include_links is not None
-            else cfg.html_source.include_links
-        )
-        self._include_tables = (
-            include_tables
-            if include_tables is not None
-            else cfg.html_source.include_tables
-        )
+        if (
+            pre_chunk_config is None
+            or include_links is None
+            or include_tables is None
+        ):
+            cfg = SourceConfigLoader().load()
+            pre_chunk_config = pre_chunk_config or cfg.html_source.pre_chunk
+            if include_links is None:
+                include_links = cfg.html_source.include_links
+            if include_tables is None:
+                include_tables = cfg.html_source.include_tables
+        self._pre_chunk_config = pre_chunk_config
+        self._include_links = include_links
+        self._include_tables = include_tables
 
         # 实例级别锁
         self._stats_lock = threading.Lock()
@@ -144,15 +135,8 @@ class LocalHtmlDataSource(BaseDataSource):
         return sha256_file(file_path)
 
     def _read_html_file(self, file_path: str) -> str:
-        """读取 HTML 文件，按编码链尝试。"""
-        for encoding in self._encoding_fallbacks:
-            try:
-                with open(file_path, "r", encoding=encoding) as f:
-                    return f.read()
-            except UnicodeDecodeError:
-                continue
-        # 兜底：utf-8 忽略错误
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        """按 UTF-8 读取 HTML；解码失败由单文件处理逻辑记录为失败。"""
+        with open(file_path, "r", encoding="utf-8-sig") as f:
             return f.read()
 
     @staticmethod
@@ -522,7 +506,7 @@ class LocalHtmlDataSource(BaseDataSource):
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
         """加载指定的 HTML 文件列表，用于增量上传（同步）"""
-        self.logger.info(f"[HtmlDataSource] 增量加载指定文件 count={len(file_paths)}")
+        self.logger.info(f"[HtmlDataSource] 加载指定文件 count={len(file_paths)}")
 
         html_files = []
         for fp in file_paths:
@@ -552,7 +536,7 @@ class LocalHtmlDataSource(BaseDataSource):
 
         with self._stats_lock:
             self.logger.info(
-                f"[HtmlDataSource] 增量加载完成 | "
+                f"[HtmlDataSource] 指定文件加载完成 | "
                 f"总文件={self._stats['total_files']} | "
                 f"成功={self._stats['success_files']} | "
                 f"失败={self._stats['failed_files']} | "

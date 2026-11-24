@@ -7,14 +7,12 @@ LocalTextDataSource 通过 SourceConfig 数据类接收参数，不感知配置�
 
 配置项：
   - text_source.extensions: 文本数据源支持的文件扩展名
-  - text_source.encoding_fallbacks: 文本编码尝试顺序
   - text_source.pre_chunk: 大文件预分块配置（边界优先级 + 块大小）
 
 用法：
   loader = SourceConfigLoader()
   config = loader.load()                          # SourceConfig 实例
   config.text_source.extensions                   # {".txt", ".md"}
-  config.text_source.encoding_fallbacks           # ("utf-8", "gbk", "latin-1")
   config.text_source.pre_chunk.enabled            # True
   config.text_source.pre_chunk.chunk_chars        # 500
   config.text_source.pre_chunk.boundaries         # ["\\n\\n", "\\n", ""]
@@ -66,9 +64,6 @@ class TextSourceConfig:
     # 支持的文件扩展名（带点号，小写）
     extensions: set[str] = field(default_factory=set)
 
-    # 文本编码尝试顺序
-    encoding_fallbacks: tuple[str, ...] = field(default_factory=tuple)
-
     # 大文件预分块配置
     pre_chunk: PreChunkConfig = field(default_factory=PreChunkConfig)
 
@@ -76,9 +71,6 @@ class TextSourceConfig:
 @dataclass(frozen=True)
 class CsvSourceConfig:
     """CSV 数据源配置（纯数据类）。"""
-
-    # 编码尝试顺序
-    encoding_fallbacks: tuple[str, ...]
 
     # 每个 Document 包含的数据行数（不含表头）
     batch_rows: int
@@ -95,9 +87,6 @@ class XlsxSourceConfig:
 @dataclass(frozen=True)
 class MarkdownSourceConfig:
     """Markdown 数据源配置（纯数据类）。"""
-
-    # 编码尝试顺序
-    encoding_fallbacks: tuple[str, ...] = field(default_factory=tuple)
 
     # 超大标题段落的二次切分配置
     pre_chunk: PreChunkConfig = field(default_factory=PreChunkConfig)
@@ -134,9 +123,6 @@ class PptxSourceConfig:
 @dataclass(frozen=True)
 class HtmlSourceConfig:
     """HTML 数据源配置（纯数据类）。"""
-
-    # 编码尝试顺序
-    encoding_fallbacks: tuple[str, ...]
 
     # 预分块配置（超大正文按自然边界切分）
     pre_chunk: PreChunkConfig
@@ -197,33 +183,25 @@ class SourceConfigLoader:
             return self._cache
 
         raw = self._read_yaml()
-        source_section = raw.get("source", {})
+        source_section = raw
 
         # 解析 csv_source
         csv_section = source_section.get("csv_source", {})
-        csv_enc_list = csv_section.get("encoding_fallbacks")
-        if csv_enc_list is None:
-            raise ValueError("缺少 source.csv_source.encoding_fallbacks 配置项")
-        csv_encoding_fallbacks = tuple(csv_enc_list)
         csv_batch_rows = csv_section.get("batch_rows")
         if csv_batch_rows is None:
-            raise ValueError("缺少 source.csv_source.batch_rows 配置项")
+            raise ValueError("缺少 csv_source.batch_rows 配置项")
 
         # 解析 xlsx_source
         xlsx_section = source_section.get("xlsx_source", {})
         xlsx_batch_rows = xlsx_section.get("batch_rows")
         if xlsx_batch_rows is None:
-            raise ValueError("缺少 source.xlsx_source.batch_rows 配置项")
+            raise ValueError("缺少 xlsx_source.batch_rows 配置项")
 
         text_section = source_section.get("text_source", {})
 
         # 解析 extensions 为 set
         ext_list = text_section.get("extensions", [])
         extensions = set(ext_list) if ext_list else set()
-
-        # 解析 encoding_fallbacks 为 tuple
-        enc_list = text_section.get("encoding_fallbacks", [])
-        encoding_fallbacks = tuple(enc_list) if enc_list else tuple()
 
         # 解析 pre_chunk
         pre_chunk_section = text_section.get("pre_chunk", {})
@@ -237,8 +215,6 @@ class SourceConfigLoader:
 
         # 解析 markdown_source
         md_section = source_section.get("markdown_source", {})
-        md_enc_list = md_section.get("encoding_fallbacks", [])
-        md_encoding_fallbacks = tuple(md_enc_list) if md_enc_list else tuple()
         md_pre_chunk_section = md_section.get("pre_chunk", [])
         md_boundaries_raw = md_pre_chunk_section.get("boundaries", [])
         md_boundaries = tuple(md_boundaries_raw) if md_boundaries_raw else tuple()
@@ -250,10 +226,10 @@ class SourceConfigLoader:
         # 解析 doc_source
         doc_section = source_section.get("doc_source", {})
         if not doc_section:
-            raise ValueError("缺少 source.doc_source 配置项")
+            raise ValueError("缺少 doc_source 配置项")
         doc_pre_chunk_section = doc_section.get("pre_chunk", {})
         if not doc_pre_chunk_section:
-            raise ValueError("缺少 source.doc_source.pre_chunk 配置项")
+            raise ValueError("缺少 doc_source.pre_chunk 配置项")
         doc_boundaries_raw = doc_pre_chunk_section.get("boundaries", [])
         doc_boundaries = tuple(doc_boundaries_raw) if doc_boundaries_raw else tuple()
         doc_pre_chunk = PreChunkConfig(
@@ -263,15 +239,15 @@ class SourceConfigLoader:
         )
         doc_include_tables = doc_section.get("include_tables")
         if doc_include_tables is None:
-            raise ValueError("缺少 source.doc_source.include_tables 配置项")
+            raise ValueError("缺少 doc_source.include_tables 配置项")
 
         # 解析 pptx_source
         pptx_section = source_section.get("pptx_source", {})
         if not pptx_section:
-            raise ValueError("缺少 source.pptx_source 配置项")
+            raise ValueError("缺少 pptx_source 配置项")
         pptx_pre_chunk_section = pptx_section.get("pre_chunk", {})
         if not pptx_pre_chunk_section:
-            raise ValueError("缺少 source.pptx_source.pre_chunk 配置项")
+            raise ValueError("缺少 pptx_source.pre_chunk 配置项")
         pptx_boundaries_raw = pptx_pre_chunk_section.get("boundaries", [])
         pptx_boundaries = tuple(pptx_boundaries_raw) if pptx_boundaries_raw else tuple()
         pptx_pre_chunk = PreChunkConfig(
@@ -281,25 +257,21 @@ class SourceConfigLoader:
         )
         pptx_include_tables = pptx_section.get("include_tables")
         if pptx_include_tables is None:
-            raise ValueError("缺少 source.pptx_source.include_tables 配置项")
+            raise ValueError("缺少 pptx_source.include_tables 配置项")
         pptx_include_notes = pptx_section.get("include_notes")
         if pptx_include_notes is None:
-            raise ValueError("缺少 source.pptx_source.include_notes 配置项")
+            raise ValueError("缺少 pptx_source.include_notes 配置项")
         pptx_extract_images = pptx_section.get("extract_images")
         if pptx_extract_images is None:
-            raise ValueError("缺少 source.pptx_source.extract_images 配置项")
+            raise ValueError("缺少 pptx_source.extract_images 配置项")
 
         # 解析 html_source
         html_section = source_section.get("html_source", {})
         if not html_section:
-            raise ValueError("缺少 source.html_source 配置项")
-        html_enc_list = html_section.get("encoding_fallbacks")
-        if html_enc_list is None:
-            raise ValueError("缺少 source.html_source.encoding_fallbacks 配置项")
-        html_encoding_fallbacks = tuple(html_enc_list)
+            raise ValueError("缺少 html_source 配置项")
         html_pre_chunk_section = html_section.get("pre_chunk", {})
         if not html_pre_chunk_section:
-            raise ValueError("缺少 source.html_source.pre_chunk 配置项")
+            raise ValueError("缺少 html_source.pre_chunk 配置项")
         html_boundaries_raw = html_pre_chunk_section.get("boundaries", [])
         html_boundaries = tuple(html_boundaries_raw) if html_boundaries_raw else tuple()
         html_pre_chunk = PreChunkConfig(
@@ -309,14 +281,13 @@ class SourceConfigLoader:
         )
         html_include_links = html_section.get("include_links")
         if html_include_links is None:
-            raise ValueError("缺少 source.html_source.include_links 配置项")
+            raise ValueError("缺少 html_source.include_links 配置项")
         html_include_tables = html_section.get("include_tables")
         if html_include_tables is None:
-            raise ValueError("缺少 source.html_source.include_tables 配置项")
+            raise ValueError("缺少 html_source.include_tables 配置项")
 
         self._cache = SourceConfig(
             csv_source=CsvSourceConfig(
-                encoding_fallbacks=csv_encoding_fallbacks,
                 batch_rows=csv_batch_rows,
             ),
             xlsx_source=XlsxSourceConfig(
@@ -324,11 +295,9 @@ class SourceConfigLoader:
             ),
             text_source=TextSourceConfig(
                 extensions=extensions,
-                encoding_fallbacks=encoding_fallbacks,
                 pre_chunk=pre_chunk,
             ),
             markdown_source=MarkdownSourceConfig(
-                encoding_fallbacks=md_encoding_fallbacks,
                 pre_chunk=md_pre_chunk,
             ),
             doc_source=DocSourceConfig(
@@ -342,7 +311,6 @@ class SourceConfigLoader:
                 extract_images=pptx_extract_images,
             ),
             html_source=HtmlSourceConfig(
-                encoding_fallbacks=html_encoding_fallbacks,
                 pre_chunk=html_pre_chunk,
                 include_links=html_include_links,
                 include_tables=html_include_tables,

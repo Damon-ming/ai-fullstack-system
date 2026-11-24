@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from src.com.damon.ming.ai.rag.index.index_text import node_text_for_search
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import FILE_PATH, FILE_SHA256
-from src.com.damon.ming.ai.rag.source import list_engines, resolve_source
+from src.com.damon.ming.ai.rag.source.manager import DataSourceManager
 from src.com.damon.ming.log import pin
 
 if TYPE_CHECKING:
@@ -47,17 +47,14 @@ class KnowledgeBootstrapResult:
 
 def bootstrap_knowledge_index(
     *,
-    corpus_dir: Path,
+    source_manager: DataSourceManager,
     splitter: BaseDocumentSplitter,
     bm25_index: BM25Index,
     embedder: BaseEmbeddingService,
     vector_store: BaseVectorStore,
 ) -> KnowledgeBootstrapResult:
     """扫描数据源，重建 BM25 并对账 vector_db。"""
-    documents: list[Document] = []
-    for source_name in list_engines():
-        source = resolve_source(source_name)(corpus_dir)
-        documents.extend(source.load_documents())
+    documents: list[Document] = source_manager.load_directory()
 
     discovered_file_paths = {
         str(Path(doc.metadata[FILE_PATH]).resolve())

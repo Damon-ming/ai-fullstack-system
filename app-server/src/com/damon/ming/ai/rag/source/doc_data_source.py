@@ -73,17 +73,13 @@ class LocalDocDataSource(BaseDataSource):
         self.enable_image_extract = enable_image_extract
         self.vlm_model = vlm_model
 
-        cfg = SourceConfigLoader().load()
-        self._pre_chunk_config = (
-            pre_chunk_config
-            if pre_chunk_config is not None
-            else cfg.doc_source.pre_chunk
-        )
-        self._include_tables = (
-            include_tables
-            if include_tables is not None
-            else cfg.doc_source.include_tables
-        )
+        if pre_chunk_config is None or include_tables is None:
+            cfg = SourceConfigLoader().load()
+            pre_chunk_config = pre_chunk_config or cfg.doc_source.pre_chunk
+            if include_tables is None:
+                include_tables = cfg.doc_source.include_tables
+        self._pre_chunk_config = pre_chunk_config
+        self._include_tables = include_tables
 
         # 实例级别锁
         self._stats_lock = threading.Lock()
@@ -438,7 +434,7 @@ class LocalDocDataSource(BaseDataSource):
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
         """加载指定的 DOC/DOCX 文件列表，用于增量上传（同步）"""
-        self.logger.info(f"[DocDataSource] 增量加载指定文件 count={len(file_paths)}")
+        self.logger.info(f"[DocDataSource] 加载指定文件 count={len(file_paths)}")
 
         doc_files = []
         for fp in file_paths:
@@ -468,7 +464,7 @@ class LocalDocDataSource(BaseDataSource):
 
         with self._stats_lock:
             self.logger.info(
-                f"[DocDataSource] 增量加载完成 | "
+                f"[DocDataSource] 指定文件加载完成 | "
                 f"总文件={self._stats['total_files']} | "
                 f"成功={self._stats['success_files']} | "
                 f"失败={self._stats['failed_files']} | "

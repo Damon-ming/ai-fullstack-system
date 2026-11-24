@@ -23,7 +23,7 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_SHA256,
 )
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
-from src.com.damon.ming.ai.rag.source import list_engines, resolve_source
+from src.com.damon.ming.ai.rag.source.manager import DataSourceManager
 from src.com.damon.ming.ai.rag.spliter.spliter import BaseDocumentSplitter
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 from src.com.damon.ming.app.thread_pools import run_in_pool, submit_to_pool
@@ -48,6 +48,7 @@ class KnowledgeIndexService:
         embedder: BaseEmbeddingService,
         vector_store: BaseVectorStore,
         bm25_index: BM25Index,
+        source_manager: DataSourceManager,
         bootstrap_result: KnowledgeBootstrapResult,
     ) -> None:
         self._corpus_dir = corpus_dir
@@ -57,6 +58,7 @@ class KnowledgeIndexService:
         self._embedder = embedder
         self._vector_store = vector_store
         self._bm25_index = bm25_index
+        self._source_manager = source_manager
         # BM25 使用启动时的列表作为语料快照，上传在自己的列表上追加。
         self._nodes = list(bootstrap_result.nodes)
         self.startup_index_failures: list[IndexSyncFailure] = (
@@ -219,18 +221,18 @@ class KnowledgeIndexService:
 
     async def _load_documents(self, file_paths: list[str]) -> dict[str, list[Document]]:
         docs_by_path: dict[str, list[Document]] = {}
-        for source_name in list_engines():
-            source = resolve_source(source_name)(self._corpus_dir)
-            try:
-                docs = await run_in_pool(
-                    self._document_pool, source.load_specific_files, file_paths
-                )
-            except asyncio.CancelledError:
-                logger.warning("索引文件 | %s 加载阶段被取消", source_name)
-                raise
-            for doc in docs:
-                # e.g. "E:/knowledge/report.pdf": [doc1, doc2, doc3]
-                docs_by_path.setdefault(doc.metadata[FILE_PATH], []).append(doc)
+        try:
+            docs = await run_in_pool(
+                self._document_pool,
+                self._source_manager.load_files,
+                file_paths,
+            )
+        except asyncio.CancelledError:
+            logger.warning("索引文件 | 数据源解析阶段被取消")
+            raise
+        for doc in docs:
+            # e.g. "E:/knowledge/report.pdf": [doc1, doc2, doc3]
+            docs_by_path.setdefault(doc.metadata[FILE_PATH], []).append(doc)
         return docs_by_path
 
     def _write_files(
