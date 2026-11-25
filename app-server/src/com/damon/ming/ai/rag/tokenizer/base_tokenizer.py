@@ -6,7 +6,7 @@
   - BaseTokenizer:    token ID 级（encode → list[int]），用于 LLM 上下文窗口管理
   - BaseWordTokenizer: 词语级（tokenize → list[str]），用于 BM25 等关键词检索
 
-配置见 tokenizer/config/tokenizer-config.yaml，由本模块的 manager 负责装配。
+配置由 AppInitializer 注入，由本模块的 manager 负责装配。
 
 用法：
   from src.com.damon.ming.ai.rag.tokenizer import BaseTokenizer, TokenizerParams, register_engine

@@ -1,16 +1,20 @@
 # app-server/src/com/damon/ming/ai/rag/tokenizer/manager.py
 """RAG 分词器的初始化和访问入口。"""
 
+from pathlib import Path
 from typing import cast
 
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseTokenizer,
     BaseWordTokenizer,
-)
-from src.com.damon.ming.ai.rag.tokenizer.config.tokenizer_config_loader import (
-    TokenizerConfigLoader,
+    JiebaTokenizerParams,
+    TiktokenTokenizerParams,
 )
 from src.com.damon.ming.ai.rag.tokenizer.embedding_tokenizer import EmbeddingTokenizer
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    TokenizerRoleConfig,
+    TokenizerRuntimeConfig,
+)
 
 
 class RagTokenizers:
@@ -18,10 +22,12 @@ class RagTokenizers:
         self._items: dict[str, object] | None = None
         self._embedding_tokenizer: BaseTokenizer | None = None
 
-    def initialize(self, embedding_tokenizer=None) -> None:
+    def initialize(
+        self, config: TokenizerRuntimeConfig, embedding_tokenizer=None
+    ) -> None:
         if self._items is not None:
             raise RuntimeError("RAG 分词器已经初始化")
-        from src.com.damon.ming.ai.rag.tokenizer import list_engines
+        from src.com.damon.ming.ai.rag.tokenizer import list_engines, resolve_tokenizer
         from src.com.damon.ming.log import pin
 
         engines = list_engines()
@@ -29,9 +35,42 @@ class RagTokenizers:
             pin("RagTokenizers").info("[Registry] 可用分词器引擎: %s", engines)
         else:
             pin("RagTokenizers").warning("[Registry] 未注册任何分词器引擎")
-        self._items = TokenizerConfigLoader().load_all()
+        items: dict[str, object] = {}
+        for name, spec in config.roles.items():
+            params = self._build_params(name, spec)
+            items[name] = resolve_tokenizer(spec.tokenizer_engine)(params)
+        self._items = items
         if embedding_tokenizer is not None:
             self._embedding_tokenizer = EmbeddingTokenizer(embedding_tokenizer)
+
+    @staticmethod
+    def _build_params(name: str, spec: TokenizerRoleConfig):
+        if spec.tokenizer_engine == "tiktoken":
+            return TiktokenTokenizerParams(encoding_name=spec.params["encoding_name"])
+        if spec.tokenizer_engine == "jieba":
+            return JiebaTokenizerParams(
+                user_dict_paths=RagTokenizers._discover_jieba_dict_paths(
+                    spec.params, name
+                )
+            )
+        raise ValueError(f"未知分词器引擎: {spec.tokenizer_engine}")
+
+    @staticmethod
+    def _discover_jieba_dict_paths(params: dict, name: str) -> tuple[str, ...]:
+        dicts_dir_name = params.get("dicts_dir")
+        if dicts_dir_name is None or dicts_dir_name == "":
+            return ()
+        dicts_dir_name = dicts_dir_name.strip()
+        if not dicts_dir_name:
+            return ()
+        dicts_dir = (Path(__file__).resolve().parent / dicts_dir_name).resolve()
+        if not dicts_dir.is_dir():
+            raise FileNotFoundError(f"分词器 '{name}' 的词典目录不存在: {dicts_dir}")
+        return tuple(
+            str(path.resolve())
+            for path in sorted(dicts_dir.glob("*.txt"))
+            if path.is_file()
+        )
 
     def _get(self, name: str) -> object:
         if self._items is None:

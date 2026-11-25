@@ -4,20 +4,22 @@ from dataclasses import replace
 from pathlib import Path
 
 from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker
-from src.com.damon.ming.ai.rag.rerank.config.rerank_config_loader import (
-    RerankerConfigLoader,
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    RerankRuntimeConfig,
 )
 
 
 class RerankersManager:
     def __init__(self) -> None:
         self._model_root_dir: Path | None = None
-        self._config_loader: RerankerConfigLoader | None = None
+        self._config: RerankRuntimeConfig | None = None
         self._rerankers: dict[str, BaseReranker] = {}
 
-    def initialize(self, model_root_dir: Path) -> None:
-        if self._config_loader is not None:
+    def initialize(self, model_root_dir: Path, config: RerankRuntimeConfig) -> None:
+        if self._config is not None:
             raise RuntimeError("RAG 重排器已经初始化")
+        if not config.roles:
+            raise ValueError("RAG 重排器缺少配置")
         from src.com.damon.ming.ai.rag.rerank import list_engines
         from src.com.damon.ming.log import pin
 
@@ -27,16 +29,20 @@ class RerankersManager:
         else:
             pin("RerankersManager").warning("[Registry] 未注册任何重排引擎")
         self._model_root_dir = model_root_dir
-        self._config_loader = RerankerConfigLoader()
+        self._config = config
 
     def get(self, name: str) -> BaseReranker:
-        """按 YAML 配置名获取重排器；每个模型只在首次获取时实例化一次。"""
-        if self._config_loader is None or self._model_root_dir is None:
+        """按配置名获取重排器；每个模型只在首次获取时实例化一次。"""
+        if self._config is None or self._model_root_dir is None:
             raise RuntimeError("RAG 重排器尚未初始化")
         if name in self._rerankers:
             return self._rerankers[name]
 
-        params = self._config_loader.load(name)
+        if name not in self._config.roles:
+            raise ValueError(
+                f"未找到重排器配置: '{name}'. 可用: {list(self._config.roles)}"
+            )
+        params = self._config.roles[name]
         model_path = Path(params.model_name)
         if not model_path.is_absolute():
             params = replace(

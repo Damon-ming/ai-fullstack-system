@@ -8,7 +8,7 @@ Markdown 数据源 —— 纯同步实现，线程编排由上层 RagChoreograph
     保留标题路径作为 metadata（header_path）。
   - 超过 chunk_chars 的叶子节点按自然边界二次切分。
 
-可配置项复用 SourceConfigLoader：
+可配置项由 DataSourceManager 注入：
   - markdown_source.pre_chunk: 二次切分配置（边界优先级 + 块大小）
 """
 
@@ -30,9 +30,6 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
-)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -46,22 +43,13 @@ class LocalMarkdownDataSource(BaseDataSource):
     def __init__(
         self,
         folder_path: str,
-        pre_chunk_config=None,
+        pre_chunk_config,
     ):
         super().__init__(folder_path)
         self.logger = pin("LocalMarkdownDataSource")
         self._ensure_dir_exists()
 
-        # 从 YAML 加载配置
-        if pre_chunk_config is None:
-            cfg = SourceConfigLoader().load()
-            self._pre_chunk_config = (
-                pre_chunk_config
-                if pre_chunk_config is not None
-                else cfg.markdown_source.pre_chunk
-            )
-        else:
-            self._pre_chunk_config = pre_chunk_config
+        self._pre_chunk_config = pre_chunk_config
 
         # AST 解析器（线程安全，可复用）
         self._parser = MarkdownNodeParser()
@@ -264,9 +252,7 @@ class LocalMarkdownDataSource(BaseDataSource):
         self, file_paths: list[str], reset_stats: bool = True
     ) -> list[Document]:
         """加载指定的 Markdown 文件列表，用于增量上传（同步）"""
-        self.logger.info(
-            f"[MarkdownDataSource] 加载指定文件 count={len(file_paths)}"
-        )
+        self.logger.info(f"[MarkdownDataSource] 加载指定文件 count={len(file_paths)}")
         md_files = []
         for fp in file_paths:
             p = Path(fp).resolve()

@@ -43,6 +43,15 @@ from src.com.damon.ming.ai.rag.thread_pools import RagThreadPools
 from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    ConstructorConfig,
+    RerankRuntimeConfig,
+    RetrieverRuntimeConfig,
+    SplitterRuntimeConfig,
+    SummaryRuntimeConfig,
+    TokenizerRuntimeConfig,
+)
+from src.com.damon.ming.app.config.ai.rag.source_config import SourceConfig
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import ThreadPoolGroup
@@ -60,6 +69,13 @@ def get_rag_choreographer(
     inference_gateway: InferenceGateway,
     embedding_gateway: EmbeddingGateway,
     max_chunk_token_size: int,
+    constructor_config: ConstructorConfig,
+    rerank_config: RerankRuntimeConfig,
+    retriever_config: RetrieverRuntimeConfig,
+    splitter_config: SplitterRuntimeConfig,
+    summary_config: SummaryRuntimeConfig,
+    source_config: SourceConfig,
+    tokenizer_config: TokenizerRuntimeConfig,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
@@ -70,6 +86,13 @@ def get_rag_choreographer(
         inference_gateway: 启动时装配的统一推理入口（必填）。
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
         max_chunk_token_size: AppInitializer 注入的 RAG chunk 目标大小。
+        constructor_config: AppInitializer 注入的章节重建标签配置。
+        rerank_config: AppInitializer 注入的重排运行配置。
+        retriever_config: AppInitializer 注入的检索运行配置。
+        splitter_config: AppInitializer 注入的文档切分配置。
+        summary_config: AppInitializer 注入的摘要策略配置。
+        source_config: AppInitializer 注入的数据源配置。
+        tokenizer_config: AppInitializer 注入的分词器配置。
     """
     global _rag_choreographer_instance
     if _rag_choreographer_instance is None:
@@ -82,6 +105,13 @@ def get_rag_choreographer(
                     inference_gateway=inference_gateway,
                     embedding_gateway=embedding_gateway,
                     max_chunk_token_size=max_chunk_token_size,
+                    constructor_config=constructor_config,
+                    rerank_config=rerank_config,
+                    retriever_config=retriever_config,
+                    splitter_config=splitter_config,
+                    summary_config=summary_config,
+                    source_config=source_config,
+                    tokenizer_config=tokenizer_config,
                 )
     return _rag_choreographer_instance
 
@@ -96,6 +126,13 @@ class RagChoreographer:
         model_root_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
         embedding_gateway: EmbeddingGateway | None = None,
+        constructor_config: ConstructorConfig | None = None,
+        rerank_config: RerankRuntimeConfig | None = None,
+        retriever_config: RetrieverRuntimeConfig | None = None,
+        splitter_config: SplitterRuntimeConfig | None = None,
+        summary_config: SummaryRuntimeConfig | None = None,
+        source_config: SourceConfig | None = None,
+        tokenizer_config: TokenizerRuntimeConfig | None = None,
     ):
         logger.info("RAG 容器初始化开始")
 
@@ -114,6 +151,29 @@ class RagChoreographer:
         if embedding_gateway is None:
             raise ValueError("RagChoreographer 初始化失败：embedding_gateway 不能为空")
 
+        if constructor_config is None:
+            raise ValueError("RagChoreographer 初始化失败：constructor_config 不能为空")
+
+        if rerank_config is None or not rerank_config.roles:
+            raise ValueError("RagChoreographer 初始化失败：rerank_config 不能为空")
+
+        if retriever_config is None or "hybrid" not in retriever_config.roles:
+            raise ValueError(
+                "RagChoreographer 初始化失败：retriever_config 缺少 hybrid role"
+            )
+
+        if splitter_config is None:
+            raise ValueError("RagChoreographer 初始化失败：splitter_config 不能为空")
+
+        if summary_config is None:
+            raise ValueError("RagChoreographer 初始化失败：summary_config 不能为空")
+
+        if source_config is None:
+            raise ValueError("RagChoreographer 初始化失败：source_config 不能为空")
+
+        if tokenizer_config is None or not tokenizer_config.roles:
+            raise ValueError("RagChoreographer 初始化失败：tokenizer_config 不能为空")
+
         if type(max_chunk_token_size) is not int or max_chunk_token_size <= 0:
             raise ValueError(
                 "RagChoreographer 初始化失败：max_chunk_token_size 必须是正整数"
@@ -130,7 +190,7 @@ class RagChoreographer:
 
         # 步骤2：加载通用 tokenizer，并注入 embedding 模型实际使用的 tokenizer
         self.tokenizer_manager = create_tokenizers(
-            embedding_tokenizer=self.embedder.get_tokenizer()
+            config=tokenizer_config, embedding_tokenizer=self.embedder.get_tokenizer()
         )
         self.llm_tokenizer: BaseTokenizer = self.tokenizer_manager.get_llm_tokenizer()
         # BM25 词语分词器（中文关键词检索）
@@ -147,15 +207,17 @@ class RagChoreographer:
 
         # 步骤4：初始化章节重构 + 摘要服务
         self.section_recon = SectionReconstructor(
-            self.thread_pools.get_retrieval_pool()
+            self.thread_pools.get_retrieval_pool(), constructor_config
         )
+
         self.summary = create_summary_service(
             tokenizer=self.llm_tokenizer,
             summary_inference=inference_gateway.get_summary(),
+            config=summary_config,
         )
 
         # 步骤5：启动时加载 BGE-Reranker-v2-M3，避免首次请求时产生加载延迟
-        self.reranker_manager = create_rerankers(model_root_path)
+        self.reranker_manager = create_rerankers(model_root_path, rerank_config)
         self.reranker: BaseReranker = self.reranker_manager.get_bge_reranker_v2_m3()
 
         # 步骤6：BM25 索引由知识库和稀疏检索器共享。
@@ -165,6 +227,7 @@ class RagChoreographer:
             embedder=self.embedder,
             bm25_index=self.bm25_index,
             retrieval_pool=self.thread_pools.get_retrieval_pool(),
+            runtime_config=retriever_config,
         )
         self.retriever_config = self.retriever_manager.get_hybrid_config()
         self.hybrid_retriever = self.retriever_manager.get_hybrid()
@@ -175,11 +238,12 @@ class RagChoreographer:
             tokenizer=embedding_tokenizer,
             max_chunk_token_size=max_chunk_token_size,
             max_input_tokens=embedding_max_input_tokens,
+            config=splitter_config,
         )
         self.splitter = self.splitter_manager.get_structured()
 
         self.source_manager = DataSourceManager()
-        self.source_manager.initialize(corpus_path)
+        self.source_manager.initialize(corpus_path, source_config)
 
         bootstrap_result = bootstrap_knowledge_index(
             source_manager=self.source_manager,

@@ -6,7 +6,7 @@
   - BaseReranker:   重排器抽象基类，定义 rerank() 接口
   - RerankerParams: 纯数据类，参数由上层配置注入
 
-配置加载见 rerank/config/，由本模块的 manager 负责装配。
+配置由 AppInitializer 注入，manager 负责装配。
 
 引擎注册表由各实现类通过 @register_reranker 自动注册。
 """
@@ -20,6 +20,7 @@ from typing import Any
 from llama_index.core.schema import TextNode
 
 
+# todo是否迁移到 config
 @dataclass(frozen=True)
 class RerankerParams:
     """重排器参数（纯数据类）。"""

@@ -65,7 +65,7 @@
 |---|---|
 | `rerank/base_reranker.py` | `RerankerParams` 新增必填参数 `window_overlap` / `max_windows_per_node`（无默认值，全部 YAML 显式声明） |
 | `rerank/cross_encoder_reranker.py` | `rerank()` 改为先展开窗口再按 max 聚合；新增 `_split_into_windows()` / `_compute_window_size()`；新增模块级 `_uniform_sample()`；窗口数超 `max_windows_per_node` 时 `logger.warning` 记录原始 token 数与窗口数，便于后期统计降级频率 |
-| `config/rerank/rerank-config.yaml` | 增加 `window_overlap: 128` / `max_windows_per_node: 5` |
+| `app/config/ai/rag/rag-runtime.yaml` 的 `rerank` 段 | 增加 `window_overlap: 128` / `max_windows_per_node: 5` |
 | `rag_tool.py` | 删除阶段 3（rerank 前 LLM 压缩）和阶段 5（恢复原文）；阶段重编号；docstring 同步更新 |
 
 ### 改动量
@@ -156,8 +156,8 @@ reranker 只能对这 5 个重新排序，无法把排名第 6~20 的候选捞�
 
 | 文件 | 改动 |
 |---|---|
-| `config/retriever/retriever-config.yaml` | 新增 `retrieve_top_k: 20`；`dense_top_k`/`sparse_top_k` 10→30；`rrf_oversample_multiplier` 3→2 |
-| `config/retriever/retriever_config_loader.py` | `RetrieverConfig` 新增 `retrieve_top_k` 字段（`__slots__` + `__init__` + `_build_one`） |
+| `app/config/ai/rag/rag-runtime.yaml` 的 `retriever` 段 | 新增 `retrieve_top_k: 20`；`dense_top_k`/`sparse_top_k` 10→30；`rrf_oversample_multiplier` 3→2 |
+| `app/config/ai/rag/rag_runtime_config_loader.py` | `RetrieverConfig` 新增 `retrieve_top_k` 字段，由运行配置加载器构造 |
 | `rag_tool.py` | 删除 `build_rag_context` 的 `top_k` 入参；`effective_top_k` 拆为 `retrieve_top_k`（YAML）/ `rerank_top_k`（YAML `top_k`）；retrieve 传前者，rerank 传后者；日志输出两个值 |
 
 ### 改动量
@@ -391,7 +391,7 @@ reranker 输入只有 section 正文。当多个 section 正文结构相似、�
 | 文件 | 改动 |
 |---|---|
 | `rerank/base_reranker.py` | `RerankerParams` 新增必填参数 `include_heading: bool`（无默认值） |
-| `config/rerank/rerank-config.yaml` | 增加 `include_heading: true` |
+| `app/config/ai/rag/rag-runtime.yaml` 的 `rerank` 段 | 增加 `include_heading: true` |
 | `rerank/cross_encoder_reranker.py` | 新增 `_heading_prefix()`；`_split_into_windows()` 加 `prefix` 参数；`rerank()` 调用处拼接 |
 
 ### 改动量
@@ -464,7 +464,7 @@ query："数据库连接超时时间默认是多少？"
 
 **思路**：升级为 bge-m3（1024 维，中英文双语）提升 dense recall。
 
-**结论**：**前提不成立，已完成**。embedding role 配置 `BAAI/bge-m3`；维度由 `model-config/models.yaml` 提供，并由 App 注入向量存储。`ai/rag/embedding/config/embedding-config.yaml` 配置 `query_prefix` / `passage_prefix`。
+**结论**：**前提不成立，已完成**。embedding role 配置 `BAAI/bge-m3`；维度由 `model-config/models.yaml` 提供，并由 App 注入向量存储。`app/config/ai/rag/rag-runtime.yaml` 的 `embedding` 段配置 `query_prefix` / `passage_prefix`。
 
 **剩余可挖掘方向**（非"换模型"）：
 

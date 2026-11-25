@@ -33,7 +33,7 @@ import re
 #   "rag_context_max_tokens": 1024,
 #   "rag_max_chunk_token_size": 768
 # }
-# inference-config.yaml 和 embedding-config.yaml 中的 model_name 决定读取哪个模型规格；
+# inference-config.yaml 和 rag-runtime.yaml 的 embedding role 中的 model_name 决定读取哪个模型规格；
 # 修改模型规格后，请同步更新此速查 JSON。
 
 # RAG 返回给主推理模型的参考上下文 token 上限。

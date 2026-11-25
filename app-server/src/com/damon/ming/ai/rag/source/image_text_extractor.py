@@ -21,9 +21,6 @@ import fitz  # pymupdf
 import ollama
 import paddle
 from paddleocr import PaddleOCR
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
-)
 from src.com.damon.ming.log import pin
 
 logger = pin("ImageTextExtractor")
@@ -31,9 +28,21 @@ logger = pin("ImageTextExtractor")
 # 类级别锁，保证 PaddleOCR 单例线程安全
 _ocr_lock = threading.Lock()
 _ocr_instance: PaddleOCR | None = None
+_ocr_device: str | None = None
 
 # VLM 降级阈值：OCR 文字少于此值时启用 VLM
 VLM_FALLBACK_THRESHOLD = 20
+
+
+def configure_ocr(device: str) -> None:
+    """在首次提取图片文字前注入 OCR 设备。"""
+    global _ocr_device
+    if device not in {"cpu", "gpu"}:
+        raise ValueError("ocr.device 只支持 'cpu' 或 'gpu'")
+    with _ocr_lock:
+        if _ocr_device is not None and _ocr_device != device:
+            raise RuntimeError("OCR 设备已配置，不能在运行中切换")
+        _ocr_device = device
 
 
 def _get_ocr() -> PaddleOCR:
@@ -42,7 +51,9 @@ def _get_ocr() -> PaddleOCR:
     if _ocr_instance is None:
         with _ocr_lock:
             if _ocr_instance is None:
-                device = SourceConfigLoader().load().ocr.device
+                device = _ocr_device
+                if device is None:
+                    raise RuntimeError("OCR 设备尚未配置")
                 use_gpu = device == "gpu"
                 if use_gpu and not paddle.is_compiled_with_cuda():
                     raise RuntimeError(

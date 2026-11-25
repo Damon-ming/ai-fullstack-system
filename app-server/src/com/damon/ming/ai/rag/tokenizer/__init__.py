@@ -9,11 +9,14 @@
   - register_engine:   引擎注册装饰器
   - resolve_tokenizer: 根据引擎名称解析实现类
 
-配置加载见 tokenizer/config/，由本模块的 manager 负责装配。
+配置由 AppInitializer 注入，由本模块的 manager 负责装配。
 
 引擎注册表由各实现类通过 @register_engine 自动注册。
 """
 
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    TokenizerRuntimeConfig,
+)
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseTokenizer,
     BaseWordTokenizer,
@@ -67,12 +70,12 @@ from src.com.damon.ming.ai.rag.tokenizer.jieba_tokenizer import JiebaTokenizer
 from src.com.damon.ming.ai.rag.tokenizer.tiktoken_tokenizer import TiktokenTokenizer
 
 
-def create_tokenizers(*, embedding_tokenizer=None):
+def create_tokenizers(*, config: TokenizerRuntimeConfig, embedding_tokenizer=None):
     """初始化并返回已加载的分词器集合。"""
     from src.com.damon.ming.ai.rag.tokenizer.manager import RagTokenizers
 
     manager = RagTokenizers()
-    manager.initialize(embedding_tokenizer=embedding_tokenizer)
+    manager.initialize(config=config, embedding_tokenizer=embedding_tokenizer)
     return manager
 
 

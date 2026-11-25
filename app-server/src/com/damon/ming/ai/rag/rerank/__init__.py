@@ -9,7 +9,7 @@
   - resolve_reranker:  根据引擎名称解析实现类
   - list_engines:     列出所有已注册的引擎名称
 
-配置加载见 rerank/config/，由本模块的 manager 负责装配。
+配置由 AppInitializer 注入，manager 负责装配。
 
 引擎注册表由各实现类通过 @register_reranker 自动注册。
 """
@@ -54,12 +54,13 @@ def list_engines() -> list[str]:
 from src.com.damon.ming.ai.rag.rerank.cross_encoder_reranker import CrossEncoderReranker
 
 
-def create_rerankers(model_root_dir: Path):
+# todo model_root_dir是否可以合并到config
+def create_rerankers(model_root_dir: Path, config):
     """初始化并返回重排器管理器。"""
     from src.com.damon.ming.ai.rag.rerank.manager import RerankersManager
 
     manager = RerankersManager()
-    manager.initialize(model_root_dir)
+    manager.initialize(model_root_dir, config)
     return manager
 
 

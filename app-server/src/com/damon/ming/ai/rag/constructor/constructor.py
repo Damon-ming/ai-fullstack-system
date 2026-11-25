@@ -6,12 +6,11 @@
 线程池通过参数注入，本模块只做同步计算。
 """
 
+from __future__ import annotations
+
 from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.rag.constructor.config.constructor_config_loader import (
-    ConstructorConfigLoader,
-)
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_ID,
     FILE_NAME,
@@ -28,6 +27,9 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     TOTAL_PAGES,
 )
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    ConstructorConfig,
+)
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 
@@ -53,9 +55,11 @@ class SectionReconstructor:
     使用调用方注入的 retrieval 池，不管理线程池生命周期。
     """
 
-    def __init__(self, retrieval_pool: ThreadPoolExecutor) -> None:
+    def __init__(
+        self, retrieval_pool: ThreadPoolExecutor, config: ConstructorConfig
+    ) -> None:
         self._executor = retrieval_pool
-        self._config = ConstructorConfigLoader().load()
+        self._config = config
 
     async def reconstruct_sections_to_nodes(
         self,

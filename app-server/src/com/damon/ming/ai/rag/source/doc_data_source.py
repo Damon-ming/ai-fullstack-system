@@ -11,7 +11,7 @@ DOCX 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer �
   - 预分块：超大文本段落按自然边界（\\n\\n → \\n → 字符级）切分
   - 可配置：块大小、边界优先级、是否包含表格
 
-可配置项通过 SourceConfigLoader 从 YAML 读取：
+可配置项由 DataSourceManager 注入：
   - doc_source.pre_chunk: 预分块配置（边界优先级 + 块大小）
   - doc_source.include_tables: 是否提取表格为 Markdown 表格
 
@@ -38,9 +38,6 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
-)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -61,8 +58,8 @@ class LocalDocDataSource(BaseDataSource):
     def __init__(
         self,
         folder_path: str,
-        pre_chunk_config=None,
-        include_tables: bool | None = None,
+        pre_chunk_config,
+        include_tables: bool,
         enable_image_extract: bool = False,
         vlm_model: str | None = None,
     ):
@@ -73,11 +70,6 @@ class LocalDocDataSource(BaseDataSource):
         self.enable_image_extract = enable_image_extract
         self.vlm_model = vlm_model
 
-        if pre_chunk_config is None or include_tables is None:
-            cfg = SourceConfigLoader().load()
-            pre_chunk_config = pre_chunk_config or cfg.doc_source.pre_chunk
-            if include_tables is None:
-                include_tables = cfg.doc_source.include_tables
         self._pre_chunk_config = pre_chunk_config
         self._include_tables = include_tables
 
@@ -442,7 +434,9 @@ class LocalDocDataSource(BaseDataSource):
             if p.exists() and p.suffix.lower() == ".docx":
                 doc_files.append(str(p))
             else:
-                self.logger.warning(f"[DocDataSource] 跳过不支持的格式/不存在文件: {fp}")
+                self.logger.warning(
+                    f"[DocDataSource] 跳过不支持的格式/不存在文件: {fp}"
+                )
 
         if not doc_files:
             return []

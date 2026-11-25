@@ -17,14 +17,14 @@ from math import floor
 
 from src.com.damon.ming.ai.inference.base_inference import ContextWindowExceededError
 from src.com.damon.ming.ai.inference.inference_gateway import RoleInference
-from src.com.damon.ming.ai.rag.summary.config.summary_config_loader import (
-    SummaryConfig,
-)
 from src.com.damon.ming.ai.rag.summary.summary_segmenter import (
     SummarySegment,
     SummarySegmenter,
 )
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    SummaryRuntimeConfig,
+)
 from src.com.damon.ming.log import pin
 
 logger = pin("SummaryService")
@@ -37,7 +37,7 @@ class SummaryService:
         self,
         tokenizer: BaseTokenizer,
         summary_inference: RoleInference,
-        config: SummaryConfig,
+        config: SummaryRuntimeConfig,
     ):
         self.tokenizer = tokenizer
         self.summary_inference = summary_inference

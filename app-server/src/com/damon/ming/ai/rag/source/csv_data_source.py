@@ -34,9 +34,6 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
-)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -50,14 +47,12 @@ class LocalCsvDataSource(BaseDataSource):
     def __init__(
         self,
         folder_path: str,
-        batch_rows: int | None = None,
+        batch_rows: int,
     ):
         super().__init__(folder_path)
         self.logger = pin("LocalCsvDataSource")
         self._ensure_dir_exists()
 
-        if batch_rows is None:
-            batch_rows = SourceConfigLoader().load().csv_source.batch_rows
         self._batch_rows = batch_rows
         # 实例级别锁
         self._stats_lock = threading.Lock()

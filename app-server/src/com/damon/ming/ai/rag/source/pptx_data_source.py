@@ -10,7 +10,7 @@ PPTX 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer �
   - 图片提取：幻灯片内嵌图片 OCR 后追加到当页文本
   - 预分块：超大文本按自然边界切分
 
-可配置项通过 SourceConfigLoader 从 YAML 读取：
+可配置项由 DataSourceManager 注入：
   - pptx_source.pre_chunk: 预分块配置
   - pptx_source.include_tables: 是否提取表格
   - pptx_source.include_notes: 是否提取演讲者备注
@@ -39,9 +39,6 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
-)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -59,10 +56,10 @@ class LocalPptxDataSource(BaseDataSource):
     def __init__(
         self,
         folder_path: str,
-        pre_chunk_config=None,
-        include_tables: bool | None = None,
-        include_notes: bool | None = None,
-        extract_images: bool | None = None,
+        pre_chunk_config,
+        include_tables: bool,
+        include_notes: bool,
+        extract_images: bool,
         vlm_model: str | None = None,
     ):
         super().__init__(folder_path)
@@ -71,20 +68,6 @@ class LocalPptxDataSource(BaseDataSource):
         self._images_dir = os.path.join(folder_path, "images")
         self.vlm_model = vlm_model
 
-        if (
-            pre_chunk_config is None
-            or include_tables is None
-            or include_notes is None
-            or extract_images is None
-        ):
-            cfg = SourceConfigLoader().load()
-            pre_chunk_config = pre_chunk_config or cfg.pptx_source.pre_chunk
-            if include_tables is None:
-                include_tables = cfg.pptx_source.include_tables
-            if include_notes is None:
-                include_notes = cfg.pptx_source.include_notes
-            if extract_images is None:
-                extract_images = cfg.pptx_source.extract_images
         self._pre_chunk_config = pre_chunk_config
         self._include_tables = include_tables
         self._include_notes = include_notes

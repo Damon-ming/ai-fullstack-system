@@ -1,5 +1,7 @@
 """初始化和访问使用同一 BM25 索引的 RAG 检索器。"""
 
+from __future__ import annotations
+
 from concurrent.futures import ThreadPoolExecutor
 
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
@@ -10,16 +12,16 @@ from src.com.damon.ming.ai.rag.retriever.base_retriever import (
     SparseRetriever,
 )
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
-from src.com.damon.ming.ai.rag.retriever.config.retriever_config_loader import (
-    RetrieverConfig,
-    RetrieverConfigLoader,
-)
 from src.com.damon.ming.ai.rag.retriever.hybrid_retriever import HybridRetriever
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    RetrieverConfig,
+    RetrieverRuntimeConfig,
+)
 
 
 class RetrieverManager:
-    """加载配置，装配稠密、稀疏和混合检索器。"""
+    """使用注入的配置装配稠密、稀疏和混合检索器。"""
 
     def __init__(self) -> None:
         self._config: RetrieverConfig | None = None
@@ -33,10 +35,14 @@ class RetrieverManager:
         embedder: BaseEmbeddingService,
         bm25_index: BM25Index,
         retrieval_pool: ThreadPoolExecutor,
+        runtime_config: RetrieverRuntimeConfig,
     ) -> None:
         if self._hybrid is not None:
             raise RuntimeError("RAG 检索器已经初始化")
-        config = RetrieverConfigLoader().load("hybrid")
+        try:
+            config = runtime_config.roles["hybrid"]
+        except KeyError as exc:
+            raise ValueError("RAG retriever 配置缺少 hybrid role") from exc
         dense = DenseRetriever(vector_store=vector_store, embedding_service=embedder)
         sparse = SparseRetriever(bm25_index=bm25_index)
         hybrid = HybridRetriever(

@@ -4,20 +4,20 @@
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
-from src.com.damon.ming.ai.rag.embedding.config.embedding_config_loader import (
-    EmbeddingBusinessConfigLoader,
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    VLLMEmbeddingParams,
 )
 
 
 class EmbeddingGateway:
     """统一 embedding 入口，后端由启动配置装配。"""
 
-    def __init__(self, roles: dict[str, dict]) -> None:
-        """合并业务配置并按角色装配 embedding 引擎。"""
+    # todo:待考虑VLLMEmbeddingParams
+    def __init__(self, roles: dict[str, VLLMEmbeddingParams]) -> None:
+        """按已校验的角色参数装配 embedding 引擎。"""
         from src.com.damon.ming.ai.rag.embedding.vllm_embedding import VllmEmbedding
 
-        params = EmbeddingBusinessConfigLoader().load(roles)
-        self._models = {role: VllmEmbedding(config) for role, config in params.items()}
+        self._models = {role: VllmEmbedding(config) for role, config in roles.items()}
 
     def get(self, role: str) -> BaseEmbeddingService:
         """获取角色对应的 embedding 服务。"""

@@ -12,7 +12,7 @@ HTML 数据源 —— 纯同步实现，线程编排由上层 RagChoreographer �
   - 表格提取：HTML 表格格式化为 Markdown 表格
   - 预分块：超大正文按自然边界切分
 
-可配置项通过 SourceConfigLoader 从 YAML 读取：
+可配置项由 DataSourceManager 注入：
   - html_source.pre_chunk: 预分块配置
   - html_source.include_links: 是否保留超链接 URL
   - html_source.include_tables: 是否提取 HTML 表格
@@ -37,9 +37,6 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
-)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -90,25 +87,14 @@ class LocalHtmlDataSource(BaseDataSource):
     def __init__(
         self,
         folder_path: str,
-        pre_chunk_config=None,
-        include_links: bool | None = None,
-        include_tables: bool | None = None,
+        pre_chunk_config,
+        include_links: bool,
+        include_tables: bool,
     ):
         super().__init__(folder_path)
         self.logger = pin("LocalHtmlDataSource")
         self._ensure_dir_exists()
 
-        if (
-            pre_chunk_config is None
-            or include_links is None
-            or include_tables is None
-        ):
-            cfg = SourceConfigLoader().load()
-            pre_chunk_config = pre_chunk_config or cfg.html_source.pre_chunk
-            if include_links is None:
-                include_links = cfg.html_source.include_links
-            if include_tables is None:
-                include_tables = cfg.html_source.include_tables
         self._pre_chunk_config = pre_chunk_config
         self._include_links = include_links
         self._include_tables = include_tables

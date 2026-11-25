@@ -4,7 +4,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from src.com.damon.ming.ai.rag.embedding.model_config import EmbeddingParams
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import EmbeddingParams
 
 
 class EmbeddingInputPolicy:

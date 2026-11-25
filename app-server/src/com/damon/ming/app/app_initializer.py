@@ -397,14 +397,12 @@ class AppInitializer:
         from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag.embedding import EmbeddingGateway
         from src.com.damon.ming.ai.rag.rag_tool import get_rag_choreographer
-        from src.com.damon.ming.app.config.ai.embedding.embedding_config_loader import (
-            EmbeddingConfigLoader,
-        )
         from src.com.damon.ming.app.config.ai.inference.inference_config_loader import (
             InferenceConfigLoader,
         )
         from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
             RagConfigLoader,
+            build_embedding_params,
         )
         from src.com.damon.ming.app.config.ai_runtime_config import (
             RAG_CONTEXT_MAX_TOKENS,
@@ -415,10 +413,13 @@ class AppInitializer:
             UploadRecoveryService,
         )
 
-        rag = RagConfigLoader().load().rag
+        rag_runtime = RagConfigLoader().load()
+        rag = rag_runtime.rag
         inference_config = InferenceConfigLoader().load()
         self.model_root_dir = rag.model_root_dir
-        embedding_config = EmbeddingConfigLoader().load(Path(self.model_root_dir))
+        embedding_config = build_embedding_params(
+            Path(self.model_root_dir), rag_runtime.embedding
+        )
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
         self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
@@ -450,6 +451,13 @@ class AppInitializer:
             inference_gateway=self.inference_gateway,
             embedding_gateway=self.embedding_gateway,
             max_chunk_token_size=RAG_MAX_CHUNK_TOKEN_SIZE,
+            constructor_config=rag_runtime.constructor,
+            rerank_config=rag_runtime.rerank,
+            retriever_config=rag_runtime.retriever,
+            splitter_config=rag_runtime.splitter,
+            summary_config=rag_runtime.summary,
+            source_config=rag_runtime.source,
+            tokenizer_config=rag_runtime.tokenizer,
         )
 
         UploadRecoveryService.recover_startup(

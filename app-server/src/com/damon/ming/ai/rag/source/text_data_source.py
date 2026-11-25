@@ -9,7 +9,7 @@
 使每个 Document 粒度合理，匹配 PDF 按标题切章节的效果，
 避免检索时章节重建拉回全文。
 
-可配置项通过 SourceConfigLoader 从 YAML 读取：
+可配置项由 DataSourceManager 注入：
   - text_source.extensions: 文本数据源支持的文件扩展名
   - text_source.pre_chunk: 预分块配置（边界优先级 + 块大小 + 重叠）
 
@@ -32,9 +32,6 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 )
 from src.com.damon.ming.ai.rag.source import register_engine
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfigLoader,
-)
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -52,29 +49,15 @@ class LocalTextDataSource(BaseDataSource):
     def __init__(
         self,
         folder_path: str,
-        supported_extensions: set[str] | None = None,
-        pre_chunk_config=None,
+        supported_extensions: set[str],
+        pre_chunk_config,
     ):
         super().__init__(folder_path)
         self.logger = pin("LocalTextDataSource")
         self._ensure_dir_exists()
 
-        # 从 YAML 加载配置（未提供参数时使用配置值）
-        if supported_extensions is None or pre_chunk_config is None:
-            cfg = SourceConfigLoader().load()
-            self._supported_extensions = (
-                supported_extensions
-                if supported_extensions is not None
-                else cfg.text_source.extensions
-            )
-            self._pre_chunk_config = (
-                pre_chunk_config
-                if pre_chunk_config is not None
-                else cfg.text_source.pre_chunk
-            )
-        else:
-            self._supported_extensions = supported_extensions
-            self._pre_chunk_config = pre_chunk_config
+        self._supported_extensions = supported_extensions
+        self._pre_chunk_config = pre_chunk_config
 
         # 实例级别锁
         self._stats_lock = threading.Lock()

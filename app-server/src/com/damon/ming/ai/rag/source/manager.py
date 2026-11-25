@@ -14,14 +14,12 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 )
 from src.com.damon.ming.ai.rag.source import resolve_source
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
-from src.com.damon.ming.ai.rag.source.config.source_config_loader import (
-    SourceConfig,
-    SourceConfigLoader,
-)
+from src.com.damon.ming.ai.rag.source.image_text_extractor import configure_ocr
 from src.com.damon.ming.ai.rag.source.legacy_office_converter import (
     LEGACY_OFFICE_EXTENSIONS,
     convert_legacy_office,
 )
+from src.com.damon.ming.app.config.ai.rag.source_config import SourceConfig
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.security.digest import sha256_file
 
@@ -45,13 +43,15 @@ class DataSourceManager:
         self._corpus_dir: Path | None = None
         self._config: SourceConfig | None = None
 
-    def initialize(self, corpus_dir: Path) -> None:
+    def initialize(self, corpus_dir: Path, config: SourceConfig) -> None:
         """初始化知识库目录和数据源配置。"""
         if self._config is not None:
             raise RuntimeError("数据源管理器已经初始化")
+        # todo 新增
+        configure_ocr(config.ocr.device)
         self._corpus_dir = Path(corpus_dir)
         self._corpus_dir.mkdir(parents=True, exist_ok=True)
-        self._config = SourceConfigLoader().load()
+        self._config = config
 
     def load_directory(self) -> list[Document]:
         """扫描目录一次，并将受支持的文件交给对应数据源解析。"""
@@ -68,9 +68,7 @@ class DataSourceManager:
                 for directory_name in directory_names
                 if directory_name.lower() != "images"
             ]
-            file_paths.extend(
-                str(Path(root) / file_name) for file_name in file_names
-            )
+            file_paths.extend(str(Path(root) / file_name) for file_name in file_names)
         return self.load_files(file_paths)
 
     def load_files(self, file_paths: list[str]) -> list[Document]:

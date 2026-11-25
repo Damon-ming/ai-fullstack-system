@@ -6,7 +6,9 @@ from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
 from src.com.damon.ming.ai.rag.embedding.input_policy import EmbeddingInputPolicy
-from src.com.damon.ming.ai.rag.embedding.model_config import HuggingFaceEmbeddingParams
+from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    HuggingFaceEmbeddingParams,
+)
 from src.com.damon.ming.log import pin
 
 logger = pin("HuggingFaceEmbedding")
