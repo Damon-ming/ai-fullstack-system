@@ -10,6 +10,10 @@ from src.com.damon.ming.ai.inference.base_inference import (
     BaseInferenceService,
     InferenceParams,
 )
+from src.com.damon.ming.app.config.ai_runtime_config import (
+    get_default_max_output_tokens,
+    get_model_max_len,
+)
 from src.com.damon.ming.app.config.env import (
     get_inference_gateway_url,
     get_inference_server,
@@ -25,7 +29,7 @@ class ModelEntry:
     engine_type: str
     engine: BaseInferenceService
     timeout_seconds: float | None
-    context_window_tokens: int | None
+    max_model_len: int
 
 
 @dataclass(frozen=True)
@@ -91,7 +95,7 @@ class InferenceConfigLoader:
                 engine_type,
                 engines[key],
                 config["timeout_seconds"],
-                config["context_window_tokens"],
+                config["max_model_len"],
             )
         self._config = InferenceConfig(concurrency, float(timeout), entries)
         return self._config
@@ -116,14 +120,10 @@ class InferenceConfigLoader:
                 raise ValueError(f"{path}.model_name 必须是非空字符串")
             if not isinstance(options, dict):
                 raise TypeError(f"{path}.options 必须是键值对")
+            options = dict(options)
+            options["max_tokens"] = get_default_max_output_tokens(role)
             role_timeout = params.get("timeout_seconds")
-            context_window = params.get("context_window_tokens")
-            if (role == "summary" or context_window is not None) and (
-                type(context_window) is not int or context_window < 2
-            ):
-                raise ValueError(
-                    f"{path}.context_window_tokens 必须是大于等于 2 的整数"
-                )
+            max_model_len = get_model_max_len(name)
             if role_timeout is not None and (
                 isinstance(role_timeout, bool)
                 or not isinstance(role_timeout, (int, float))
@@ -150,7 +150,7 @@ class InferenceConfigLoader:
                 "api_key": api_key,
                 "model_name": name,
                 "options": dict(options),
-                "context_window_tokens": context_window,
+                "max_model_len": max_model_len,
                 "timeout_seconds": float(role_timeout)
                 if role_timeout is not None
                 else None,

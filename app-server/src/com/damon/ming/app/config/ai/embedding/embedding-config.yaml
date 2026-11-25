@@ -1,12 +1,9 @@
 # app-server/src/com/damon/ming/app/config/ai/embedding/embedding-config.yaml
 # Embedding Gateway 超时与模型角色；网关地址从 INFERENCE_GATEWAY_URL 读取。
-# TODO: 从统一模型配置动态读取 model_name、max_input_tokens 和 dimension；
-# 同时校验 vLLM 的 --max-model-len 与向量库维度，避免换模型时逐处手改。
+# max_input_tokens、dimension 和模型 max-model-len 从根目录 model-config/models.yaml 读取。
 transport:
   timeout_seconds: 60
 roles:
   bge_m3:
     model_name: BAAI/bge-m3
     api_key: ak_embedding
-    max_input_tokens: 8182  # BGE-M3 上限 8192，预留特殊 token 与安全余量
-    dimension: 1024

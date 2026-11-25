@@ -60,6 +60,7 @@ class RagRuntime:
     """RAG 容器及流程配置。"""
 
     rag_sem: asyncio.Semaphore
+    rag_context_max_tokens: int
     execution_timeout_seconds: float
     retry_ms: int
     model_root_dir: str

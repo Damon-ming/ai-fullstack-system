@@ -3,6 +3,11 @@
 
 from pathlib import Path
 
+from src.com.damon.ming.app.config.ai_runtime_config import (
+    get_model_dimension,
+    get_model_max_input_tokens,
+    get_model_max_len,
+)
 from src.com.damon.ming.app.config.env import (
     get_inference_gateway_url,
 )
@@ -39,8 +44,9 @@ class EmbeddingConfigLoader:
                 raise ValueError(f"Embedding role '{role}' 缺少有效的 model_name")
 
             api_key = entry.get("api_key")
-            max_tokens = entry.get("max_input_tokens")
-            dimension = entry.get("dimension")
+            max_tokens = get_model_max_input_tokens(model_name)
+            dimension = get_model_dimension(model_name)
+            max_model_len = get_model_max_len(model_name)
             timeout = transport.get("timeout_seconds")
             if not isinstance(api_key, str) or not api_key.strip():
                 raise ValueError(f"Embedding role '{role}' 的 api_key 必须是非空字符串")
@@ -50,6 +56,10 @@ class EmbeddingConfigLoader:
                 )
             if type(dimension) is not int or dimension <= 0:
                 raise ValueError(f"Embedding role '{role}' 的 dimension 必须是正整数")
+            if max_tokens > max_model_len:
+                raise ValueError(
+                    f"Embedding role '{role}' 的 max_input_tokens 不能大于模型 max-model-len"
+                )
             if (
                 isinstance(timeout, bool)
                 or not isinstance(timeout, (int, float))

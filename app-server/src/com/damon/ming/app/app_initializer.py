@@ -43,6 +43,7 @@ class AppInitializer:
         self.rag_choreographer = None
         self.inference_gateway = None
         self.embedding_gateway = None
+        self.rag_context_max_tokens = None
 
         # 上传改为逐文件同步入库，无需后台任务
 
@@ -97,6 +98,7 @@ class AppInitializer:
         app.state.ai = AIRuntime(
             rag=RagRuntime(
                 rag_sem=self.rag_sem,
+                rag_context_max_tokens=self.rag_context_max_tokens,
                 execution_timeout_seconds=self.execution_timeout_seconds,
                 retry_ms=self.rag_retry_ms,
                 model_root_dir=self.model_root_dir,
@@ -404,6 +406,9 @@ class AppInitializer:
         from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
             RagConfigLoader,
         )
+        from src.com.damon.ming.app.config.ai_runtime_config import (
+            RAG_CONTEXT_MAX_TOKENS,
+        )
         from src.com.damon.ming.app.thread_pools import get_rag_pool_group
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
@@ -436,7 +441,7 @@ class AppInitializer:
         )
 
         self.embedding_gateway = EmbeddingGateway(embedding_config)
-
+        self.rag_context_max_tokens = RAG_CONTEXT_MAX_TOKENS
         self.rag_choreographer = get_rag_choreographer(
             pools=get_rag_pool_group(),
             corpus_dir=self.system_config.corpus_dir,

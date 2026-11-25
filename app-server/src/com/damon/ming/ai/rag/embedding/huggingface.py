@@ -60,11 +60,13 @@ class HuggingFaceEmbedding(BaseEmbeddingService):
             raise RuntimeError(f"HuggingFace embedding failed: {e}")
 
     @property
-    def max_input_tokens(self) -> int | None:
+    def max_input_tokens(self) -> int:
         """返回扣除特殊 token 和边界余量后的输入 token 上限。"""
         model_limit = getattr(self.model, "max_seq_length", None)
         if not isinstance(model_limit, int) or model_limit <= 0:
-            return None
+            raise ValueError(
+                f"无法获取 embedding 模型 '{self.params.model_name}' 的有效 max_seq_length"
+            )
         special_tokens = self.model.tokenizer.num_special_tokens_to_add(pair=False)
         # 文本前缀与正文拼接处可能改变少量子词边界，预留 8 token 防止模型静默截断。
         boundary_margin = 8

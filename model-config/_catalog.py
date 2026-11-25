@@ -19,6 +19,7 @@ class ModelConfig:
     model_type: str
     max_model_len: int
     dimension: int | None = None
+    max_input_tokens: int | None = None
 
 
 def _read_model_values(path: Path) -> dict:
@@ -45,6 +46,16 @@ def _read_model_values(path: Path) -> dict:
             if group == "embedding" or dimension is not None:
                 if type(dimension) is not int or dimension <= 0:
                     raise ModelConfigError(f"{name}.dimension 必须是正整数")
+            max_input_tokens = entry.get("max-input-tokens")
+            if group == "embedding" or max_input_tokens is not None:
+                if type(max_input_tokens) is not int or max_input_tokens <= 0:
+                    raise ModelConfigError(
+                        f"{name}.max-input-tokens 必须是正整数"
+                    )
+                if max_input_tokens > window:
+                    raise ModelConfigError(
+                        f"{name}.max-input-tokens 不能大于 max-model-len"
+                    )
             names.add(name)
     return models
 
@@ -52,7 +63,13 @@ def _read_model_values(path: Path) -> dict:
 def _read_catalog(path: Path) -> Mapping[str, ModelConfig]:
     models = _read_model_values(path)
     return MappingProxyType({
-        name: ModelConfig(name, group, entry["max-model-len"], entry.get("dimension"))
+        name: ModelConfig(
+            name=name,
+            model_type=group,
+            max_model_len=entry["max-model-len"],
+            dimension=entry.get("dimension"),
+            max_input_tokens=entry.get("max-input-tokens"),
+        )
         for group in ("inference", "embedding")
         for name, entry in models[group].items()
     })

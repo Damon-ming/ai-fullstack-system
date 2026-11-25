@@ -18,9 +18,15 @@ class BaseEmbeddingService(ABC):
         self.params = params
 
     @property
-    def max_input_tokens(self) -> int | None:
-        """单条文档可用的最大输入 token 数；未知时返回 None。"""
-        return None
+    @abstractmethod
+    def max_input_tokens(self) -> int:
+        """单条文档可用的最大输入 token 数。"""
+        ...
+
+    @property
+    def dimension(self) -> int:
+        """获取模型输出向量的维度。"""
+        return self.params.dimension
 
     def get_tokenizer(self) -> Any | None:
         """返回模型实际使用的 tokenizer；无法提供时返回 None。"""

@@ -18,12 +18,6 @@ from src.com.damon.ming.log import pin
 
 logger = pin("chat.core")
 
-# TODO: 根据主推理角色的实际窗口、输出上限和提示词 token 数动态计算
-# RAG 上下文预算，并保留业务上限；换模型时无需修改这里的常量。
-# 当前参考资料业务上限为 512 token；主推理部署窗口为 4096，输出上限为 1024。
-# 实际可用空间还受 system、query 和消息模板的 token 数影响。
-MAX_CONTEXT_TOKEN_BUDGET = 512
-
 
 def _resolve_locale_text(rag_locales: dict, locale: str):
     """按请求 locale 取文本配置，缺省回退 i18n 配置的 default_locale。"""
@@ -43,7 +37,7 @@ async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
         logger.debug("开始执行 RAG 检索")
         ref_content = await app_state.ai.rag.choreographer.build_rag_context(
             query,
-            max_context_tokens=MAX_CONTEXT_TOKEN_BUDGET,
+            max_context_tokens=app_state.ai.rag.rag_context_max_tokens,
         )
 
     chat_cfg = _resolve_locale_text(app_state.ai.rag.locales, get_locale())

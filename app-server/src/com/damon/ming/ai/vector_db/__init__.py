@@ -71,12 +71,12 @@ from src.com.damon.ming.ai.vector_db.chroma_store import ChromaDBStore
 from src.com.damon.ming.ai.vector_db.pgvector_store import PGVectorStore
 
 
-def create_vector_stores():
+def create_vector_stores(embedding_dimension: int):
     """初始化并返回向量存储管理器。"""
     from src.com.damon.ming.ai.vector_db.manager import VectorStoreManager
 
     manager = VectorStoreManager()
-    manager.initialize()
+    manager.initialize(embedding_dimension)
     return manager
 
 
@@ -84,8 +84,8 @@ __all__ = [
     "BaseVectorStore",
     "ChromaDBStore",
     "ChromaParams",
-    "PGVectorStore",
     "PGVectorParams",
+    "PGVectorStore",
     "SharedVectorStoreParams",
     "VectorStoreParams",
     "create_vector_stores",

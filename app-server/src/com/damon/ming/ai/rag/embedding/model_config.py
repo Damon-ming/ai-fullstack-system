@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/ai/rag/embedding/model_config.py
 """Embedding 各推理引擎的参数。"""
 
 from dataclasses import dataclass, field
@@ -8,6 +9,7 @@ class EmbeddingParams:
     """各 embedding 引擎共享的模型参数。"""
 
     model_name: str
+    dimension: int = field(kw_only=True)
     batch_size: int = field(kw_only=True)
     query_prefix: str = field(kw_only=True)
     passage_prefix: str = field(kw_only=True)
@@ -20,7 +22,6 @@ class VLLMEmbeddingParams(EmbeddingParams):
     api_key: str
     timeout: float
     max_input_tokens: int
-    dimension: int
 
 
 @dataclass(frozen=True)

@@ -1,17 +1,14 @@
 # app-server/src/com/damon/ming/ai/vector_db/config/vector-config.yaml
-# 向量存储配置 —— 由 VectorConfigLoader 读取，注入 vector_db 模块。
-# TODO: embedding_dimension 从统一模型配置读取并在启动时校验；
-# 切换 embedding 模型时迁移向量表并重新生成已有文档向量。
+# 向量存储配置 —— 由 VectorConfigLoader 读取静态 YAML 参数。
+# embedding_dimension 由 VectorStoreManager 从当前 embedding 模型规格动态注入。
 
 # chroma:
 #   table_name: rag_documents  # Chroma 会将其用作 collection 名称
 #   persist_directory: ./chroma
-#   embedding_dimension: 1024
 
 pgvector:
   connection_string: ${DB_URL}
   table_name: rag_documents
-  embedding_dimension: 1024
   pool_min_conn: 2
   pool_max_conn: 10
   pool_recycle: 3600  # 连接年龄回收阈值（秒）

@@ -41,10 +41,12 @@ import os
 
 max_model_len = int(os.environ["QWEN2_5_1_8B_INSTRUCT_MAX_MODEL_LEN"])
 dimension = int(os.environ["BGE_M3_DIMENSION"])
+max_input_tokens = int(os.environ["BGE_M3_MAX_INPUT_TOKENS"])
 ```
 
 应用自己的 YAML 中 `${变量}` 不会因 env_file 自动展开，仍需要配置加载器支持。
-本次只接通变量生成、Compose 参数引用和容器环境注入；现有业务窗口、预算和向量维度加载器尚未迁移。
+app-server 的 `ai_runtime_config.py` 按模型名读取窗口、embedding 输入上限和向量维度；
+embedding 与向量存储配置加载器使用这些值装配运行参数。
 
 ## 命名和扩展
 
@@ -55,6 +57,7 @@ inference:
 embedding:
   BAAI/bge-m3:
     max-model-len: 8192
+    max-input-tokens: 8182
     dimension: 1024
 ```
 
@@ -63,6 +66,7 @@ embedding:
 ```dotenv
 QWEN2_5_1_8B_INSTRUCT_MAX_MODEL_LEN=4096
 BGE_M3_MAX_MODEL_LEN=8192
+BGE_M3_MAX_INPUT_TOKENS=8182
 BGE_M3_DIMENSION=1024
 ```
 
@@ -70,7 +74,8 @@ BGE_M3_DIMENSION=1024
 字段名采用相同规则。规范化后若变量重名则报错，避免不同模型静默覆盖。
 当前支持有限数值参数；新增如 `gpu-memory-utilization: 0.4` 会自动导出对应变量，无需修改导出器。
 新增变量不会自动接入业务：使用方仍需在自己的配置中引用它。
-`max-model-len` 和 embedding 的 `dimension` 必须为正整数。
+`max-model-len`、embedding 的 `max-input-tokens` 和 `dimension` 必须为正整数；
+`max-input-tokens` 不能大于 `max-model-len`。
 当前窗口来自已有部署值，尚未核实为模型官方最大能力。
 
 现有 `get_model_config()` Python 查询接口保留供安装库后的代码使用；本次 Docker 部署通过 env 文件共享数值，

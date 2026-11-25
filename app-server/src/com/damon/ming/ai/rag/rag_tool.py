@@ -116,6 +116,8 @@ class RagChoreographer:
         # 步骤1：使用 AppInitializer 装配并注入的 embedding gateway。
         self.embedding_gateway = embedding_gateway
         self.embedder = self.embedding_gateway.get_bge_m3()
+        embedding_max_input_tokens = self.embedder.max_input_tokens
+        embedding_dimension = self.embedder.dimension
 
         # 步骤2：加载通用 tokenizer，并注入 embedding 模型实际使用的 tokenizer
         self.tokenizer_manager = create_tokenizers(
@@ -129,7 +131,9 @@ class RagChoreographer:
         )
 
         # 步骤3：初始化向量库
-        self.vector_store_manager = create_vector_stores()
+        self.vector_store_manager = create_vector_stores(
+            embedding_dimension=embedding_dimension
+        )
         self._vector_store: BaseVectorStore = self.vector_store_manager.get_pgvector()
 
         # 步骤4：初始化章节重构 + 摘要服务
@@ -160,7 +164,7 @@ class RagChoreographer:
 
         self.splitter_manager = create_splitters(
             tokenizer=embedding_tokenizer,
-            max_input_tokens=self.embedder.max_input_tokens,
+            max_input_tokens=embedding_max_input_tokens,
         )
         self.splitter = self.splitter_manager.get_structured()
 

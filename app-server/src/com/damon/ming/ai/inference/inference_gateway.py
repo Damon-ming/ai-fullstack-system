@@ -118,11 +118,8 @@ class RoleInference:
         return self._gateway._resolve(self._role)[2]
 
     def context_window(self) -> int:
-        """返回配置的模型上下文窗口，未配置时明确报错。"""
-        context_window = self._gateway._roles[self._role].context_window_tokens
-        if context_window is None:
-            raise ValueError(f"推理 role '{self._role}' 未配置 context_window_tokens")
-        return context_window
+        """返回该模型在 model-config 中配置的上下文窗口。"""
+        return self._gateway._roles[self._role].max_model_len
 
     async def generate(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         return await self._gateway.generate(self._role, messages, **kwargs)
