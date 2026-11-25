@@ -66,6 +66,30 @@ def list_history(
         )
 
 
+@router.get("/search/v1", response_model=None)
+@limiter.limit("30/minute")
+def search_history(
+    request: Request,
+    keyword: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(20, ge=1, le=50),
+):
+    """Search current user's conversations by title, query, or answer text."""
+    normalized_keyword = keyword.strip()
+    if not normalized_keyword:
+        return BaseSuccessResponse(code=ErrorCode.OK, data=[])
+    try:
+        items = HistoryService.search_history(
+            _user_id(request), normalized_keyword, limit
+        )
+        return BaseSuccessResponse(code=ErrorCode.OK, data=items)
+    except Exception as e:
+        logger.exception("历史记录搜索失败")
+        fail_data = HistoryFailedData(error_msg=get_safe_error_message(e))
+        return BaseFailedResponse(
+            code=ErrorCode.SYSTEM.DATABASE_FAILURE, data=fail_data
+        )
+
+
 # ---------------------------------------------------------------------------
 # 详情
 # ---------------------------------------------------------------------------

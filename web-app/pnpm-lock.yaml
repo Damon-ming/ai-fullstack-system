@@ -389,6 +389,9 @@ importers:
       '@ming/core-log':
         specifier: workspace:*
         version: link:../../core/log
+      '@ming/data-layer':
+        specifier: workspace:*
+        version: link:../../data-layer
       '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api

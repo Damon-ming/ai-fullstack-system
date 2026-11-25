@@ -24,3 +24,21 @@ export interface HistoryItem {
   isPinned: boolean;
   turns?: HistoryTurn[];
 }
+
+export interface HistoryListData {
+  pinned: HistoryItem[];
+  items: HistoryItem[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export interface HistoryDetailData extends HistoryItem {
+  turns: HistoryTurn[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export interface HistoryPinData {
+  conversationId: string;
+  isPinned: boolean;
+}

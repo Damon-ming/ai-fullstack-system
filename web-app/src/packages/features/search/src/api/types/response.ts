@@ -1,4 +1,7 @@
 export interface SearchResultItem {
+  conversationId: string;
   title: string;
-  turns?: Array<{ query: string; content: string }>;
+  createdAt: string;
+  updatedAt: string;
+  isPinned: boolean;
 }

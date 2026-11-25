@@ -1,9 +1,13 @@
 // search/src/ui/SearchModal.tsx
-// SECURITY: 搜索为纯本地内存过滤，无网络请求，无 XSS 风险。
+// Search requests are scoped to the authenticated user's server-side history.
 import { useSearchModalHook } from "../hook/useSearchModalHook";
 import { useTranslation } from "@ming/i18n";
 
-export function SearchModal({ onSelect }: { onSelect: (id: string) => void }) {
+type SearchModalProps = Readonly<{
+  onSelect: (id: string) => void;
+}>;
+
+export function SearchModal({ onSelect }: SearchModalProps) {
   const { t } = useTranslation("search");
   const { open, keyword, setKeyword, closeSearch, results } =
     useSearchModalHook();

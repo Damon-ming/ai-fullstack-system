@@ -20,6 +20,7 @@ import {
   removeFromServer,
   unpinOnServer,
 } from "./history.api";
+import type { HistoryListData } from "./types";
 
 // ---------------------------------------------------------------------------
 // 缓存 key
@@ -62,9 +63,9 @@ export const HISTORY_TURN_PAGE_SIZE = 50;
 /** 列表无限滚动查询 —— 30s 内不重新拉取 */
 export const useHistoryListInfiniteQuery = () =>
   useInfiniteQuery<
-    DataApiResponse<unknown>,
+    DataApiResponse<HistoryListData>,
     DataLayerError,
-    InfiniteData<DataApiResponse<unknown>>,
+    InfiniteData<DataApiResponse<HistoryListData>>,
     typeof HISTORY_LIST_KEY,
     string | null
   >({
@@ -73,9 +74,7 @@ export const useHistoryListInfiniteQuery = () =>
       fetchList(pageParam ?? undefined, HISTORY_PAGE_SIZE),
     initialPageParam: null,
     getNextPageParam: (lastPage) => {
-      const data = lastPage.data as
-        | { hasMore?: boolean; nextCursor?: string | null }
-        | undefined;
+      const data = lastPage.data;
       return data?.hasMore && data.nextCursor ? data.nextCursor : undefined;
     },
     staleTime: 30 * 1000,

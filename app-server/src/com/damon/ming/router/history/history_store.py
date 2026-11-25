@@ -174,6 +174,41 @@ def list_history(
     return pinned_items, items, has_more, next_cursor
 
 
+def search_history(
+    user_id: int, keyword: str, limit: int = 20
+) -> list[HistoryConversationRow]:
+    """Search a user's conversations by title, query, or answer text."""
+    pattern = f"%{keyword}%"
+    matched = (
+        select(history_turns.c.conversation_id)
+        .where(
+            or_(
+                history_turns.c.query.ilike(pattern),
+                history_turns.c.content.ilike(pattern),
+            )
+        )
+        .distinct()
+    )
+    query = (
+        select(history_conversations)
+        .where(
+            history_conversations.c.user_id == user_id,
+            or_(
+                history_conversations.c.title.ilike(pattern),
+                history_conversations.c.id.in_(matched),
+            ),
+        )
+        .order_by(
+            history_conversations.c.is_pinned.desc(),
+            history_conversations.c.updated_at.desc(),
+        )
+        .limit(limit)
+    )
+    with _db().transaction() as conn:
+        rows = conn.execute(query).mappings().all()
+    return [HistoryConversationRow(**row) for row in rows]
+
+
 # ---------------------------------------------------------------------------
 # 详情
 # ---------------------------------------------------------------------------

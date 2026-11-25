@@ -86,6 +86,13 @@ class HistoryService:
         )
 
     @staticmethod
+    def search_history(
+        user_id: int, keyword: str, limit: int = 20
+    ) -> list[HistoryListItem]:
+        rows = history_store.search_history(user_id, keyword, limit)
+        return [_conv_to_list_item(row) for row in rows]
+
+    @staticmethod
     def get_history(
         conversation_id: str,
         user_id: int,

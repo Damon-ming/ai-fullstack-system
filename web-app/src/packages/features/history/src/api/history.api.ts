@@ -14,6 +14,7 @@
 import { dataApi } from "@ming/data-layer";
 import type { DataApiResponse } from "@ming/data-layer";
 import { createLogger } from "@ming/core-log";
+import type { HistoryDetailData, HistoryListData, HistoryPinData } from "./types";
 
 const log = createLogger("history/api");
 
@@ -24,9 +25,9 @@ const log = createLogger("history/api");
 export async function fetchList(
   cursor: string | undefined,
   limit: number,
-): Promise<DataApiResponse<unknown>> {
+): Promise<DataApiResponse<HistoryListData>> {
   log.debug("fetch history list", { cursor, limit });
-  return dataApi.get<unknown>("/api/history/list/v1", {
+  return dataApi.get<HistoryListData>("/api/history/list/v1", {
     params: { limit, ...(cursor ? { cursor } : {}) },
   });
 }
@@ -35,30 +36,31 @@ export async function fetchTurns(
   id: string,
   cursor: string | undefined,
   limit: number,
-): Promise<DataApiResponse<unknown>> {
+): Promise<DataApiResponse<HistoryDetailData>> {
   log.debug("fetch history turns", { id, cursor, limit });
-  return dataApi.get<unknown>(`/api/history/v1/${id}`, {
-    params: { limit, ...(cursor ? { cursor } : {}) },
-  });
+  return dataApi.get<HistoryDetailData>(
+    `/api/history/v1/${encodeURIComponent(id)}`,
+    { params: { limit, ...(cursor ? { cursor } : {}) } },
+  );
 }
 
 export async function removeFromServer(
   id: string,
 ): Promise<DataApiResponse<void>> {
   log.debug("remove history", { id });
-  return dataApi.delete<void>(`/api/history/v1/${id}`);
+  return dataApi.delete<void>(`/api/history/v1/${encodeURIComponent(id)}`);
 }
 
 export async function pinOnServer(
   id: string,
-): Promise<DataApiResponse<unknown>> {
-  return dataApi.post<unknown>(`/api/history/v1/${id}/pin`);
+): Promise<DataApiResponse<HistoryPinData>> {
+  return dataApi.post<HistoryPinData>(`/api/history/v1/${encodeURIComponent(id)}/pin`);
 }
 
 export async function unpinOnServer(
   id: string,
-): Promise<DataApiResponse<unknown>> {
-  return dataApi.delete<unknown>(`/api/history/v1/${id}/pin`);
+): Promise<DataApiResponse<HistoryPinData>> {
+  return dataApi.delete<HistoryPinData>(`/api/history/v1/${encodeURIComponent(id)}/pin`);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+# todo:多语言问题
 # 章节重建后传给模型的参考资料标签格式。
 # {value} 分别替换为来源上下文或标题路径。
 source_label_template: "【来源：{value}】"
