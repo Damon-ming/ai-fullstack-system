@@ -102,6 +102,13 @@ class TokenizerRuntimeConfig:
 
 
 @dataclass(frozen=True)
+class RagThreadPoolConfig:
+    """RAG 资源组内部各命名线程池的 worker 数。"""
+
+    workers: dict[str, int]
+
+
+@dataclass(frozen=True)
 class LocaleConfig:
     """rag.locales.{locale} 段 —— 单个 locale 的聊天文本。"""
 
@@ -223,6 +230,7 @@ class RagRuntimeConfig:
     summary —— 摘要提示词和分段比例。
     source —— 数据源处理、预分块及 OCR 参数。
     tokenizer —— LLM 计数和 BM25 分词器实例。
+    thread_pools —— RAG 资源组内部的 worker 分配。
     """
 
     rag: RagConfig
@@ -234,6 +242,7 @@ class RagRuntimeConfig:
     summary: SummaryRuntimeConfig
     source: SourceConfig
     tokenizer: TokenizerRuntimeConfig
+    thread_pools: RagThreadPoolConfig
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -267,8 +276,26 @@ class RagConfigLoader:
             summary=self._load_summary(raw),
             source=SourceConfigParser.parse(raw.get("source")),
             tokenizer=self._load_tokenizer(raw),
+            thread_pools=self._load_thread_pools(raw),
         )
         return self._config
+
+    @staticmethod
+    def _load_thread_pools(raw: dict) -> RagThreadPoolConfig:
+        section = raw.get("thread_pools")
+        if not isinstance(section, dict) or not section:
+            raise TypeError("RAG thread_pools 配置必须是非空键值对象")
+        workers: dict[str, int] = {}
+        for name, count in section.items():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("RAG 线程池名称必须是非空字符串")
+            if type(count) is not int or count <= 0:
+                raise ValueError(f"RAG 线程池 {name} 的 worker 数必须是正整数")
+            workers[name] = count
+        missing = {"retrieval", "document", "rerank", "bm25"} - workers.keys()
+        if missing:
+            raise ValueError(f"RAG thread_pools 缺少线程池: {', '.join(sorted(missing))}")
+        return RagThreadPoolConfig(workers=workers)
 
     @staticmethod
     def _load_tokenizer(raw: dict) -> TokenizerRuntimeConfig:

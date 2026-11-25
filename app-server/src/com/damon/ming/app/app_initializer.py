@@ -451,6 +451,7 @@ class AppInitializer:
             inference_gateway=self.inference_gateway,
             embedding_gateway=self.embedding_gateway,
             max_chunk_token_size=RAG_MAX_CHUNK_TOKEN_SIZE,
+            thread_pool_config=rag_runtime.thread_pools,
             constructor_config=rag_runtime.constructor,
             rerank_config=rag_runtime.rerank,
             retriever_config=rag_runtime.retriever,

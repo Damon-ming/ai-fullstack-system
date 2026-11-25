@@ -16,7 +16,7 @@ RAG 容器 —— 检索线程编排层。
   - 不碰 vector_db 中的原始数据
 
 线程模型：
-  - 全局线程预算由 app/config/thread 控制，RAG 内部池分配由 thread_pools/config 控制
+  - 全局线程预算由 app/config/thread 控制，RAG 内部池分配由 rag-runtime.yaml 控制
   - 所属组件通过 RAG 线程池接口获取本组件需要的池
   - 异步 AI 函数（SummaryService.run_summary）直接调用
 """
@@ -45,6 +45,7 @@ from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
 from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
     ConstructorConfig,
+    RagThreadPoolConfig,
     RerankRuntimeConfig,
     RetrieverRuntimeConfig,
     SplitterRuntimeConfig,
@@ -69,6 +70,7 @@ def get_rag_choreographer(
     inference_gateway: InferenceGateway,
     embedding_gateway: EmbeddingGateway,
     max_chunk_token_size: int,
+    thread_pool_config: RagThreadPoolConfig,
     constructor_config: ConstructorConfig,
     rerank_config: RerankRuntimeConfig,
     retriever_config: RetrieverRuntimeConfig,
@@ -86,6 +88,7 @@ def get_rag_choreographer(
         inference_gateway: 启动时装配的统一推理入口（必填）。
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
         max_chunk_token_size: AppInitializer 注入的 RAG chunk 目标大小。
+        thread_pool_config: AppInitializer 注入的 RAG 内部线程池配置。
         constructor_config: AppInitializer 注入的章节重建标签配置。
         rerank_config: AppInitializer 注入的重排运行配置。
         retriever_config: AppInitializer 注入的检索运行配置。
@@ -105,6 +108,7 @@ def get_rag_choreographer(
                     inference_gateway=inference_gateway,
                     embedding_gateway=embedding_gateway,
                     max_chunk_token_size=max_chunk_token_size,
+                    thread_pool_config=thread_pool_config,
                     constructor_config=constructor_config,
                     rerank_config=rerank_config,
                     retriever_config=retriever_config,
@@ -126,6 +130,7 @@ class RagChoreographer:
         model_root_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
         embedding_gateway: EmbeddingGateway | None = None,
+        thread_pool_config: RagThreadPoolConfig | None = None,
         constructor_config: ConstructorConfig | None = None,
         rerank_config: RerankRuntimeConfig | None = None,
         retriever_config: RetrieverRuntimeConfig | None = None,
@@ -150,6 +155,9 @@ class RagChoreographer:
 
         if embedding_gateway is None:
             raise ValueError("RagChoreographer 初始化失败：embedding_gateway 不能为空")
+
+        if thread_pool_config is None:
+            raise ValueError("RagChoreographer 初始化失败：thread_pool_config 不能为空")
 
         if constructor_config is None:
             raise ValueError("RagChoreographer 初始化失败：constructor_config 不能为空")
@@ -180,7 +188,7 @@ class RagChoreographer:
             )
 
         self.thread_pools = RagThreadPools()
-        self.thread_pools.initialize(pools)
+        self.thread_pools.initialize(pools, thread_pool_config)
 
         # 步骤1：使用 AppInitializer 装配并注入的 embedding gateway。
         self.embedding_gateway = embedding_gateway
