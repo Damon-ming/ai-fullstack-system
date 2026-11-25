@@ -44,15 +44,23 @@
 # ═══════════════════════════════════════════════════════════════════
 
 # include.env_file 用于 Compose 参数替换；容器内部环境由各服务的 env_file 注入。
+x-model-config-env-file: &model-config-env-file ./model-config.env
+
 include:
+  - path:
+      - model-gateway/config/docker/docker-${INFERENCE_SERVER:-vllm}-inference.yaml
+      - model-gateway/config/docker/docker-vllm-embedding.yaml
+    env_file: *model-config-env-file
   - path: app-server/docker-compose.yaml
-    env_file: ./model-config.env
-  - path: model-gateway/config/docker/docker-${INFERENCE_SERVER:-vllm}-inference.yaml
-    env_file: ./model-config.env
-  - path: model-gateway/config/docker/docker-vllm-embedding.yaml
-    env_file: ./model-config.env
   - model-gateway/docker-compose.yaml
   - web-app/docker-compose.yaml
+
+# 共享模型参数注入应用容器；Compose 子模块不重复声明。
+services:
+  app-server:
+    env_file: *model-config-env-file
+  model-gateway:
+    env_file: *model-config-env-file
 
 # SECURITY: P1-27 全 compose 无 CPU/内存 limits。
 # 单租户可控（自己不会打自己）；vLLM 无 limits 时多实例可争抢宿主机 RAM，
