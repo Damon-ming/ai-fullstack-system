@@ -34,7 +34,7 @@ class RerankerParams:
     include_heading: bool
     # 标题路径前缀模板，必须包含 {heading_path} 占位符
     heading_prefix_template: str
-    # 最低重排分数；None 表示不按分数过滤
+    # 最低归一化重排分数（[0, 1]）；None 表示不按分数过滤
     score_threshold: float | None = None
     device: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
@@ -65,6 +65,8 @@ class RerankerParams:
             or not math.isfinite(self.score_threshold)
         ):
             raise ValueError("score_threshold 必须是有限数值或 None")
+        if self.score_threshold is not None and not 0 <= self.score_threshold <= 1:
+            raise ValueError("score_threshold 必须在 [0, 1] 范围内")
 
 
 class BaseReranker(ABC):

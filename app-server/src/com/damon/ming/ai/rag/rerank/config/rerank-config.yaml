@@ -14,7 +14,7 @@ bge_reranker_v2_m3:
   # 滑动窗口：长 section 切窗打分后取 max，替代 rerank 前的 LLM 有损压缩
   window_overlap: 128
   max_windows_per_node: 5
-  # 最低重排分数（原始模型分数）；低于该值的结果会被过滤
+  # 最低归一化重排分数（[0, 1]）；低于该值的结果会被过滤
   score_threshold: 0.5
   # 打分时附加章节标题链（heading_path），无该元数据的文档自动跳过
   include_heading: true

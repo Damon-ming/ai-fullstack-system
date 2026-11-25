@@ -91,7 +91,8 @@ class CrossEncoderModel:
 
                 with torch.inference_mode():
                     outputs = self.model(**inputs)
-                    scores = outputs.logits[:, 0].float()
+                    # 对外统一提供 [0, 1] 的相关性分数。
+                    scores = torch.sigmoid(outputs.logits[:, 0].float())
 
             # 锁外：CPU 后处理（numpy 转换不依赖 GPU，可并发）
             all_scores.extend(scores.cpu().numpy().tolist())
