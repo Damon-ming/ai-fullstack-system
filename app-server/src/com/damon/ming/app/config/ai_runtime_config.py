@@ -30,7 +30,8 @@ import re
 #     "max-input-tokens": 8182,
 #     "dimension": 1024,
 #   },
-#   "rag_context_max_tokens": 1024
+#   "rag_context_max_tokens": 1024,
+#   "rag_max_chunk_token_size": 768
 # }
 # inference-config.yaml 和 embedding-config.yaml 中的 model_name 决定读取哪个模型规格；
 # 修改模型规格后，请同步更新此速查 JSON。
@@ -38,6 +39,9 @@ import re
 # RAG 返回给主推理模型的参考上下文 token 上限。
 # rag_core.py 用它限制检索结果；超限摘要也以此作为目标输出长度。
 RAG_CONTEXT_MAX_TOKENS = 1024
+
+# RAG 文档切分的目标 chunk 大小；启动时会按 embedding 模型输入上限收紧。
+RAG_MAX_CHUNK_TOKEN_SIZE = 768
 
 # 按业务 role 配置默认输出上限；各次请求仍可通过调用参数降低上限。
 # summary 默认跟随 RAG_CONTEXT_MAX_TOKENS；当前 RAG 摘要调用会显式传入该值。

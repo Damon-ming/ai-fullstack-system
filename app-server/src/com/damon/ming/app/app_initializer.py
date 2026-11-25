@@ -408,6 +408,7 @@ class AppInitializer:
         )
         from src.com.damon.ming.app.config.ai_runtime_config import (
             RAG_CONTEXT_MAX_TOKENS,
+            RAG_MAX_CHUNK_TOKEN_SIZE,
         )
         from src.com.damon.ming.app.thread_pools import get_rag_pool_group
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
@@ -448,6 +449,7 @@ class AppInitializer:
             model_root_dir=self.model_root_dir,
             inference_gateway=self.inference_gateway,
             embedding_gateway=self.embedding_gateway,
+            max_chunk_token_size=RAG_MAX_CHUNK_TOKEN_SIZE,
         )
 
         UploadRecoveryService.recover_startup(

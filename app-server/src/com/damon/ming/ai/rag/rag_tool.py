@@ -59,6 +59,7 @@ def get_rag_choreographer(
     model_root_dir: str,
     inference_gateway: InferenceGateway,
     embedding_gateway: EmbeddingGateway,
+    max_chunk_token_size: int,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
@@ -68,6 +69,7 @@ def get_rag_choreographer(
         model_root_dir: 本地模型统一目录（由 RagRuntime 环境配置注入）。
         inference_gateway: 启动时装配的统一推理入口（必填）。
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
+        max_chunk_token_size: AppInitializer 注入的 RAG chunk 目标大小。
     """
     global _rag_choreographer_instance
     if _rag_choreographer_instance is None:
@@ -79,6 +81,7 @@ def get_rag_choreographer(
                     model_root_dir=model_root_dir,
                     inference_gateway=inference_gateway,
                     embedding_gateway=embedding_gateway,
+                    max_chunk_token_size=max_chunk_token_size,
                 )
     return _rag_choreographer_instance
 
@@ -88,6 +91,7 @@ class RagChoreographer:
     def __init__(
         self,
         pools: ThreadPoolGroup,
+        max_chunk_token_size: int,
         corpus_dir: str = "",
         model_root_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
@@ -109,6 +113,11 @@ class RagChoreographer:
 
         if embedding_gateway is None:
             raise ValueError("RagChoreographer 初始化失败：embedding_gateway 不能为空")
+
+        if type(max_chunk_token_size) is not int or max_chunk_token_size <= 0:
+            raise ValueError(
+                "RagChoreographer 初始化失败：max_chunk_token_size 必须是正整数"
+            )
 
         self.thread_pools = RagThreadPools()
         self.thread_pools.initialize(pools)
@@ -164,6 +173,7 @@ class RagChoreographer:
 
         self.splitter_manager = create_splitters(
             tokenizer=embedding_tokenizer,
+            max_chunk_token_size=max_chunk_token_size,
             max_input_tokens=embedding_max_input_tokens,
         )
         self.splitter = self.splitter_manager.get_structured()
