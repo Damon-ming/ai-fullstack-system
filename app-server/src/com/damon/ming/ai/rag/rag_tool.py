@@ -44,7 +44,6 @@ from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
 from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    RagThreadPoolConfig,
     SplitterRuntimeConfig,
     SummaryRuntimeConfig,
     TokenizerRuntimeConfig,
@@ -67,7 +66,7 @@ def get_rag_choreographer(
     inference_gateway: InferenceGateway,
     embedding_gateway: EmbeddingGateway,
     max_chunk_token_size: int,
-    thread_pool_config: RagThreadPoolConfig,
+    thread_pool_config: dict[str, object],
     constructor_config: dict[str, object],
     rerank_config: dict[str, object],
     retriever_config: dict[str, object],
@@ -127,7 +126,7 @@ class RagChoreographer:
         model_root_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
         embedding_gateway: EmbeddingGateway | None = None,
-        thread_pool_config: RagThreadPoolConfig | None = None,
+        thread_pool_config: dict[str, object] | None = None,
         constructor_config: dict[str, object] | None = None,
         rerank_config: dict[str, object] | None = None,
         retriever_config: dict[str, object] | None = None,

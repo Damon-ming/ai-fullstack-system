@@ -3,9 +3,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    RagThreadPoolConfig,
-)
+from src.com.damon.ming.ai.rag.thread_pools.config import RagThreadPoolConfig
 from src.com.damon.ming.thread import ThreadPoolGroup
 
 
@@ -15,14 +13,16 @@ class RagThreadPools:
     def __init__(self) -> None:
         self._pools: dict[str, ThreadPoolExecutor] = {}
 
-    def initialize(self, pools: ThreadPoolGroup, config: RagThreadPoolConfig) -> None:
+    def initialize(self, pools: ThreadPoolGroup, config: dict[str, object]) -> None:
         """在已授权的 RAG 资源组中创建配置的线程池。"""
         if self._pools:
             raise RuntimeError("RAG 线程池已经初始化")
 
+        parsed_config = RagThreadPoolConfig.from_mapping(config)
+
         self._pools = {
             name: pools.create_pool(name, workers)
-            for name, workers in config.workers.items()
+            for name, workers in parsed_config.workers.items()
         }
 
     def _get_pool(self, name: str) -> ThreadPoolExecutor:
