@@ -44,7 +44,6 @@ from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
 from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    SplitterRuntimeConfig,
     SummaryRuntimeConfig,
     TokenizerRuntimeConfig,
 )
@@ -70,7 +69,7 @@ def get_rag_choreographer(
     constructor_config: dict[str, object],
     rerank_config: dict[str, object],
     retriever_config: dict[str, object],
-    splitter_config: SplitterRuntimeConfig,
+    splitter_config: dict[str, object],
     summary_config: SummaryRuntimeConfig,
     source_config: SourceConfig,
     tokenizer_config: TokenizerRuntimeConfig,
@@ -130,7 +129,7 @@ class RagChoreographer:
         constructor_config: dict[str, object] | None = None,
         rerank_config: dict[str, object] | None = None,
         retriever_config: dict[str, object] | None = None,
-        splitter_config: SplitterRuntimeConfig | None = None,
+        splitter_config: dict[str, object] | None = None,
         summary_config: SummaryRuntimeConfig | None = None,
         source_config: SourceConfig | None = None,
         tokenizer_config: TokenizerRuntimeConfig | None = None,

@@ -1,11 +1,9 @@
 # app-server/src/com/damon/ming/ai/rag/spliter/manager.py
 """分割器的初始化和访问入口。"""
 
+from src.com.damon.ming.ai.rag.spliter.config import SplitterConfig
 from src.com.damon.ming.ai.rag.spliter.spliter import StructuredDocumentSplitter
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    SplitterRuntimeConfig,
-)
 
 
 class SplitterManager:
@@ -19,10 +17,11 @@ class SplitterManager:
         tokenizer: BaseTokenizer,
         max_chunk_token_size: int,
         max_input_tokens: int,
-        config: SplitterRuntimeConfig,
+        config: dict[str, object],
     ) -> None:
         if self._structured is not None:
             raise RuntimeError("RAG 分割器已经初始化")
+        config = SplitterConfig.from_mapping(config)
         chunk_size = min(max_chunk_token_size, max_input_tokens)
         overlap = min(config.chunk_overlap, chunk_size - 1)
         self._structured = StructuredDocumentSplitter(

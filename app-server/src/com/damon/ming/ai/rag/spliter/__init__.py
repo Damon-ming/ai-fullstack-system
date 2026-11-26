@@ -1,11 +1,9 @@
 # app-server/src/com/damon/ming/ai/rag/spliter/__init__.py
 
+from src.com.damon.ming.ai.rag.spliter.config import SplitterConfig
 from src.com.damon.ming.ai.rag.spliter.spliter import (
     BaseDocumentSplitter,
     StructuredDocumentSplitter,
-)
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    SplitterRuntimeConfig,
 )
 
 
@@ -14,7 +12,7 @@ def create_splitters(
     tokenizer,
     max_chunk_token_size: int,
     max_input_tokens: int,
-    config: SplitterRuntimeConfig,
+    config: dict[str, object],
 ):
     """使用注入的 splitter 策略，并应用 embedding 输入上限。"""
     from src.com.damon.ming.ai.rag.spliter.manager import SplitterManager
@@ -26,6 +24,7 @@ def create_splitters(
 
 __all__ = [
     "BaseDocumentSplitter",
+    "SplitterConfig",
     "StructuredDocumentSplitter",
     "create_splitters",
 ]

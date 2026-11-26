@@ -30,27 +30,6 @@ from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True)
-class SplitterRuntimeConfig:
-    chunk_overlap: int
-    max_grouped_chunks_per_section: int
-    max_headed_chunks_per_section: int
-
-    def __post_init__(self) -> None:
-        if type(self.chunk_overlap) is not int or self.chunk_overlap < 0:
-            raise ValueError("chunk_overlap 必须是非负整数")
-        if (
-            type(self.max_grouped_chunks_per_section) is not int
-            or self.max_grouped_chunks_per_section <= 0
-        ):
-            raise ValueError("max_grouped_chunks_per_section 必须是正整数")
-        if (
-            type(self.max_headed_chunks_per_section) is not int
-            or self.max_headed_chunks_per_section <= 0
-        ):
-            raise ValueError("max_headed_chunks_per_section 必须是正整数")
-
-
-@dataclass(frozen=True)
 class SummaryRuntimeConfig:
     system_prompt_template: str
     context_message_template: str
@@ -167,7 +146,7 @@ class RagRuntimeConfig:
     embedding: EmbeddingRuntimeConfig
     rerank: dict[str, Any]
     retriever: dict[str, Any]
-    splitter: SplitterRuntimeConfig
+    splitter: dict[str, Any]
     summary: SummaryRuntimeConfig
     source: SourceConfig
     tokenizer: TokenizerRuntimeConfig
@@ -313,24 +292,11 @@ class RagConfigLoader:
         )
 
     @staticmethod
-    def _load_splitter(raw: dict) -> SplitterRuntimeConfig:
+    def _load_splitter(raw: dict) -> dict[str, Any]:
         splitter = raw.get("splitter")
         if not isinstance(splitter, dict):
             raise TypeError("RAG splitter 配置必须是键值对象")
-        try:
-            return SplitterRuntimeConfig(
-                chunk_overlap=(
-                    0
-                    if splitter.get("chunk_overlap") is None
-                    else splitter["chunk_overlap"]
-                ),
-                max_grouped_chunks_per_section=splitter[
-                    "max_grouped_chunks_per_section"
-                ],
-                max_headed_chunks_per_section=splitter["max_headed_chunks_per_section"],
-            )
-        except KeyError as exc:
-            raise ValueError(f"分割器配置缺少必填字段: {exc}") from exc
+        return splitter
 
     @staticmethod
     def _load_retriever(raw: dict) -> dict[str, Any]:
