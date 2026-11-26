@@ -18,8 +18,8 @@ from pathlib import Path
 
 from src.com.damon.ming.ai.rag.rerank.base_reranker import (
     BaseReranker,
-    RerankerParams,
 )
+from src.com.damon.ming.ai.rag.rerank.config import RerankConfig, RerankerParams
 
 # ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 _name_to_class: dict[str, type[BaseReranker]] = {}
@@ -54,8 +54,7 @@ def list_engines() -> list[str]:
 from src.com.damon.ming.ai.rag.rerank.cross_encoder_reranker import CrossEncoderReranker
 
 
-# todo model_root_dir是否可以合并到config
-def create_rerankers(model_root_dir: Path, config):
+def create_rerankers(model_root_dir: Path, config: dict[str, object]):
     """初始化并返回重排器管理器。"""
     from src.com.damon.ming.ai.rag.rerank.manager import RerankersManager
 
@@ -67,6 +66,7 @@ def create_rerankers(model_root_dir: Path, config):
 __all__ = [
     "BaseReranker",
     "CrossEncoderReranker",
+    "RerankConfig",
     "RerankerParams",
     "create_rerankers",
     "list_engines",

@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from src.com.damon.ming.ai.rag.embedding.params import VLLMEmbeddingParams
-from src.com.damon.ming.ai.rag.rerank.base_reranker import RerankerParams
 from src.com.damon.ming.app.config.ai.rag.source_config import SourceConfig
 from src.com.damon.ming.app.config.ai.rag.source_config_parser import SourceConfigParser
 from src.com.damon.ming.app.config.ai_runtime_config import (
@@ -137,11 +136,6 @@ class EmbeddingRuntimeConfig:
     roles: dict[str, EmbeddingRoleConfig]
 
 
-@dataclass(frozen=True)
-class RerankRuntimeConfig:
-    roles: dict[str, RerankerParams]
-
-
 def build_embedding_params(
     model_root_dir: Path, config: EmbeddingRuntimeConfig
 ) -> dict[str, VLLMEmbeddingParams]:
@@ -201,7 +195,7 @@ class RagRuntimeConfig:
     rag: RagConfig
     constructor: dict[str, Any]
     embedding: EmbeddingRuntimeConfig
-    rerank: RerankRuntimeConfig
+    rerank: dict[str, Any]
     retriever: RetrieverRuntimeConfig
     splitter: SplitterRuntimeConfig
     summary: SummaryRuntimeConfig
@@ -430,30 +424,11 @@ class RagConfigLoader:
         return RetrieverRuntimeConfig(roles=roles)
 
     @staticmethod
-    def _load_rerank(raw: dict) -> RerankRuntimeConfig:
+    def _load_rerank(raw: dict) -> dict[str, Any]:
         rerank = raw.get("rerank")
         if not isinstance(rerank, dict):
             raise TypeError("RAG rerank 配置必须是键值对象")
-        raw_roles = rerank.get("roles")
-        if not isinstance(raw_roles, dict) or not raw_roles:
-            raise ValueError("RAG rerank 配置缺少 roles")
-
-        known_fields = {f.name for f in RerankerParams.__dataclass_fields__.values()}
-        roles: dict[str, RerankerParams] = {}
-        for name, config in raw_roles.items():
-            if not isinstance(config, dict):
-                raise TypeError(f"重排器配置 '{name}' 必须是键值对象")
-            base_kwargs = {
-                key: value for key, value in config.items() if key in known_fields
-            }
-            extra_kwargs = {
-                key: value for key, value in config.items() if key not in known_fields
-            }
-            try:
-                roles[name] = RerankerParams(**base_kwargs, extra=extra_kwargs)
-            except (TypeError, ValueError) as exc:
-                raise type(exc)(f"重排器配置 '{name}' 无效: {exc}") from exc
-        return RerankRuntimeConfig(roles=roles)
+        return rerank
 
     @staticmethod
     def _load_embedding(raw: dict) -> EmbeddingRuntimeConfig:

@@ -9,10 +9,8 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     HEADING_PATH,
 )
 from src.com.damon.ming.ai.rag.rerank import register_reranker
-from src.com.damon.ming.ai.rag.rerank.base_reranker import (
-    BaseReranker,
-    RerankerParams,
-)
+from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker
+from src.com.damon.ming.ai.rag.rerank.config import RerankerParams
 from src.com.damon.ming.log import pin
 
 

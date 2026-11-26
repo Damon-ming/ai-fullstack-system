@@ -4,22 +4,20 @@ from dataclasses import replace
 from pathlib import Path
 
 from src.com.damon.ming.ai.rag.rerank.base_reranker import BaseReranker
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    RerankRuntimeConfig,
-)
+from src.com.damon.ming.ai.rag.rerank.config import RerankConfig
 
 
 class RerankersManager:
     def __init__(self) -> None:
         self._model_root_dir: Path | None = None
-        self._config: RerankRuntimeConfig | None = None
+        self._config: RerankConfig | None = None
         self._rerankers: dict[str, BaseReranker] = {}
 
-    def initialize(self, model_root_dir: Path, config: RerankRuntimeConfig) -> None:
+    # todo：看下怎么处理这个路径问题
+    def initialize(self, model_root_dir: Path, config: dict[str, object]) -> None:
         if self._config is not None:
             raise RuntimeError("RAG 重排器已经初始化")
-        if not config.roles:
-            raise ValueError("RAG 重排器缺少配置")
+        config = RerankConfig.from_mapping(config)
         from src.com.damon.ming.ai.rag.rerank import list_engines
         from src.com.damon.ming.log import pin
 

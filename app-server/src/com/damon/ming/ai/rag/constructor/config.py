@@ -7,13 +7,23 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ConstructorConfig:
     """Formatting rules used when reconstructed sections are sent to the model."""
 
     source_label_template: str
     heading_label_template: str
     heading_separator: str
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("source_label_template", self.source_label_template),
+            ("heading_label_template", self.heading_label_template),
+        ):
+            if not isinstance(value, str) or "{value}" not in value:
+                raise ValueError(f"{name} 必须是包含 {{value}} 的字符串")
+        if not isinstance(self.heading_separator, str) or not self.heading_separator:
+            raise ValueError("heading_separator 必须是非空字符串")
 
     @classmethod
     def from_mapping(cls, raw: Any) -> ConstructorConfig:

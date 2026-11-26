@@ -45,7 +45,6 @@ from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
 from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
     RagThreadPoolConfig,
-    RerankRuntimeConfig,
     RetrieverRuntimeConfig,
     SplitterRuntimeConfig,
     SummaryRuntimeConfig,
@@ -71,7 +70,7 @@ def get_rag_choreographer(
     max_chunk_token_size: int,
     thread_pool_config: RagThreadPoolConfig,
     constructor_config: dict[str, object],
-    rerank_config: RerankRuntimeConfig,
+    rerank_config: dict[str, object],
     retriever_config: RetrieverRuntimeConfig,
     splitter_config: SplitterRuntimeConfig,
     summary_config: SummaryRuntimeConfig,
@@ -83,13 +82,13 @@ def get_rag_choreographer(
     Args:
         pools: 仅限 RAG 资源组的线程池能力，由 AppInitializer 注入。
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
-        model_root_dir: 本地模型统一目录（由 RagRuntime 环境配置注入）。
+        model_root_dir: 本地模型统一目录（来自 rag-runtime.yaml）。
         inference_gateway: 启动时装配的统一推理入口（必填）。
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
         max_chunk_token_size: AppInitializer 注入的 RAG chunk 目标大小。
         thread_pool_config: AppInitializer 注入的 RAG 内部线程池配置。
         constructor_config: AppInitializer 透传的 constructor YAML 配置段。
-        rerank_config: AppInitializer 注入的重排运行配置。
+        rerank_config: AppInitializer 透传的 rerank YAML 配置段。
         retriever_config: AppInitializer 注入的检索运行配置。
         splitter_config: AppInitializer 注入的文档切分配置。
         summary_config: AppInitializer 注入的摘要策略配置。
@@ -131,7 +130,7 @@ class RagChoreographer:
         embedding_gateway: EmbeddingGateway | None = None,
         thread_pool_config: RagThreadPoolConfig | None = None,
         constructor_config: dict[str, object] | None = None,
-        rerank_config: RerankRuntimeConfig | None = None,
+        rerank_config: dict[str, object] | None = None,
         retriever_config: RetrieverRuntimeConfig | None = None,
         splitter_config: SplitterRuntimeConfig | None = None,
         summary_config: SummaryRuntimeConfig | None = None,
@@ -161,7 +160,7 @@ class RagChoreographer:
         if constructor_config is None:
             raise ValueError("RagChoreographer 初始化失败：constructor_config 不能为空")
 
-        if rerank_config is None or not rerank_config.roles:
+        if rerank_config is None:
             raise ValueError("RagChoreographer 初始化失败：rerank_config 不能为空")
 
         if retriever_config is None or "hybrid" not in retriever_config.roles:
