@@ -8,16 +8,13 @@ Embedding 引擎参数与配置解析均由本模块维护；应用层提供网�
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
-from src.com.damon.ming.ai.rag.embedding.config import (
-    EmbeddingConfig,
-    EmbeddingRoleConfig,
-    EmbeddingTransportConfig,
-)
+from src.com.damon.ming.ai.rag.embedding.config import EmbeddingConfig
 from src.com.damon.ming.ai.rag.embedding.embedding_gateway import EmbeddingGateway
 from src.com.damon.ming.ai.rag.embedding.huggingface import HuggingFaceEmbedding
 from src.com.damon.ming.ai.rag.embedding.params import (
     EmbeddingGatewayParams,
     EmbeddingParams,
+    EmbeddingRoleParams,
     HuggingFaceEmbeddingParams,
 )
 from src.com.damon.ming.ai.rag.embedding.vllm_embedding import VllmEmbedding
@@ -28,8 +25,7 @@ __all__ = [
     "EmbeddingGateway",
     "EmbeddingGatewayParams",
     "EmbeddingParams",
-    "EmbeddingRoleConfig",
-    "EmbeddingTransportConfig",
+    "EmbeddingRoleParams",
     "HuggingFaceEmbedding",
     "HuggingFaceEmbeddingParams",
     "VllmEmbedding",

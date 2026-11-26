@@ -60,6 +60,20 @@ class EmbeddingGatewayParams:
 
 
 @dataclass(frozen=True, kw_only=True)
+class EmbeddingRoleParams:
+    """同一角色的 embedding 业务参数和网关连接参数。"""
+
+    embedding: EmbeddingParams
+    gateway: EmbeddingGatewayParams
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.embedding, EmbeddingParams):
+            raise TypeError("embedding 必须使用 EmbeddingParams")
+        if not isinstance(self.gateway, EmbeddingGatewayParams):
+            raise TypeError("gateway 必须使用 EmbeddingGatewayParams")
+
+
+@dataclass(frozen=True, kw_only=True)
 class HuggingFaceEmbeddingParams(EmbeddingParams):
     device: str
     concurrency: int
