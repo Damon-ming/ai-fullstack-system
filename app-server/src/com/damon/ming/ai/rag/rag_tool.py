@@ -44,7 +44,6 @@ from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
 from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    ConstructorConfig,
     RagThreadPoolConfig,
     RerankRuntimeConfig,
     RetrieverRuntimeConfig,
@@ -71,7 +70,7 @@ def get_rag_choreographer(
     embedding_gateway: EmbeddingGateway,
     max_chunk_token_size: int,
     thread_pool_config: RagThreadPoolConfig,
-    constructor_config: ConstructorConfig,
+    constructor_config: dict[str, object],
     rerank_config: RerankRuntimeConfig,
     retriever_config: RetrieverRuntimeConfig,
     splitter_config: SplitterRuntimeConfig,
@@ -89,7 +88,7 @@ def get_rag_choreographer(
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
         max_chunk_token_size: AppInitializer 注入的 RAG chunk 目标大小。
         thread_pool_config: AppInitializer 注入的 RAG 内部线程池配置。
-        constructor_config: AppInitializer 注入的章节重建标签配置。
+        constructor_config: AppInitializer 透传的 constructor YAML 配置段。
         rerank_config: AppInitializer 注入的重排运行配置。
         retriever_config: AppInitializer 注入的检索运行配置。
         splitter_config: AppInitializer 注入的文档切分配置。
@@ -131,7 +130,7 @@ class RagChoreographer:
         inference_gateway: InferenceGateway | None = None,
         embedding_gateway: EmbeddingGateway | None = None,
         thread_pool_config: RagThreadPoolConfig | None = None,
-        constructor_config: ConstructorConfig | None = None,
+        constructor_config: dict[str, object] | None = None,
         rerank_config: RerankRuntimeConfig | None = None,
         retriever_config: RetrieverRuntimeConfig | None = None,
         splitter_config: SplitterRuntimeConfig | None = None,

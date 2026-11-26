@@ -31,15 +31,6 @@ from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True)
-class ConstructorConfig:
-    """章节重建的来源与标题标签格式。"""
-
-    source_label_template: str
-    heading_label_template: str
-    heading_separator: str
-
-
-@dataclass(frozen=True)
 class RetrieverConfig:
     """检索器构造、候选池及最终输出参数。"""
 
@@ -208,7 +199,7 @@ class RagRuntimeConfig:
     """
 
     rag: RagConfig
-    constructor: ConstructorConfig
+    constructor: dict[str, Any]
     embedding: EmbeddingRuntimeConfig
     rerank: RerankRuntimeConfig
     retriever: RetrieverRuntimeConfig
@@ -511,27 +502,11 @@ class RagConfigLoader:
         return EmbeddingRuntimeConfig(timeout_seconds=float(timeout), roles=roles)
 
     @staticmethod
-    def _load_constructor(raw: dict) -> ConstructorConfig:
+    def _load_constructor(raw: dict) -> dict[str, Any]:
         constructor = raw.get("constructor")
         if not isinstance(constructor, dict):
             raise TypeError("运行时配置缺少 constructor 段")
-
-        templates = {}
-        for key in ("source_label_template", "heading_label_template"):
-            value = constructor.get(key)
-            if not isinstance(value, str) or "{value}" not in value:
-                raise ValueError(f"constructor.{key} 必须是包含 {{value}} 的字符串")
-            templates[key] = value
-
-        heading_separator = constructor.get("heading_separator")
-        if not isinstance(heading_separator, str) or not heading_separator:
-            raise ValueError("constructor.heading_separator 必须是非空字符串")
-
-        return ConstructorConfig(
-            source_label_template=templates["source_label_template"],
-            heading_label_template=templates["heading_label_template"],
-            heading_separator=heading_separator,
-        )
+        return constructor
 
     # ---- 私有：YAML 段映射 ----------------------------------------------
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
 from llama_index.core.schema import TextNode
+from src.com.damon.ming.ai.rag.constructor.config import ConstructorConfig
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     FILE_ID,
     FILE_NAME,
@@ -27,9 +28,6 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     TOTAL_PAGES,
 )
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    ConstructorConfig,
-)
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 
@@ -56,10 +54,10 @@ class SectionReconstructor:
     """
 
     def __init__(
-        self, retrieval_pool: ThreadPoolExecutor, config: ConstructorConfig
+        self, retrieval_pool: ThreadPoolExecutor, config: dict[str, object]
     ) -> None:
         self._executor = retrieval_pool
-        self._config = config
+        self._config = ConstructorConfig.from_mapping(config)
 
     async def reconstruct_sections_to_nodes(
         self,
