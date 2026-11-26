@@ -1,0 +1,16 @@
+# retriever 模块配置。
+roles:
+  hybrid:
+    # reranker 精选后的 section 数；候选池大小由 retrieve_top_k 控制。
+    top_k: 5
+    retrieve_top_k: 20
+    dense_top_k: 30
+    sparse_top_k: 30
+    dedup_by_section: true
+    dense_weight: 0.7
+    sparse_weight: 0.3
+    fuse_k: 40
+    retrieval_timeout_seconds: 30
+    params:
+      max_section_oversample_multiplier: 5
+      rrf_oversample_multiplier: 2

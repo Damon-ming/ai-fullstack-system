@@ -1,0 +1,13 @@
+# rerank 模块配置。
+# 当前使用一个多语言重排器；相对模型名位于 MODEL_ROOT_DIR/rerank/ 下。
+roles:
+  bge_reranker_v2_m3:
+    model_name: bge-reranker-v2-m3
+    batch_size: 16
+    max_seq_len: 1024
+    device: cuda
+    window_overlap: 128
+    max_windows_per_node: 5
+    score_threshold: 0.5
+    include_heading: true
+    heading_prefix_template: "[{heading_path}]"

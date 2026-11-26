@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
     from src.com.damon.ming.ai.rag.rag_tool import RagChoreographer
-    from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+    from src.com.damon.ming.app.config.ai.rag.config import (
         LocaleConfig,
     )
     from src.com.damon.ming.app.config.system.system_config_loader import SystemConfig
@@ -60,7 +60,6 @@ class RagRuntime:
     """RAG 容器及流程配置。"""
 
     rag_sem: asyncio.Semaphore
-    rag_context_max_tokens: int
     execution_timeout_seconds: float
     retry_ms: int
     model_root_dir: str

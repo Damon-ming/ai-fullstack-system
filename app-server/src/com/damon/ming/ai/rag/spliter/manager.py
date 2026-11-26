@@ -15,18 +15,17 @@ class SplitterManager:
     def initialize(
         self,
         tokenizer: BaseTokenizer,
-        max_chunk_token_size: int,
         max_input_tokens: int,
         config: dict[str, object],
     ) -> None:
         if self._structured is not None:
             raise RuntimeError("RAG 分割器已经初始化")
         config = SplitterConfig.from_mapping(config)
-        chunk_size = min(max_chunk_token_size, max_input_tokens)
+        chunk_size = min(config.chunk_token_size, max_input_tokens)
         overlap = min(config.chunk_overlap, chunk_size - 1)
         self._structured = StructuredDocumentSplitter(
             tokenizer=tokenizer,
-            max_chunk_token_size=chunk_size,
+            chunk_token_size=chunk_size,
             chunk_overlap=overlap,
             max_grouped_chunks_per_section=config.max_grouped_chunks_per_section,
             max_headed_chunks_per_section=config.max_headed_chunks_per_section,

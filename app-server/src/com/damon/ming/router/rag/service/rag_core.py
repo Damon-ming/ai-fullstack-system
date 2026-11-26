@@ -37,7 +37,6 @@ async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
         logger.debug("开始执行 RAG 检索")
         ref_content = await app_state.ai.rag.choreographer.build_rag_context(
             query,
-            max_context_tokens=app_state.ai.rag.rag_context_max_tokens,
         )
 
     chat_cfg = _resolve_locale_text(app_state.ai.rag.locales, get_locale())

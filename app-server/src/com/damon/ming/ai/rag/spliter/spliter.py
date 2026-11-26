@@ -64,20 +64,20 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
     def __init__(
         self,
         tokenizer: BaseTokenizer,
-        max_chunk_token_size: int,
+        chunk_token_size: int,
         max_grouped_chunks_per_section: int,
         max_headed_chunks_per_section: int,
         chunk_overlap: int | None = None,
     ):
-        if type(max_chunk_token_size) is not int or max_chunk_token_size <= 0:
-            raise ValueError("max_chunk_token_size 必须是正整数")
+        if type(chunk_token_size) is not int or chunk_token_size <= 0:
+            raise ValueError("chunk_token_size 必须是正整数")
         if chunk_overlap is None:
             chunk_overlap = 0
         if (
             type(chunk_overlap) is not int
-            or not 0 <= chunk_overlap < max_chunk_token_size
+            or not 0 <= chunk_overlap < chunk_token_size
         ):
-            raise ValueError("chunk_overlap 必须是小于 max_chunk_token_size 的非负整数")
+            raise ValueError("chunk_overlap 必须是小于 chunk_token_size 的非负整数")
         if (
             type(max_grouped_chunks_per_section) is not int
             or max_grouped_chunks_per_section <= 0
@@ -88,7 +88,7 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
             or max_headed_chunks_per_section <= 0
         ):
             raise ValueError("max_headed_chunks_per_section 必须是正整数")
-        self.max_chunk_token_size = max_chunk_token_size
+        self.chunk_token_size = chunk_token_size
         self.chunk_overlap = chunk_overlap
         self.max_grouped_chunks_per_section = max_grouped_chunks_per_section
         self.max_headed_chunks_per_section = max_headed_chunks_per_section
@@ -192,12 +192,12 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         self,
         doc: Document,
         page_offset_list: list,
-        max_chunk_size: int,
+        chunk_token_size: int,
         token_splitter: TokenTextSplitter,
         stats: dict[str, int],
     ) -> list[TextNode]:
         """处理单个文档（同步）"""
-        limit = max_chunk_size
+        limit = chunk_token_size
         doc_nodes = []
         doc_text = doc.text.strip()
 
@@ -392,15 +392,15 @@ class StructuredDocumentSplitter(BaseDocumentSplitter):
         if not docs:
             return []
 
-        effective_size = self.max_chunk_token_size
+        effective_size = self.chunk_token_size
         effective_overlap = self.chunk_overlap
         if type(effective_size) is not int or effective_size <= 0:
-            raise ValueError("max_chunk_size 必须是正整数")
+            raise ValueError("chunk_token_size 必须是正整数")
         if (
             type(effective_overlap) is not int
             or not 0 <= effective_overlap < effective_size
         ):
-            raise ValueError("chunk_overlap 必须是小于 max_chunk_size 的非负整数")
+            raise ValueError("chunk_overlap 必须是小于 chunk_token_size 的非负整数")
         token_splitter = TokenTextSplitter(
             chunk_size=effective_size,
             chunk_overlap=effective_overlap,

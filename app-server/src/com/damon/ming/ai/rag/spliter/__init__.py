@@ -10,7 +10,6 @@ from src.com.damon.ming.ai.rag.spliter.spliter import (
 def create_splitters(
     *,
     tokenizer,
-    max_chunk_token_size: int,
     max_input_tokens: int,
     config: dict[str, object],
 ):
@@ -18,7 +17,7 @@ def create_splitters(
     from src.com.damon.ming.ai.rag.spliter.manager import SplitterManager
 
     manager = SplitterManager()
-    manager.initialize(tokenizer, max_chunk_token_size, max_input_tokens, config)
+    manager.initialize(tokenizer, max_input_tokens, config)
     return manager
 
 

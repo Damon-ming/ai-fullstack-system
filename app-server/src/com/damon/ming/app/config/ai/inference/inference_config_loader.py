@@ -10,10 +10,6 @@ from src.com.damon.ming.ai.inference.base_inference import (
     BaseInferenceService,
     InferenceParams,
 )
-from src.com.damon.ming.app.config.ai_runtime_config import (
-    get_default_max_output_tokens,
-    get_model_max_len,
-)
 from src.com.damon.ming.app.config.env import (
     get_inference_gateway_url,
     get_inference_server,
@@ -121,9 +117,10 @@ class InferenceConfigLoader:
             if not isinstance(options, dict):
                 raise TypeError(f"{path}.options 必须是键值对")
             options = dict(options)
-            options["max_tokens"] = get_default_max_output_tokens(role)
             role_timeout = params.get("timeout_seconds")
-            max_model_len = get_model_max_len(name)
+            max_model_len = params.get("max_model_len")
+            if type(max_model_len) is not int or max_model_len < 2:
+                raise ValueError(f"{path}.max_model_len 必须是大于等于 2 的整数")
             if role_timeout is not None and (
                 isinstance(role_timeout, bool)
                 or not isinstance(role_timeout, (int, float))
@@ -132,7 +129,7 @@ class InferenceConfigLoader:
             ):
                 raise ValueError(f"{path}.timeout_seconds 必须是有限正数")
             if "max_tokens" in options and (
-                type(options["max_tokens"]) is not int or options["max_tokens"] < 1
+                type(options.get("max_tokens")) is not int or options["max_tokens"] < 1
             ):
                 raise ValueError(f"{path}.options.max_tokens 必须是正整数")
             for field, lower, upper in (("temperature", 0, 2), ("top_p", 0, 1)):

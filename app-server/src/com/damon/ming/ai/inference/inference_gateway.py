@@ -118,7 +118,7 @@ class RoleInference:
         return self._gateway._resolve(self._role)[2]
 
     def context_window(self) -> int:
-        """返回该模型在 model-config 中配置的上下文窗口。"""
+        """返回该角色在 inference YAML 中配置的上下文窗口。"""
         return self._gateway._roles[self._role].max_model_len
 
     async def generate(self, messages: list[dict[str, str]], **kwargs: Any) -> str:

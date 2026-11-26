@@ -1,0 +1,11 @@
+# tokenizer 模块配置。
+# llm_counter 当前使用 cl100k_base；生成模型变更后需与模型 tokenizer 对齐。
+roles:
+  llm_counter:
+    tokenizer_engine: tiktoken
+    params:
+      encoding_name: cl100k_base
+  bm25_searcher:
+    tokenizer_engine: jieba
+    params:
+      dicts_dir: dicts  # 相对于 tokenizer/ 目录

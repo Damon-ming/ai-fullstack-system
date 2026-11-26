@@ -43,7 +43,6 @@ class AppInitializer:
         self.rag_choreographer = None
         self.inference_gateway = None
         self.embedding_gateway = None
-        self.rag_context_max_tokens = None
 
         # 上传改为逐文件同步入库，无需后台任务
 
@@ -98,7 +97,6 @@ class AppInitializer:
         app.state.ai = AIRuntime(
             rag=RagRuntime(
                 rag_sem=self.rag_sem,
-                rag_context_max_tokens=self.rag_context_max_tokens,
                 execution_timeout_seconds=self.execution_timeout_seconds,
                 retry_ms=self.rag_retry_ms,
                 model_root_dir=self.model_root_dir,
@@ -400,25 +398,32 @@ class AppInitializer:
         from src.com.damon.ming.app.config.ai.inference.inference_config_loader import (
             InferenceConfigLoader,
         )
-        from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
+        from src.com.damon.ming.app.config.ai.rag.config import (
+            RagConfig,
             RagConfigLoader,
         )
-        from src.com.damon.ming.app.config.ai_runtime_config import (
-            RAG_CONTEXT_MAX_TOKENS,
-            RAG_MAX_CHUNK_TOKEN_SIZE,
+        from src.com.damon.ming.app.config.env import (
+            get_inference_gateway_url,
+            get_model_root_dir,
         )
-        from src.com.damon.ming.app.config.env import get_inference_gateway_url
+        from src.com.damon.ming.app.config.i18n.i18n_config_loader import (
+            I18nConfigLoader,
+        )
         from src.com.damon.ming.app.thread_pools import get_rag_pool_group
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
         )
 
-        rag_runtime = RagConfigLoader().load()
-        rag = rag_runtime.rag
+        rag_config_loader = RagConfigLoader()
+
+        rag = RagConfig.from_mapping(
+            rag_config_loader.get_rag_config(),
+            default_locale=I18nConfigLoader().load().default_locale,
+        )
         inference_config = InferenceConfigLoader().load()
-        self.model_root_dir = rag.model_root_dir
+        self.model_root_dir = get_model_root_dir()
         self.embedding_gateway = EmbeddingGateway.from_mapping(
-            rag_runtime.embedding,
+            rag_config_loader.get_embedding_config(),
             model_root_dir=Path(self.model_root_dir),
             # todo:解决base_url问题
             base_url=get_inference_gateway_url(),
@@ -445,22 +450,14 @@ class AppInitializer:
             asyncio.Semaphore(inference_config.max_concurrency),
         )
 
-        self.rag_context_max_tokens = RAG_CONTEXT_MAX_TOKENS
         self.rag_choreographer = get_rag_choreographer(
             pools=get_rag_pool_group(),
             corpus_dir=self.system_config.corpus_dir,
             model_root_dir=self.model_root_dir,
             inference_gateway=self.inference_gateway,
             embedding_gateway=self.embedding_gateway,
-            max_chunk_token_size=RAG_MAX_CHUNK_TOKEN_SIZE,
-            thread_pool_config=rag_runtime.thread_pools,
-            constructor_config=rag_runtime.constructor,
-            rerank_config=rag_runtime.rerank,
-            retriever_config=rag_runtime.retriever,
-            splitter_config=rag_runtime.splitter,
-            summary_config=rag_runtime.summary,
-            source_config=rag_runtime.source,
-            tokenizer_config=rag_runtime.tokenizer,
+            context_max_tokens=rag.context_max_tokens,
+            config=rag_config_loader.get_modules_config(),
         )
 
         UploadRecoveryService.recover_startup(

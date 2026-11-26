@@ -24,8 +24,10 @@ RAG 容器 —— 检索线程编排层。
 import asyncio
 import threading
 from pathlib import Path
+from typing import Any
 
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
+from src.com.damon.ming.ai.rag.config import ChoreographerConfig, RagModuleConfig
 from src.com.damon.ming.ai.rag.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.rag.embedding import (
     EmbeddingGateway,
@@ -59,33 +61,19 @@ def get_rag_choreographer(
     model_root_dir: str,
     inference_gateway: InferenceGateway,
     embedding_gateway: EmbeddingGateway,
-    max_chunk_token_size: int,
-    thread_pool_config: dict[str, object],
-    constructor_config: dict[str, object],
-    rerank_config: dict[str, object],
-    retriever_config: dict[str, object],
-    splitter_config: dict[str, object],
-    summary_config: dict[str, object],
-    source_config: dict[str, object],
-    tokenizer_config: dict[str, object],
+    context_max_tokens: int,
+    config: dict[str, Any],
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
     Args:
         pools: 仅限 RAG 资源组的线程池能力，由 AppInitializer 注入。
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
-        model_root_dir: 本地模型统一目录（来自 rag-runtime.yaml）。
+        model_root_dir: 本地模型统一目录（由应用环境配置注入）。
         inference_gateway: 启动时装配的统一推理入口（必填）。
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
-        max_chunk_token_size: AppInitializer 注入的 RAG chunk 目标大小。
-        thread_pool_config: AppInitializer 注入的 RAG 内部线程池配置。
-        constructor_config: AppInitializer 透传的 constructor YAML 配置段。
-        rerank_config: AppInitializer 透传的 rerank YAML 配置段。
-        retriever_config: AppInitializer 透传的 retriever YAML 配置段。
-        splitter_config: AppInitializer 注入的文档切分配置。
-        summary_config: AppInitializer 注入的摘要策略配置。
-        source_config: AppInitializer 透传的 source YAML 配置段。
-        tokenizer_config: AppInitializer 透传的 tokenizer YAML 配置段。
+        context_max_tokens: AppInitializer 从 rag 段注入的参考上下文 token 上限。
+        config: AppInitializer 透传的 RAG YAML modules 配置段。
     """
     global _rag_choreographer_instance
     if _rag_choreographer_instance is None:
@@ -97,15 +85,8 @@ def get_rag_choreographer(
                     model_root_dir=model_root_dir,
                     inference_gateway=inference_gateway,
                     embedding_gateway=embedding_gateway,
-                    max_chunk_token_size=max_chunk_token_size,
-                    thread_pool_config=thread_pool_config,
-                    constructor_config=constructor_config,
-                    rerank_config=rerank_config,
-                    retriever_config=retriever_config,
-                    splitter_config=splitter_config,
-                    summary_config=summary_config,
-                    source_config=source_config,
-                    tokenizer_config=tokenizer_config,
+                    context_max_tokens=context_max_tokens,
+                    config=config,
                 )
     return _rag_choreographer_instance
 
@@ -115,19 +96,12 @@ class RagChoreographer:
     def __init__(
         self,
         pools: ThreadPoolGroup,
-        max_chunk_token_size: int,
+        context_max_tokens: int,
         corpus_dir: str = "",
         model_root_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
         embedding_gateway: EmbeddingGateway | None = None,
-        thread_pool_config: dict[str, object] | None = None,
-        constructor_config: dict[str, object] | None = None,
-        rerank_config: dict[str, object] | None = None,
-        retriever_config: dict[str, object] | None = None,
-        splitter_config: dict[str, object] | None = None,
-        summary_config: dict[str, object] | None = None,
-        source_config: dict[str, object] | None = None,
-        tokenizer_config: dict[str, object] | None = None,
+        config: dict[str, Any] | None = None,
     ):
         logger.info("RAG 容器初始化开始")
 
@@ -146,37 +120,13 @@ class RagChoreographer:
         if embedding_gateway is None:
             raise ValueError("RagChoreographer 初始化失败：embedding_gateway 不能为空")
 
-        if thread_pool_config is None:
-            raise ValueError("RagChoreographer 初始化失败：thread_pool_config 不能为空")
-
-        if constructor_config is None:
-            raise ValueError("RagChoreographer 初始化失败：constructor_config 不能为空")
-
-        if rerank_config is None:
-            raise ValueError("RagChoreographer 初始化失败：rerank_config 不能为空")
-
-        if retriever_config is None:
-            raise ValueError("RagChoreographer 初始化失败：retriever_config 不能为空")
-
-        if splitter_config is None:
-            raise ValueError("RagChoreographer 初始化失败：splitter_config 不能为空")
-
-        if summary_config is None:
-            raise ValueError("RagChoreographer 初始化失败：summary_config 不能为空")
-
-        if source_config is None:
-            raise ValueError("RagChoreographer 初始化失败：source_config 不能为空")
-
-        if tokenizer_config is None:
-            raise ValueError("RagChoreographer 初始化失败：tokenizer_config 不能为空")
-
-        if type(max_chunk_token_size) is not int or max_chunk_token_size <= 0:
-            raise ValueError(
-                "RagChoreographer 初始化失败：max_chunk_token_size 必须是正整数"
-            )
+        self.config = RagModuleConfig(config)
+        self.choreographer_config = ChoreographerConfig(
+            context_max_tokens=context_max_tokens,
+        )
 
         self.thread_pools = RagThreadPools()
-        self.thread_pools.initialize(pools, thread_pool_config)
+        self.thread_pools.initialize(pools, self.config.get_thread_pool_config())
 
         # 步骤1：使用 AppInitializer 装配并注入的 embedding gateway。
         self.embedding_gateway = embedding_gateway
@@ -186,7 +136,8 @@ class RagChoreographer:
 
         # 步骤2：加载通用 tokenizer，并注入 embedding 模型实际使用的 tokenizer
         self.tokenizer_manager = create_tokenizers(
-            config=tokenizer_config, embedding_tokenizer=self.embedder.get_tokenizer()
+            config=self.config.get_tokenizer_config(),
+            embedding_tokenizer=self.embedder.get_tokenizer(),
         )
         self.llm_tokenizer: BaseTokenizer = self.tokenizer_manager.get_llm_tokenizer()
         # BM25 词语分词器（中文关键词检索）
@@ -203,17 +154,19 @@ class RagChoreographer:
 
         # 步骤4：初始化章节重构 + 摘要服务
         self.section_recon = SectionReconstructor(
-            self.thread_pools.get_retrieval_pool(), constructor_config
+            self.thread_pools.get_retrieval_pool(), self.config.get_constructor_config()
         )
 
         self.summary = create_summary_service(
             tokenizer=self.llm_tokenizer,
             summary_inference=inference_gateway.get_summary(),
-            config=summary_config,
+            config=self.config.get_summary_config(),
         )
 
         # 步骤5：启动时加载 BGE-Reranker-v2-M3，避免首次请求时产生加载延迟
-        self.reranker_manager = create_rerankers(model_root_path, rerank_config)
+        self.reranker_manager = create_rerankers(
+            model_root_path, self.config.get_reranker_config()
+        )
         self.reranker: BaseReranker = self.reranker_manager.get_bge_reranker_v2_m3()
 
         # 步骤6：BM25 索引由知识库和稀疏检索器共享。
@@ -223,7 +176,7 @@ class RagChoreographer:
             embedder=self.embedder,
             bm25_index=self.bm25_index,
             retrieval_pool=self.thread_pools.get_retrieval_pool(),
-            config=retriever_config,
+            config=self.config.get_retriever_config(),
         )
         self.retriever_config = self.retriever_manager.get_hybrid_config()
         self.hybrid_retriever = self.retriever_manager.get_hybrid()
@@ -232,14 +185,13 @@ class RagChoreographer:
 
         self.splitter_manager = create_splitters(
             tokenizer=embedding_tokenizer,
-            max_chunk_token_size=max_chunk_token_size,
             max_input_tokens=embedding_max_input_tokens,
-            config=splitter_config,
+            config=self.config.get_splitter_config(),
         )
         self.splitter = self.splitter_manager.get_structured()
 
         self.source_manager = DataSourceManager()
-        self.source_manager.initialize(corpus_path, source_config)
+        self.source_manager.initialize(corpus_path, self.config.get_source_config())
 
         bootstrap_result = bootstrap_knowledge_index(
             source_manager=self.source_manager,
@@ -265,7 +217,6 @@ class RagChoreographer:
     async def build_rag_context(
         self,
         query: str,
-        max_context_tokens: int,
     ) -> str:
         """RAG 检索主流程。
 
@@ -292,6 +243,7 @@ class RagChoreographer:
         Raises:
             asyncio.CancelledError: 客户端断开或超时时向上传播。
         """
+        max_context_tokens = self.choreographer_config.context_max_tokens
         cfg = self.retriever_config
         # 候选池大小（retrieve）与最终输出大小（rerank）分离，全部由 YAML 配置驱动：
         #   retrieve_top_k — 检索器返回多少 section 给 reranker（候选池，决定 precision 上限）

@@ -5,7 +5,7 @@
 # max-model-len：token 窗口，字段名称与 vLLM 启动参数一致。
 # 当前 max-model-len 取自现有部署配置，仅作为初始化记录，尚未核实为模型官方上限。
 # 修改后执行 python model-config/export_env.py，生成根目录 model-config.env。
-# Compose 和服务容器原生读取生成的环境变量；app-server 读取推理模型窗口，RAG embedding 参数由 RAG YAML 维护。
+# Compose 读取生成的环境变量用于部署；app-server 的推理窗口与 embedding 运行规格由各自 YAML 维护。
 
 inference:
   qwen2.5-1.8B-instruct:

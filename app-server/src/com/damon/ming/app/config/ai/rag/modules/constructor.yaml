@@ -1,0 +1,5 @@
+# constructor 模块配置。
+# 章节重建后传给模型的参考资料标签格式；{value} 替换为来源或标题路径。
+source_label_template: "【来源：{value}】"
+heading_label_template: "【章节：{value}】"
+heading_separator: " > "

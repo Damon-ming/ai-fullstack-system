@@ -34,15 +34,10 @@ app-server 和 model-gateway 各自服务下的 `env_file: ../model-config.env` 
 项目根目录 `.env` 仍按 Compose 默认机制提供部署路径、数据库和密钥等配置。
 模型变量只在生成文件中维护，避免在宿主机环境或根 `.env` 重复设置同名变量而覆盖生成值。
 
-app-server 从此文件读取推理模型窗口；RAG embedding 的输入上限、维度和运行窗口由
-`app/config/ai/rag/rag-runtime.yaml` 单独维护。vLLM embedding 服务的部署窗口在
-`model-gateway/config/docker/docker-vllm-embedding.yaml` 配置：
-
-```python
-import os
-
-max_model_len = int(os.environ["QWEN2_5_1_8B_INSTRUCT_MAX_MODEL_LEN"])
-```
+app-server 的推理模型窗口由 `app/config/ai/inference/inference-config.yaml` 中各角色的
+`max_model_len` 配置，需与这里的部署窗口一致，不再读取模型窗口环境变量。
+RAG embedding 的输入上限、维度和运行窗口由 `app/config/ai/rag/modules/embedding.yaml` 维护。
+vLLM embedding 服务的部署窗口在 `model-gateway/config/docker/docker-vllm-embedding.yaml` 配置。
 
 应用自己的 YAML 中 `${变量}` 不会因 env_file 自动展开，仍需要配置加载器支持。
 
