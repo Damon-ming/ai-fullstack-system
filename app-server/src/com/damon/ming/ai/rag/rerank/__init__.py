@@ -19,7 +19,8 @@ from pathlib import Path
 from src.com.damon.ming.ai.rag.rerank.base_reranker import (
     BaseReranker,
 )
-from src.com.damon.ming.ai.rag.rerank.config import RerankConfig, RerankerParams
+from src.com.damon.ming.ai.rag.rerank.config import RerankConfig
+from src.com.damon.ming.ai.rag.rerank.params import RerankerParams
 
 # ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 _name_to_class: dict[str, type[BaseReranker]] = {}

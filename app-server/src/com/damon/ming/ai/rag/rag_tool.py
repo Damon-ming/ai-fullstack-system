@@ -43,9 +43,6 @@ from src.com.damon.ming.ai.rag.thread_pools import RagThreadPools
 from src.com.damon.ming.ai.rag.tokenizer import create_tokenizers
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    TokenizerRuntimeConfig,
-)
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import ThreadPoolGroup
@@ -70,7 +67,7 @@ def get_rag_choreographer(
     splitter_config: dict[str, object],
     summary_config: dict[str, object],
     source_config: dict[str, object],
-    tokenizer_config: TokenizerRuntimeConfig,
+    tokenizer_config: dict[str, object],
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
 
@@ -88,7 +85,7 @@ def get_rag_choreographer(
         splitter_config: AppInitializer 注入的文档切分配置。
         summary_config: AppInitializer 注入的摘要策略配置。
         source_config: AppInitializer 透传的 source YAML 配置段。
-        tokenizer_config: AppInitializer 注入的分词器配置。
+        tokenizer_config: AppInitializer 透传的 tokenizer YAML 配置段。
     """
     global _rag_choreographer_instance
     if _rag_choreographer_instance is None:
@@ -130,7 +127,7 @@ class RagChoreographer:
         splitter_config: dict[str, object] | None = None,
         summary_config: dict[str, object] | None = None,
         source_config: dict[str, object] | None = None,
-        tokenizer_config: TokenizerRuntimeConfig | None = None,
+        tokenizer_config: dict[str, object] | None = None,
     ):
         logger.info("RAG 容器初始化开始")
 
@@ -170,7 +167,7 @@ class RagChoreographer:
         if source_config is None:
             raise ValueError("RagChoreographer 初始化失败：source_config 不能为空")
 
-        if tokenizer_config is None or not tokenizer_config.roles:
+        if tokenizer_config is None:
             raise ValueError("RagChoreographer 初始化失败：tokenizer_config 不能为空")
 
         if type(max_chunk_token_size) is not int or max_chunk_token_size <= 0:

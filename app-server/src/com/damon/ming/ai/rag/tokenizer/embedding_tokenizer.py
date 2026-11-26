@@ -1,9 +1,7 @@
 """Embedding 模型 tokenizer 的统一接口包装。"""
 
-from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
-    BaseTokenizer,
-    EmbeddingTokenizerParams,
-)
+from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
+from src.com.damon.ming.ai.rag.tokenizer.params import EmbeddingTokenizerParams
 
 
 class EmbeddingTokenizer(BaseTokenizer):

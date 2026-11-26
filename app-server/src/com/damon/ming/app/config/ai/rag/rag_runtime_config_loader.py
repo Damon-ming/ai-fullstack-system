@@ -18,17 +18,6 @@ from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True)
-class TokenizerRoleConfig:
-    tokenizer_engine: str
-    params: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class TokenizerRuntimeConfig:
-    roles: dict[str, TokenizerRoleConfig]
-
-
-@dataclass(frozen=True)
 class LocaleConfig:
     """rag.locales.{locale} 段 —— 单个 locale 的聊天文本。"""
 
@@ -72,7 +61,7 @@ class RagRuntimeConfig:
     splitter: dict[str, Any]
     summary: dict[str, Any]
     source: dict[str, Any]
-    tokenizer: TokenizerRuntimeConfig
+    tokenizer: dict[str, Any]
     thread_pools: dict[str, Any]
 
 
@@ -126,36 +115,11 @@ class RagConfigLoader:
         return section
 
     @staticmethod
-    def _load_tokenizer(raw: dict) -> TokenizerRuntimeConfig:
+    def _load_tokenizer(raw: dict) -> dict[str, Any]:
         tokenizer = raw.get("tokenizer")
         if not isinstance(tokenizer, dict):
             raise TypeError("RAG tokenizer 配置必须是键值对象")
-        raw_roles = tokenizer.get("roles")
-        if not isinstance(raw_roles, dict) or not raw_roles:
-            raise ValueError("RAG tokenizer 配置缺少 roles")
-
-        roles: dict[str, TokenizerRoleConfig] = {}
-        for name, entry in raw_roles.items():
-            if not isinstance(entry, dict):
-                raise TypeError(f"分词器配置 '{name}' 必须是键值对象")
-            engine = entry.get("tokenizer_engine")
-            if not engine:
-                raise ValueError("配置缺少 tokenizer_engine 字段")
-            params = entry.get("params", {})
-            if not isinstance(params, dict):
-                raise TypeError(f"分词器 '{name}' 的 params 必须是键值对象")
-            if engine == "tiktoken":
-                encoding_name = params.get("encoding_name")
-                if not isinstance(encoding_name, str) or not encoding_name.strip():
-                    raise ValueError(f"分词器 '{name}' 缺少有效的 params.encoding_name")
-            elif engine == "jieba":
-                dicts_dir = params.get("dicts_dir")
-                if dicts_dir is not None and not isinstance(dicts_dir, str):
-                    raise TypeError(f"分词器 '{name}' 的 params.dicts_dir 必须是字符串")
-            else:
-                raise ValueError(f"分词器引擎 '{engine}' 尚未配置对应的参数解析器")
-            roles[name] = TokenizerRoleConfig(tokenizer_engine=engine, params=params)
-        return TokenizerRuntimeConfig(roles=roles)
+        return tokenizer
 
     @staticmethod
     def _load_summary(raw: dict) -> dict[str, Any]:

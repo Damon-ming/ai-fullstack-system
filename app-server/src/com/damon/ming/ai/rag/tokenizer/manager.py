@@ -7,13 +7,15 @@ from typing import cast
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseTokenizer,
     BaseWordTokenizer,
-    JiebaTokenizerParams,
-    TiktokenTokenizerParams,
+)
+from src.com.damon.ming.ai.rag.tokenizer.config import (
+    TokenizerConfig,
+    TokenizerRoleConfig,
 )
 from src.com.damon.ming.ai.rag.tokenizer.embedding_tokenizer import EmbeddingTokenizer
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    TokenizerRoleConfig,
-    TokenizerRuntimeConfig,
+from src.com.damon.ming.ai.rag.tokenizer.params import (
+    JiebaTokenizerParams,
+    TiktokenTokenizerParams,
 )
 
 
@@ -22,11 +24,10 @@ class RagTokenizers:
         self._items: dict[str, object] | None = None
         self._embedding_tokenizer: BaseTokenizer | None = None
 
-    def initialize(
-        self, config: TokenizerRuntimeConfig, embedding_tokenizer=None
-    ) -> None:
+    def initialize(self, config: dict[str, object], embedding_tokenizer=None) -> None:
         if self._items is not None:
             raise RuntimeError("RAG 分词器已经初始化")
+        parsed_config = TokenizerConfig.from_mapping(config)
         from src.com.damon.ming.ai.rag.tokenizer import list_engines, resolve_tokenizer
         from src.com.damon.ming.log import pin
 
@@ -36,7 +37,7 @@ class RagTokenizers:
         else:
             pin("RagTokenizers").warning("[Registry] 未注册任何分词器引擎")
         items: dict[str, object] = {}
-        for name, spec in config.roles.items():
+        for name, spec in parsed_config.roles.items():
             params = self._build_params(name, spec)
             items[name] = resolve_tokenizer(spec.tokenizer_engine)(params)
         self._items = items

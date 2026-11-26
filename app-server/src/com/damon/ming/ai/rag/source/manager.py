@@ -14,7 +14,7 @@ from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
 )
 from src.com.damon.ming.ai.rag.source import SourceConfig, resolve_source
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
-from src.com.damon.ming.ai.rag.source.config_parser import SourceConfigParser
+from src.com.damon.ming.ai.rag.source.config import SourceConfigParser
 from src.com.damon.ming.ai.rag.source.image_text_extractor import configure_ocr
 from src.com.damon.ming.ai.rag.source.legacy_office_converter import (
     LEGACY_OFFICE_EXTENSIONS,

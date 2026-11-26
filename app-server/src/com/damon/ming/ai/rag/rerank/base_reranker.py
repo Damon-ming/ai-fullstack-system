@@ -15,7 +15,7 @@ import threading
 from abc import ABC, abstractmethod
 
 from llama_index.core.schema import TextNode
-from src.com.damon.ming.ai.rag.rerank.config import RerankerParams
+from src.com.damon.ming.ai.rag.rerank.params import RerankerParams
 
 
 class BaseReranker(ABC):

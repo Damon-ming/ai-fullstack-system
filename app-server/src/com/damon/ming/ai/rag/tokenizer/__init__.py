@@ -14,18 +14,21 @@
 引擎注册表由各实现类通过 @register_engine 自动注册。
 """
 
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    TokenizerRuntimeConfig,
-)
 from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseTokenizer,
     BaseWordTokenizer,
+)
+from src.com.damon.ming.ai.rag.tokenizer.embedding_tokenizer import EmbeddingTokenizer
+from src.com.damon.ming.ai.rag.tokenizer.params import (
     EmbeddingTokenizerParams,
     JiebaTokenizerParams,
     TiktokenTokenizerParams,
     TokenizerParams,
 )
-from src.com.damon.ming.ai.rag.tokenizer.embedding_tokenizer import EmbeddingTokenizer
+from src.com.damon.ming.ai.rag.tokenizer.config import (
+    TokenizerConfig,
+    TokenizerRoleConfig,
+)
 
 # ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 # 支持两种类型："token_id"（BaseTokenizer）和 "word"（BaseWordTokenizer）
@@ -70,7 +73,7 @@ from src.com.damon.ming.ai.rag.tokenizer.jieba_tokenizer import JiebaTokenizer
 from src.com.damon.ming.ai.rag.tokenizer.tiktoken_tokenizer import TiktokenTokenizer
 
 
-def create_tokenizers(*, config: TokenizerRuntimeConfig, embedding_tokenizer=None):
+def create_tokenizers(*, config: dict[str, object], embedding_tokenizer=None):
     """初始化并返回已加载的分词器集合。"""
     from src.com.damon.ming.ai.rag.tokenizer.manager import RagTokenizers
 
@@ -89,6 +92,8 @@ __all__ = [
     "TiktokenTokenizer",
     "TiktokenTokenizerParams",
     "TokenizerParams",
+    "TokenizerConfig",
+    "TokenizerRoleConfig",
     "create_tokenizers",
     "list_engines",
     "register_engine",

@@ -2,10 +2,8 @@
 
 import tiktoken
 from src.com.damon.ming.ai.rag.tokenizer import register_engine
-from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
-    BaseTokenizer,
-    TiktokenTokenizerParams,
-)
+from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
+from src.com.damon.ming.ai.rag.tokenizer.params import TiktokenTokenizerParams
 from src.com.damon.ming.log import pin
 
 logger = pin("TiktokenTokenizer")

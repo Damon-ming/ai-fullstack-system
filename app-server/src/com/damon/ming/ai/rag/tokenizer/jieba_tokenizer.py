@@ -4,10 +4,8 @@ import os
 import unicodedata
 
 from src.com.damon.ming.ai.rag.tokenizer import register_engine
-from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
-    BaseWordTokenizer,
-    JiebaTokenizerParams,
-)
+from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseWordTokenizer
+from src.com.damon.ming.ai.rag.tokenizer.params import JiebaTokenizerParams
 from src.com.damon.ming.log import pin
 
 logger = pin("JiebaTokenizer")

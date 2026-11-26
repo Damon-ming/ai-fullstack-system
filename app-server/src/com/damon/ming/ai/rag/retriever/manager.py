@@ -12,11 +12,9 @@ from src.com.damon.ming.ai.rag.retriever.base_retriever import (
     SparseRetriever,
 )
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
-from src.com.damon.ming.ai.rag.retriever.config import (
-    RetrieverConfig,
-    RetrieverRoleParams,
-)
+from src.com.damon.ming.ai.rag.retriever.config import RetrieverConfig
 from src.com.damon.ming.ai.rag.retriever.hybrid_retriever import HybridRetriever
+from src.com.damon.ming.ai.rag.retriever.params import RetrieverRoleParams
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
 
 
