@@ -12,19 +12,19 @@ from src.com.damon.ming.ai.rag.retriever.base_retriever import (
     SparseRetriever,
 )
 from src.com.damon.ming.ai.rag.retriever.bm25_index import BM25Index
+from src.com.damon.ming.ai.rag.retriever.config import (
+    RetrieverConfig,
+    RetrieverRoleParams,
+)
 from src.com.damon.ming.ai.rag.retriever.hybrid_retriever import HybridRetriever
 from src.com.damon.ming.ai.vector_db.base_vector_db import BaseVectorStore
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    RetrieverConfig,
-    RetrieverRuntimeConfig,
-)
 
 
 class RetrieverManager:
     """使用注入的配置装配稠密、稀疏和混合检索器。"""
 
     def __init__(self) -> None:
-        self._config: RetrieverConfig | None = None
+        self._config: RetrieverRoleParams | None = None
         self._dense: DenseRetriever | None = None
         self._sparse: SparseRetriever | None = None
         self._hybrid: HybridRetriever | None = None
@@ -35,33 +35,34 @@ class RetrieverManager:
         embedder: BaseEmbeddingService,
         bm25_index: BM25Index,
         retrieval_pool: ThreadPoolExecutor,
-        runtime_config: RetrieverRuntimeConfig,
+        config_mapping: dict[str, object],
     ) -> None:
         if self._hybrid is not None:
             raise RuntimeError("RAG 检索器已经初始化")
         try:
-            config = runtime_config.roles["hybrid"]
-        except KeyError as exc:
-            raise ValueError("RAG retriever 配置缺少 hybrid role") from exc
+            config = RetrieverConfig.from_mapping(config_mapping)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"RAG retriever 配置无效: {exc}") from exc
+        role_params = config.roles["hybrid"]
         dense = DenseRetriever(vector_store=vector_store, embedding_service=embedder)
         sparse = SparseRetriever(bm25_index=bm25_index)
         hybrid = HybridRetriever(
             dense_retriever=dense,
             sparse_retriever=sparse,
-            dense_weight=config.dense_weight,
-            sparse_weight=config.sparse_weight,
-            fuse_k=config.fuse_k,
-            max_section_oversample_multiplier=config.max_section_oversample_multiplier,
-            rrf_oversample_multiplier=config.rrf_oversample_multiplier,
-            retrieval_timeout_seconds=config.retrieval_timeout_seconds,
+            dense_weight=role_params.dense_weight,
+            sparse_weight=role_params.sparse_weight,
+            fuse_k=role_params.fuse_k,
+            max_section_oversample_multiplier=role_params.max_section_oversample_multiplier,
+            rrf_oversample_multiplier=role_params.rrf_oversample_multiplier,
+            retrieval_timeout_seconds=role_params.retrieval_timeout_seconds,
             retrieval_pool=retrieval_pool,
         )
-        self._config = config
+        self._config = role_params
         self._dense = dense
         self._sparse = sparse
         self._hybrid = hybrid
 
-    def get_hybrid_config(self) -> RetrieverConfig:
+    def get_hybrid_config(self) -> RetrieverRoleParams:
         if self._config is None:
             raise RuntimeError("RAG 检索器尚未初始化")
         return self._config

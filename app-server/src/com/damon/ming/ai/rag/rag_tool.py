@@ -45,7 +45,6 @@ from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 from src.com.damon.ming.ai.vector_db import BaseVectorStore, create_vector_stores
 from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
     RagThreadPoolConfig,
-    RetrieverRuntimeConfig,
     SplitterRuntimeConfig,
     SummaryRuntimeConfig,
     TokenizerRuntimeConfig,
@@ -71,7 +70,7 @@ def get_rag_choreographer(
     thread_pool_config: RagThreadPoolConfig,
     constructor_config: dict[str, object],
     rerank_config: dict[str, object],
-    retriever_config: RetrieverRuntimeConfig,
+    retriever_config: dict[str, object],
     splitter_config: SplitterRuntimeConfig,
     summary_config: SummaryRuntimeConfig,
     source_config: SourceConfig,
@@ -89,7 +88,7 @@ def get_rag_choreographer(
         thread_pool_config: AppInitializer 注入的 RAG 内部线程池配置。
         constructor_config: AppInitializer 透传的 constructor YAML 配置段。
         rerank_config: AppInitializer 透传的 rerank YAML 配置段。
-        retriever_config: AppInitializer 注入的检索运行配置。
+        retriever_config: AppInitializer 透传的 retriever YAML 配置段。
         splitter_config: AppInitializer 注入的文档切分配置。
         summary_config: AppInitializer 注入的摘要策略配置。
         source_config: AppInitializer 注入的数据源配置。
@@ -131,7 +130,7 @@ class RagChoreographer:
         thread_pool_config: RagThreadPoolConfig | None = None,
         constructor_config: dict[str, object] | None = None,
         rerank_config: dict[str, object] | None = None,
-        retriever_config: RetrieverRuntimeConfig | None = None,
+        retriever_config: dict[str, object] | None = None,
         splitter_config: SplitterRuntimeConfig | None = None,
         summary_config: SummaryRuntimeConfig | None = None,
         source_config: SourceConfig | None = None,
@@ -163,10 +162,8 @@ class RagChoreographer:
         if rerank_config is None:
             raise ValueError("RagChoreographer 初始化失败：rerank_config 不能为空")
 
-        if retriever_config is None or "hybrid" not in retriever_config.roles:
-            raise ValueError(
-                "RagChoreographer 初始化失败：retriever_config 缺少 hybrid role"
-            )
+        if retriever_config is None:
+            raise ValueError("RagChoreographer 初始化失败：retriever_config 不能为空")
 
         if splitter_config is None:
             raise ValueError("RagChoreographer 初始化失败：splitter_config 不能为空")
@@ -233,7 +230,7 @@ class RagChoreographer:
             embedder=self.embedder,
             bm25_index=self.bm25_index,
             retrieval_pool=self.thread_pools.get_retrieval_pool(),
-            runtime_config=retriever_config,
+            config=retriever_config,
         )
         self.retriever_config = self.retriever_manager.get_hybrid_config()
         self.hybrid_retriever = self.retriever_manager.get_hybrid()

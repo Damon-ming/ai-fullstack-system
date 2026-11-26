@@ -30,29 +30,6 @@ from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True)
-class RetrieverConfig:
-    """检索器构造、候选池及最终输出参数。"""
-
-    name: str
-    top_k: int
-    retrieve_top_k: int
-    dense_top_k: int
-    sparse_top_k: int
-    dedup_by_section: bool
-    dense_weight: float
-    sparse_weight: float
-    fuse_k: int
-    retrieval_timeout_seconds: float
-    max_section_oversample_multiplier: int = 5
-    rrf_oversample_multiplier: int = 3
-
-
-@dataclass(frozen=True)
-class RetrieverRuntimeConfig:
-    roles: dict[str, RetrieverConfig]
-
-
-@dataclass(frozen=True)
 class SplitterRuntimeConfig:
     chunk_overlap: int
     max_grouped_chunks_per_section: int
@@ -196,7 +173,7 @@ class RagRuntimeConfig:
     constructor: dict[str, Any]
     embedding: EmbeddingRuntimeConfig
     rerank: dict[str, Any]
-    retriever: RetrieverRuntimeConfig
+    retriever: dict[str, Any]
     splitter: SplitterRuntimeConfig
     summary: SummaryRuntimeConfig
     source: SourceConfig
@@ -375,53 +352,11 @@ class RagConfigLoader:
             raise ValueError(f"分割器配置缺少必填字段: {exc}") from exc
 
     @staticmethod
-    def _load_retriever(raw: dict) -> RetrieverRuntimeConfig:
+    def _load_retriever(raw: dict) -> dict[str, Any]:
         retriever = raw.get("retriever")
         if not isinstance(retriever, dict):
             raise TypeError("RAG retriever 配置必须是键值对象")
-        raw_roles = retriever.get("roles")
-        if not isinstance(raw_roles, dict) or not raw_roles:
-            raise ValueError("RAG retriever 配置缺少 roles")
-
-        roles: dict[str, RetrieverConfig] = {}
-        for name, section in raw_roles.items():
-            if not isinstance(section, dict):
-                raise TypeError(f"检索器配置 '{name}' 必须是键值对象")
-            params = section.get("params", {})
-            if not isinstance(params, dict):
-                raise TypeError(f"检索器配置 '{name}' 的 params 必须是键值对象")
-            timeout = section.get("retrieval_timeout_seconds")
-            if (
-                isinstance(timeout, bool)
-                or not isinstance(timeout, (int, float))
-                or not math.isfinite(timeout)
-                or timeout <= 0
-            ):
-                raise ValueError(
-                    f"检索器配置 '{name}' 的 retrieval_timeout_seconds 必须是有限正数"
-                )
-            try:
-                roles[name] = RetrieverConfig(
-                    name=name,
-                    top_k=section["top_k"],
-                    retrieve_top_k=section["retrieve_top_k"],
-                    dense_top_k=section["dense_top_k"],
-                    sparse_top_k=section["sparse_top_k"],
-                    dedup_by_section=section["dedup_by_section"],
-                    dense_weight=section["dense_weight"],
-                    sparse_weight=section["sparse_weight"],
-                    fuse_k=section["fuse_k"],
-                    retrieval_timeout_seconds=timeout,
-                    max_section_oversample_multiplier=params.get(
-                        "max_section_oversample_multiplier", 5
-                    ),
-                    rrf_oversample_multiplier=params.get(
-                        "rrf_oversample_multiplier", 3
-                    ),
-                )
-            except KeyError as exc:
-                raise ValueError(f"检索器配置 '{name}' 缺少必填字段: {exc}") from exc
-        return RetrieverRuntimeConfig(roles=roles)
+        return retriever
 
     @staticmethod
     def _load_rerank(raw: dict) -> dict[str, Any]:
