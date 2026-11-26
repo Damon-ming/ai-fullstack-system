@@ -8,10 +8,10 @@
 
 【必须设置】
   MASTER_KEY              加密主密钥（≥32 字符，见 encryption/constants.py）
-  INFERENCE_SERVER        推理后端：vllm / sglang，无默认值
   INFERENCE_GATEWAY_URL   推理网关地址，无默认值
 
 【可选（本地开发用，生产镜像通过 build_info.py 固化）】
+  INFERENCE_SERVER       推理后端类型，默认 vllm（目前仅实现 vllm）
   APP_ENV                 环境标志：debug / release（默认 debug）
   LOG_LEVEL               日志级别：DEBUG / INFO / WARNING / ERROR（默认 INFO）
   INFERENCE_TEMPERATURE        聊天采样温度（环境变量覆盖 inference-config.yaml，格式 ROLE_PARAM）【未实现】

@@ -98,11 +98,9 @@ def get_required_db_env_values() -> dict[str, str | None]:
 
 
 def get_inference_server() -> str:
-    """推理后端类型，必填，无默认值。"""
-    value = os.environ.get(_VAR_INFERENCE_SERVER)
-    if not value or not value.strip():
-        raise ValueError(f"环境变量 {_VAR_INFERENCE_SERVER} 未设置或为空")
-    return value
+    """推理后端类型；未设置或为空时使用 vllm，与 Compose 默认值一致。"""
+    value = os.environ.get(_VAR_INFERENCE_SERVER, "").strip()
+    return value or "vllm"
 
 
 def get_inference_gateway_url() -> str:

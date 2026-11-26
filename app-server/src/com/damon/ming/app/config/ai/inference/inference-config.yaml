@@ -1,6 +1,6 @@
 # app-server/src/com/damon/ming/app/config/ai/inference/inference-config.yaml
 # 推理网关连接超时、共享并发上限和各用途模型配置。
-# 引擎与网关地址从环境变量加载；各角色 API key 在此配置。
+# 引擎类型（默认 vllm）和网关地址由应用从环境变量读取后注入；各角色 API key 在此配置。
 # 各角色的 max_model_len 是输入与输出合计的窗口，需与模型服务部署值一致。
 # options 是请求生成参数；调用方可通过 max_tokens 显式指定输出上限。
 transport:

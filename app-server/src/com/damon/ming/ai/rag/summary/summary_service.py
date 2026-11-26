@@ -139,7 +139,7 @@ class SummaryService:
     ) -> str:
         """单段摘要，带容错降级。"""
         messages = self._build_messages(text, max_tokens, context)
-        # max_tokens 为通用输出上限键，由推理层按引擎翻译（vLLM 直用 / Ollama → num_predict）。
+        # max_tokens 为 vLLM OpenAI 兼容接口的输出上限参数。
         # 目标值覆盖角色默认值，保证摘要长度受调用方控制。
         try:
             summary = await self.summary_inference.generate(

@@ -1,18 +1,5 @@
 # app-server/src/com/damon/ming/ai/inference/base_inference.py
-"""
-推理服务抽象层 —— 纯技术模块，支持多种推理引擎。
-
-提供：
-  - BaseInferenceService: 推理服务抽象基类
-  - StreamToken: 流式输出 token
-  - InferenceParams: 纯数据类，参数由上层配置注入
-  - register_engine: 引擎注册装饰器
-  - resolve_engine: 根据引擎名称解析实现类
-
-配置加载见 config/rag/，本模块不感知配置来源。
-
-引擎注册表由各实现类通过 @register_engine 自动注册。
-"""
+"""推理服务接口与引擎注册表；连接参数由应用层显式注入。"""
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
@@ -64,7 +51,7 @@ class ModelOptions:
 
 
 class BaseInferenceService(ABC):
-    """推理服务统一抽象，Ollama/VLLM/第三方大模型统一接口。"""
+    """推理服务统一接口。"""
 
     def __init__(self, params: InferenceParams):
         self.params = params
@@ -104,7 +91,7 @@ class BaseInferenceService(ABC):
         """监控、日志模型信息。"""
 
 
-# ── 引擎注册表 ──────────────────────────────────────────────────────
+# 引擎注册表；目前仅注册 vLLM，后续实现可通过装饰器接入。
 _name_to_class: dict[str, type[BaseInferenceService]] = {}
 
 
@@ -121,7 +108,7 @@ def register_engine(name: str):
 
 
 def resolve_engine(engine: str) -> type[BaseInferenceService]:
-    """根据引擎名称解析对应的实现类。"""
+    """根据引擎名称解析实现，未注册的引擎明确报错。"""
     if engine not in _name_to_class:
         available = list(_name_to_class.keys())
         raise ValueError(f"未知推理引擎: '{engine}'. 可用: {available}")

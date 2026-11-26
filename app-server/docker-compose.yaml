@@ -2,7 +2,7 @@
 # 后端应用服务 + PostgreSQL 数据库 —— 同生同死的私有基础设施
 #
 # 连接 model-gateway 的方式：
-#   INFERENCE_SERVER  推理后端类型：vllm / sglang（决定连接配置）
+#   INFERENCE_SERVER 推理后端类型（默认 vllm，目前仅实现 vllm）
 #   INFERENCE_GATEWAY_URL 网关地址（在本文件中显式注入）
 #
 # 根 Compose 负责注入共享模型环境变量；本文件只定义 app-server 服务本身。
