@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/app/config/ai/rag/modules/tokenizer.yaml
 # tokenizer 模块配置。
 # llm_counter 当前使用 cl100k_base；生成模型变更后需与模型 tokenizer 对齐。
 roles:
@@ -8,4 +9,6 @@ roles:
   bm25_searcher:
     tokenizer_engine: jieba
     params:
-      dicts_dir: dicts  # 相对于 tokenizer/ 目录
+      # 相对于本 YAML 文件；应用加载器解析为绝对路径后传给 tokenizer。
+      # todo:检查代码
+      dicts_dir: .

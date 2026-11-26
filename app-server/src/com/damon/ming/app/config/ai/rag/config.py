@@ -122,11 +122,12 @@ class RagConfigLoader:
         self._config: dict[str, Any] | None = None
 
     def load(self) -> dict[str, Any]:
-        """加载 include 后展开字符串变量；字段语义由各使用方解析、校验。"""
+        """展开入口和 include 的变量，解析资源路径；字段语义由各使用方校验。"""
         if self._config is None:
             raw = load_yaml(self._config_dir / "rag-runtime.yaml")
+            raw = self._expand_variables(raw, "root")
             raw["modules"] = self._load_modules(raw.get("modules"))
-            self._config = self._expand_variables(raw, "root")
+            self._config = raw
         return self._config
 
     def _expand_variables(self, value: Any, location: str) -> Any:
@@ -169,11 +170,35 @@ class RagConfigLoader:
             path = Path(location)
             if path.is_absolute() or path.suffix.lower() not in {".yaml", ".yml"}:
                 raise ValueError(f"modules.{name}.include 必须是相对 YAML 文件路径")
-            module = load_yaml(self._config_dir / path)
+            module_path = self._config_dir / path
+            module = load_yaml(module_path)
             if "include" in module:
                 raise ValueError(f"modules.{name} 不支持嵌套 include")
+            module = self._expand_variables(module, f"root.modules.{name}")
+            if name == "tokenizer":
+                self._resolve_tokenizer_dict_paths(module, module_path.parent)
             modules[name] = module
         return modules
+
+    @staticmethod
+    def _resolve_tokenizer_dict_paths(module: dict[str, Any], config_dir: Path) -> None:
+        """业务词典的相对路径以 tokenizer YAML 所在目录为基准。"""
+        roles = module.get("roles")
+        if not isinstance(roles, dict):
+            return
+        for role in roles.values():
+            if not isinstance(role, dict) or role.get("tokenizer_engine") != "jieba":
+                continue
+            params = role.get("params")
+            if not isinstance(params, dict):
+                continue
+            location = params.get("dicts_dir")
+            if not isinstance(location, str) or not location.strip():
+                continue
+            path = Path(location.strip())
+            if not path.is_absolute():
+                path = config_dir / path
+            params["dicts_dir"] = str(path.resolve())
 
     def get_rag_config(self) -> dict[str, Any]:
         return self._get_section("rag")

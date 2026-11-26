@@ -18,16 +18,14 @@ from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import (
     BaseTokenizer,
     BaseWordTokenizer,
 )
+from src.com.damon.ming.ai.rag.tokenizer.config import TokenizerConfig
 from src.com.damon.ming.ai.rag.tokenizer.embedding_tokenizer import EmbeddingTokenizer
 from src.com.damon.ming.ai.rag.tokenizer.params import (
     EmbeddingTokenizerParams,
     JiebaTokenizerParams,
     TiktokenTokenizerParams,
     TokenizerParams,
-)
-from src.com.damon.ming.ai.rag.tokenizer.config import (
-    TokenizerConfig,
-    TokenizerRoleConfig,
+    TokenizerRoleParams,
 )
 
 # ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
@@ -91,9 +89,9 @@ __all__ = [
     "JiebaTokenizerParams",
     "TiktokenTokenizer",
     "TiktokenTokenizerParams",
-    "TokenizerParams",
     "TokenizerConfig",
-    "TokenizerRoleConfig",
+    "TokenizerParams",
+    "TokenizerRoleParams",
     "create_tokenizers",
     "list_engines",
     "register_engine",

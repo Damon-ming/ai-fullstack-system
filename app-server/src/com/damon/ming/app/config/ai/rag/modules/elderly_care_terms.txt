@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/ai/rag/tokenizer/dicts/elderly_care_terms.txt
+# app-server/src/com/damon/ming/app/config/ai/rag/modules/elderly_care_terms.txt
 # jieba 自定义词典 — 护理院、居家养老与老年人照护
 # 格式：词 词频(可选) 词性(可选)
 # 每行一条，以 # 开头的行为注释
