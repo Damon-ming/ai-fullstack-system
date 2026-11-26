@@ -3,10 +3,10 @@
 import argparse
 import math
 import os
-from pathlib import Path
 import re
 import sys
 import tempfile
+from pathlib import Path
 
 if __package__:
     from ._catalog import ModelConfigError, _read_model_values
@@ -27,9 +27,9 @@ def identifier(value: str) -> str:
 def render_env(path: Path) -> str:
     models = _read_model_values(path)
     variables = {}
-    for group in ("inference", "embedding"):
+    for group in ("inference",):
         for model_name, values in models[group].items():
-            # BAAI/bge-m3 -> BGE_M3；模型名中的版本、小数点等转为下划线。
+            # 模型名中的版本、小数点等转为下划线。
             prefix = identifier(model_name.rsplit("/", 1)[-1])
             for field, value in values.items():
                 if not isinstance(field, str):
@@ -37,7 +37,9 @@ def render_env(path: Path) -> str:
                 variable = f"{prefix}_{identifier(field)}"
                 if variable in variables:
                     raise ModelConfigError(f"环境变量名冲突: {variable}")
-                if type(value) not in (int, float) or (type(value) is float and not math.isfinite(value)):
+                if type(value) not in (int, float) or (
+                    type(value) is float and not math.isfinite(value)
+                ):
                     raise ModelConfigError(f"{model_name}.{field} 只能导出有限数值参数")
                 variables[variable] = str(value)
     lines = ["# Generated from model-config/models.yaml; do not edit manually."]
@@ -51,8 +53,13 @@ def export_env(source: Path, destination: Path) -> None:
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", newline="\n", dir=destination.parent,
-            prefix=destination.name + ".", suffix=".tmp", delete=False,
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            dir=destination.parent,
+            prefix=destination.name + ".",
+            suffix=".tmp",
+            delete=False,
         ) as stream:
             temporary = Path(stream.name)
             stream.write(content)
@@ -65,7 +72,9 @@ def export_env(source: Path, destination: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--models", type=Path, default=MODULE_DIR / "models.yaml")
-    parser.add_argument("--output", type=Path, default=MODULE_DIR.parent / "model-config.env")
+    parser.add_argument(
+        "--output", type=Path, default=MODULE_DIR.parent / "model-config.env"
+    )
     args = parser.parse_args(argv)
     try:
         export_env(args.models, args.output)

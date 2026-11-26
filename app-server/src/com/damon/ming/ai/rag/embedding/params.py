@@ -1,30 +1,75 @@
-"""Immutable initialization parameters shared by embedding engines."""
+"""Runtime parameters for embedding behavior and gateway access."""
 
-from dataclasses import dataclass, field
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class EmbeddingParams:
-    """各 embedding 引擎共享的完整初始化参数。"""
+    """Business and model parameters shared by embedding implementations."""
 
     model_name: str
-    dimension: int = field(kw_only=True)
-    batch_size: int = field(kw_only=True)
-    query_prefix: str = field(kw_only=True)
-    passage_prefix: str = field(kw_only=True)
-    cache_folder: str | None = field(default=None, kw_only=True)
+    dimension: int
+    batch_size: int
+    query_prefix: str
+    passage_prefix: str
+    max_input_tokens: int | None = None
+    cache_folder: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.model_name, str) or not self.model_name.strip():
+            raise ValueError("model_name 必须是非空字符串")
+        for name, value in (
+            ("dimension", self.dimension),
+            ("batch_size", self.batch_size),
+        ):
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{name} 必须是正整数")
+        if self.max_input_tokens is not None and (
+            type(self.max_input_tokens) is not int or self.max_input_tokens <= 0
+        ):
+            raise ValueError("max_input_tokens 必须是正整数或 None")
+        if not isinstance(self.query_prefix, str) or not isinstance(
+            self.passage_prefix, str
+        ):
+            raise TypeError("文本前缀必须是字符串")
 
 
-@dataclass(frozen=True)
-class VLLMEmbeddingParams(EmbeddingParams):
+@dataclass(frozen=True, kw_only=True)
+class EmbeddingGatewayParams:
+    """Connection and authentication parameters for the embedding API."""
+
     base_url: str
     api_key: str
-    timeout: float
-    max_input_tokens: int
+    timeout_seconds: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.base_url, str) or not self.base_url.strip():
+            raise ValueError("base_url 必须是非空字符串")
+        if not isinstance(self.api_key, str) or not self.api_key.strip():
+            raise ValueError("api_key 必须是非空字符串")
+        if (
+            isinstance(self.timeout_seconds, bool)
+            or not isinstance(self.timeout_seconds, (int, float))
+            or not math.isfinite(self.timeout_seconds)
+            or self.timeout_seconds <= 0
+        ):
+            raise ValueError("timeout_seconds 必须是有限正数")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class HuggingFaceEmbeddingParams(EmbeddingParams):
     device: str
     concurrency: int
     normalize_embeddings: bool
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.device, str) or not self.device.strip():
+            raise ValueError("device 必须是非空字符串")
+        if type(self.concurrency) is not int or self.concurrency <= 0:
+            raise ValueError("concurrency 必须是正整数")
+        if not isinstance(self.normalize_embeddings, bool):
+            raise TypeError("normalize_embeddings 必须是布尔值")

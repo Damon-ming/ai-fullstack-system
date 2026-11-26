@@ -3,10 +3,9 @@
 # 模型键：与 app-server 的 model_name、vLLM 的 --served-model-name 完全一致；
 # embedding 未显式设置 --served-model-name 时，与当前 --model 对应。
 # max-model-len：token 窗口，字段名称与 vLLM 启动参数一致。
-# max-input-tokens：embedding 单条输入的应用侧上限，可为特殊 token 和安全余量预留空间。
 # 当前 max-model-len 取自现有部署配置，仅作为初始化记录，尚未核实为模型官方上限。
 # 修改后执行 python model-config/export_env.py，生成根目录 model-config.env。
-# Compose 和服务容器原生读取生成的环境变量；app-server 通过统一运行配置模块读取模型参数。
+# Compose 和服务容器原生读取生成的环境变量；app-server 读取推理模型窗口，RAG embedding 参数由 RAG YAML 维护。
 
 inference:
   qwen2.5-1.8B-instruct:
@@ -17,9 +16,3 @@ inference:
 
   qwen3guard-gen-0.6b:
     max-model-len: 4096
-
-embedding:
-  BAAI/bge-m3:
-    max-model-len: 8192
-    max-input-tokens: 8182
-    dimension: 1024

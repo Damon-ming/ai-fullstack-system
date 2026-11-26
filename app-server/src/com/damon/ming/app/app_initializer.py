@@ -402,12 +402,12 @@ class AppInitializer:
         )
         from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
             RagConfigLoader,
-            build_embedding_params,
         )
         from src.com.damon.ming.app.config.ai_runtime_config import (
             RAG_CONTEXT_MAX_TOKENS,
             RAG_MAX_CHUNK_TOKEN_SIZE,
         )
+        from src.com.damon.ming.app.config.env import get_inference_gateway_url
         from src.com.damon.ming.app.thread_pools import get_rag_pool_group
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
@@ -417,8 +417,11 @@ class AppInitializer:
         rag = rag_runtime.rag
         inference_config = InferenceConfigLoader().load()
         self.model_root_dir = rag.model_root_dir
-        embedding_config = build_embedding_params(
-            Path(self.model_root_dir), rag_runtime.embedding
+        self.embedding_gateway = EmbeddingGateway.from_mapping(
+            rag_runtime.embedding,
+            model_root_dir=Path(self.model_root_dir),
+            # todo:解决base_url问题
+            base_url=get_inference_gateway_url(),
         )
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
@@ -442,7 +445,6 @@ class AppInitializer:
             asyncio.Semaphore(inference_config.max_concurrency),
         )
 
-        self.embedding_gateway = EmbeddingGateway(embedding_config)
         self.rag_context_max_tokens = RAG_CONTEXT_MAX_TOKENS
         self.rag_choreographer = get_rag_choreographer(
             pools=get_rag_pool_group(),

@@ -7,7 +7,10 @@ from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
 from src.com.damon.ming.ai.rag.embedding.input_policy import EmbeddingInputPolicy
-from src.com.damon.ming.ai.rag.embedding.params import VLLMEmbeddingParams
+from src.com.damon.ming.ai.rag.embedding.params import (
+    EmbeddingGatewayParams,
+    EmbeddingParams,
+)
 from src.com.damon.ming.log import pin
 
 logger = pin("VllmEmbedding")
@@ -16,7 +19,13 @@ logger = pin("VllmEmbedding")
 class VllmEmbedding(BaseEmbeddingService):
     """将 embedding 请求转发到独立的 vLLM 服务。"""
 
-    def __init__(self, params: VLLMEmbeddingParams):
+    def __init__(
+        self,
+        params: EmbeddingParams,
+        gateway_params: EmbeddingGatewayParams,
+    ):
+        if params.max_input_tokens is None:
+            raise ValueError("vLLM embedding 必须配置 max_input_tokens")
         super().__init__(params)
         self._input_policy = EmbeddingInputPolicy(params)
         try:
@@ -24,9 +33,9 @@ class VllmEmbedding(BaseEmbeddingService):
         except ImportError as e:
             raise ImportError("vLLM embedding 需要 openai Python SDK") from e
 
-        self._base_url = params.base_url
-        self._api_key = params.api_key
-        self._timeout = params.timeout
+        self._base_url = gateway_params.base_url
+        self._api_key = gateway_params.api_key
+        self._timeout = gateway_params.timeout_seconds
         self._max_input_tokens = params.max_input_tokens
         self._dimension = params.dimension
         self._tokenizer = self._load_tokenizer(

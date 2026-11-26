@@ -23,18 +23,9 @@ import re
 #       "max_output_tokens": 128
 #     }
 #   },
-#   "embedding": {
-#     "role": "bge_m3",
-#     "model_name": "BAAI/bge-m3",
-#     "max-model-len": 8192,
-#     "max-input-tokens": 8182,
-#     "dimension": 1024,
-#   },
 #   "rag_context_max_tokens": 1024,
 #   "rag_max_chunk_token_size": 768
 # }
-# inference-config.yaml 和 rag-runtime.yaml 的 embedding role 中的 model_name 决定读取哪个模型规格；
-# 修改模型规格后，请同步更新此速查 JSON。
 
 # RAG 返回给主推理模型的参考上下文 token 上限。
 # rag_core.py 用它限制检索结果；超限摘要也以此作为目标输出长度。
@@ -92,13 +83,3 @@ def _get_model_int(model_name: str, field: str) -> int:
 def get_model_max_len(model_name: str) -> int:
     """读取模型部署窗口（MAX_MODEL_LEN）。"""
     return _get_model_int(model_name, "max-model-len")
-
-
-def get_model_max_input_tokens(model_name: str) -> int:
-    """读取 embedding 模型的可用输入 token 上限。"""
-    return _get_model_int(model_name, "max-input-tokens")
-
-
-def get_model_dimension(model_name: str) -> int:
-    """读取 embedding 模型输出向量维度。"""
-    return _get_model_int(model_name, "dimension")

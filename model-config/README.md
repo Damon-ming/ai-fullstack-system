@@ -1,6 +1,6 @@
 # 共享模型配置
 
-`models.yaml` 是模型参数的唯一维护源。`export_env.py` 校验后将它导出为项目根目录的 `model-config.env`。
+`models.yaml` 是文本推理模型服务窗口的维护源。`export_env.py` 校验后将它导出为项目根目录的 `model-config.env`。
 生成文件仅作为部署产物，不手动编辑，已加入 Git 忽略规则。
 
 ## 使用
@@ -34,19 +34,17 @@ app-server 和 model-gateway 各自服务下的 `env_file: ../model-config.env` 
 项目根目录 `.env` 仍按 Compose 默认机制提供部署路径、数据库和密钥等配置。
 模型变量只在生成文件中维护，避免在宿主机环境或根 `.env` 重复设置同名变量而覆盖生成值。
 
-Python 进程可直接读取：
+app-server 从此文件读取推理模型窗口；RAG embedding 的输入上限、维度和运行窗口由
+`app/config/ai/rag/rag-runtime.yaml` 单独维护。vLLM embedding 服务的部署窗口在
+`model-gateway/config/docker/docker-vllm-embedding.yaml` 配置：
 
 ```python
 import os
 
 max_model_len = int(os.environ["QWEN2_5_1_8B_INSTRUCT_MAX_MODEL_LEN"])
-dimension = int(os.environ["BGE_M3_DIMENSION"])
-max_input_tokens = int(os.environ["BGE_M3_MAX_INPUT_TOKENS"])
 ```
 
 应用自己的 YAML 中 `${变量}` 不会因 env_file 自动展开，仍需要配置加载器支持。
-app-server 的 `ai_runtime_config.py` 按模型名读取窗口、embedding 输入上限和向量维度；
-embedding 与向量存储配置加载器使用这些值装配运行参数。
 
 ## 命名和扩展
 
@@ -54,28 +52,19 @@ embedding 与向量存储配置加载器使用这些值装配运行参数。
 inference:
   qwen2.5-1.8B-instruct:
     max-model-len: 4096
-embedding:
-  BAAI/bge-m3:
-    max-model-len: 8192
-    max-input-tokens: 8182
-    dimension: 1024
 ```
 
 导出为：
 
 ```dotenv
 QWEN2_5_1_8B_INSTRUCT_MAX_MODEL_LEN=4096
-BGE_M3_MAX_MODEL_LEN=8192
-BGE_M3_MAX_INPUT_TOKENS=8182
-BGE_M3_DIMENSION=1024
 ```
 
 变量前缀使用模型 key 最后一个 `/` 后的名称，非字母数字转换为下划线并转大写。
 字段名采用相同规则。规范化后若变量重名则报错，避免不同模型静默覆盖。
 当前支持有限数值参数；新增如 `gpu-memory-utilization: 0.4` 会自动导出对应变量，无需修改导出器。
 新增变量不会自动接入业务：使用方仍需在自己的配置中引用它。
-`max-model-len`、embedding 的 `max-input-tokens` 和 `dimension` 必须为正整数；
-`max-input-tokens` 不能大于 `max-model-len`。
+`max-model-len` 必须为正整数。
 当前窗口来自已有部署值，尚未核实为模型官方最大能力。
 
 现有 `get_model_config()` Python 查询接口保留供安装库后的代码使用；本次 Docker 部署通过 env 文件共享数值，

@@ -8,12 +8,15 @@ constructor:
   heading_separator: " > "
 
 embedding:
-  # 网关地址从 INFERENCE_GATEWAY_URL 读取；模型规格来自 model-config.env。
+  # 网关地址从 INFERENCE_GATEWAY_URL 读取；embedding 运行规格在本段集中配置。
   transport:
     timeout_seconds: 60
   roles:
     bge_m3:
       model_name: BAAI/bge-m3
+      max_model_len: 8192
+      max_input_tokens: 8182
+      dimension: 1024
       api_key: ak_embedding
       query_prefix: ""
       passage_prefix: ""
