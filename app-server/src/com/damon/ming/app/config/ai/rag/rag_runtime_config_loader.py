@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from src.com.damon.ming.ai.rag.embedding.params import VLLMEmbeddingParams
-from src.com.damon.ming.app.config.ai.rag.source_config import SourceConfig
-from src.com.damon.ming.app.config.ai.rag.source_config_parser import SourceConfigParser
 from src.com.damon.ming.app.config.ai_runtime_config import (
     get_model_dimension,
     get_model_max_input_tokens,
@@ -148,7 +146,7 @@ class RagRuntimeConfig:
     retriever: dict[str, Any]
     splitter: dict[str, Any]
     summary: SummaryRuntimeConfig
-    source: SourceConfig
+    source: dict[str, Any]
     tokenizer: TokenizerRuntimeConfig
     thread_pools: dict[str, Any]
 
@@ -182,7 +180,7 @@ class RagConfigLoader:
             retriever=self._load_retriever(raw),
             splitter=self._load_splitter(raw),
             summary=self._load_summary(raw),
-            source=SourceConfigParser.parse(raw.get("source")),
+            source=self._load_source(raw),
             tokenizer=self._load_tokenizer(raw),
             thread_pools=self._load_thread_pools(raw),
         )
@@ -193,6 +191,13 @@ class RagConfigLoader:
         section = raw.get("thread_pools")
         if not isinstance(section, dict) or not section:
             raise TypeError("RAG thread_pools 配置必须是非空键值对象")
+        return section
+
+    @staticmethod
+    def _load_source(raw: dict) -> dict[str, Any]:
+        section = raw.get("source")
+        if not isinstance(section, dict):
+            raise TypeError("RAG source 配置必须是键值对象")
         return section
 
     @staticmethod

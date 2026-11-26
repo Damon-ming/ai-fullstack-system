@@ -9,6 +9,7 @@
 """
 
 from src.com.damon.ming.ai.rag.source.base import BaseDataSource
+from src.com.damon.ming.ai.rag.source.config import SourceConfig
 
 # ── 引擎注册表（必须在实现类 import 之前定义）──────────────────────
 _name_to_class: dict[str, type[BaseDataSource]] = {}
@@ -78,6 +79,7 @@ __all__ = [
     "LocalPptxDataSource",
     "LocalTextDataSource",
     "LocalXlsxDataSource",
+    "SourceConfig",
     "list_engines",
     "register_engine",
     "resolve_source",

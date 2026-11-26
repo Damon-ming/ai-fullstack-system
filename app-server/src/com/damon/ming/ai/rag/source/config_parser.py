@@ -1,19 +1,19 @@
 """解析 RagRuntime 中的数据源配置。"""
 
-from src.com.damon.ming.app.config.ai.rag.source_config import (
-    CsvSourceConfig,
-    DocSourceConfig,
-    HtmlSourceConfig,
-    ImageSourceConfig,
-    LegacyOfficeSourceConfig,
-    MarkdownSourceConfig,
-    OcrConfig,
-    PdfSourceConfig,
-    PptxSourceConfig,
-    PreChunkConfig,
+from src.com.damon.ming.ai.rag.source.config import (
+    CsvSourceParams,
+    DocSourceParams,
+    HtmlSourceParams,
+    ImageSourceParams,
+    LegacyOfficeSourceParams,
+    MarkdownSourceParams,
+    OcrParams,
+    PdfSourceParams,
+    PptxSourceParams,
+    PreChunkParams,
     SourceConfig,
-    TextSourceConfig,
-    XlsxSourceConfig,
+    TextSourceParams,
+    XlsxSourceParams,
 )
 
 
@@ -85,46 +85,46 @@ class SourceConfigParser:
         cls._validate_bool(html_include_tables, "html_source.include_tables")
 
         config = SourceConfig(
-            csv_source=CsvSourceConfig(
+            csv_source=CsvSourceParams(
                 batch_rows=cls._required_positive_int(
                     csv_section, "batch_rows", "csv_source"
                 ),
             ),
-            xlsx_source=XlsxSourceConfig(
+            xlsx_source=XlsxSourceParams(
                 batch_rows=cls._required_positive_int(
                     xlsx_section, "batch_rows", "xlsx_source"
                 ),
             ),
-            image_source=ImageSourceConfig(extensions=set(image_extensions_raw)),
-            ocr=OcrConfig(device=ocr_device),
-            legacy_office_source=LegacyOfficeSourceConfig(
+            image_source=ImageSourceParams(extensions=set(image_extensions_raw)),
+            ocr=OcrParams(device=ocr_device),
+            legacy_office_source=LegacyOfficeSourceParams(
                 conversion_timeout_seconds=cls._required_positive_int(
                     legacy_office_section,
                     "conversion_timeout_seconds",
                     "legacy_office_source",
                 ),
             ),
-            text_source=TextSourceConfig(
+            text_source=TextSourceParams(
                 extensions=set(extensions_raw),
                 pre_chunk=cls._parse_pre_chunk(text_section, "text_source"),
             ),
-            markdown_source=MarkdownSourceConfig(
+            markdown_source=MarkdownSourceParams(
                 pre_chunk=cls._parse_pre_chunk(markdown_section, "markdown_source"),
             ),
-            pdf_source=PdfSourceConfig(
+            pdf_source=PdfSourceParams(
                 enable_image_extract=pdf_enable_image_extract,
             ),
-            doc_source=DocSourceConfig(
+            doc_source=DocSourceParams(
                 pre_chunk=cls._parse_pre_chunk(doc_section, "doc_source"),
                 include_tables=doc_include_tables,
             ),
-            pptx_source=PptxSourceConfig(
+            pptx_source=PptxSourceParams(
                 pre_chunk=cls._parse_pre_chunk(pptx_section, "pptx_source"),
                 include_tables=pptx_include_tables,
                 include_notes=pptx_include_notes,
                 extract_images=pptx_extract_images,
             ),
-            html_source=HtmlSourceConfig(
+            html_source=HtmlSourceParams(
                 pre_chunk=cls._parse_pre_chunk(html_section, "html_source"),
                 include_links=html_include_links,
                 include_tables=html_include_tables,
@@ -136,7 +136,7 @@ class SourceConfigParser:
     def _required_section(parent: dict, key: str) -> dict:
         section = parent.get(key)
         if not isinstance(section, dict):
-            raise ValueError(f"缺少有效的 {key} 配置项")
+            raise TypeError(f"缺少有效的 {key} 配置项")
         return section
 
     @staticmethod
@@ -146,7 +146,7 @@ class SourceConfigParser:
         return section[key]
 
     @classmethod
-    def _parse_pre_chunk(cls, source_section: dict, source_name: str) -> PreChunkConfig:
+    def _parse_pre_chunk(cls, source_section: dict, source_name: str) -> PreChunkParams:
         section = cls._required_section(source_section, "pre_chunk")
         enabled = cls._required_value(section, "enabled", f"{source_name}.pre_chunk")
         chunk_chars = cls._required_value(
@@ -165,7 +165,7 @@ class SourceConfigParser:
         if not boundaries_raw:
             raise ValueError(f"{source_name}.pre_chunk.boundaries 不能为空")
 
-        return PreChunkConfig(
+        return PreChunkParams(
             enabled=enabled,
             chunk_chars=chunk_chars,
             boundaries=tuple(boundaries_raw),

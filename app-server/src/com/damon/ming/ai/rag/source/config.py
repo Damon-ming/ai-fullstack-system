@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
-class PreChunkConfig:
+@dataclass(frozen=True, kw_only=True)
+class PreChunkParams:
     """预分块配置（纯数据类）。
 
     大文本文件在入库前按自然边界预分块，使每个 Document 粒度合理，
@@ -32,88 +32,88 @@ class PreChunkConfig:
     boundaries: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class TextSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class TextSourceParams:
     """文本数据源配置（纯数据类）。"""
 
     # 支持的文件扩展名（带点号，小写）
     extensions: set[str]
 
     # 大文件预分块配置
-    pre_chunk: PreChunkConfig
+    pre_chunk: PreChunkParams
 
 
-@dataclass(frozen=True)
-class CsvSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class CsvSourceParams:
     """CSV 数据源配置（纯数据类）。"""
 
     # 每个 Document 包含的数据行数（不含表头）
     batch_rows: int
 
 
-@dataclass(frozen=True)
-class XlsxSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class XlsxSourceParams:
     """XLSX 数据源配置（纯数据类）。"""
 
     # 每个 Document 包含的数据行数（不含表头）
     batch_rows: int
 
 
-@dataclass(frozen=True)
-class ImageSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class ImageSourceParams:
     """独立图片数据源配置。"""
 
     # 支持的图片文件扩展名（带点号，小写）
     extensions: set[str]
 
 
-@dataclass(frozen=True)
-class OcrConfig:
+@dataclass(frozen=True, kw_only=True)
+class OcrParams:
     """OCR 推理设备配置。"""
 
     device: str
 
 
-@dataclass(frozen=True)
-class LegacyOfficeSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class LegacyOfficeSourceParams:
     """旧版 Office 转换配置。"""
 
     conversion_timeout_seconds: int
 
 
-@dataclass(frozen=True)
-class MarkdownSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class MarkdownSourceParams:
     """Markdown 数据源配置（纯数据类）。"""
 
     # 超大标题段落的二次切分配置
-    pre_chunk: PreChunkConfig
+    pre_chunk: PreChunkParams
 
 
-@dataclass(frozen=True)
-class PdfSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class PdfSourceParams:
     """PDF 数据源配置（纯数据类）。"""
 
     # 是否从文本型 PDF 的嵌入图片中提取文字
     enable_image_extract: bool
 
 
-@dataclass(frozen=True)
-class DocSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class DocSourceParams:
     """DOCX 数据源配置（纯数据类）。"""
 
     # 预分块配置（超大段落按自然边界切分）
-    pre_chunk: PreChunkConfig
+    pre_chunk: PreChunkParams
 
     # 是否提取表格为 Markdown 表格
     include_tables: bool
 
 
-@dataclass(frozen=True)
-class PptxSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class PptxSourceParams:
     """PPTX 数据源配置（纯数据类）。"""
 
     # 预分块配置（超大文本按自然边界切分）
-    pre_chunk: PreChunkConfig
+    pre_chunk: PreChunkParams
 
     # 是否提取表格为 Markdown 表格
     include_tables: bool
@@ -125,12 +125,12 @@ class PptxSourceConfig:
     extract_images: bool
 
 
-@dataclass(frozen=True)
-class HtmlSourceConfig:
+@dataclass(frozen=True, kw_only=True)
+class HtmlSourceParams:
     """HTML 数据源配置（纯数据类）。"""
 
     # 预分块配置（超大正文按自然边界切分）
-    pre_chunk: PreChunkConfig
+    pre_chunk: PreChunkParams
 
     # 是否保留超链接 URL
     include_links: bool
@@ -139,39 +139,39 @@ class HtmlSourceConfig:
     include_tables: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SourceConfig:
     """数据源总配置（纯数据类）。所有参数由应用配置显式提供，无内置默认值。"""
 
     # CSV 数据源配置
-    csv_source: CsvSourceConfig
+    csv_source: CsvSourceParams
 
     # XLSX 数据源配置
-    xlsx_source: XlsxSourceConfig
+    xlsx_source: XlsxSourceParams
 
     # 图片数据源配置
-    image_source: ImageSourceConfig
+    image_source: ImageSourceParams
 
     # OCR 推理配置（PDF、Office 内嵌图片和独立图片共用）
-    ocr: OcrConfig
+    ocr: OcrParams
 
     # 旧版 Office 转换配置
-    legacy_office_source: LegacyOfficeSourceConfig
+    legacy_office_source: LegacyOfficeSourceParams
 
     # 文本数据源配置
-    text_source: TextSourceConfig
+    text_source: TextSourceParams
 
     # Markdown 数据源配置
-    markdown_source: MarkdownSourceConfig
+    markdown_source: MarkdownSourceParams
 
     # PDF 数据源配置
-    pdf_source: PdfSourceConfig
+    pdf_source: PdfSourceParams
 
     # DOC/DOCX 数据源配置
-    doc_source: DocSourceConfig
+    doc_source: DocSourceParams
 
     # PPTX 数据源配置
-    pptx_source: PptxSourceConfig
+    pptx_source: PptxSourceParams
 
     # HTML 数据源配置
-    html_source: HtmlSourceConfig
+    html_source: HtmlSourceParams

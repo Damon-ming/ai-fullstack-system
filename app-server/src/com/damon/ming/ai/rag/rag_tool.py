@@ -47,7 +47,6 @@ from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
     SummaryRuntimeConfig,
     TokenizerRuntimeConfig,
 )
-from src.com.damon.ming.app.config.ai.rag.source_config import SourceConfig
 from src.com.damon.ming.app.thread_pools import run_in_pool
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.thread import ThreadPoolGroup
@@ -71,7 +70,7 @@ def get_rag_choreographer(
     retriever_config: dict[str, object],
     splitter_config: dict[str, object],
     summary_config: SummaryRuntimeConfig,
-    source_config: SourceConfig,
+    source_config: dict[str, object],
     tokenizer_config: TokenizerRuntimeConfig,
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
@@ -89,7 +88,7 @@ def get_rag_choreographer(
         retriever_config: AppInitializer 透传的 retriever YAML 配置段。
         splitter_config: AppInitializer 注入的文档切分配置。
         summary_config: AppInitializer 注入的摘要策略配置。
-        source_config: AppInitializer 注入的数据源配置。
+        source_config: AppInitializer 透传的 source YAML 配置段。
         tokenizer_config: AppInitializer 注入的分词器配置。
     """
     global _rag_choreographer_instance
@@ -131,7 +130,7 @@ class RagChoreographer:
         retriever_config: dict[str, object] | None = None,
         splitter_config: dict[str, object] | None = None,
         summary_config: SummaryRuntimeConfig | None = None,
-        source_config: SourceConfig | None = None,
+        source_config: dict[str, object] | None = None,
         tokenizer_config: TokenizerRuntimeConfig | None = None,
     ):
         logger.info("RAG 容器初始化开始")
