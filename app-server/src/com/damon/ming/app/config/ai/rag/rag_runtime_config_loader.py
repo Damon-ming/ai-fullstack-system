@@ -28,14 +28,6 @@ from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True)
-class SummaryRuntimeConfig:
-    system_prompt_template: str
-    context_message_template: str
-    context_margin_ratio: float | None
-    context_overlap_ratio: float | None
-
-
-@dataclass(frozen=True)
 class TokenizerRoleConfig:
     tokenizer_engine: str
     params: dict[str, Any]
@@ -145,7 +137,7 @@ class RagRuntimeConfig:
     rerank: dict[str, Any]
     retriever: dict[str, Any]
     splitter: dict[str, Any]
-    summary: SummaryRuntimeConfig
+    summary: dict[str, Any]
     source: dict[str, Any]
     tokenizer: TokenizerRuntimeConfig
     thread_pools: dict[str, Any]
@@ -233,68 +225,11 @@ class RagConfigLoader:
         return TokenizerRuntimeConfig(roles=roles)
 
     @staticmethod
-    def _load_summary(raw: dict) -> SummaryRuntimeConfig:
+    def _load_summary(raw: dict) -> dict[str, Any]:
         summary = raw.get("summary")
         if not isinstance(summary, dict):
             raise TypeError("RAG summary 配置必须是键值对象")
-
-        context_margin_ratio = summary.get("context_margin_ratio")
-        if context_margin_ratio is not None:
-            if isinstance(context_margin_ratio, bool) or not isinstance(
-                context_margin_ratio, (int, float)
-            ):
-                raise TypeError("summary.context_margin_ratio 必须是数值或 null")
-            if not 0 <= context_margin_ratio < 1:
-                raise ValueError("summary.context_margin_ratio 必须大于等于 0 且小于 1")
-
-        context_overlap_ratio = summary.get("context_overlap_ratio")
-        if context_overlap_ratio is not None:
-            if isinstance(context_overlap_ratio, bool) or not isinstance(
-                context_overlap_ratio, (int, float)
-            ):
-                raise TypeError("summary.context_overlap_ratio 必须是数值或 null")
-            if not 0 <= context_overlap_ratio < 0.5:
-                raise ValueError(
-                    "summary.context_overlap_ratio 必须大于等于 0 且小于 0.5"
-                )
-
-        context_message_template = summary.get("context_message_template")
-        if (
-            not isinstance(context_message_template, str)
-            or not context_message_template.strip()
-        ):
-            raise ValueError("summary.context_message_template 必须是非空字符串")
-        if any(
-            placeholder not in context_message_template
-            for placeholder in ("{context}", "{content}")
-        ):
-            raise ValueError(
-                "summary.context_message_template 必须包含 {context} 和 {content}"
-            )
-
-        system_prompt_template = summary.get("system_prompt_template")
-        if (
-            not isinstance(system_prompt_template, str)
-            or not system_prompt_template.strip()
-        ):
-            raise ValueError("summary.system_prompt_template 必须是非空字符串")
-        if "{max_tokens}" not in system_prompt_template:
-            raise ValueError("summary.system_prompt_template 必须包含 {max_tokens}")
-
-        return SummaryRuntimeConfig(
-            system_prompt_template=system_prompt_template,
-            context_message_template=context_message_template,
-            context_margin_ratio=(
-                float(context_margin_ratio)
-                if context_margin_ratio is not None
-                else None
-            ),
-            context_overlap_ratio=(
-                float(context_overlap_ratio)
-                if context_overlap_ratio is not None
-                else None
-            ),
-        )
+        return summary
 
     @staticmethod
     def _load_splitter(raw: dict) -> dict[str, Any]:
