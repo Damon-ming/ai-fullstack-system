@@ -4,9 +4,7 @@
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
     BaseEmbeddingService,
 )
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import (
-    VLLMEmbeddingParams,
-)
+from src.com.damon.ming.ai.rag.embedding.params import VLLMEmbeddingParams
 
 
 class EmbeddingGateway:

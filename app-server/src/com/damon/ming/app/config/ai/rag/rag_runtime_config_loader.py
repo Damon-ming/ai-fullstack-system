@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.com.damon.ming.ai.rag.embedding.params import VLLMEmbeddingParams
 from src.com.damon.ming.ai.rag.rerank.base_reranker import RerankerParams
 from src.com.damon.ming.app.config.ai.rag.source_config import SourceConfig
 from src.com.damon.ming.app.config.ai.rag.source_config_parser import SourceConfigParser
@@ -146,33 +147,6 @@ class EmbeddingRuntimeConfig:
 
 
 @dataclass(frozen=True)
-class EmbeddingParams:
-    """各 embedding 引擎共享的完整初始化参数。"""
-
-    model_name: str
-    dimension: int = field(kw_only=True)
-    batch_size: int = field(kw_only=True)
-    query_prefix: str = field(kw_only=True)
-    passage_prefix: str = field(kw_only=True)
-    cache_folder: str | None = field(default=None, kw_only=True)
-
-
-@dataclass(frozen=True)
-class VLLMEmbeddingParams(EmbeddingParams):
-    base_url: str
-    api_key: str
-    timeout: float
-    max_input_tokens: int
-
-
-@dataclass(frozen=True)
-class HuggingFaceEmbeddingParams(EmbeddingParams):
-    device: str
-    concurrency: int
-    normalize_embeddings: bool
-
-
-@dataclass(frozen=True)
 class RerankRuntimeConfig:
     roles: dict[str, RerankerParams]
 
@@ -294,7 +268,9 @@ class RagConfigLoader:
             workers[name] = count
         missing = {"retrieval", "document", "rerank", "bm25"} - workers.keys()
         if missing:
-            raise ValueError(f"RAG thread_pools 缺少线程池: {', '.join(sorted(missing))}")
+            raise ValueError(
+                f"RAG thread_pools 缺少线程池: {', '.join(sorted(missing))}"
+            )
         return RagThreadPoolConfig(workers=workers)
 
     @staticmethod

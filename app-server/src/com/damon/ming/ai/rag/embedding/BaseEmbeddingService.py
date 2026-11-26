@@ -8,7 +8,7 @@ Embedding 服务接口，只定义上层需要的向量化能力。
 from abc import ABC, abstractmethod
 from typing import Any
 
-from src.com.damon.ming.app.config.ai.rag.rag_runtime_config_loader import EmbeddingParams
+from src.com.damon.ming.ai.rag.embedding.params import EmbeddingParams
 
 
 class BaseEmbeddingService(ABC):
