@@ -10,8 +10,12 @@ from typing import Any
 
 from src.com.damon.ming.ai.inference.base_inference import (
     BaseInferenceService,
+    InferenceParams,
     StreamToken,
+    resolve_engine,
 )
+from src.com.damon.ming.ai.inference.config import InferenceConfig
+from src.com.damon.ming.ai.inference.params import InferenceRoleParams
 
 
 class InferenceGateway:
@@ -19,13 +23,43 @@ class InferenceGateway:
 
     def __init__(
         self,
-        roles: dict[str, Any],
+        roles: dict[str, InferenceRoleParams],
+        engines: dict[str, BaseInferenceService],
         inference_semaphore: asyncio.Semaphore,
     ):
         if not roles:
             raise ValueError("InferenceGateway 至少需要一个已配置 role")
         self._roles = dict(roles)
+        self._engines = dict(engines)
         self._inference_semaphore = inference_semaphore
+
+    @classmethod
+    def from_mapping(
+        cls,
+        raw: Any,
+        *,
+        base_url: str,
+        engine_type: str,
+    ) -> InferenceGateway:
+        """解析配置并装配引擎，地址和引擎类型均由应用显式注入。"""
+        if not isinstance(base_url, str) or not base_url.strip():
+            raise ValueError("base_url 必须是非空字符串")
+        if not isinstance(engine_type, str) or not engine_type.strip():
+            raise ValueError("engine_type 必须是非空字符串")
+        config = InferenceConfig.from_mapping(raw)
+        impl = resolve_engine(engine_type)
+        engines: dict[str, BaseInferenceService] = {}
+        for role in config.roles.values():
+            if role.api_key not in engines:
+                engines[role.api_key] = impl(
+                    InferenceParams(
+                        base_url=base_url,
+                        timeout=float(config.timeout_seconds),
+                        api_key=role.api_key,
+                        extra=dict(config.engine_options),
+                    )
+                )
+        return cls(config.roles, engines, asyncio.Semaphore(config.max_concurrency))
 
     def get(self, role: str) -> RoleInference:
         """按配置名称获取推理入口，供动态角色使用。"""
@@ -50,7 +84,7 @@ class InferenceGateway:
             entry = self._roles[role]
         except KeyError as exc:
             raise ValueError(f"未配置推理 role: {role}") from exc
-        return entry.engine, entry.model_name, dict(entry.options)
+        return self._engines[entry.api_key], entry.model_name, dict(entry.options)
 
     async def generate(
         self,

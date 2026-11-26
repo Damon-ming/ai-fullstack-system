@@ -402,6 +402,7 @@ class AppInitializer:
         )
         from src.com.damon.ming.app.config.env import (
             get_inference_gateway_url,
+            get_inference_server,
             get_model_root_dir,
         )
         from src.com.damon.ming.app.config.i18n.i18n_config_loader import (
@@ -415,16 +416,14 @@ class AppInitializer:
         rag_config_loader = RagConfigLoader(
             variables={"model_dir": get_model_root_dir()},
         )
+        self.embedding_gateway = EmbeddingGateway.from_mapping(
+            rag_config_loader.get_embedding_config(),
+            base_url=get_inference_gateway_url(),
+        )
 
         rag = RagConfig.from_mapping(
             rag_config_loader.get_rag_config(),
             default_locale=I18nConfigLoader().load().default_locale,
-        )
-        inference_config = InferenceConfigLoader().load()
-        self.embedding_gateway = EmbeddingGateway.from_mapping(
-            rag_config_loader.get_embedding_config(),
-            # todo:解决base_url问题
-            base_url=get_inference_gateway_url(),
         )
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
@@ -442,10 +441,12 @@ class AppInitializer:
             rag.execution_timeout_seconds,
         )
 
+        inference_config = InferenceConfigLoader().load()
         # 所有推理角色共享 Gateway 的并发限制。
-        self.inference_gateway = InferenceGateway(
-            inference_config.roles,
-            asyncio.Semaphore(inference_config.max_concurrency),
+        self.inference_gateway = InferenceGateway.from_mapping(
+            inference_config,
+            base_url=get_inference_gateway_url(),
+            engine_type=get_inference_server(),
         )
 
         self.rag_choreographer = get_rag_choreographer(

@@ -24,14 +24,18 @@ from src.com.damon.ming.ai.inference.base_inference import (
     register_engine,
     resolve_engine,
 )
+from src.com.damon.ming.ai.inference.config import InferenceConfig
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
 from src.com.damon.ming.ai.inference.ollama_inference import OllamaInference
+from src.com.damon.ming.ai.inference.params import InferenceRoleParams
 from src.com.damon.ming.ai.inference.vllm_inference import VLLMInference
 
 __all__ = [
     "BaseInferenceService",
+    "InferenceConfig",
     "InferenceGateway",
     "InferenceParams",
+    "InferenceRoleParams",
     "ModelOptions",
     "OllamaInference",
     "StreamToken",
