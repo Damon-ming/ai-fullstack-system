@@ -62,7 +62,6 @@ class RagRuntime:
     rag_sem: asyncio.Semaphore
     execution_timeout_seconds: float
     retry_ms: int
-    model_root_dir: str
     locales: dict[str, LocaleConfig]
     choreographer: RagChoreographer
 

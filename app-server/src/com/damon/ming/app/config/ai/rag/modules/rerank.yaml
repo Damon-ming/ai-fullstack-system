@@ -1,5 +1,6 @@
 # rerank 模块配置。
-# 当前使用一个多语言重排器；相对模型名位于 MODEL_ROOT_DIR/rerank/ 下。
+# 当前使用一个多语言重排器；相对模型名从 model_dir 下加载。
+model_dir: "${model_dir}/rerank"
 roles:
   bge_reranker_v2_m3:
     model_name: bge-reranker-v2-m3

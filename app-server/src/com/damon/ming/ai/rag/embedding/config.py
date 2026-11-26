@@ -30,11 +30,13 @@ class EmbeddingConfig:
         raw: Any,
         *,
         base_url: str,
-        cache_folder: str | None = None,
     ) -> EmbeddingConfig:
-        """解析 YAML 并注入应用提供的地址、缓存目录，不读取应用环境配置。"""
+        """解析 YAML 的缓存目录和角色配置，注入应用提供的网关地址。"""
         if not isinstance(raw, dict):
             raise TypeError("RAG embedding 配置必须是 YAML 对象")
+        cache_folder = raw.get("cache_folder")
+        if not isinstance(cache_folder, str) or not cache_folder.strip():
+            raise ValueError("RAG embedding.cache_folder 必须是非空字符串")
         transport = raw.get("transport")
         if not isinstance(transport, dict):
             raise TypeError("Embedding 配置缺少 transport")

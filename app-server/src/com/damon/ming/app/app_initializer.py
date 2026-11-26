@@ -99,7 +99,6 @@ class AppInitializer:
                 rag_sem=self.rag_sem,
                 execution_timeout_seconds=self.execution_timeout_seconds,
                 retry_ms=self.rag_retry_ms,
-                model_root_dir=self.model_root_dir,
                 locales=self.rag_locales,
                 choreographer=self.rag_choreographer,
             ),
@@ -390,7 +389,6 @@ class AppInitializer:
     def _init_ai(self) -> None:
         """加载 AI 配置，初始化 RAG 容器和统一推理入口。"""
         import asyncio
-        from pathlib import Path
 
         from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag.embedding import EmbeddingGateway
@@ -414,17 +412,17 @@ class AppInitializer:
             UploadRecoveryService,
         )
 
-        rag_config_loader = RagConfigLoader()
+        rag_config_loader = RagConfigLoader(
+            variables={"model_dir": get_model_root_dir()},
+        )
 
         rag = RagConfig.from_mapping(
             rag_config_loader.get_rag_config(),
             default_locale=I18nConfigLoader().load().default_locale,
         )
         inference_config = InferenceConfigLoader().load()
-        self.model_root_dir = get_model_root_dir()
         self.embedding_gateway = EmbeddingGateway.from_mapping(
             rag_config_loader.get_embedding_config(),
-            model_root_dir=Path(self.model_root_dir),
             # todo:解决base_url问题
             base_url=get_inference_gateway_url(),
         )
@@ -453,7 +451,6 @@ class AppInitializer:
         self.rag_choreographer = get_rag_choreographer(
             pools=get_rag_pool_group(),
             corpus_dir=self.system_config.corpus_dir,
-            model_root_dir=self.model_root_dir,
             inference_gateway=self.inference_gateway,
             embedding_gateway=self.embedding_gateway,
             context_max_tokens=rag.context_max_tokens,

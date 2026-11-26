@@ -10,9 +10,12 @@ from src.com.damon.ming.ai.rag.rerank.params import RerankerParams
 
 @dataclass(frozen=True, kw_only=True)
 class RerankConfig:
+    model_dir: str
     roles: dict[str, RerankerParams]
 
     def __post_init__(self) -> None:
+        if not isinstance(self.model_dir, str) or not self.model_dir.strip():
+            raise ValueError("RAG rerank.model_dir 必须是非空字符串")
         if not isinstance(self.roles, dict) or not self.roles:
             raise ValueError("RAG rerank 配置必须包含至少一个 role")
         if not all(
@@ -43,4 +46,4 @@ class RerankConfig:
                 roles[name] = RerankerParams(**base_kwargs, extra=extra_kwargs)
             except (TypeError, ValueError) as exc:
                 raise type(exc)(f"重排器配置 '{name}' 无效: {exc}") from exc
-        return cls(roles=roles)
+        return cls(model_dir=raw.get("model_dir"), roles=roles)

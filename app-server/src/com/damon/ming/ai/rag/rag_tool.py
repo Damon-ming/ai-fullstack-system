@@ -58,7 +58,6 @@ _rag_choreographer_lock = threading.Lock()
 def get_rag_choreographer(
     pools: ThreadPoolGroup,
     corpus_dir: str,
-    model_root_dir: str,
     inference_gateway: InferenceGateway,
     embedding_gateway: EmbeddingGateway,
     context_max_tokens: int,
@@ -69,7 +68,6 @@ def get_rag_choreographer(
     Args:
         pools: 仅限 RAG 资源组的线程池能力，由 AppInitializer 注入。
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
-        model_root_dir: 本地模型统一目录（由应用环境配置注入）。
         inference_gateway: 启动时装配的统一推理入口（必填）。
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
         context_max_tokens: AppInitializer 从 rag 段注入的参考上下文 token 上限。
@@ -82,7 +80,6 @@ def get_rag_choreographer(
                 _rag_choreographer_instance = RagChoreographer(
                     pools=pools,
                     corpus_dir=corpus_dir,
-                    model_root_dir=model_root_dir,
                     inference_gateway=inference_gateway,
                     embedding_gateway=embedding_gateway,
                     context_max_tokens=context_max_tokens,
@@ -98,7 +95,6 @@ class RagChoreographer:
         pools: ThreadPoolGroup,
         context_max_tokens: int,
         corpus_dir: str = "",
-        model_root_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
         embedding_gateway: EmbeddingGateway | None = None,
         config: dict[str, Any] | None = None,
@@ -109,10 +105,6 @@ class RagChoreographer:
         if not corpus_dir:
             raise ValueError("RagChoreographer 初始化失败：corpus_dir 不能为空")
         corpus_path = Path(corpus_dir)
-
-        if not model_root_dir:
-            raise ValueError("RagChoreographer 初始化失败：model_root_dir 不能为空")
-        model_root_path = Path(model_root_dir)
 
         if inference_gateway is None:
             raise ValueError("RagChoreographer 初始化失败：inference_gateway 不能为空")
@@ -165,7 +157,7 @@ class RagChoreographer:
 
         # 步骤5：启动时加载 BGE-Reranker-v2-M3，避免首次请求时产生加载延迟
         self.reranker_manager = create_rerankers(
-            model_root_path, self.config.get_reranker_config()
+            self.config.get_reranker_config()
         )
         self.reranker: BaseReranker = self.reranker_manager.get_bge_reranker_v2_m3()
 

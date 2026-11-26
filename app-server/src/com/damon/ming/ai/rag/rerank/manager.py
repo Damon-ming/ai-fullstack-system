@@ -9,12 +9,10 @@ from src.com.damon.ming.ai.rag.rerank.config import RerankConfig
 
 class RerankersManager:
     def __init__(self) -> None:
-        self._model_root_dir: Path | None = None
         self._config: RerankConfig | None = None
         self._rerankers: dict[str, BaseReranker] = {}
 
-    # todo：看下怎么处理这个路径问题
-    def initialize(self, model_root_dir: Path, config: dict[str, object]) -> None:
+    def initialize(self, config: dict[str, object]) -> None:
         if self._config is not None:
             raise RuntimeError("RAG 重排器已经初始化")
         config = RerankConfig.from_mapping(config)
@@ -26,12 +24,11 @@ class RerankersManager:
             pin("RerankersManager").info("[Registry] 可用重排引擎: %s", engines)
         else:
             pin("RerankersManager").warning("[Registry] 未注册任何重排引擎")
-        self._model_root_dir = model_root_dir
         self._config = config
 
     def get(self, name: str) -> BaseReranker:
         """按配置名获取重排器；每个模型只在首次获取时实例化一次。"""
-        if self._config is None or self._model_root_dir is None:
+        if self._config is None:
             raise RuntimeError("RAG 重排器尚未初始化")
         if name in self._rerankers:
             return self._rerankers[name]
@@ -45,7 +42,7 @@ class RerankersManager:
         if not model_path.is_absolute():
             params = replace(
                 params,
-                model_name=str(self._model_root_dir / "rerank" / model_path),
+                model_name=str(Path(self._config.model_dir) / model_path),
             )
 
         # 当前项目的 reranker 配置使用 CrossEncoder 实现。

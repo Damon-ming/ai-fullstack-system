@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -113,19 +114,47 @@ class RagConfig:
 
 
 class RagConfigLoader:
-    """读取 RAG 入口及其一层模块引用，缓存合并后的配置字典。"""
+    """加载一层模块引用，展开显式提供的变量，缓存配置字典。"""
 
-    def __init__(self) -> None:
+    def __init__(self, *, variables: dict[str, str] | None = None) -> None:
         self._config_dir = Path(__file__).resolve().parent
+        self._variables = dict(variables or {})
         self._config: dict[str, Any] | None = None
 
     def load(self) -> dict[str, Any]:
-        """展开 modules 中的 include；字段语义由各使用方解析、校验。"""
+        """加载 include 后展开字符串变量；字段语义由各使用方解析、校验。"""
         if self._config is None:
             raw = load_yaml(self._config_dir / "rag-runtime.yaml")
             raw["modules"] = self._load_modules(raw.get("modules"))
-            self._config = raw
+            self._config = self._expand_variables(raw, "root")
         return self._config
+
+    def _expand_variables(self, value: Any, location: str) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: self._expand_variables(item, f"{location}.{key}")
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [
+                self._expand_variables(item, f"{location}[{index}]")
+                for index, item in enumerate(value)
+            ]
+        if not isinstance(value, str):
+            return value
+
+        def replace(match: re.Match[str]) -> str:
+            name = match.group(1)
+            if name not in self._variables:
+                raise ValueError(f"RAG 配置变量 '{name}' 未提供 | path={location}")
+            replacement = self._variables[name]
+            if not isinstance(replacement, str) or not replacement.strip():
+                raise ValueError(
+                    f"RAG 配置变量 '{name}' 必须是非空字符串 | path={location}"
+                )
+            return replacement
+
+        return re.sub(r"\$\{([^{}]+)\}", replace, value)
 
     def _load_modules(self, raw: Any) -> dict[str, dict[str, Any]]:
         if not isinstance(raw, dict) or not raw:

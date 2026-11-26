@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from src.com.damon.ming.ai.rag.embedding.BaseEmbeddingService import (
@@ -33,14 +32,12 @@ class EmbeddingGateway:
         cls,
         raw: Any,
         *,
-        model_root_dir: Path,
         base_url: str,
     ) -> EmbeddingGateway:
         """解析 RAG embedding 配置并装配各角色的服务。"""
         config = EmbeddingConfig.from_mapping(
             raw,
             base_url=base_url,
-            cache_folder=str(model_root_dir / "embedding"),
         )
         return cls(config.roles)
 
