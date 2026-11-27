@@ -1,64 +1,66 @@
 # ============================================================
-# AI Fullstack System — Server Dependencies
-# Python 3.11+
+# AI Fullstack System - Server Dependencies
+# Python 3.11 / 3.12 (Docker uses 3.11; pinned NumPy does not support 3.13)
 # ============================================================
-# 安装命令: pip install -r requirements.txt
+# Install: pip install -r requirements.txt
 
-# ── Web Framework ────────────────────────────────────────────
+# -- Web Framework ---------------------------------------------
 fastapi==0.128.0
 uvicorn==0.40.0
 starlette==0.50.0
 python-multipart==0.0.32
 sse-starlette==3.5.0
 
-# ── Data Validation ──────────────────────────────────────────
+# -- Data Validation -------------------------------------------
 pydantic==2.12.5
 
-# ── AI / LLM ─────────────────────────────────────────────────
+# -- AI / LLM --------------------------------------------------
 llama-index==0.14.13
 ollama==0.6.1
 openai==2.16.0
 tiktoken==0.12.0
 
-# ── ML / Embedding / Rerank ──────────────────────────────────
+# -- ML / Embedding / Rerank ----------------------------------
 torch==2.8.0
 transformers==4.57.1
 sentence-transformers==5.1.2
 
-# ── Vector DB & Retrieval ────────────────────────────────────
+# -- Vector DB & Retrieval ------------------------------------
 chromadb==1.5.9
-# pgvector 由 SQLAlchemy + psycopg2 驱动，无需额外 pip 包
-# PostgreSQL 服务端需安装 pgvector 扩展
+# pgvector is accessed through SQLAlchemy + psycopg2; no extra pip package.
+# The PostgreSQL server must have the pgvector extension installed.
 rank-bm25==0.2.2
 numpy==1.26.4
 
-# ── Chinese Tokenization ──────────────────────────────────────
+# -- Chinese Tokenization --------------------------------------
 jieba==0.42.1
 
-# ── Data Processing ───────────────────────────────────────────
+# -- Data Processing --------------------------------------------
 pandas==2.3.2
 
-# ── Document Processing ──────────────────────────────────────
+# -- Document Processing ---------------------------------------
 pymupdf4llm==1.28.2
 python-docx==1.1.2
 paddleocr==2.9.0
 paddlepaddle==3.1.0
+albumentations==1.4.10
+albucore==0.0.13
 python-pptx==1.0.2
-beautifulsoup4==4.13.0
+beautifulsoup4==4.13.5
 lxml==5.3.0
 
-# ── Database ─────────────────────────────────────────────────
-# SQLAlchemy 2.x — 通用 ORM/核心层，支持 PostgreSQL / MySQL / SQLite 等
-sqlalchemy>=2.0.0
-# PostgreSQL 适配器（SQLAlchemy 驱动层）
+# -- Database --------------------------------------------------
+# SQLAlchemy 2.x - ORM/core layer for PostgreSQL, MySQL, SQLite, etc.
+sqlalchemy==2.0.44
+# PostgreSQL adapter for SQLAlchemy.
 psycopg2-binary==2.9.13
 
-# ── Security / Encryption ────────────────────────────────────
+# -- Security / Encryption -------------------------------------
 cryptography==44.0.1
 argon2-cffi==25.1.0
 
-# ── Rate Limiting ─────────────────────────────────────────────
+# -- Rate Limiting ---------------------------------------------
 slowapi==0.1.10
 
-# ── Config / Utils ───────────────────────────────────────────
+# -- Config / Utils --------------------------------------------
 PyYAML==6.0.2
