@@ -41,11 +41,11 @@
 │  重试 + 错误兜底  │   └─────────────┘
 └────────┬─────────┘
          │
-    ┌────┴────┬────────┬────────┬────────┐
-    ▼         ▼        ▼        ▼        ▼
- vllm-1    vllm-2   vllm-3   vllm-4   vllm-5
- 7B-inference 0.5B  1.8B     1.5B     4B-guardrail
- (意图)   (检索)    (改写)   (摘要)    (护栏)
+    ┌────┴────────────┬────────────┬───────────┐
+    ▼                ▼            ▼           ▼
+vllm-inferences-001 vllm-inferences-002 vllm-guardrail vllm-embedding
+  Qwen2.5-1.5B       Qwen2.5-0.5B     Qwen3Guard     BGE-M3
+    (主推理)           (摘要)           (护栏)       (向量)
 ```
 
 ## 核心特性
@@ -143,7 +143,7 @@ ai-fullstack-system/
 
 | 实例 | 模型 | gpu-memory-utilization | 16 GB GPU 的配置预算 |
 |------|------|----------------------|-------------------|
-| vllm-inferences-001（主推理） | Qwen2.5-1.8B-Instruct | 0.4 | ~6.4 GB |
+| vllm-inferences-001（主推理） | Qwen2.5-1.5B-Instruct | 0.4 | ~6.4 GB |
 | vllm-inferences-002（摘要） | Qwen2.5-0.5B-Instruct | 0.3 | ~4.8 GB |
 | vllm-guardrail | Qwen3Guard-Gen-0.6B | 0.1 | ~1.6 GB |
 | vllm-embedding | BAAI/bge-m3 | 0.1（可配置） | ~1.6 GB |
@@ -159,7 +159,7 @@ ${DATA_DIR}/                          # 默认 /root/damon
 ├── models/                           # vLLM 模型权重（vLLM 模式）
 │   └── inference/
 │       ├── Qwen2.5-0.5B-Instruct/
-│       ├── Qwen2.5-1.8B-Instruct/
+│       ├── Qwen2.5-1.5B-Instruct/
 │       └── Qwen3Guard-Gen-0.6B/
 ├── chroma/                           # Chroma 向量缓存
 ├── knowledge/                       # 上传知识库文件
@@ -206,8 +206,7 @@ app-server (depends_on: postgres + model-gateway)
 web-app (depends_on: app-server)
 ```
 
-model-config 将 models.yaml 导出为根目录 model-config.env，不运行独立容器。
-Compose 在解析启动参数时读取该文件，app-server 和 model-gateway 通过服务 env_file 接收同一份模型变量。
+TODO：当前 Compose 尚未接入 `model-config.env`；vLLM 的模型参数仍由 Compose 配置固定。待模型配置真正接入 vLLM 启动参数后，再恢复该文件的生成与注入。
 
 ## 一键部署
 
@@ -218,9 +217,8 @@ Compose 在解析启动参数时读取该文件，app-server 和 model-gateway �
 - NVIDIA Container Toolkit（vLLM 模式需要）
 
 完成 `.env` 配置和模型下载后，执行 `docker compose up -d --build` 一键启动。
-根 Compose 保持 include 结构，通过 include.env_file 提供模型参数替换。
-app-server 和 model-gateway 在各自服务下通过 env_file 注入容器环境；启动命令无需追加 --env-file。
-修改模型配置后，先执行 `python model-config/export_env.py` 更新根目录 model-config.env，再运行 Compose。
+当前启动流程不需要生成 `model-config.env`；vLLM 的模型参数仍由 Compose 配置固定。
+TODO：模型配置接入 vLLM 启动参数后，恢复 `model-config.env` 的生成与注入。
 
 ### 部署步骤
 
@@ -236,17 +234,13 @@ cp .env.example .env
 python -m pip install huggingface-hub
 python scripts/download-models.py
 
-# 4. 准备配置导出依赖并生成根目录 model-config.env
-python -m pip install -e ./model-config
-python model-config/export_env.py
-
-# 5. 一键部署（需要 GPU）
+# 4. 一键部署（需要 GPU）
 docker compose up -d --build
 
-# 6. 查看日志
+# 5. 查看日志
 docker compose logs -f app-server
 
-# 7. 停止所有服务
+# 6. 停止所有服务
 docker compose down
 ```
 
@@ -273,8 +267,8 @@ docker compose down
 
 切换推理后端通过 `.env` 配置；当前模型窗口入口仅接入现有 vLLM 配置，其他后端需补充对应的读取规则。
 
-vLLM 的 `--max-model-len` 使用标准 `${模型变量}` 引用根目录 model-config.env，数值由 model-config/models.yaml 导出。
-修改 YAML 后重新导出，再执行 `docker compose up -d`，让 Compose 应用新的参数和容器环境。
+当前 vLLM 的 `--max-model-len` 在 Compose 文件中使用固定值，尚未接入 `model-config/models.yaml`。
+TODO：将模型配置接入 vLLM 启动参数后，再恢复 `model-config.env` 的导出和注入流程。
 模型配置入口和字段说明见 [model-config/README.md](model-config/README.md)。app-server 的窗口及业务预算尚未接入。
 
 Embedding 固定由独立的 vLLM 服务运行，并通过 model-gateway 路由；`INFERENCE_SERVER` 只选择生成推理后端。

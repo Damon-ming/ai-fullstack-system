@@ -45,14 +45,14 @@ vLLM embedding 服务的部署窗口在 `model-gateway/config/docker/docker-vllm
 
 ```yaml
 inference:
-  qwen2.5-1.8B-instruct:
+  qwen2.5-1.5B-instruct:
     max-model-len: 4096
 ```
 
 导出为：
 
 ```dotenv
-QWEN2_5_1_8B_INSTRUCT_MAX_MODEL_LEN=4096
+QWEN2_5_1_5B_INSTRUCT_MAX_MODEL_LEN=4096
 ```
 
 变量前缀使用模型 key 最后一个 `/` 后的名称，非字母数字转换为下划线并转大写。

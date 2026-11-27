@@ -11,7 +11,7 @@ roles:
   inference:
     api_key: ak_inference_001
     timeout_seconds: 180  # 包含等待并发槽及完整输出
-    model_name: qwen2.5-1.8B-instruct
+    model_name: qwen2.5-1.5B-instruct
     max_model_len: 4096
     options:
       temperature: 0.1

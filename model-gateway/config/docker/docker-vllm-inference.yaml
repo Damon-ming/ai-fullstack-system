@@ -5,7 +5,7 @@
 # 路由层不感知业务语义，只认 api_key → upstream 映射。
 #
 # 新增实例：添加服务并在 gateway.yaml 添加对应 route
-# --max-model-len 来自根目录 model-config.env，由 models.yaml 自动生成。
+# TODO: 当前 --max-model-len 使用下方固定值；模型配置接通后再改为动态注入。
 # TODO: 后续接入模型名、服务名与 app-server 角色配置的统一管理。
 #
 # 使用 vLLM 0.17.0：Qwen3Guard-Gen 要求 vLLM >=0.9.0。
@@ -20,10 +20,10 @@ services:
     container_name: vllm-inferences-001
     command: >
       --host 0.0.0.0 --port 8000
-      --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-1.8B-Instruct
-      --served-model-name qwen2.5-1.8B-instruct
+      --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-1.5B-Instruct
+      --served-model-name qwen2.5-1.5B-instruct
       --gpu-memory-utilization 0.4
-      --max-model-len ${QWEN2_5_1_8B_INSTRUCT_MAX_MODEL_LEN}
+      --max-model-len 4096
       --api-key uk_inference_001
     healthcheck:
       start_period: 300s
@@ -39,7 +39,7 @@ services:
       --model ${MODEL_ROOT_DIR}/inference/Qwen2.5-0.5B-Instruct
       --served-model-name qwen2.5-0.5B-instruct
       --gpu-memory-utilization 0.3
-      --max-model-len ${QWEN2_5_0_5B_INSTRUCT_MAX_MODEL_LEN}
+      --max-model-len 2048
       --api-key uk_inference_002
     healthcheck:
       start_period: 120s
@@ -54,7 +54,7 @@ services:
       --host 0.0.0.0 --port 8000
       --model ${MODEL_ROOT_DIR}/inference/Qwen3Guard-Gen-0.6B
       --served-model-name qwen3guard-gen-0.6b
-      --max-model-len ${QWEN3GUARD_GEN_0_6B_MAX_MODEL_LEN}
+      --max-model-len 4096
       --gpu-memory-utilization 0.1
       --api-key uk_guardrail
     healthcheck:

@@ -8,7 +8,7 @@
 # Compose 读取生成的环境变量用于部署；app-server 的推理窗口与 embedding 运行规格由各自 YAML 维护。
 
 inference:
-  qwen2.5-1.8B-instruct:
+  qwen2.5-1.5B-instruct:
     max-model-len: 4096
 
   qwen2.5-0.5B-instruct:

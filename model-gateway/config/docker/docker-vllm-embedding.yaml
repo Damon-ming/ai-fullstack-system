@@ -17,7 +17,7 @@ services:
       --runner pooling
       --hf-overrides '{"architectures":["BgeM3EmbeddingModel"]}'
       --max-model-len 8192
-      --gpu-memory-utilization ${EMBEDDING_GPU_MEMORY_UTILIZATION:-0.1}
+      --gpu-memory-utilization 0.1
       --api-key uk_embedding
     healthcheck:
       start_period: 300s

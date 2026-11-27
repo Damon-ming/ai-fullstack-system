@@ -26,9 +26,9 @@ from pathlib import Path
 # 与 model-gateway/config/docker/docker-vllm-inference.yaml 保持一致。
 VLLM_MODELS = [
     (
-        "Qwen/Qwen2.5-1.8B-Instruct",
-        "inference/Qwen2.5-1.8B-Instruct",
-        "主推理模型 (1.8B)",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "inference/Qwen2.5-1.5B-Instruct",
+        "主推理模型 (1.5B)",
     ),
     (
         "Qwen/Qwen2.5-0.5B-Instruct",
