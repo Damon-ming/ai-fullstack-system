@@ -24,10 +24,10 @@ RUN pnpm install --frozen-lockfile --no-optional=false
 #   1 → vite build --mode development → DEV=true  → localStorage 可切换（开发/预发）
 ARG FRONTEND_BUILD_ENV=0
 RUN cd src/app/main && if [ "$FRONTEND_BUILD_ENV" = "1" ]; then \
-      vite build --mode development; \
-    else \
-      vite build; \
-    fi
+  pnpm exec vite build --mode development; \
+  else \
+  pnpm exec vite build; \
+  fi
 
 # 阶段2 Nginx不变
 # 重新开启一个全新基础镜像，nginx alpine，只有 nginx，没有 node、pnpm、没有源码。

@@ -216,7 +216,8 @@ TODO：当前 Compose 尚未接入 `model-config.env`；vLLM 的模型参数仍�
 - Docker Compose v2.20.3+
 - NVIDIA Container Toolkit（vLLM 模式需要）
 
-完成 `.env` 配置和模型下载后，执行 `docker compose up -d --build` 一键启动。
+完成 `.env` 配置和模型准备后，执行 `docker compose up -d --build` 一键构建并启动服务。
+前端和后端依赖由各自 Dockerfile 在构建镜像时安装；Docker 会先完成镜像构建，再启动容器，不需要在 Ubuntu 宿主机安装 pnpm 或 Python 项目依赖。
 当前启动流程不需要生成 `model-config.env`；vLLM 的模型参数仍由 Compose 配置固定。
 TODO：模型配置接入 vLLM 启动参数后，恢复 `model-config.env` 的生成与注入。
 
@@ -230,19 +231,31 @@ git clone <repo-url> && cd ai-fullstack-system
 cp .env.example .env
 # 编辑 .env，设置 DB_PASSWORD、MASTER_KEY 等
 
-# 3. 在宿主机安装模型下载工具并下载当前部署所需模型
+# 3. 首次部署或模型尚未下载完整时，下载模型
 python -m pip install huggingface-hub
 python scripts/download-models.py
 
-# 4. 一键部署（需要 GPU）
-docker compose up -d --build
+# 4. 构建应用镜像并启动服务（需要 GPU）
+sudo SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 INFERENCE_SERVER=vllm docker compose up -d --build
 
 # 5. 查看日志
-docker compose logs -f app-server
+sudo docker compose logs -f app-server
 
 # 6. 停止所有服务
-docker compose down
+sudo docker compose down
 ```
+
+模型已经下载完整时可跳过第 3 步。如果 Docker 用户组权限已配置且当前用户已重新登录，可去掉命令前的 `sudo`。`python scripts/install-frontend-deps.py` 仅用于宿主机前端开发，不属于 Docker 部署步骤。
+
+### 本地前端依赖（可选）
+
+仅在宿主机进行前端开发时，在仓库根目录执行：
+
+```bash
+python scripts/install-frontend-deps.py
+```
+
+脚本使用 `web-app/pnpm-lock.yaml` 安装整个前端 workspace 的锁定依赖，其中包含 `src/app/main` 已声明的 Vite。需要预先安装 Node.js 和 pnpm。Docker 构建会在 builder 镜像中自行安装依赖，部署时无需在宿主机运行此脚本。
 
 ### 端口分配
 
