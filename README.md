@@ -175,7 +175,7 @@ ${DATA_DIR}/                          # 默认 /root/damon
 | model-gateway | python:3.11-slim | 3.11 | 模型推理与 embedding 网关 |
 | web-app (builder) | node:22-alpine | — | 前端构建 |
 | web-app (serve) | nginx:alpine | — | 前端静态资源 |
-| postgres | postgres:16-alpine | — | 数据库 |
+| postgres | pgvector/pgvector:0.8.7-pg16-bookworm | — | PostgreSQL 16 + pgvector 数据库 |
 | vllm-inferences-001/002、vllm-guardrail | vllm/vllm-openai:v0.17.0 | — | 主推理池 / 摘要池 / 护栏池 |
 | vllm-embedding | vllm/vllm-openai:v0.17.0 | — | BGE-M3 pooling embedding |
 

@@ -10,7 +10,7 @@
 services:
   # ── PostgreSQL ─────────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.7-pg16-bookworm
     container_name: server-postgres
     restart: always
     # SECURITY: 仅暴露给 Docker 内部网络，不映射到宿主机端口（P1-6 修复）
