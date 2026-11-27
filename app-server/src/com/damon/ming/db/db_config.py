@@ -14,6 +14,8 @@ db 模块本身不感知配置来源，也不做任何环境变量回退。
 from dataclasses import dataclass
 from typing import Literal
 
+from sqlalchemy.engine import URL
+
 # 支持的数据库驱动方言
 DbDialect = Literal["postgresql", "mysql", "sqlite"]
 
@@ -65,9 +67,16 @@ class DbConfig:
         if self.dialect == "sqlite":
             return f"sqlite:///{self.dbname}"
 
-        driver_part = f"+{self.driver}" if self.driver else ""
-        auth = f"{self.user}:{self.password}" if self.password else self.user
-        return f"{self.dialect}{driver_part}://{auth}@{self.host}:{self.port}/{self.dbname}"
+        drivername = f"{self.dialect}+{self.driver}" if self.driver else self.dialect
+        url = URL.create(
+            drivername=drivername,
+            username=self.user,
+            password=self.password or None,
+            host=self.host,
+            port=self.port,
+            database=self.dbname,
+        )
+        return url.render_as_string(hide_password=False)
 
     def get_engine_kwargs(self) -> dict:
         """获取 SQLAlchemy create_engine 的 kwargs。"""
