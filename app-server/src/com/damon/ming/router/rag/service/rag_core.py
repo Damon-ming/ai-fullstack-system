@@ -12,16 +12,9 @@ from collections.abc import AsyncGenerator
 from contextlib import aclosing
 
 from src.com.damon.ming.ai.inference.base_inference import StreamToken
-from src.com.damon.ming.i18n import get_locale
-from src.com.damon.ming.i18n.locale_negotiator import get_default_locale
 from src.com.damon.ming.log import pin
 
 logger = pin("chat.core")
-
-
-def _resolve_locale_text(rag_locales: dict, locale: str):
-    """按请求 locale 取文本配置，缺省回退 i18n 配置的 default_locale。"""
-    return rag_locales.get(locale) or rag_locales[get_default_locale()]
 
 
 async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
@@ -39,7 +32,7 @@ async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
             query,
         )
 
-    chat_cfg = _resolve_locale_text(app_state.ai.rag.locales, get_locale())
+    chat_cfg = app_state.ai.rag.prompt
 
     prompt_messages = [
         {"role": "system", "content": chat_cfg.system_prompt},

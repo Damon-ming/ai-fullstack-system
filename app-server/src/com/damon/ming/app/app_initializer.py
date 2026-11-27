@@ -99,7 +99,7 @@ class AppInitializer:
                 rag_sem=self.rag_sem,
                 execution_timeout_seconds=self.execution_timeout_seconds,
                 retry_ms=self.rag_retry_ms,
-                locales=self.rag_locales,
+                prompt=self.rag_prompt,
                 choreographer=self.rag_choreographer,
             ),
             inference=InferenceRuntime(
@@ -405,9 +405,6 @@ class AppInitializer:
             get_inference_server,
             get_model_root_dir,
         )
-        from src.com.damon.ming.app.config.i18n.i18n_config_loader import (
-            I18nConfigLoader,
-        )
         from src.com.damon.ming.app.thread_pools import get_rag_pool_group
         from src.com.damon.ming.router.upload.service.upload_recovery_service import (
             UploadRecoveryService,
@@ -423,20 +420,17 @@ class AppInitializer:
 
         rag = RagConfig.from_mapping(
             rag_config_loader.get_rag_config(),
-            default_locale=I18nConfigLoader().load().default_locale,
         )
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
         self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
         self.execution_timeout_seconds = rag.execution_timeout_seconds
         self.rag_retry_ms = rag.retry_ms
-        # 多 locale 文本配置：locale → LocaleConfig
-        self.rag_locales = rag.locales
+        self.rag_prompt = rag.prompt
 
         logger.info(
-            "RAG 配置初始化完成 | locales=%s | rag_max_concurrency=%d | "
+            "RAG 配置初始化完成 | rag_max_concurrency=%d | "
             "execution_timeout_seconds=%g",
-            list(self.rag_locales.keys()),
             rag.rag_max_concurrency,
             rag.execution_timeout_seconds,
         )

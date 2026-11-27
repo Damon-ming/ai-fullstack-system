@@ -1,5 +1,5 @@
 # app-server/src/com/damon/ming/app/config/ai/rag/config.py
-"""加载 RAG YAML，并解析应用侧请求预算与多语言提示词配置。"""
+"""加载 RAG YAML，并解析应用侧请求预算与提示词配置。"""
 
 from __future__ import annotations
 
@@ -13,12 +13,31 @@ from src.com.damon.ming.utils.yaml_loader import load_yaml
 
 
 @dataclass(frozen=True, kw_only=True)
-class LocaleConfig:
-    """rag.locales.{locale} 段 —— 单个 locale 的聊天文本。"""
+class RagPromptConfig:
+    """rag.prompt 段：参考资料标签、问题标签和系统提示词。"""
 
     ref_label: str
     query_label: str
     system_prompt: str
+
+    def __post_init__(self) -> None:
+        for name in ("ref_label", "query_label", "system_prompt"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"rag.prompt.{name} 必须是非空字符串")
+
+    @classmethod
+    def from_mapping(cls, raw: Any) -> RagPromptConfig:
+        if not isinstance(raw, dict):
+            raise TypeError("rag.prompt 必须是配置映射")
+        try:
+            return cls(
+                ref_label=raw["ref_label"],
+                query_label=raw["query_label"],
+                system_prompt=raw["system_prompt"],
+            )
+        except KeyError as exc:
+            raise ValueError(f"rag.prompt 缺少必填字段: {exc}") from exc
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -29,10 +48,10 @@ class RagConfig:
     context_max_tokens: int
     rag_max_concurrency: int
     retry_ms: int
-    locales: dict[str, LocaleConfig]
+    prompt: RagPromptConfig
 
     @classmethod
-    def from_mapping(cls, rag: Any, *, default_locale: str) -> RagConfig:
+    def from_mapping(cls, rag: Any) -> RagConfig:
         if not isinstance(rag, dict):
             raise TypeError("运行时配置缺少 rag 段")
 
@@ -54,9 +73,7 @@ class RagConfig:
                     "rag.retry_ms",
                     minimum=0,
                 ),
-                locales=cls._load_rag_locales(
-                    rag.get("locales"), default_locale=default_locale
-                ),
+                prompt=RagPromptConfig.from_mapping(rag["prompt"]),
             )
         except KeyError as e:
             raise ValueError(f"rag 缺少必填字段: {e}") from e
@@ -76,41 +93,6 @@ class RagConfig:
         if type(value) is not int or value < minimum:
             raise ValueError(f"{path} 必须是大于等于 {minimum} 的整数")
         return value
-
-    @staticmethod
-    def _text(value: object, path: str) -> str:
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"{path} 必须是非空字符串")
-        return value
-
-    @classmethod
-    def _load_rag_locales(
-        cls, locales_raw: Any, *, default_locale: str
-    ) -> dict[str, LocaleConfig]:
-        if not isinstance(locales_raw, dict) or not locales_raw:
-            raise ValueError("运行时配置缺少 rag.locales 段")
-
-        locales: dict[str, LocaleConfig] = {}
-        for locale, section in locales_raw.items():
-            if not isinstance(section, dict):
-                raise TypeError(f"locale '{locale}' 配置格式错误")
-            try:
-                locales[locale] = LocaleConfig(
-                    ref_label=cls._text(
-                        section["ref_label"], f"rag.locales.{locale}.ref_label"
-                    ),
-                    query_label=cls._text(
-                        section["query_label"], f"rag.locales.{locale}.query_label"
-                    ),
-                    system_prompt=cls._text(
-                        section["system_prompt"], f"rag.locales.{locale}.system_prompt"
-                    ),
-                )
-            except KeyError as e:
-                raise ValueError(f"locale '{locale}' 缺少必填字段: {e}") from e
-        if default_locale not in locales:
-            raise ValueError(f"rag.locales 缺少系统默认语言：{default_locale}")
-        return locales
 
 
 class RagConfigLoader:
