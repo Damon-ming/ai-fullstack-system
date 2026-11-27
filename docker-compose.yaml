@@ -78,4 +78,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: ${PROXY_NETWORK_SUBNET:-172.30.20.0/24}
+        - subnet: ${PROXY_NETWORK_SUBNET}
