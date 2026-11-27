@@ -25,7 +25,6 @@ from pathlib import Path
 
 from docx import Document
 from docx.document import Document as DocxDocumentType
-from llama_index.core import Document
 from src.com.damon.ming.ai.rag.knowledge.metadata_keys import (
     CONTENT_TYPE,
     FILE_NAME,

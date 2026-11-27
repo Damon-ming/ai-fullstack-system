@@ -1,5 +1,5 @@
 # app-server/src/com/damon/ming/ai/vector_db/config/vector-config.yaml
-# 向量存储配置 —— 由 VectorConfigLoader 读取静态 YAML 参数。
+# 向量存储静态参数 —— 数据库连接由应用初始化时注入。
 # embedding_dimension 由 VectorStoreManager 从当前 embedding 模型规格动态注入。
 
 # chroma:
@@ -7,7 +7,6 @@
 #   persist_directory: ./chroma
 
 pgvector:
-  connection_string: ${DB_URL}
   table_name: rag_documents
   pool_min_conn: 2
   pool_max_conn: 10

@@ -61,6 +61,7 @@ def get_rag_choreographer(
     inference_gateway: InferenceGateway,
     embedding_gateway: EmbeddingGateway,
     context_max_tokens: int,
+    vector_db_url: str,
     config: dict[str, Any],
 ):
     """进程级单例，上传和聊天共用同一个向量库/BM25实例。
@@ -71,6 +72,7 @@ def get_rag_choreographer(
         inference_gateway: 启动时装配的统一推理入口（必填）。
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
         context_max_tokens: AppInitializer 从 rag 段注入的参考上下文 token 上限。
+        vector_db_url: AppInitializer 从 DbConfig 注入的数据库连接串（必填）。
         config: AppInitializer 透传的 RAG YAML modules 配置段。
     """
     global _rag_choreographer_instance
@@ -83,6 +85,7 @@ def get_rag_choreographer(
                     inference_gateway=inference_gateway,
                     embedding_gateway=embedding_gateway,
                     context_max_tokens=context_max_tokens,
+                    vector_db_url=vector_db_url,
                     config=config,
                 )
     return _rag_choreographer_instance
@@ -94,6 +97,7 @@ class RagChoreographer:
         self,
         pools: ThreadPoolGroup,
         context_max_tokens: int,
+        vector_db_url: str,
         corpus_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
         embedding_gateway: EmbeddingGateway | None = None,
@@ -140,7 +144,8 @@ class RagChoreographer:
 
         # 步骤3：初始化向量库
         self.vector_store_manager = create_vector_stores(
-            embedding_dimension=embedding_dimension
+            embedding_dimension=embedding_dimension,
+            vector_db_url=vector_db_url,
         )
         self._vector_store: BaseVectorStore = self.vector_store_manager.get_pgvector()
 
@@ -156,9 +161,7 @@ class RagChoreographer:
         )
 
         # 步骤5：启动时加载 BGE-Reranker-v2-M3，避免首次请求时产生加载延迟
-        self.reranker_manager = create_rerankers(
-            self.config.get_reranker_config()
-        )
+        self.reranker_manager = create_rerankers(self.config.get_reranker_config())
         self.reranker: BaseReranker = self.reranker_manager.get_bge_reranker_v2_m3()
 
         # 步骤6：BM25 索引由知识库和稀疏检索器共享。

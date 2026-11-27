@@ -90,11 +90,9 @@ class PGVectorStore(BaseVectorStore):
         except ImportError:
             raise ImportError("请安装 sqlalchemy: pip install sqlalchemy>=2.0.0")
 
-        url = self.pgvector_params.connection_string
+        url = self.pgvector_params.vector_db_url
         if not url:
-            raise ValueError(
-                "PGVectorStore 需要 connection_string，请在 YAML 中配置 DB_URL"
-            )
+            raise ValueError("PGVectorStore 需要由应用初始化器注入 vector_db_url")
 
         min_conn = self.pgvector_params.pool_min_conn
         max_conn = self.pgvector_params.pool_max_conn

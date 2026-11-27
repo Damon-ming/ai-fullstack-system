@@ -32,6 +32,7 @@ class AppInitializer:
     def __init__(self) -> None:
         # 子系统状态（startup 后填充）
         self.system_config = None
+        self.db_config = None
         self.db_conn = None
         self.rsa_key_pair = None
         self.key_material = None
@@ -259,6 +260,7 @@ class AppInitializer:
 
         loader = DbConfigLoader()
         db_config = loader.load()
+        self.db_config = db_config
         self.db_conn = DbConnection(db_config)
         self.db_conn.initialize()  # pool 参数从 DbConfig 读取
         set_default_db(self.db_conn)
@@ -449,6 +451,7 @@ class AppInitializer:
             inference_gateway=self.inference_gateway,
             embedding_gateway=self.embedding_gateway,
             context_max_tokens=rag.context_max_tokens,
+            vector_db_url=self.db_config.get_sqlalchemy_url(),
             config=rag_config_loader.get_modules_config(),
         )
 

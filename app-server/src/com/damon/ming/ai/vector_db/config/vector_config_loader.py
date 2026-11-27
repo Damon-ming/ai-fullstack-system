@@ -28,11 +28,14 @@ class VectorConfigLoader:
             config_path if config_path is not None else os.path.dirname(__file__)
         )
 
-    def load(self, engine: str) -> LoadedVectorStoreConfig:
+    def load(
+        self, engine: str, *, vector_db_url: str | None = None
+    ) -> LoadedVectorStoreConfig:
         """加载指定引擎的 YAML 配置，不创建向量存储实例。
 
         Args:
             engine: 引擎名称，如 "chroma" / "pgvector"
+            vector_db_url: pgvector 数据库连接串，由应用初始化器注入。
 
         Returns:
             已校验的静态向量存储配置。
@@ -41,6 +44,10 @@ class VectorConfigLoader:
         if not isinstance(raw, dict):
             raise TypeError(f"引擎 '{engine}' 配置必须是键值对")
         raw_params = dict(raw)
+        if engine == "pgvector":
+            if not isinstance(vector_db_url, str) or not vector_db_url.strip():
+                raise ValueError("pgvector 配置缺少数据库连接串注入")
+            raw_params["vector_db_url"] = vector_db_url
         try:
             table_name = raw_params.pop("table_name")
         except KeyError as exc:

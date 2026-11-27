@@ -15,11 +15,11 @@ class VectorStoreManager:
     def __init__(self) -> None:
         self._pgvector: PGVectorStore | None = None
 
-    def initialize(self, embedding_dimension: int) -> None:
+    def initialize(self, embedding_dimension: int, vector_db_url: str) -> None:
         if self._pgvector is not None:
             raise RuntimeError("向量存储已经初始化")
 
-        config = VectorConfigLoader().load("pgvector")
+        config = VectorConfigLoader().load("pgvector", vector_db_url=vector_db_url)
         params = VectorStoreParams(
             shared_params=SharedVectorStoreParams(
                 table_name=config.table_name,

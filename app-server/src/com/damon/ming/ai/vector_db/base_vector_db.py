@@ -49,7 +49,7 @@ class SharedVectorStoreParams:
 class PGVectorParams:
     """PGVector 专属配置。"""
 
-    connection_string: str
+    vector_db_url: str
     pool_min_conn: int
     pool_max_conn: int
     pool_recycle: int
