@@ -1,15 +1,15 @@
 /**
  * 知识库目录树 —— 类型定义。
- * 对应后端 KnowledgeNode schema 和 GET /api/corpus/tree/v1 响应。
+ * 对应后端 CorpusNode schema 和 GET /api/corpus/tree/v1 响应。
  */
 
 /** 知识库目录树节点 */
-export interface KnowledgeNode {
+export interface CorpusNode {
   /** 节点名称（原始文件名或目录名） */
   name: string;
   /** 节点类型：directory | file */
   type: "directory" | "file";
-  /** 相对 knowledge_dir 的 POSIX 路径 */
+  /** 相对 corpus_dir 的 POSIX 路径 */
   path: string;
   /** 文件大小（bytes），目录为 0 */
   size: number;
@@ -18,11 +18,11 @@ export interface KnowledgeNode {
   /** 上传者昵称，未匹配到则为空 */
   uploader: string;
   /** 子节点（仅 directory 类型） */
-  children: KnowledgeNode[];
+  children: CorpusNode[];
 }
 
 /** 知识库目录树接口响应数据 */
-export interface KnowledgeTreeData {
+export interface CorpusTreeData {
   /** 根节点 */
-  root: KnowledgeNode;
+  root: CorpusNode;
 }

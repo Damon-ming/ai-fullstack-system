@@ -1,5 +1,5 @@
-export interface KnowledgeResources {
-  knowledge: {
+export interface CorpusResources {
+  corpus: {
     title: string;
     close: string;
     tabList: string;

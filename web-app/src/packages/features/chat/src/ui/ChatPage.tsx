@@ -1,6 +1,6 @@
-// chat/src/ui/ChatPage.tsx
+// web-app/src/packages/features/chat/src/ui/ChatPage.tsx
 import { ChatDrawer } from "@ming/feature-chat-drawer-api";
-import { KnowledgeModal } from "@ming/feature-knowledge-api";
+import { CorpusModal } from "@ming/feature-corpus-api";
 import { SearchModal } from "@ming/feature-search-api";
 import { ChatChatroom } from "@ming/feature-chat-chatroom-api";
 import { AccountDialog } from "@ming/feature-account-api";
@@ -19,7 +19,7 @@ export const ChatPage: React.FC = () => {
     uploadMessage,
     closeUpload,
     abortUpload,
-    knowledgeOpen,
+    corpusOpen,
   } = useChatPageHook();
 
   // 页面关闭/刷新前取消进行中的上传，避免服务端继续空跑
@@ -151,8 +151,8 @@ export const ChatPage: React.FC = () => {
       {/* 搜索弹窗 —— 由 search 模块自包含渲染 */}
       {searchOpen && <SearchModal onSelect={handleSearchSelect} />}
 
-      {/* 知识库弹窗 —— 由 knowledge 模块自包含渲染 */}
-      {knowledgeOpen && <KnowledgeModal />}
+      {/* 知识库弹窗 —— 由 corpus 模块自包含渲染 */}
+      {corpusOpen && <CorpusModal />}
     </div>
   );
 };

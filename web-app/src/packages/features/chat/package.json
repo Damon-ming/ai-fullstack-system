@@ -15,7 +15,7 @@
     "@ming/feature-chat-chatroom-api": "workspace:*",
     "@ming/feature-history-api": "workspace:*",
     "@ming/feature-search-api": "workspace:*",
-    "@ming/feature-knowledge-api": "workspace:*",
+    "@ming/feature-corpus-api": "workspace:*",
     "@ming/feature-account-api": "workspace:*",
     "@ming/i18n": "workspace:*"
   },

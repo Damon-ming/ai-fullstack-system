@@ -1,11 +1,11 @@
-// knowledge/src/hook/useKnowledgeModalHook.ts
+// corpus/src/hook/useCorpusModalHook.ts
 import { useCallback, useMemo } from "react";
-import { useKnowledgeStore } from "@ming/store";
-import { useKnowledgeQuery } from "../api";
-import type { KnowledgeNode } from "../api";
-import type { KnowledgeGroup } from "./types";
+import { useCorpusStore } from "@ming/store";
+import { useCorpusQuery } from "../api";
+import type { CorpusNode } from "../api";
+import type { CorpusGroup } from "./types";
 
-export type { KnowledgeGroup, KnowledgeGroupFile } from "./types";
+export type { CorpusGroup, CorpusGroupFile } from "./types";
 
 /** 格式化文件大小 —— 共享工具函数，hook/UI 均可使用 */
 export function formatFileSize(bytes: number): string {
@@ -15,8 +15,8 @@ export function formatFileSize(bytes: number): string {
 }
 
 /** 扁平化收集所有文件节点 */
-function collectFiles(nodes: KnowledgeNode[]): KnowledgeNode[] {
-  const result: KnowledgeNode[] = [];
+function collectFiles(nodes: CorpusNode[]): CorpusNode[] {
+  const result: CorpusNode[] = [];
   for (const node of nodes) {
     if (node.type === "file") result.push(node);
     else result.push(...collectFiles(node.children));
@@ -25,8 +25,8 @@ function collectFiles(nodes: KnowledgeNode[]): KnowledgeNode[] {
 }
 
 /** 按日期分组，日期降序 */
-function groupByDate(files: KnowledgeNode[]): KnowledgeGroup[] {
-  const groups = new Map<string, KnowledgeNode[]>();
+function groupByDate(files: CorpusNode[]): CorpusGroup[] {
+  const groups = new Map<string, CorpusNode[]>();
   for (const file of files) {
     const key = file.created_at
       ? new Date(file.created_at).toISOString().slice(0, 10)
@@ -51,18 +51,18 @@ function groupByDate(files: KnowledgeNode[]): KnowledgeGroup[] {
     });
 }
 
-export function useKnowledgeModalHook() {
-  const open = useKnowledgeStore((s) => s.open);
-  const openKnowledge = useKnowledgeStore((s) => s.openKnowledge);
-  const closeKnowledge = useKnowledgeStore((s) => s.closeKnowledge);
-  const { data, isLoading, isError, refetch } = useKnowledgeQuery();
+export function useCorpusModalHook() {
+  const open = useCorpusStore((s) => s.open);
+  const openCorpus = useCorpusStore((s) => s.openCorpus);
+  const closeCorpus = useCorpusStore((s) => s.closeCorpus);
+  const { data, isLoading, isError, refetch } = useCorpusQuery();
 
   const handleOpen = useCallback(() => {
-    openKnowledge();
+    openCorpus();
     refetch();
-  }, [openKnowledge, refetch]);
+  }, [openCorpus, refetch]);
 
-  const knowledgeGroups = useMemo(() => {
+  const corpusGroups = useMemo(() => {
     const tree = data?.data;
     if (!tree) return [];
     const files = collectFiles(tree.root.children);
@@ -70,16 +70,16 @@ export function useKnowledgeModalHook() {
   }, [data]);
 
   const totalFileCount = useMemo(
-    () => knowledgeGroups.reduce((sum, g) => sum + g.files.length, 0),
-    [knowledgeGroups],
+    () => corpusGroups.reduce((sum, g) => sum + g.files.length, 0),
+    [corpusGroups],
   );
 
   return {
     open,
-    openKnowledge: handleOpen,
-    closeKnowledge,
+    openCorpus: handleOpen,
+    closeCorpus,
     treeData: data?.data ?? null,
-    knowledgeGroups,
+    corpusGroups,
     totalFileCount,
     isLoading,
     isError,

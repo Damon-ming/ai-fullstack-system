@@ -224,12 +224,12 @@ importers:
       '@ming/feature-chat-drawer-api':
         specifier: workspace:*
         version: link:../chat-drawer-api
+      '@ming/feature-corpus-api':
+        specifier: workspace:*
+        version: link:../corpus-api
       '@ming/feature-history-api':
         specifier: workspace:*
         version: link:../history-api
-      '@ming/feature-knowledge-api':
-        specifier: workspace:*
-        version: link:../knowledge-api
       '@ming/feature-search-api':
         specifier: workspace:*
         version: link:../search-api
@@ -321,6 +321,27 @@ importers:
         specifier: workspace:*
         version: link:../chat-drawer
 
+  src/packages/features/corpus:
+    dependencies:
+      '@ming/data-layer':
+        specifier: workspace:*
+        version: link:../../data-layer
+      '@ming/i18n':
+        specifier: workspace:*
+        version: link:../../i18n
+      '@ming/store':
+        specifier: workspace:*
+        version: link:../../store
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
+  src/packages/features/corpus-api:
+    dependencies:
+      '@ming/feature-corpus':
+        specifier: workspace:*
+        version: link:../corpus
+
   src/packages/features/encryption:
     dependencies:
       '@ming/biz-common-net-api':
@@ -362,27 +383,6 @@ importers:
       '@ming/feature-history':
         specifier: workspace:*
         version: link:../history
-
-  src/packages/features/knowledge:
-    dependencies:
-      '@ming/data-layer':
-        specifier: workspace:*
-        version: link:../../data-layer
-      '@ming/i18n':
-        specifier: workspace:*
-        version: link:../../i18n
-      '@ming/store':
-        specifier: workspace:*
-        version: link:../../store
-      react:
-        specifier: ^18.2.0
-        version: 18.3.1
-
-  src/packages/features/knowledge-api:
-    dependencies:
-      '@ming/feature-knowledge':
-        specifier: workspace:*
-        version: link:../knowledge
 
   src/packages/features/search:
     dependencies:

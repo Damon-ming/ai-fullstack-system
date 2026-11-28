@@ -6,29 +6,39 @@ import {
   useChatUploadStore,
   useHistoryStore,
   useSearchStore,
-  useKnowledgeStore,
+  useCorpusStore,
 } from "@ming/store";
-import {
-  useHistory,
-  useSelectConversation,
-} from "@ming/feature-history-api";
+import type {
+  ChatUiState,
+  HistoryState,
+  SearchState,
+  ChatUploadState,
+  CorpusState,
+} from "@ming/store";
+import { useHistory, useSelectConversation } from "@ming/feature-history-api";
 import { useDrawerUploadHook } from "@ming/feature-chat-drawer-api";
 
 const log = createLogger("chat/page");
 
 export function useChatPageHook() {
-  const drawerOpen = useChatUiStore((state) => state.drawerOpen);
-  const chatSessionId = useChatUiStore((state) => state.sessionId);
-  const toggleDrawer = useChatUiStore((state) => state.toggleDrawer);
-  const savedTurn = useHistoryStore((state) => state.savedTurn);
+  const drawerOpen = useChatUiStore((state: ChatUiState) => state.drawerOpen);
+  const chatSessionId = useChatUiStore((state: ChatUiState) => state.sessionId);
+  const toggleDrawer = useChatUiStore(
+    (state: ChatUiState) => state.toggleDrawer,
+  );
+  const savedTurn = useHistoryStore((state: HistoryState) => state.savedTurn);
   const { refresh } = useHistory();
-  const searchOpen = useSearchStore((state) => state.open);
-  const closeSearch = useSearchStore((state) => state.closeSearch);
-  const upload = useChatUploadStore((state) => state.upload);
-  const closeUpload = useChatUploadStore((state) => state.closeUpload);
+  const searchOpen = useSearchStore((state: SearchState) => state.open);
+  const closeSearch = useSearchStore((state: SearchState) => state.closeSearch);
+  const upload: ChatUploadState["upload"] = useChatUploadStore(
+    (state: ChatUploadState) => state.upload,
+  );
+  const closeUpload = useChatUploadStore(
+    (state: ChatUploadState) => state.closeUpload,
+  );
   const { abortUpload, message: uploadMessage } = useDrawerUploadHook();
-  const knowledgeOpen = useKnowledgeStore((state) => state.open);
-  const closeKnowledge = useKnowledgeStore((state) => state.closeKnowledge);
+  const corpusOpen = useCorpusStore((state: CorpusState) => state.open);
+  const closeCorpus = useCorpusStore((state: CorpusState) => state.closeCorpus);
 
   // 会话内容由服务端落库，前端不再写入，只负责刷新列表
   useEffect(() => {
@@ -47,7 +57,7 @@ export function useChatPageHook() {
     uploadMessage,
     closeUpload,
     abortUpload,
-    knowledgeOpen,
-    closeKnowledge,
+    corpusOpen,
+    closeCorpus,
   };
 }

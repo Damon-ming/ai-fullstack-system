@@ -4,7 +4,7 @@ import { DrawerHeader } from "./DrawerHeader";
 import { DrawerNewChat } from "./DrawerNewChat";
 import { DrawerUpload } from "./DrawerUpload";
 import { DrawerSearch } from "./DrawerSearch";
-import { DrawerKnowledge } from "./DrawerKnowledge";
+import { DrawerCorpus } from "./DrawerCorpus";
 import { DrawerHistory } from "./DrawerHistory";
 import { DrawerAccount } from "./DrawerAccount";
 import { DrawerCollapsed } from "./DrawerCollapsed";
@@ -22,7 +22,7 @@ export const ChatDrawer: React.FC = () => {
             <DrawerNewChat />
             <DrawerUpload />
             <DrawerSearch />
-            <DrawerKnowledge />
+            <DrawerCorpus />
           </div>
           <DrawerHistory />
           {/* 账号设置始终在最底部 */}

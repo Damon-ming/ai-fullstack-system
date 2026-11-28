@@ -14,7 +14,7 @@
     "success_with_duplicates": "上传完成：{{success_count}} 个成功，{{duplicate_count}} 个已存在（已跳过）",
     "error": "文件上传失败"
   },
-  "knowledge": {
+  "corpus": {
     "button": "⊞ 知识库"
   },
   "history": {

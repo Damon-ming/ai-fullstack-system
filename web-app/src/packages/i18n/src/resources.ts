@@ -10,7 +10,7 @@ import type { ChatDrawerResources } from "../../features/chat-drawer/src/locales
 import type { ChatPageResources } from "../../features/chat/src/locales/resources";
 import type { ChatChatroomResources } from "../../features/chat-chatroom/src/locales/resources";
 import type { SearchResources } from "../../features/search/src/locales/resources";
-import type { KnowledgeResources } from "../../features/knowledge/src/locales/resources";
+import type { CorpusResources } from "../../features/corpus/src/locales/resources";
 
 export interface AppResources {
   account: AccountResources;
@@ -18,7 +18,7 @@ export interface AppResources {
   "chat-page": ChatPageResources;
   "chat-chatroom": ChatChatroomResources;
   search: SearchResources;
-  knowledge: KnowledgeResources;
+  corpus: CorpusResources;
 }
 
 // TypeScript 允许重新打开一个已存在模块的接口并往里加东西，

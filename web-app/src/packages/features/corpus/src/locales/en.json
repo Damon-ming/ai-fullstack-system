@@ -1,6 +1,6 @@
 {
-  "knowledge": {
-    "title": "Knowledge Base",
+  "corpus": {
+    "title": "Corpus Base",
     "close": "Close",
     "tabList": "List",
     "tabTree": "Tree",

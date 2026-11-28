@@ -13,7 +13,7 @@ export interface ChatDrawerResources {
     success_with_failed: string;
     error: string;
   };
-  knowledge: {
+  corpus: {
     button: string;
   };
   history: {

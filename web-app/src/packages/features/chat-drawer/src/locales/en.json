@@ -14,8 +14,8 @@
     "success_with_duplicates": "Uploaded: {{success_count}} succeeded, {{duplicate_count}} already exists (skipped)",
     "error": "Upload failed"
   },
-  "knowledge": {
-    "button": "⊞ Knowledge"
+  "corpus": {
+    "button": "⊞ Corpus"
   },
   "history": {
     "title": "Recent Chats",

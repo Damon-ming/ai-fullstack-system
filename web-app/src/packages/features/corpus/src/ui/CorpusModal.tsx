@@ -1,15 +1,15 @@
-// knowledge/src/ui/KnowledgeModal.tsx
+// corpus/src/ui/CorpusModal.tsx
 import React, { useState } from "react";
-import { useKnowledgeModalHook, formatFileSize } from "../hook";
+import { useCorpusModalHook, formatFileSize } from "../hook";
 import { useTranslation } from "@ming/i18n";
-import type { KnowledgeNode } from "../api";
-import type { KnowledgeGroup } from "../hook";
+import type { CorpusNode } from "../api";
+import type { CorpusGroup } from "../hook";
 
 /** 递归渲染目录树节点 */
 function TreeItem({
   node,
   depth,
-}: Readonly<{ node: KnowledgeNode; depth: number }>) {
+}: Readonly<{ node: CorpusNode; depth: number }>) {
   const [expanded, setExpanded] = useState(depth === 0);
 
   if (node.type === "directory") {
@@ -69,7 +69,7 @@ function TreeItem({
 }
 
 /** 按日期分组的文件列表 — 纯展示，数据由 hook 预处理好 */
-function DateGroupedList({ groups }: Readonly<{ groups: KnowledgeGroup[] }>) {
+function DateGroupedList({ groups }: Readonly<{ groups: CorpusGroup[] }>) {
   return (
     <div className="space-y-4">
       {groups.map((group) => (
@@ -109,17 +109,17 @@ function DateGroupedList({ groups }: Readonly<{ groups: KnowledgeGroup[] }>) {
   );
 }
 
-export function KnowledgeModal() {
-  const { t } = useTranslation("knowledge");
+export function CorpusModal() {
+  const { t } = useTranslation("corpus");
   const {
     open,
-    closeKnowledge,
+    closeCorpus,
     treeData,
-    knowledgeGroups,
+    corpusGroups,
     totalFileCount,
     isLoading,
     isError,
-  } = useKnowledgeModalHook();
+  } = useCorpusModalHook();
   const [tab, setTab] = useState<"tree" | "list">("list");
 
   if (!open) return null;
@@ -127,7 +127,7 @@ export function KnowledgeModal() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={closeKnowledge}
+      onClick={closeCorpus}
     >
       <section
         role="dialog"
@@ -137,13 +137,13 @@ export function KnowledgeModal() {
         {/* 头部 */}
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <h2 className="text-base font-semibold text-gray-800">
-            {t("knowledge.title")}
+            {t("corpus.title")}
           </h2>
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-            onClick={closeKnowledge}
-            aria-label={t("knowledge.close")}
+            onClick={closeCorpus}
+            aria-label={t("corpus.close")}
           >
             ✕
           </button>
@@ -160,7 +160,7 @@ export function KnowledgeModal() {
             }`}
             onClick={() => setTab("list")}
           >
-            {t("knowledge.tabList")}
+            {t("corpus.tabList")}
           </button>
           <button
             type="button"
@@ -171,7 +171,7 @@ export function KnowledgeModal() {
             }`}
             onClick={() => setTab("tree")}
           >
-            {t("knowledge.tabTree")}
+            {t("corpus.tabTree")}
           </button>
         </div>
 
@@ -179,22 +179,22 @@ export function KnowledgeModal() {
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {isLoading && (
             <div className="flex items-center justify-center py-12 text-sm text-gray-400">
-              {t("knowledge.loading")}
+              {t("corpus.loading")}
             </div>
           )}
           {isError && (
             <div className="flex items-center justify-center py-12 text-sm text-red-500">
-              {t("knowledge.error")}
+              {t("corpus.error")}
             </div>
           )}
           {!isLoading && !isError && totalFileCount === 0 && (
             <div className="flex items-center justify-center py-12 text-sm text-gray-400">
-              {t("knowledge.empty")}
+              {t("corpus.empty")}
             </div>
           )}
           {!isLoading && !isError && totalFileCount > 0 && (
             <>
-              {tab === "list" && <DateGroupedList groups={knowledgeGroups} />}
+              {tab === "list" && <DateGroupedList groups={corpusGroups} />}
               {tab === "tree" && <TreeItem node={treeData!.root} depth={0} />}
             </>
           )}
@@ -203,7 +203,7 @@ export function KnowledgeModal() {
         {/* 底部 */}
         {totalFileCount > 0 && (
           <div className="border-t border-gray-100 px-6 py-3 text-xs text-gray-400">
-            {t("knowledge.fileCount", { count: totalFileCount })}
+            {t("corpus.fileCount", { count: totalFileCount })}
           </div>
         )}
       </section>

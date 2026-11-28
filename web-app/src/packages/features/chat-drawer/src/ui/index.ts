@@ -3,7 +3,7 @@ export { DrawerHeader } from "./DrawerHeader";
 export { DrawerNewChat } from "./DrawerNewChat";
 export { DrawerUpload } from "./DrawerUpload";
 export { DrawerSearch } from "./DrawerSearch";
-export { DrawerKnowledge } from "./DrawerKnowledge";
+export { DrawerCorpus } from "./DrawerCorpus";
 export { DrawerHistory } from "./DrawerHistory";
 export { DrawerAccount } from "./DrawerAccount";
 export { DrawerCollapsed } from "./DrawerCollapsed";
