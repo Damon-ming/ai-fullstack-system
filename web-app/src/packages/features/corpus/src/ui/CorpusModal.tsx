@@ -1,16 +1,15 @@
-// corpus/src/ui/CorpusModal.tsx
+// web-app/src/packages/features/corpus/src/ui/CorpusModal.tsx
 import React, { useState } from "react";
-import { useCorpusModalHook, formatFileSize } from "../hook";
+import { useCorpusModalHook } from "../hook";
 import { useTranslation } from "@ming/i18n";
-import type { CorpusNode } from "../api";
-import type { CorpusGroup } from "../hook";
+import type { CorpusViewNode } from "../hook";
 
 /** 递归渲染目录树节点 */
 function TreeItem({
   node,
   depth,
-}: Readonly<{ node: CorpusNode; depth: number }>) {
-  const [expanded, setExpanded] = useState(depth === 0);
+}: Readonly<{ node: CorpusViewNode; depth: number }>) {
+  const [expanded, setExpanded] = useState(true);
 
   if (node.type === "directory") {
     const hasChildren = node.children.length > 0;
@@ -50,12 +49,8 @@ function TreeItem({
     >
       <span className="w-4 text-center text-xs text-gray-300">·</span>
       <span className="flex-1 truncate text-gray-700">{node.name}</span>
-      <span className="shrink-0 max-w-[120px] truncate text-xs text-gray-400">
-        {node.uploader || "—"}
-      </span>
-      <span className="shrink-0 text-xs text-gray-400">
-        {formatFileSize(node.size)}
-      </span>
+      <span className="shrink-0 text-xs text-gray-400">{node.uploadDate}</span>
+      <span className="shrink-0 text-xs text-gray-400">{node.displaySize}</span>
       <button
         type="button"
         className="shrink-0 rounded p-1 text-xs text-gray-400 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
@@ -68,59 +63,10 @@ function TreeItem({
   );
 }
 
-/** 按日期分组的文件列表 — 纯展示，数据由 hook 预处理好 */
-function DateGroupedList({ groups }: Readonly<{ groups: CorpusGroup[] }>) {
-  return (
-    <div className="space-y-4">
-      {groups.map((group) => (
-        <div key={group.date}>
-          <div className="sticky top-0 z-10 bg-white px-3 py-1.5 text-xs font-medium text-gray-500">
-            {group.dateLabel} · {group.files.length} 个文件
-          </div>
-          <div className="space-y-0.5">
-            {group.files.map((file) => (
-              <div
-                key={file.path}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-gray-50"
-              >
-                <span className="flex-1 truncate text-gray-700">
-                  {file.name}
-                </span>
-                <span className="shrink-0 max-w-[120px] truncate text-xs text-gray-400">
-                  {file.uploader || "—"}
-                </span>
-                <span className="shrink-0 text-xs text-gray-400">
-                  {file.sizeMB}
-                </span>
-                <button
-                  type="button"
-                  className="shrink-0 rounded p-1 text-xs text-gray-400 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
-                  disabled
-                  title="删除功能开发中"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function CorpusModal() {
   const { t } = useTranslation("corpus");
-  const {
-    open,
-    closeCorpus,
-    treeData,
-    corpusGroups,
-    totalFileCount,
-    isLoading,
-    isError,
-  } = useCorpusModalHook();
-  const [tab, setTab] = useState<"tree" | "list">("list");
+  const { open, closeCorpus, treeData, totalFileCount, isLoading, isError } =
+    useCorpusModalHook();
 
   if (!open) return null;
 
@@ -149,32 +95,6 @@ export function CorpusModal() {
           </button>
         </div>
 
-        {/* 切换 tab */}
-        <div className="flex gap-1 border-b border-gray-100 px-6 pt-2">
-          <button
-            type="button"
-            className={`rounded-t-lg px-3 py-1.5 text-sm font-medium transition ${
-              tab === "list"
-                ? "bg-gray-100 text-gray-800"
-                : "text-gray-400 hover:text-gray-600"
-            }`}
-            onClick={() => setTab("list")}
-          >
-            {t("corpus.tabList")}
-          </button>
-          <button
-            type="button"
-            className={`rounded-t-lg px-3 py-1.5 text-sm font-medium transition ${
-              tab === "tree"
-                ? "bg-gray-100 text-gray-800"
-                : "text-gray-400 hover:text-gray-600"
-            }`}
-            onClick={() => setTab("tree")}
-          >
-            {t("corpus.tabTree")}
-          </button>
-        </div>
-
         {/* 内容 */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {isLoading && (
@@ -194,8 +114,7 @@ export function CorpusModal() {
           )}
           {!isLoading && !isError && totalFileCount > 0 && (
             <>
-              {tab === "list" && <DateGroupedList groups={corpusGroups} />}
-              {tab === "tree" && <TreeItem node={treeData!.root} depth={0} />}
+              <TreeItem node={treeData!} depth={0} />
             </>
           )}
         </div>

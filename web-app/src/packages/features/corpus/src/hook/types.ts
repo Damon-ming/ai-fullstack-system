@@ -1,18 +1,8 @@
-// corpus/src/hook/types.ts
-/**
- * 模块内部 UI ↔ Hook 通讯类型（非网络请求）。
- */
+import type { CorpusNode } from "../api";
 
-/** 按日期分组的文件列表 —— UI 直接渲染，不做额外处理 */
-export interface CorpusGroup {
-  date: string;
-  dateLabel: string;
-  files: CorpusGroupFile[];
-}
-
-export interface CorpusGroupFile {
-  name: string;
-  path: string;
-  sizeMB: string;
-  uploader: string;
-}
+/** Hook 为目录树 UI 准备好的展示节点。 */
+export type CorpusViewNode = Omit<CorpusNode, "children"> & {
+  uploadDate: string;
+  displaySize: string;
+  children: CorpusViewNode[];
+};

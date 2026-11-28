@@ -2,8 +2,6 @@
   "corpus": {
     "title": "Corpus Base",
     "close": "Close",
-    "tabList": "List",
-    "tabTree": "Tree",
     "loading": "Loading...",
     "error": "Failed to load",
     "empty": "No files uploaded",

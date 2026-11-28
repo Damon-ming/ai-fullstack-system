@@ -6,4 +6,3 @@
 export { CorpusModal } from "@ming/feature-corpus";
 export { useCorpusModalHook, formatFileSize } from "@ming/feature-corpus";
 export type { CorpusNode, CorpusTreeData } from "@ming/feature-corpus";
-export type { CorpusGroup, CorpusGroupFile } from "@ming/feature-corpus";
