@@ -3,6 +3,7 @@
 
 import asyncio
 import os
+import re
 from pathlib import Path
 
 from src.com.damon.ming.app.thread_pools import get_io_pool, run_in_pool
@@ -37,10 +38,16 @@ class UploadFileStorage:
             logger.info("启动清理残留临时文件 | count=%d", tmp_cleaned)
 
     @classmethod
-    def build_file_path(cls, file_id: str, file_name: str, suffix: str) -> Path:
+    def build_file_path(
+        cls, user_id: int, user_name: str, file_id: str, file_name: str, suffix: str
+    ) -> Path:
+        """构造 corpus/{user_id}-{name}/{扩展名}/{file_id}_{文件名}。"""
+        safe_user_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", user_name).strip(" .")
         safe_name = file_name.replace("/", "_").replace("\\", "_").replace("\0", "")
         sub_folder = suffix.lstrip(".") if suffix else "no_ext"
-        target_dir = cls.upload_dir / sub_folder
+        target_dir = (
+            cls.upload_dir / f"{user_id}-{safe_user_name or '用户'}" / sub_folder
+        )
         target_dir.mkdir(parents=True, exist_ok=True)
         return target_dir / f"{file_id}_{safe_name}"
 

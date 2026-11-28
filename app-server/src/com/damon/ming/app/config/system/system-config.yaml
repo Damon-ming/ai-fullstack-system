@@ -22,5 +22,5 @@ whitelist:
   - /api/account/logout/v1         # 当前设备退出（无请求体）
   - /api/account/profile/get/v1    # 资料读取（GET，无 body）
   - /api/history                   # list + detail(GET/DELETE)，均无 body
-  - /api/knowledge/tree/v1         # 知识库树（GET，无 body）
+  - /api/corpus/tree/v1            # 知识库树（GET，无 body）
   # 注：/health、/ping 由 wrap_health_app 在中间件之前短路，不经过加密中间件，无需列入。

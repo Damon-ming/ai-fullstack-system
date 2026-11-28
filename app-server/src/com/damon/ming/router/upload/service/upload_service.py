@@ -35,6 +35,7 @@ class UploadService:
         upload_config,
         knowledge_index: KnowledgeIndexService,
         user_id: int,
+        user_name: str,
         device_id: str = "",
     ) -> dict:
         success_files: list[dict] = []
@@ -169,6 +170,8 @@ class UploadService:
 
                 file_sha256 = sha256_hex(content)
                 file_path = UploadFileStorage.build_file_path(
+                    user_id,
+                    user_name,
                     file_id,
                     file_name,
                     suffix,

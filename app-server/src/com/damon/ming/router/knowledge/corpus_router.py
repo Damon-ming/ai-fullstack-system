@@ -1,11 +1,12 @@
-# app-server/src/com/damon/ming/router/knowledge/knowledge_router.py
+# app-server/src/com/damon/ming/router/knowledge/corpus_router.py
 """
 知识库目录树 —— 查看已上传资料的整体结构。
 
 接口：
-  GET /api/knowledge/tree/v1  获取知识库目录树 + 文件属性（size / created_at）
+  GET /api/corpus/tree/v1  获取知识库目录树 + 文件属性（size / created_at）
 
-磁盘文件名格式: {UUID}_{原始文件名}.ext — 展示时自动剥除 UUID 前缀。
+磁盘目录: corpus/{user_id}-{name}/{扩展名}/{UUID}_{原始文件名}.ext。
+展示时自动剥除文件名中的 UUID 前缀。
 多用户共享知识库，所有登录用户看到同一份目录，不按用户过滤。
 """
 
@@ -28,9 +29,9 @@ from src.com.damon.ming.schemas.response import (
 )
 from src.com.damon.ming.utils.file_stat import file_creation_time, file_size
 
-logger = pin("knowledge.router")
+logger = pin("corpus.router")
 
-router = APIRouter(prefix="/api/knowledge", tags=["知识库"])
+router = APIRouter(prefix="/api/corpus", tags=["知识库"])
 
 # 磁盘文件名格式: {UUID}_{原始文件名}.ext — 展示时剥除 UUID 前缀
 _UUID_PREFIX = re.compile(r"^[0-9a-f]{32}_")
@@ -102,7 +103,7 @@ def _build_tree(
 
 @router.get("/tree/v1", response_model=None)
 @limiter.limit("30/minute")
-def get_knowledge_tree(request: Request):
+def get_corpus_tree(request: Request):
     """获取知识库目录树。
 
     返回完整目录结构，每个文件节点携带 size / created_at 属性。

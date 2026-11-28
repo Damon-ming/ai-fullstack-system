@@ -27,3 +27,8 @@ class AccountService:
     def get_phone_by_user_id(user_id: int) -> str | None:
         """user_id → 手机号。"""
         return token_store.get_phone_by_user_id(user_id)
+
+    @staticmethod
+    def get_name_by_user_id(user_id: int) -> str | None:
+        """user_id → 注册姓名。"""
+        return token_store.get_name_by_user_id(user_id)

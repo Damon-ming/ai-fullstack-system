@@ -3,10 +3,12 @@ import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, File, Request, UploadFile
+from src.com.damon.ming.app.thread_pools import get_database_pool, run_in_pool
 from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
+from src.com.damon.ming.router.account.service.account_service import AccountService
 from src.com.damon.ming.router.upload.schemas.bean import (
     FileUploadResponse,
 )
@@ -19,7 +21,7 @@ from src.com.damon.ming.schemas.response import (
 
 logger = pin("upload.router")
 
-router = APIRouter(prefix="/api/files", tags=["文件管理"])
+router = APIRouter(prefix="/api/corpus", tags=["文件管理"])
 
 
 @router.post("/upload/v1", response_model=None)
@@ -35,13 +37,23 @@ async def save_files(
     )
 
     try:
+        user_id = request.state.client.user_id
+        user_name = await run_in_pool(
+            get_database_pool(), AccountService.get_name_by_user_id, user_id
+        )
+        if user_name is None:
+            return BaseFailedResponse(
+                code=ErrorCode.AUTH.INVALID_SESSION,
+                data=BaseBizFailedData(error_msg="用户不存在"),
+            )
         choreographer = request.app.state.ai.rag.choreographer
         # 逐文件原子提交：写盘 + 向量库入库，任一步失败则回滚该文件
         result = await UploadService.batch_save_files(
             file_list=files,
             upload_config=request.app.state.config.upload_config,
             knowledge_index=choreographer.knowledge_index_service,
-            user_id=request.state.client.user_id,
+            user_id=user_id,
+            user_name=user_name,
             device_id=request.state.client.device_id,
         )
         logger.info(

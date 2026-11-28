@@ -86,6 +86,14 @@ def get_phone_by_user_id(user_id: int) -> str | None:
     return get_field_encryptor().decrypt(row.phone) if row else None
 
 
+def get_name_by_user_id(user_id: int) -> str | None:
+    """根据用户编号读取注册姓名，供上传目录命名。"""
+    with _db().engine.connect() as conn:
+        return conn.execute(
+            select(users.c.name).where(users.c.user_id == user_id)
+        ).scalar_one_or_none()
+
+
 def _verify_user_password(row, password: str) -> None:
     """验证用户密码。"""
     if not verify_password(password, row.password):
