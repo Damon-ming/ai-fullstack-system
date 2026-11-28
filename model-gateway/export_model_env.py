@@ -1,5 +1,5 @@
 # model-gateway/export_model_env.py
-"""把 models.yaml 导出为 Docker Compose 可插值的根目录环境文件。"""
+"""把 models.yaml 导出为 Docker Compose 可插值的模块环境文件。"""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from typing import Any
 
 import yaml
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-MODELS_PATH = BASE_DIR / "model-gateway" / "config" / "models.yaml"
-OUTPUT_PATH = BASE_DIR / "model-gateway-models.env"
+MODULE_DIR = Path(__file__).resolve().parent
+MODELS_PATH = MODULE_DIR / "config" / "models.yaml"
+OUTPUT_PATH = MODULE_DIR / "model-gateway-models.env"
 
 
 def _variable_name(model_name: str) -> str:

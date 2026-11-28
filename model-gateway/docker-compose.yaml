@@ -9,7 +9,14 @@
 # 原因：gateway.yaml 含明文路由 key（ak_inference_* / ak_embedding），避免 key 进镜像层随镜像分发泄露。
 # 若改为 COPY 进 Dockerfile，请先评估镜像是否会上传公共/共享仓库。
 # 推理后端配置在本目录 config/docker/ 下。
+# 本模块加载推理与 embedding Compose 文件，并从生成的 env 文件读取模型窗口。
 # ai-network 在根 docker-compose.yaml 统一声明，此处不再重复定义。
+
+include:
+  - path:
+      - config/docker/docker-${INFERENCE_SERVER:-vllm}-inference.yaml
+      - config/docker/docker-vllm-embedding.yaml
+    env_file: ./model-gateway-models.env
 
 services:
   # ── API Gateway ──────────────────────────────────────────────────

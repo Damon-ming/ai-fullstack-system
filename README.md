@@ -203,10 +203,10 @@ model-gateway (healthy) ←── vLLM pools 独立启动，无 depends_on
     ↓
 app-server (depends_on: postgres + model-gateway)
     ↓
-web-app (depends_on: app-server)
+web-app (独立启动)
 ```
 
-`model-gateway/config/models.yaml` 维护各模型的 `max_model_len`。启动前需要从该文件生成供 Compose 插值的 `model-gateway-models.env`；app-server 启动时则通过 model-gateway 接口读取同一份模型配置。
+`model-gateway/config/models.yaml` 维护各模型的 `max_model_len`。启动前需要从该文件生成供 Compose 插值的 `model-gateway/model-gateway-models.env`；app-server 启动时则通过 model-gateway 接口读取同一份模型配置。
 
 ## 一键部署
 
@@ -247,7 +247,7 @@ sudo docker compose logs -f app-server
 sudo docker compose down
 ```
 
-模型已经下载完整时可跳过第 3 步。如果 Docker 用户组权限已配置且当前用户已重新登录，可去掉命令前的 `sudo`。`python scripts/install-frontend-deps.py` 仅用于宿主机前端开发，不属于 Docker 部署步骤。
+模型已经下载完整时可跳过第 4 步。如果 Docker 用户组权限已配置且当前用户已重新登录，可去掉命令前的 `sudo`。`python scripts/install-frontend-deps.py` 仅用于宿主机前端开发，不属于 Docker 部署步骤。
 
 ### 本地前端依赖（可选）
 
@@ -282,7 +282,7 @@ python scripts/install-frontend-deps.py
 
 切换推理后端通过 `.env` 配置；当前模型窗口启动参数按 vLLM 接入，其他后端需补充对应的读取规则。
 
-vLLM 的 `--max-model-len` 从 `model-gateway/config/models.yaml` 导出；修改模型窗口后，需重新生成 `model-gateway-models.env` 并重启对应服务。app-server 启动时从 model-gateway 接口读取同一份模型窗口，用于推理请求和 embedding 输入长度校验。
+vLLM 的 `--max-model-len` 从 `model-gateway/config/models.yaml` 导出；修改模型窗口后，需重新生成 `model-gateway/model-gateway-models.env` 并重启对应服务。app-server 启动时从 model-gateway 接口读取同一份模型窗口，用于推理请求和 embedding 输入长度校验。
 
 Embedding 固定由独立的 vLLM 服务运行，并通过 model-gateway 路由；`INFERENCE_SERVER` 只选择生成推理后端。
 

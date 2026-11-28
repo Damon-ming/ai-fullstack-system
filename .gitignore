@@ -12,6 +12,7 @@ __pycache__/
 /model-config.env
 /model-config/
 /model-gateway-models.env
+/model-gateway/model-gateway-models.env
 
 # ── 系统文件 ─────────────────────────────────────────
 .DS_Store

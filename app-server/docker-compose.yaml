@@ -5,7 +5,7 @@
 #   INFERENCE_SERVER 推理后端类型（默认 vllm，目前仅实现 vllm）
 #   INFERENCE_GATEWAY_URL 网关地址（在本文件中显式注入）
 #
-# 根 Compose 负责注入共享模型环境变量；本文件只定义 app-server 服务本身。
+# 从根目录运行 Compose 时读取共享 .env；模型规格由 model-gateway 接口提供。
 
 services:
   # ── PostgreSQL ─────────────────────────────────────────────────────
