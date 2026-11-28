@@ -19,7 +19,7 @@ from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
 from src.com.damon.ming.router.knowledge.schemas.bean import KnowledgeNode
-from src.com.damon.ming.router.upload.service.upload_store import (
+from src.com.damon.ming.router.upload.service.upload_audit_repository import (
     get_file_uploader_map,
 )
 from src.com.damon.ming.schemas.response import (

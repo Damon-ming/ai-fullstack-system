@@ -17,7 +17,7 @@ export async function uploadFile(
   signal?: AbortSignal,
 ): Promise<DataApiResponse<UploadResponse>> {
   log.debug("upload request", {
-    endpoint: "/api/files/upload/v1",
+    endpoint: "/api/corpus/upload/v1",
     fileCount: request.files.length,
   });
   const formData = new FormData();
@@ -25,7 +25,7 @@ export async function uploadFile(
 
   // PDF 解析、Embedding 和向量入库可能持续几十秒，不能使用普通接口的 10s 超时。
   const result = await dataApi.post<UploadResponse>(
-    "/api/files/upload/v1",
+    "/api/corpus/upload/v1",
     formData,
     { timeout: 1 * 60 * 1000, signal },
   );

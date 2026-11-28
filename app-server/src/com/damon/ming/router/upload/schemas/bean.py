@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/router/upload/schemas/bean.py
 from pydantic import BaseModel, Field
 from src.com.damon.ming.schemas.response import BaseBizSuccessData
 

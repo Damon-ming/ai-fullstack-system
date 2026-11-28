@@ -10,5 +10,5 @@ import type { KnowledgeTreeData } from "./types/knowledge";
 export async function fetchKnowledgeTree(): Promise<
   DataApiResponse<KnowledgeTreeData>
 > {
-  return dataApi.get<KnowledgeTreeData>("/api/knowledge/tree/v1");
+  return dataApi.get<KnowledgeTreeData>("/api/corpus/tree/v1");
 }

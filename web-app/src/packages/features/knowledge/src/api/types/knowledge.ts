@@ -1,6 +1,6 @@
 /**
  * 知识库目录树 —— 类型定义。
- * 对应后端 KnowledgeNode schema 和 GET /api/knowledge/tree/v1 响应。
+ * 对应后端 KnowledgeNode schema 和 GET /api/corpus/tree/v1 响应。
  */
 
 /** 知识库目录树节点 */

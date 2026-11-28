@@ -1,4 +1,4 @@
-// account/src/hook/AccountHook.ts
+// web-app/src/packages/features/account/src/hook/AccountHook.ts
 /**
  * 账号 Hook 层 —— 业务编排 + 状态管理 + 输入校验。
  *
@@ -21,15 +21,32 @@ import {
 } from "../api";
 import type { LoginRequest } from "../api";
 import { useAccountStore } from "@ming/store/biz/account-state";
+import type { AccountState } from "@ming/store/biz/account-state";
 
 const log = createLogger("account/hook");
+
+function getAccountErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "data" in error) {
+    const data = error.data;
+    if (
+      data &&
+      typeof data === "object" &&
+      "error_msg" in data &&
+      typeof data.error_msg === "string"
+    ) {
+      return data.error_msg;
+    }
+  }
+  return fallback;
+}
 
 // ---------------------------------------------------------------------------
 // 校验规则 —— 与服务端保持一致（服务端: app-server/.../account/schemas/bean.py）
 // ---------------------------------------------------------------------------
 
 /** 手机号：可选 + 前缀，6-20 位数字 */
-const _PHONE_PATTERN = /^\+?[0-9]{6,20}$/;
+const _PHONE_PATTERN = /^\+?\d{6,20}$/;
 
 /** 密码：≥8 位，含大小写字母、数字、. 或 _ 至少一个，最长 64 位 */
 const _PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[._]).{8,64}$/;
@@ -219,9 +236,7 @@ export function useLoginPageHook(
       setStatus("success");
       onSuccess();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "登录失败，请稍后重试";
-      setSubmitError(message);
+      setSubmitError(getAccountErrorMessage(err, "登录失败，请稍后重试"));
       setStatus("error");
     }
   }, [phone, password, name, onSuccess]);
@@ -248,8 +263,8 @@ export function useLoginPageHook(
 // ---------------------------------------------------------------------------
 
 export function useAccount(fetchOnMount = true) {
-  const profile = useAccountStore((s) => s.profile);
-  const setProfile = useAccountStore((s) => s.setProfile);
+  const profile = useAccountStore((s: AccountState) => s.profile);
+  const setProfile = useAccountStore((s: AccountState) => s.setProfile);
 
   // 挂载时从服务端拉取用户资料
   useEffect(() => {
@@ -279,7 +294,10 @@ export function useAccount(fetchOnMount = true) {
     const normalized = nickname.trim();
     if (!normalized) return profile;
     const res = await updateProfile({ nickname: normalized });
-    const savedNickname = res.data?.nickname || normalized;
+    const savedNickname = res.data?.nickname;
+    if (!savedNickname) {
+      throw new Error("更新失败: 服务端未返回昵称");
+    }
     const next = {
       ...profile,
       nickname: savedNickname,
