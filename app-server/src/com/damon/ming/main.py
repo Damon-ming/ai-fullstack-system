@@ -44,9 +44,9 @@ from src.com.damon.ming.log import init_logging, pin
 from src.com.damon.ming.middleware import register_middlewares
 from src.com.damon.ming.precheck import run_precheck
 from src.com.damon.ming.router.account import account_router
+from src.com.damon.ming.router.corpus import corpus_router
 from src.com.damon.ming.router.encryption import encryption_router
 from src.com.damon.ming.router.history import history_router
-from src.com.damon.ming.router.knowledge import corpus_router
 from src.com.damon.ming.router.rag import rag_router
 from src.com.damon.ming.router.upload import upload_router
 

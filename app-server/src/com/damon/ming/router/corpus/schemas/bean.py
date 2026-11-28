@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/router/knowledge/schemas/bean.py
+# app-server/src/com/damon/ming/router/corpus/schemas/bean.py
 """
 知识库目录树 —— 请求/响应 Schema。
 
@@ -9,7 +9,7 @@
 from pydantic import BaseModel, Field
 
 
-class KnowledgeNode(BaseModel):
+class CorpusNode(BaseModel):
     """知识库目录树节点。
 
     type="directory" 时 children 非空（空目录允许空列表）；
@@ -22,6 +22,6 @@ class KnowledgeNode(BaseModel):
     size: int = Field(0, description="文件大小（bytes），目录为 0")
     created_at: str = Field("", description="文件创建时间（ISO8601），目录为空")
     uploader: str = Field("", description="上传者昵称，未匹配到则为空")
-    children: list["KnowledgeNode"] = Field(
+    children: list["CorpusNode"] = Field(
         default_factory=list, description="子节点（仅 directory 类型）"
     )

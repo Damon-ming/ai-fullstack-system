@@ -1,4 +1,4 @@
-# app-server/src/com/damon/ming/router/knowledge/corpus_router.py
+# app-server/src/com/damon/ming/router/corpus/corpus_router.py
 """
 知识库目录树 —— 查看已上传资料的整体结构。
 
@@ -18,7 +18,7 @@ from src.com.damon.ming.exception.error_codes import ErrorCode
 from src.com.damon.ming.exception.server_error import get_safe_error_message
 from src.com.damon.ming.log import pin
 from src.com.damon.ming.middleware.rate_limiter import limiter
-from src.com.damon.ming.router.knowledge.schemas.bean import KnowledgeNode
+from src.com.damon.ming.router.corpus.schemas.bean import CorpusNode
 from src.com.damon.ming.router.upload.service.upload_audit_repository import (
     get_file_uploader_map,
 )
@@ -41,7 +41,7 @@ def _build_tree(
     node_path: Path,
     rel_base: Path,
     uploader_map: dict[str, str] | None = None,
-) -> KnowledgeNode:
+) -> CorpusNode:
     """递归构建目录树节点。
 
     Args:
@@ -50,14 +50,14 @@ def _build_tree(
         uploader_map: 文件路径 → 上传者昵称映射（由 account 模块提供）。
 
     Returns:
-        带完整属性的 KnowledgeNode。文件展示名已剥除 UUID 前缀。
+        带完整属性的 CorpusNode。文件展示名已剥除 UUID 前缀。
     """
     rel_path = (
         str(node_path.relative_to(rel_base).as_posix()) if node_path != rel_base else ""
     )
 
     if node_path.is_dir():
-        children: list[KnowledgeNode] = []
+        children: list[CorpusNode] = []
         try:
             sorted_entries = sorted(node_path.iterdir())
         except PermissionError:
@@ -70,8 +70,8 @@ def _build_tree(
                 continue
             children.append(_build_tree(entry, rel_base, uploader_map))
 
-        return KnowledgeNode(
-            name=node_path.name or "knowledge",
+        return CorpusNode(
+            name=node_path.name or "corpus",
             type="directory",
             path=rel_path,
             children=children,
@@ -91,7 +91,7 @@ def _build_tree(
     # 剥除 UUID_ 前缀，恢复原始文件名用于展示
     display_name = _UUID_PREFIX.sub("", node_path.name)
 
-    return KnowledgeNode(
+    return CorpusNode(
         name=display_name,
         type="file",
         path=rel_path,
@@ -114,8 +114,8 @@ def get_corpus_tree(request: Request):
 
         corpus_dir = Path(request.app.state.config.system_config.corpus_dir)
         if not corpus_dir.exists():
-            root = KnowledgeNode(
-                name="knowledge",
+            root = CorpusNode(
+                name="corpus",
                 type="directory",
                 path="",
                 children=[],
