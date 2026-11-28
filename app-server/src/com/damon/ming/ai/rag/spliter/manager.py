@@ -7,7 +7,7 @@ from src.com.damon.ming.ai.rag.tokenizer.base_tokenizer import BaseTokenizer
 
 
 class SplitterManager:
-    """使用注入的切分策略和 embedding 输入上限创建分割器。"""
+    """使用注入的切分策略和 embedding 单块正文上限创建分割器。"""
 
     def __init__(self) -> None:
         self._structured: StructuredDocumentSplitter | None = None
@@ -15,13 +15,13 @@ class SplitterManager:
     def initialize(
         self,
         tokenizer: BaseTokenizer,
-        max_input_tokens: int,
+        max_document_tokens: int,
         config: dict[str, object],
     ) -> None:
         if self._structured is not None:
             raise RuntimeError("RAG 分割器已经初始化")
         config = SplitterConfig.from_mapping(config)
-        chunk_size = min(config.chunk_token_size, max_input_tokens)
+        chunk_size = min(config.chunk_token_size, max_document_tokens)
         overlap = min(config.chunk_overlap, chunk_size - 1)
         self._structured = StructuredDocumentSplitter(
             tokenizer=tokenizer,

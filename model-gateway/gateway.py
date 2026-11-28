@@ -29,11 +29,13 @@ logger = logging.getLogger("gateway")
 
 # ── 固定配置 ──────────────────────────────────────────────────────
 _CONFIG_PATH = "/etc/gateway/gateway.yaml"
+_MODEL_CONFIG_PATH = "/etc/gateway/models.yaml"
 _MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MiB
 _DEFAULT_TIMEOUT_SECONDS = 30
 
 # api_key → {upstream, upstream_key}
 ROUTING_TABLE: dict[str, dict[str, str]] = {}
+MODEL_CONFIG: dict[str, dict[str, int]] = {}
 
 # ── 共享连接池 ────────────────────────────────────────────────────
 _http_client: httpx.AsyncClient | None = None
@@ -53,6 +55,34 @@ def _load_config() -> None:
     routes = cfg.get("routes")
     if not isinstance(routes, dict) or not routes:
         raise ValueError(f"配置格式错误，缺少 routes: {_CONFIG_PATH}")
+
+    if not os.path.exists(_MODEL_CONFIG_PATH):
+        raise FileNotFoundError(f"模型配置文件不存在: {_MODEL_CONFIG_PATH}")
+    with open(_MODEL_CONFIG_PATH, "r", encoding="utf-8") as f:
+        model_cfg = yaml.safe_load(f)
+    if not isinstance(model_cfg, dict):
+        raise TypeError(f"模型配置格式错误，根节点必须是映射: {_MODEL_CONFIG_PATH}")
+    models = model_cfg.get("models")
+    if not isinstance(models, dict) or not models:
+        raise ValueError(f"模型配置格式错误，缺少 models: {_MODEL_CONFIG_PATH}")
+    loaded_models: dict[str, dict[str, int]] = {}
+    for model_name, model_config in models.items():
+        if not isinstance(model_name, str) or not model_name.strip():
+            raise ValueError("models 中的模型名称必须是非空字符串")
+        if not isinstance(model_config, dict):
+            raise TypeError(f"models.{model_name} 必须是映射")
+        max_model_len = model_config.get("max_model_len")
+        if type(max_model_len) is not int or max_model_len < 2:
+            raise ValueError(
+                f"models.{model_name}.max_model_len 必须是大于等于 2 的整数"
+            )
+        loaded_model = {"max_model_len": max_model_len}
+        if "dimension" in model_config:
+            dimension = model_config["dimension"]
+            if type(dimension) is not int or dimension <= 0:
+                raise ValueError(f"models.{model_name}.dimension 必须是正整数")
+            loaded_model["dimension"] = dimension
+        loaded_models[model_name] = loaded_model
 
     loaded_routes: dict[str, dict[str, str]] = {}
     for route_index, (api_key, route_cfg) in enumerate(routes.items(), start=1):
@@ -94,6 +124,8 @@ def _load_config() -> None:
 
     ROUTING_TABLE.clear()
     ROUTING_TABLE.update(loaded_routes)
+    MODEL_CONFIG.clear()
+    MODEL_CONFIG.update(loaded_models)
 
 
 _load_config()
@@ -120,6 +152,12 @@ async def lifespan(app: FastAPI):
 # 当前仅 ai-network 内网可达，风险可控。
 # 上公网前：加 docs_url=None, redoc_url=None，并新增 /health 端点替换 healthcheck 探测。
 app = FastAPI(title="vLLM Gateway", version="1.0", lifespan=lifespan)
+
+
+@app.get("/internal/model-config")
+async def get_model_config():
+    """返回 app-server 启动时使用的模型上下文窗口配置。"""
+    return {"models": MODEL_CONFIG}
 
 
 # SECURITY: P1-25 网关无速率限制，单 key 可无限请求耗尽 GPU。
@@ -237,9 +275,9 @@ async def _forward_stream(
         raise HTTPException(status_code=502, detail="上游服务异常") from None
 
     response_headers = _filter_response_headers(upstream_response.headers)
-    is_sse_response = "text/event-stream" in upstream_response.headers.get(
-        "content-type", ""
-    ).lower()
+    is_sse_response = (
+        "text/event-stream" in upstream_response.headers.get("content-type", "").lower()
+    )
 
     async def stream_generator():
         try:

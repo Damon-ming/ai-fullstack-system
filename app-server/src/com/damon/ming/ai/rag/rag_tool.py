@@ -120,7 +120,7 @@ class RagChoreographer:
         # 步骤1：使用 AppInitializer 装配并注入的 embedding gateway。
         self.embedding_gateway = embedding_gateway
         self.embedder = self.embedding_gateway.get_bge_m3()
-        embedding_max_input_tokens = self.embedder.max_input_tokens
+        embedding_max_document_tokens = self.embedder.max_document_tokens
         embedding_dimension = self.embedder.dimension
 
         # 步骤2：加载通用 tokenizer，并注入 embedding 模型实际使用的 tokenizer
@@ -172,7 +172,7 @@ class RagChoreographer:
 
         self.splitter_manager = create_splitters(
             tokenizer=embedding_tokenizer,
-            max_input_tokens=embedding_max_input_tokens,
+            max_document_tokens=embedding_max_document_tokens,
             config=self.config.get_splitter_config(),
         )
         self.splitter = self.splitter_manager.get_structured()

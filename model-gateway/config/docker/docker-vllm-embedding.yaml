@@ -16,7 +16,7 @@ services:
       --model BAAI/bge-m3
       --runner pooling
       --hf-overrides '{"architectures":["BgeM3EmbeddingModel"]}'
-      --max-model-len 8192
+      --max-model-len ${BAAI_BGE_M3_MAX_MODEL_LEN:?run model-gateway/export_model_env.py first}
       --gpu-memory-utilization 0.1
       --api-key uk_embedding
     healthcheck:

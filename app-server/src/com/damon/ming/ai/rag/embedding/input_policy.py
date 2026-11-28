@@ -41,17 +41,21 @@ class EmbeddingInputPolicy:
         return embeddings
 
     def available_document_tokens(self, limit: int, tokenizer: Any | None) -> int:
-        """估算扣除文档前缀后的正文上限。"""
-        if not self._passage_prefix:
-            return limit
+        """估算扣除特殊 token 和文档前缀后的正文上限。"""
+        if type(limit) is not int or limit <= 0:
+            raise ValueError("embedding 模型可用窗口必须是正整数")
         if tokenizer is None:
-            raise ValueError("配置文档前缀时需要 tokenizer 计算输入上限")
-        # 拼接可能改变分词边界；8 token 是经验余量，不是精确校验。
-        available = (
-            limit
-            - len(tokenizer.encode(self._passage_prefix, add_special_tokens=False))
-            - 8
-        )
+            raise ValueError("计算 embedding 输入上限需要 tokenizer")
+        special_tokens = tokenizer.num_special_tokens_to_add(pair=False)
+        if type(special_tokens) is not int or special_tokens < 0:
+            raise ValueError("无法获取 embedding tokenizer 的特殊 token 数")
+        available = limit - special_tokens
+        if self._passage_prefix:
+            # 拼接可能改变分词边界；8 token 是经验余量，不是精确校验。
+            available -= (
+                len(tokenizer.encode(self._passage_prefix, add_special_tokens=False))
+                + 8
+            )
         if available <= 0:
-            raise ValueError("Embedding 模型输入上限不足以容纳文档前缀")
+            raise ValueError("Embedding 模型窗口不足以容纳特殊 token 和文档前缀")
         return available

@@ -22,8 +22,7 @@
 # 优先级：命令行传值 > .env 文件 > 默认值（vllm）
 # 建议始终在 .env 中设置 INFERENCE_SERVER，或命令行显式传入
 #
-# 一键启动：docker compose up -d --build。
-# TODO: 当 models.yaml 真正接入 vLLM 启动参数后，恢复 model-config.env 的 Compose 注入。
+# 一键启动前先运行 python model-gateway/export_model_env.py，之后执行 docker compose up -d --build。
 #
 #   开发（vLLM 推理 + vLLM embedding，需 GPU）:
 #     SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 docker compose up -d --build
@@ -42,16 +41,14 @@
 #   5. 部署时 INFERENCE_SERVER=sglang
 # ═══════════════════════════════════════════════════════════════════
 
-# TODO: 接通模型配置后，在 vLLM include 及服务 env_file 中恢复 model-config.env。
 include:
   - path:
       - model-gateway/config/docker/docker-${INFERENCE_SERVER:-vllm}-inference.yaml
       - model-gateway/config/docker/docker-vllm-embedding.yaml
+    env_file: ./model-gateway-models.env
   - path: app-server/docker-compose.yaml
   - model-gateway/docker-compose.yaml
   - web-app/docker-compose.yaml
-
-# TODO: 模型配置接入后，在 app-server/model-gateway 服务 env_file 中恢复 model-config.env 注入。
 
 # SECURITY: P1-27 全 compose 无 CPU/内存 limits。
 # 单租户可控（自己不会打自己）；vLLM 无 limits 时多实例可争抢宿主机 RAM，

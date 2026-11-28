@@ -26,6 +26,7 @@ services:
       # SECURITY: 路由配置含明文 api_key，bind mount 只读挂载，
       # 不烘焙进镜像层，防止随镜像分发泄露。
       - ./config/gateway.yaml:/etc/gateway/gateway.yaml:ro
+      - ./config/models.yaml:/etc/gateway/models.yaml:ro
     networks:
       - ai-network
     healthcheck:

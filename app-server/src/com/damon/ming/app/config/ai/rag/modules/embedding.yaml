@@ -1,15 +1,14 @@
 # app-server/src/com/damon/ming/app/config/ai/rag/modules/embedding.yaml
 # embedding 模块配置。
 cache_folder: "${model_dir}/embedding"
-# 网关地址从 INFERENCE_GATEWAY_URL 读取；embedding 运行规格在本段集中配置。
+# 网关地址从 INFERENCE_GATEWAY_URL 读取；模型窗口启动时从 model-gateway 加载。
 transport:
   timeout_seconds: 60
 roles:
   bge_m3:
     model_name: BAAI/bge-m3
-    max_model_len: 8192
-    max_input_tokens: 8182
-    dimension: 1024
+    max_model_len: "${model.max_model_len}"
+    dimension: "${model.dimension}"
     api_key: ak_embedding
     query_prefix: ""
     passage_prefix: ""

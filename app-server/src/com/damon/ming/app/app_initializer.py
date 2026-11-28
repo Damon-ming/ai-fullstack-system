@@ -98,7 +98,7 @@ class AppInitializer:
         app.state.ai = AIRuntime(
             rag=RagRuntime(
                 rag_sem=self.rag_sem,
-                config=self.rag_config,
+                config=self.rag_runtime_config,
                 choreographer=self.rag_choreographer,
             ),
             inference=InferenceRuntime(
@@ -393,15 +393,10 @@ class AppInitializer:
         from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
         from src.com.damon.ming.ai.rag.embedding import EmbeddingGateway
         from src.com.damon.ming.ai.rag.rag_tool import get_rag_choreographer
-        from src.com.damon.ming.app.config.ai.inference.inference_config_loader import (
-            InferenceConfigLoader,
-        )
-        from src.com.damon.ming.app.config.ai.rag.config import (
-            RagConfig,
-            RagConfigLoader,
+        from src.com.damon.ming.app.config.ai.ai_config_loader import (
+            AiConfigLoader,
         )
         from src.com.damon.ming.app.config.env import (
-            get_inference_gateway_url,
             get_inference_server,
             get_model_root_dir,
         )
@@ -410,34 +405,26 @@ class AppInitializer:
             UploadRecoveryService,
         )
 
-        rag_config_loader = RagConfigLoader(
-            variables={"model_dir": get_model_root_dir()},
+        ai_config_loader = AiConfigLoader(
+            model_root_dir=get_model_root_dir(),
         )
-        self.embedding_gateway = EmbeddingGateway.from_mapping(
-            rag_config_loader.get_embedding_config(),
-            base_url=get_inference_gateway_url(),
-        )
+        ai_config = ai_config_loader.load()
 
-        rag = RagConfig.from_mapping(
-            rag_config_loader.get_rag_config(),
+        inference_gateway_url = ai_config_loader.get_inference_gateway_url()
+
+        self.embedding_gateway = EmbeddingGateway.from_mapping(
+            ai_config.embedding,
+            base_url=inference_gateway_url,
         )
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
-        self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
-        self.rag_config = rag
+        self.rag_sem = asyncio.Semaphore(ai_config.rag_runtime_config.max_concurrency)
+        self.rag_runtime_config = ai_config.rag_runtime_config
 
-        logger.info(
-            "RAG 配置初始化完成 | rag_max_concurrency=%d | "
-            "execution_timeout_seconds=%g",
-            rag.rag_max_concurrency,
-            rag.execution_timeout_seconds,
-        )
-
-        inference_config = InferenceConfigLoader().load()
         # 所有推理角色共享 Gateway 的并发限制。
         self.inference_gateway = InferenceGateway.from_mapping(
-            inference_config,
-            base_url=get_inference_gateway_url(),
+            ai_config.inference,
+            base_url=inference_gateway_url,
             engine_type=get_inference_server(),
         )
 
@@ -447,7 +434,7 @@ class AppInitializer:
             inference_gateway=self.inference_gateway,
             embedding_gateway=self.embedding_gateway,
             vector_db_url=self.db_config.get_sqlalchemy_url(),
-            config=rag_config_loader.get_modules_config(),
+            config=ai_config.rag_module_configs,
         )
 
         UploadRecoveryService.recover_startup(

@@ -19,8 +19,8 @@ class BaseEmbeddingService(ABC):
 
     @property
     @abstractmethod
-    def max_input_tokens(self) -> int:
-        """单条文档可用的最大输入 token 数。"""
+    def max_document_tokens(self) -> int:
+        """扣除 tokenizer 特殊 token 和前缀后，单个文档块可用的 token 数。"""
         ...
 
     @property

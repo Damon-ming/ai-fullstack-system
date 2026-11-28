@@ -49,22 +49,14 @@ class EmbeddingConfig:
             if not isinstance(entry, dict):
                 raise TypeError(f"Embedding role '{role}' 配置必须是 YAML 对象")
             try:
-                max_model_len = entry.get("max_model_len")
-                if type(max_model_len) is not int or max_model_len <= 0:
-                    raise ValueError("max_model_len 必须是正整数")
-                max_input_tokens = entry.get("max_input_tokens")
-                if type(max_input_tokens) is not int or max_input_tokens <= 0:
-                    raise ValueError("max_input_tokens 必须是正整数")
-                if max_input_tokens > max_model_len:
-                    raise ValueError("max_input_tokens 不能大于 max_model_len")
                 roles[role] = EmbeddingRoleParams(
                     embedding=EmbeddingParams(
                         model_name=entry.get("model_name"),
                         dimension=entry.get("dimension"),
+                        max_model_len=entry.get("max_model_len"),
                         batch_size=entry.get("batch_size"),
                         query_prefix=entry.get("query_prefix", ""),
                         passage_prefix=entry.get("passage_prefix", ""),
-                        max_input_tokens=max_input_tokens,
                         cache_folder=cache_folder,
                     ),
                     gateway=EmbeddingGatewayParams(

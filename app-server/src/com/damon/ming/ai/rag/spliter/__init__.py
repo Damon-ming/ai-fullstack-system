@@ -10,14 +10,14 @@ from src.com.damon.ming.ai.rag.spliter.spliter import (
 def create_splitters(
     *,
     tokenizer,
-    max_input_tokens: int,
+    max_document_tokens: int,
     config: dict[str, object],
 ):
-    """使用注入的 splitter 策略，并应用 embedding 输入上限。"""
+    """使用注入的 splitter 策略，并应用 embedding 单块正文上限。"""
     from src.com.damon.ming.ai.rag.spliter.manager import SplitterManager
 
     manager = SplitterManager()
-    manager.initialize(tokenizer, max_input_tokens, config)
+    manager.initialize(tokenizer, max_document_tokens, config)
     return manager
 
 

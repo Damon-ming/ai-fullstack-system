@@ -1,0 +1,13 @@
+# model-gateway/config/models.yaml
+# 模型固定规格；gateway API 和 vLLM Compose 参数共用此文件。
+# dimension 表示 dense embedding 的输出维度，仅 embedding 模型需要配置。
+models:
+  qwen2.5-1.5B-instruct:
+    max_model_len: 4096
+  qwen2.5-0.5B-instruct:
+    max_model_len: 2048
+  qwen3guard-gen-0.6b:
+    max_model_len: 4096
+  BAAI/bge-m3:
+    max_model_len: 8192
+    dimension: 1024

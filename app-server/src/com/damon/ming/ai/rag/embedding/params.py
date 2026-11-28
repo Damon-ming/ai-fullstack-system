@@ -12,10 +12,10 @@ class EmbeddingParams:
 
     model_name: str
     dimension: int
+    max_model_len: int
     batch_size: int
     query_prefix: str
     passage_prefix: str
-    max_input_tokens: int | None = None
     cache_folder: str | None = None
 
     def __post_init__(self) -> None:
@@ -23,14 +23,11 @@ class EmbeddingParams:
             raise ValueError("model_name 必须是非空字符串")
         for name, value in (
             ("dimension", self.dimension),
+            ("max_model_len", self.max_model_len),
             ("batch_size", self.batch_size),
         ):
             if type(value) is not int or value <= 0:
                 raise ValueError(f"{name} 必须是正整数")
-        if self.max_input_tokens is not None and (
-            type(self.max_input_tokens) is not int or self.max_input_tokens <= 0
-        ):
-            raise ValueError("max_input_tokens 必须是正整数或 None")
         if not isinstance(self.query_prefix, str) or not isinstance(
             self.passage_prefix, str
         ):

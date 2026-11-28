@@ -1,7 +1,7 @@
 # app-server/src/com/damon/ming/app/config/ai/inference/inference-config.yaml
 # 推理网关连接超时、共享并发上限和各用途模型配置。
 # 引擎类型（默认 vllm）和网关地址由应用从环境变量读取后注入；各角色 API key 在此配置。
-# 各角色的 max_model_len 是输入与输出合计的窗口，需与模型服务部署值一致。
+# 各角色的 max_model_len 启动时从 model-gateway 模型配置接口加载。
 # options 是请求生成参数；调用方可通过 max_tokens 显式指定输出上限。
 transport:
   timeout_seconds: 180
@@ -12,7 +12,7 @@ roles:
     api_key: ak_inference_001
     timeout_seconds: 180  # 包含等待并发槽及完整输出
     model_name: qwen2.5-1.5B-instruct
-    max_model_len: 4096
+    max_model_len: "${model.max_model_len}"
     options:
       temperature: 0.1
       top_p: 0.9
@@ -20,7 +20,7 @@ roles:
     api_key: ak_inference_002
     timeout_seconds: 10   # 每次摘要调用预算
     model_name: qwen2.5-0.5B-instruct
-    max_model_len: 2048
+    max_model_len: "${model.max_model_len}"
     options:
       temperature: 0.1
       top_p: 0.9
@@ -28,7 +28,7 @@ roles:
     api_key: ak_guardrail
     timeout_seconds: 5    # 包含等待并发槽
     model_name: qwen3guard-gen-0.6b
-    max_model_len: 4096
+    max_model_len: "${model.max_model_len}"
     options:
       temperature: 0.0
       top_p: 0.9

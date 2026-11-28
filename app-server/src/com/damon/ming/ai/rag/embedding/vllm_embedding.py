@@ -24,8 +24,6 @@ class VllmEmbedding(BaseEmbeddingService):
         params: EmbeddingParams,
         gateway_params: EmbeddingGatewayParams,
     ):
-        if params.max_input_tokens is None:
-            raise ValueError("vLLM embedding 必须配置 max_input_tokens")
         super().__init__(params)
         self._input_policy = EmbeddingInputPolicy(params)
         try:
@@ -36,22 +34,25 @@ class VllmEmbedding(BaseEmbeddingService):
         self._base_url = gateway_params.base_url
         self._api_key = gateway_params.api_key
         self._timeout = gateway_params.timeout_seconds
-        self._max_input_tokens = params.max_input_tokens
+        self._max_model_len = params.max_model_len
         self._dimension = params.dimension
         self._tokenizer = self._load_tokenizer(
             params.model_name,
             params.cache_folder,
         )
+        self._max_document_tokens = self._calculate_max_document_tokens()
         self._client = OpenAI(
             base_url=self._base_url,
             api_key=self._api_key,
             timeout=self._timeout,
         )
         logger.info(
-            "[VllmEmbedding] 初始化成功 | model=%s | url=%s | max_input_tokens=%s",
+            "[VllmEmbedding] 初始化成功 | model=%s | url=%s | "
+            "max_model_len=%s | max_document_tokens=%s",
             params.model_name,
             self._base_url,
-            self._max_input_tokens,
+            self._max_model_len,
+            self._max_document_tokens,
         )
 
     @staticmethod
@@ -68,9 +69,13 @@ class VllmEmbedding(BaseEmbeddingService):
         )
 
     @property
-    def max_input_tokens(self) -> int:
+    def max_document_tokens(self) -> int:
+        return self._max_document_tokens
+
+    def _calculate_max_document_tokens(self) -> int:
         return self._input_policy.available_document_tokens(
-            self._max_input_tokens, self._tokenizer
+            self._max_model_len,
+            self._tokenizer,
         )
 
     def get_tokenizer(self) -> Any:
@@ -113,7 +118,8 @@ class VllmEmbedding(BaseEmbeddingService):
             "model": self.params.model_name,
             "base_url": self._base_url,
             "dimension": self._dimension,
-            "max_input_tokens": self._max_input_tokens,
+            "max_model_len": self._max_model_len,
+            "max_document_tokens": self._max_document_tokens,
             "query_prefix": self.params.query_prefix,
             "passage_prefix": self.params.passage_prefix,
         }

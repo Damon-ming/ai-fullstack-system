@@ -46,7 +46,7 @@ class RagConfig:
 
     execution_timeout_seconds: float  # 检索、上下文构造和主推理预算（秒），不含护栏
     context_max_tokens: int  # 返回给主推理模型的参考上下文 token 上限
-    rag_max_concurrency: int
+    max_concurrency: int
     retry_ms: int
     prompt: RagPromptConfig
 
@@ -64,7 +64,7 @@ class RagConfig:
                     rag["execution_timeout_seconds"],
                     "rag.execution_timeout_seconds",
                 ),
-                rag_max_concurrency=cls._integer(
+                max_concurrency=cls._integer(
                     rag["max_concurrency"],
                     "rag.max_concurrency",
                 ),
@@ -98,9 +98,15 @@ class RagConfig:
 class RagConfigLoader:
     """加载一层模块引用，展开显式提供的变量，缓存配置字典。"""
 
-    def __init__(self, *, variables: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        variables: dict[str, str] | None = None,
+        deferred_variables: set[str] | None = None,
+    ) -> None:
         self._config_dir = Path(__file__).resolve().parent
         self._variables = dict(variables or {})
+        self._deferred_variables = frozenset(deferred_variables or ())
         self._config: dict[str, Any] | None = None
 
     def load(self) -> dict[str, Any]:
@@ -128,6 +134,8 @@ class RagConfigLoader:
 
         def replace(match: re.Match[str]) -> str:
             name = match.group(1)
+            if name in self._deferred_variables:
+                return match.group(0)
             if name not in self._variables:
                 raise ValueError(f"RAG 配置变量 '{name}' 未提供 | path={location}")
             replacement = self._variables[name]

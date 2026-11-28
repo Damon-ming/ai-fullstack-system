@@ -206,7 +206,7 @@ app-server (depends_on: postgres + model-gateway)
 web-app (depends_on: app-server)
 ```
 
-TODO：当前 Compose 尚未接入 `model-config.env`；vLLM 的模型参数仍由 Compose 配置固定。待模型配置真正接入 vLLM 启动参数后，再恢复该文件的生成与注入。
+`model-gateway/config/models.yaml` 维护各模型的 `max_model_len`。启动前需要从该文件生成供 Compose 插值的 `model-gateway-models.env`；app-server 启动时则通过 model-gateway 接口读取同一份模型配置。
 
 ## 一键部署
 
@@ -216,10 +216,8 @@ TODO：当前 Compose 尚未接入 `model-config.env`；vLLM 的模型参数仍�
 - Docker Compose v2.20.3+
 - NVIDIA Container Toolkit（vLLM 模式需要）
 
-完成 `.env` 配置和模型准备后，执行 `docker compose up -d --build` 一键构建并启动服务。
+完成 `.env` 配置和模型准备后，先生成 Compose 模型参数，再执行 `docker compose up -d --build` 一键构建并启动服务。
 前端和后端依赖由各自 Dockerfile 在构建镜像时安装；Docker 会先完成镜像构建，再启动容器，不需要在 Ubuntu 宿主机安装 pnpm 或 Python 项目依赖。
-当前启动流程不需要生成 `model-config.env`；vLLM 的模型参数仍由 Compose 配置固定。
-TODO：模型配置接入 vLLM 启动参数后，恢复 `model-config.env` 的生成与注入。
 
 ### 部署步骤
 
@@ -231,17 +229,21 @@ git clone <repo-url> && cd ai-fullstack-system
 cp .env.example .env
 # 编辑 .env，设置 DB_PASSWORD、MASTER_KEY 等
 
-# 3. 首次部署或模型尚未下载完整时，下载模型
+# 3. 生成 vLLM 启动参数（models.yaml 修改后重新执行）
+python -m pip install PyYAML
+python model-gateway/export_model_env.py
+
+# 4. 首次部署或模型尚未下载完整时，下载模型
 python -m pip install huggingface-hub
 python scripts/download-models.py
 
-# 4. 构建应用镜像并启动服务（需要 GPU）
+# 5. 构建应用镜像并启动服务（需要 GPU）
 sudo SERVER_BUILD_ENV=1 FRONTEND_BUILD_ENV=1 INFERENCE_SERVER=vllm docker compose up -d --build
 
-# 5. 查看日志
+# 6. 查看日志
 sudo docker compose logs -f app-server
 
-# 6. 停止所有服务
+# 7. 停止所有服务
 sudo docker compose down
 ```
 
@@ -278,11 +280,9 @@ python scripts/install-frontend-deps.py
 | `vllm`（默认） | 推理与 embedding | ✅ |
 | `sglang` | 预留扩展 | ✅ |
 
-切换推理后端通过 `.env` 配置；当前模型窗口入口仅接入现有 vLLM 配置，其他后端需补充对应的读取规则。
+切换推理后端通过 `.env` 配置；当前模型窗口启动参数按 vLLM 接入，其他后端需补充对应的读取规则。
 
-当前 vLLM 的 `--max-model-len` 在 Compose 文件中使用固定值，尚未接入 `model-config/models.yaml`。
-TODO：将模型配置接入 vLLM 启动参数后，再恢复 `model-config.env` 的导出和注入流程。
-模型配置入口和字段说明见 [model-config/README.md](model-config/README.md)。app-server 的窗口及业务预算尚未接入。
+vLLM 的 `--max-model-len` 从 `model-gateway/config/models.yaml` 导出；修改模型窗口后，需重新生成 `model-gateway-models.env` 并重启对应服务。app-server 启动时从 model-gateway 接口读取同一份模型窗口，用于推理请求和 embedding 输入长度校验。
 
 Embedding 固定由独立的 vLLM 服务运行，并通过 model-gateway 路由；`INFERENCE_SERVER` 只选择生成推理后端。
 
