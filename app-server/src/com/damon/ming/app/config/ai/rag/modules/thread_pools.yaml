@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/app/config/ai/rag/modules/thread_pools.yaml
 # thread_pools 模块配置。
 # RAG 资源组内部的 worker 分配；总量不得超过 app/config/thread 的 rag 预算。
 retrieval: 4

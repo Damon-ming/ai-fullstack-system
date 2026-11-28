@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/app/config/ai/rag/modules/embedding.yaml
 # embedding 模块配置。
 cache_folder: "${model_dir}/embedding"
 # 网关地址从 INFERENCE_GATEWAY_URL 读取；embedding 运行规格在本段集中配置。

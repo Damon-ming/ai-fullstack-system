@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/app/config/ai/rag/modules/splitter.yaml
 # splitter 模块配置。
 # 文档切分的目标 chunk 大小；启动时按 embedding 输入上限收紧。
 chunk_token_size: 768

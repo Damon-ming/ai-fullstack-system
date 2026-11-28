@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/app/config/ai/rag/modules/source.yaml
 # source 模块配置。
 # 数据源配置 —— 各数据源类型的可配置参数。
 #

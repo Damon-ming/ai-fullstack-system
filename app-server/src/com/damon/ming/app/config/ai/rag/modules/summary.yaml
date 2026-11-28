@@ -1,3 +1,4 @@
+# app-server/src/com/damon/ming/app/config/ai/rag/modules/summary.yaml
 # summary 模块配置。
 # TODO: 按 locale 选择摘要模板并明确输出语言；当前使用中文模板。
 context_margin_ratio: 0.02
