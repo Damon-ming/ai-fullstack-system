@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
-from src.com.damon.ming.ai.rag.config import ChoreographerConfig, RagModuleConfig
+from src.com.damon.ming.ai.rag.config import RagModuleConfig
 from src.com.damon.ming.ai.rag.constructor.constructor import SectionReconstructor
 from src.com.damon.ming.ai.rag.embedding import (
     EmbeddingGateway,
@@ -60,7 +60,6 @@ def get_rag_choreographer(
     corpus_dir: str,
     inference_gateway: InferenceGateway,
     embedding_gateway: EmbeddingGateway,
-    context_max_tokens: int,
     vector_db_url: str,
     config: dict[str, Any],
 ):
@@ -71,7 +70,6 @@ def get_rag_choreographer(
         corpus_dir: 知识库语料目录绝对路径（由 app.config 注入，必填）。
         inference_gateway: 启动时装配的统一推理入口（必填）。
         embedding_gateway: 启动时装配的统一 embedding 入口（必填）。
-        context_max_tokens: AppInitializer 从 rag 段注入的参考上下文 token 上限。
         vector_db_url: AppInitializer 从 DbConfig 注入的数据库连接串（必填）。
         config: AppInitializer 透传的 RAG YAML modules 配置段。
     """
@@ -84,7 +82,6 @@ def get_rag_choreographer(
                     corpus_dir=corpus_dir,
                     inference_gateway=inference_gateway,
                     embedding_gateway=embedding_gateway,
-                    context_max_tokens=context_max_tokens,
                     vector_db_url=vector_db_url,
                     config=config,
                 )
@@ -96,7 +93,6 @@ class RagChoreographer:
     def __init__(
         self,
         pools: ThreadPoolGroup,
-        context_max_tokens: int,
         vector_db_url: str,
         corpus_dir: str = "",
         inference_gateway: InferenceGateway | None = None,
@@ -117,9 +113,6 @@ class RagChoreographer:
             raise ValueError("RagChoreographer 初始化失败：embedding_gateway 不能为空")
 
         self.config = RagModuleConfig(config)
-        self.choreographer_config = ChoreographerConfig(
-            context_max_tokens=context_max_tokens,
-        )
 
         self.thread_pools = RagThreadPools()
         self.thread_pools.initialize(pools, self.config.get_thread_pool_config())
@@ -212,6 +205,7 @@ class RagChoreographer:
         self,
         query: str,
         top_k: int | None = None,
+        context_max_tokens: int | None = None,
     ) -> str:
         """RAG 检索主流程。
 
@@ -229,6 +223,7 @@ class RagChoreographer:
         检索与重排参数在初始化时分别注入对应组件。
         top_k 可覆盖本轮重排后保留的 section 数；不传时使用 rerank YAML 默认值。
         超过检索候选上限时按 retrieve_top_k 执行。
+        context_max_tokens 由调用方提供本轮参考资料的 token 预算。
 
         Returns:
             检索结果文本。取消时抛出 asyncio.CancelledError。
@@ -236,11 +231,8 @@ class RagChoreographer:
         Raises:
             asyncio.CancelledError: 客户端断开或超时时向上传播。
         """
-        if top_k is not None and (type(top_k) is not int or top_k <= 0):
-            raise ValueError("top_k 必须是正整数")
         retrieve_top_k = self.hybrid_retriever.params.retrieve_top_k
         effective_top_k = None if top_k is None else min(top_k, retrieve_top_k)
-        max_context_tokens = self.choreographer_config.context_max_tokens
 
         logger.info(
             "RAG 检索开始 | query_length=%s",
@@ -291,19 +283,19 @@ class RagChoreographer:
 
             # ── 阶段 5: 全局超限摘要 ──
             total_tokens = self.summary.tokenizer.count_tokens(full_text)
-            if total_tokens > max_context_tokens:
+            if total_tokens > context_max_tokens:
                 full_text = await self.summary.run_summary(
-                    full_text, max_context_tokens
+                    full_text, context_max_tokens
                 )
                 # 摘要后仍超限则截断兜底
-                if self.summary.tokenizer.count_tokens(full_text) > max_context_tokens:
+                if self.summary.tokenizer.count_tokens(full_text) > context_max_tokens:
                     logger.warning(
                         "全局摘要后仍超限 | 摘要tokens=%d | max=%d | 截断兜底",
                         self.summary.tokenizer.count_tokens(full_text),
-                        max_context_tokens,
+                        context_max_tokens,
                     )
                     full_text = self.summary.truncate_by_token(
-                        full_text, max_context_tokens
+                        full_text, context_max_tokens
                     )
 
             logger.info("RAG 检索完成 | context_length=%s", len(full_text))

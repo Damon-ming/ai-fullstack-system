@@ -98,9 +98,7 @@ class AppInitializer:
         app.state.ai = AIRuntime(
             rag=RagRuntime(
                 rag_sem=self.rag_sem,
-                execution_timeout_seconds=self.execution_timeout_seconds,
-                retry_ms=self.rag_retry_ms,
-                prompt=self.rag_prompt,
+                config=self.rag_config,
                 choreographer=self.rag_choreographer,
             ),
             inference=InferenceRuntime(
@@ -426,9 +424,7 @@ class AppInitializer:
 
         # Semaphore 在 lifespan 事件循环内创建，绑定到正确的 loop
         self.rag_sem = asyncio.Semaphore(rag.rag_max_concurrency)
-        self.execution_timeout_seconds = rag.execution_timeout_seconds
-        self.rag_retry_ms = rag.retry_ms
-        self.rag_prompt = rag.prompt
+        self.rag_config = rag
 
         logger.info(
             "RAG 配置初始化完成 | rag_max_concurrency=%d | "
@@ -450,7 +446,6 @@ class AppInitializer:
             corpus_dir=self.system_config.corpus_dir,
             inference_gateway=self.inference_gateway,
             embedding_gateway=self.embedding_gateway,
-            context_max_tokens=rag.context_max_tokens,
             vector_db_url=self.db_config.get_sqlalchemy_url(),
             config=rag_config_loader.get_modules_config(),
         )

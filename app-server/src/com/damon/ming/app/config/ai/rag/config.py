@@ -45,7 +45,7 @@ class RagConfig:
     """rag 段。"""
 
     execution_timeout_seconds: float  # 检索、上下文构造和主推理预算（秒），不含护栏
-    context_max_tokens: int
+    context_max_tokens: int  # 返回给主推理模型的参考上下文 token 上限
     rag_max_concurrency: int
     retry_ms: int
     prompt: RagPromptConfig

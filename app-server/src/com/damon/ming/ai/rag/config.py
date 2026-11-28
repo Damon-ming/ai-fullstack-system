@@ -2,17 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
-
-
-@dataclass(frozen=True, kw_only=True)
-class ChoreographerConfig:
-    context_max_tokens: int
-
-    def __post_init__(self) -> None:
-        if type(self.context_max_tokens) is not int or self.context_max_tokens <= 0:
-            raise ValueError("rag.context_max_tokens 必须是正整数")
 
 
 class RagModuleConfig:

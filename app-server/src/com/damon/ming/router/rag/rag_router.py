@@ -208,7 +208,7 @@ async def stream_chat_generator(
 
     recorder 由外部工厂创建（turn_id 自动生成），本函数只负责编排与交付。
     """
-    emitter = SseEmitter(retry_ms=request.app.state.ai.rag.retry_ms)
+    emitter = SseEmitter(retry_ms=request.app.state.ai.rag.config.retry_ms)
     turn_id = recorder.turn_id
     conversation_id = recorder.conversation_id
 

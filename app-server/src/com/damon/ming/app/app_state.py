@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
     from src.com.damon.ming.ai.rag.rag_tool import RagChoreographer
-    from src.com.damon.ming.app.config.ai.rag.config import RagPromptConfig
+    from src.com.damon.ming.app.config.ai.rag.config import RagConfig
     from src.com.damon.ming.app.config.system.system_config_loader import SystemConfig
     from src.com.damon.ming.app.config.upload.upload_config_loader import UploadConfig
     from src.com.damon.ming.app.encryption.session_service import SessionService
@@ -58,9 +58,7 @@ class RagRuntime:
     """RAG 容器及流程配置。"""
 
     rag_sem: asyncio.Semaphore
-    execution_timeout_seconds: float
-    retry_ms: int
-    prompt: RagPromptConfig
+    config: RagConfig
     choreographer: RagChoreographer
 
 

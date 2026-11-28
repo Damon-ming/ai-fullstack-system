@@ -30,9 +30,10 @@ async def _build_prompt_messages(app_state, query: str) -> list[dict[str, str]]:
         logger.debug("开始执行 RAG 检索")
         ref_content = await app_state.ai.rag.choreographer.build_rag_context(
             query,
+            context_max_tokens=app_state.ai.rag.config.context_max_tokens,
         )
 
-    chat_cfg = app_state.ai.rag.prompt
+    chat_cfg = app_state.ai.rag.config.prompt
 
     prompt_messages = [
         {"role": "system", "content": chat_cfg.system_prompt},
@@ -57,7 +58,7 @@ async def generate_answer(
     CancelledError 不加内层捕获，直接穿透到外层统一处理，
     确保 infer_service 内部 finally 能正确关闭推理流。
     """
-    async with asyncio.timeout(app_state.ai.rag.execution_timeout_seconds):
+    async with asyncio.timeout(app_state.ai.rag.config.execution_timeout_seconds):
         prompt_messages = await _build_prompt_messages(app_state, query)
         async with aclosing(
             app_state.ai.inference.gateway.get_inference().stream(
