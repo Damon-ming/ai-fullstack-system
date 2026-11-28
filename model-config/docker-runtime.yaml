@@ -1,7 +1,0 @@
-# 模型容器的共享启动模板：仅通过 extends 使用，不作为独立服务启动。
-services:
-  model-runtime:
-    extends:
-      file: docker-compose.yaml
-      service: model-library
-    entrypoint: ["python3", "-m", "model_config.runtime"]

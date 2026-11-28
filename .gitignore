@@ -10,6 +10,7 @@ __pycache__/
 .env.local
 .env.*.local
 /model-config.env
+/model-config/
 /model-gateway-models.env
 
 # ── 系统文件 ─────────────────────────────────────────
