@@ -8,10 +8,13 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   const {
     phone,
     password,
+    name,
     setPhone,
     setPassword,
+    setName,
     phoneError,
     passwordError,
+    nameError,
     submitError,
     status,
     handleSubmit,
@@ -51,6 +54,27 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
             <span className="mt-1 block text-xs text-red-500">
               {phoneError}
             </span>
+          )}
+        </label>
+
+        {/* 首次注册姓名 */}
+        <label className="mb-4 block text-xs font-semibold text-gray-500">
+          {t("login.nameLabel")}
+          <input
+            type="text"
+            value={name}
+            maxLength={64}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("login.namePlaceholder")}
+            className={`mt-1.5 block w-full rounded-xl border bg-gray-50 px-4 py-3 text-gray-700 outline-0 focus:bg-white ${
+              nameError
+                ? "border-red-300 focus:border-red-400"
+                : "border-gray-200 focus:border-blue-400"
+            }`}
+            disabled={loading}
+          />
+          {nameError && (
+            <span className="mt-1 block text-xs text-red-500">{nameError}</span>
           )}
         </label>
 

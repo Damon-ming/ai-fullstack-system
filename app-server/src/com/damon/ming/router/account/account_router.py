@@ -10,16 +10,18 @@ Account 路由 —— 用户登录 / Token 签发 / 资料管理
   - 用户资料读取与修改（昵称）
 
 用法：
-  POST /api/account/login/v1     body: { "phone": "+8613800138000", "password": "Abc123_45" }
+  POST /api/account/login/v1     首次注册 body: { "phone": "+8613800138000", "password": "Abc123_45", "name": "张三" }
     → { "token": "...", "is_new": false }
   GET  /api/account/profile/get/v1
-    → { "name": "Murphy" }
-  POST /api/account/profile/update/v1   body: { "name": "NewName" }
-    → { "name": "NewName" }
+    → { "user_id": 100000, "name": "张三", "nickname": "用户_1A2B" }
+  POST /api/account/profile/update/v1   body: { "nickname": "NewName" }
+    → { "nickname": "NewName" }
 
 profile 拆成两个路径的原因：加密白名单按路径前缀匹配，
 GET 无 body 可加密需放行，POST 有 body 必须加密，同一前缀无法区分。
 """
+
+import secrets
 
 from fastapi import APIRouter, Request
 from src.com.damon.ming.app.thread_pools import (
@@ -37,6 +39,8 @@ from src.com.damon.ming.router.account.schemas.bean import (
     LoginRequest,
     ProfileResponseData,
     TokenResponseData,
+    UpdateProfileRequest,
+    UpdateProfileResponseData,
 )
 from src.com.damon.ming.router.account.token_store import (
     create_session,
@@ -44,7 +48,7 @@ from src.com.damon.ming.router.account.token_store import (
     login_or_register,
     register_device,
     revoke_session,
-    update_user_name,
+    update_user_nickname,
 )
 from src.com.damon.ming.schemas.response import (
     BaseBizFailedData,
@@ -61,7 +65,7 @@ router = APIRouter(prefix="/api/account", tags=["账号体系"])
 @limiter.limit("5/minute")
 async def login(body: LoginRequest, request: Request):
     """
-    登录 / 自动注册 —— 手机号 + 密码一键完成。
+    登录 / 自动注册 —— 手机号 + 密码；首次注册还需姓名。
 
     流程：
       1. phone 已注册 → 验 password → 对则登录，错则返回 200004002
@@ -89,12 +93,19 @@ async def login(body: LoginRequest, request: Request):
             login_or_register,
             body.phone,
             body.password,
+            body.name,
+            _generate_default_nickname(),
         )
     except ValueError as e:
         if str(e) == "PHONE_PASSWORD_MISMATCH":
             return BaseFailedResponse(
                 code=ErrorCode.ACCOUNT.PHONE_PASSWORD_MISMATCH,
                 data=BaseBizFailedData(error_msg="手机号或密码错误"),
+            )
+        if str(e) == "NAME_REQUIRED":
+            return BaseFailedResponse(
+                code=ErrorCode.VALIDATION.PARAM_FORMAT,
+                data=BaseBizFailedData(error_msg="首次注册需要填写姓名"),
             )
         raise
 
@@ -145,39 +156,50 @@ async def get_profile(request: Request):
     """
     获取当前用户资料（需认证，token 由 AuthMiddleware 校验）。
 
-    从请求上下文提取 token → 查询用户昵称。
+    从请求上下文提取 token → 查询用户资料。
     路径独立于 update：GET 无 body，命中加密白名单明文放行。
     """
     client = request.state.client
     user = get_user_profile(client.user_id)
-    name = user.name if user else ""
+    if user is None:
+        return BaseFailedResponse(
+            code=ErrorCode.AUTH.INVALID_SESSION,
+            data=BaseBizFailedData(error_msg="用户不存在"),
+        )
 
     return BaseSuccessResponse(
         code=ErrorCode.OK,
-        data=ProfileResponseData(name=name),
+        data=ProfileResponseData(
+            name=user.name, nickname=user.nickname, user_id=user.user_id
+        ),
     )
 
 
 @router.post(
-    "/profile/update/v1", response_model=BaseSuccessResponse[ProfileResponseData]
+    "/profile/update/v1", response_model=BaseSuccessResponse[UpdateProfileResponseData]
 )
 @limiter.limit("20/minute")
-async def update_profile(body: ProfileResponseData, request: Request):
+async def update_profile(body: UpdateProfileRequest, request: Request):
     """
     更新当前用户昵称（需认证，token 由 AuthMiddleware 校验）。
 
-    从请求上下文提取 token → 更新 users 表 name 字段。
+    从请求上下文提取 token → 更新 users 表 nickname 字段。
     路径独立于 get：POST 携带 body，必须走加密通道。
     """
     client = request.state.client
-    name = body.name.strip()[:64]
-    update_user_name(client.user_id, name)
+    nickname = body.nickname
+    updated = update_user_nickname(client.user_id, nickname)
+    if not updated:
+        return BaseFailedResponse(
+            code=ErrorCode.AUTH.INVALID_SESSION,
+            data=BaseBizFailedData(error_msg="用户不存在"),
+        )
 
-    logger.info("用户资料已更新 | user_id=%s name=%s", client.user_id, name)
+    logger.info("用户资料已更新 | user_id=%s nickname=%s", client.user_id, nickname)
 
     return BaseSuccessResponse(
         code=ErrorCode.OK,
-        data=ProfileResponseData(name=name),
+        data=UpdateProfileResponseData(nickname=nickname),
     )
 
 
@@ -186,3 +208,8 @@ def _mask_phone(phone: str) -> str:
     if len(phone) > 4:
         return phone[:3] + "***" + phone[-4:]
     return "***"
+
+
+def _generate_default_nickname() -> str:
+    """生成首次注册用户的默认昵称。"""
+    return f"用户_{secrets.token_hex(2).upper()}"

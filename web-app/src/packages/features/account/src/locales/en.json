@@ -4,6 +4,8 @@
     "subtitle": "Sign in to get started",
     "phoneLabel": "Phone",
     "phonePlaceholder": "+8613800138000",
+    "nameLabel": "Name (required for new accounts)",
+    "namePlaceholder": "Leave blank to sign in",
     "passwordLabel": "Password",
     "passwordPlaceholder": "Enter your password",
     "passwordHint": "At least 8 characters with uppercase, lowercase, digit, and . or _",
@@ -12,10 +14,11 @@
   },
   "dialog": {
     "title": "Account Info",
-    "hint": "Info is saved in this browser only.",
-    "displayName": "Display name",
+    "hint": "Changes are saved to your account.",
+    "displayName": "Nickname",
     "cancel": "Cancel",
     "save": "Save",
+    "saveError": "Could not save nickname. Please try again.",
     "logout": "Sign out",
     "logoutError": "Could not sign out. Please try again."
   }

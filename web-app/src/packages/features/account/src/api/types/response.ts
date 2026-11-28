@@ -1,6 +1,7 @@
 export interface AccountProfile {
-  id: string;
+  userId: number | null;
   name: string;
+  nickname: string;
   avatarText: string;
 }
 
@@ -12,6 +13,13 @@ export interface LoginResponse {
 }
 
 export interface ProfileResponse {
-  /** 用户昵称 */
+  user_id: number;
+  /** 首次注册时填写的姓名 */
   name: string;
+  /** 可修改的昵称 */
+  nickname: string;
+}
+
+export interface UpdateProfileResponse {
+  nickname: string;
 }

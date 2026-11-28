@@ -14,6 +14,7 @@ export type {
   AccountProfile,
   LoginRequest,
   LoginResponse,
-  ProfileRequest,
+  UpdateProfileRequest,
   ProfileResponse,
+  UpdateProfileResponse,
 } from "./types";

@@ -22,8 +22,9 @@ import { createLogger } from "@ming/core-log";
 import type {
   LoginRequest,
   LoginResponse,
-  ProfileRequest,
+  UpdateProfileRequest,
   ProfileResponse,
+  UpdateProfileResponse,
 } from "./types";
 
 const log = createLogger("account/api");
@@ -52,11 +53,13 @@ export async function login(
 }
 
 /** 撤销当前设备的服务端会话。 */
-export async function logout(): Promise<DataApiResponse<Record<string, never>>> {
+export async function logout(): Promise<
+  DataApiResponse<Record<string, never>>
+> {
   return dataApi.post<Record<string, never>>("/api/account/logout/v1");
 }
 
-/** 获取当前用户昵称。 */
+/** 获取当前用户资料。 */
 export async function fetchProfile(): Promise<
   DataApiResponse<ProfileResponse>
 > {
@@ -66,8 +69,11 @@ export async function fetchProfile(): Promise<
 
 /** 更新当前用户昵称。 */
 export async function updateProfile(
-  body: ProfileRequest,
-): Promise<DataApiResponse<ProfileResponse>> {
-  log.debug("更新用户资料", { name: body.name });
-  return dataApi.post<ProfileResponse>("/api/account/profile/update/v1", body);
+  body: UpdateProfileRequest,
+): Promise<DataApiResponse<UpdateProfileResponse>> {
+  log.debug("更新用户昵称", { nickname: body.nickname });
+  return dataApi.post<UpdateProfileResponse>(
+    "/api/account/profile/update/v1",
+    body,
+  );
 }

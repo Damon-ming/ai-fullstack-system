@@ -1,17 +1,28 @@
 import { createAppStore } from "../app-store";
 
+export interface AccountProfileState {
+  userId: number | null;
+  name: string;
+  nickname: string;
+  avatarText: string;
+}
+
 export interface AccountState {
+  profile: AccountProfileState;
+  setProfile: (profile: AccountProfileState) => void;
   dialogOpen: boolean;
-  draftName: string;
-  openDialog: (name: string) => void;
+  draftNickname: string;
+  openDialog: (nickname: string) => void;
   closeDialog: () => void;
-  setDraftName: (name: string) => void;
+  setDraftNickname: (nickname: string) => void;
 }
 
 export const useAccountStore = createAppStore<AccountState>((set) => ({
+  profile: { userId: null, name: "", nickname: "", avatarText: "" },
+  setProfile: (profile) => set({ profile }),
   dialogOpen: false,
-  draftName: "",
-  openDialog: (draftName) => set({ dialogOpen: true, draftName }),
+  draftNickname: "",
+  openDialog: (draftNickname) => set({ dialogOpen: true, draftNickname }),
   closeDialog: () => set({ dialogOpen: false }),
-  setDraftName: (draftName) => set({ draftName }),
+  setDraftNickname: (draftNickname) => set({ draftNickname }),
 }));

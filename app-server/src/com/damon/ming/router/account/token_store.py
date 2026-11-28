@@ -3,12 +3,12 @@
 身份 + 设备 + 会话 存储层。
 
 职责分离：
-  - phone → users.user_id：稳定的内部用户 ID（不下发客户端）
+  - phone → users.user_id：六位用户编号，同时作为主键
   - device_id：设备层（独立存在，不归属任何用户）
   - session_id：服务端内部会话标识，保存单个设备凭据摘要
 
 关联关系：
-  phone ──1:1── users.user_id   （稳定用户 ID）
+  phone ──1:1── users.user_id   （用户主键）
   device_id ──独立注册           （设备身份，不绑定用户）
   (users.user_id, device_id) ──1:1── session_id（每次登录产生一个会话）
 
@@ -17,7 +17,6 @@ CRUD 使用 SQLAlchemy Core 复用 app/tables 的表定义，
 UPSERT 使用 PostgreSQL 方言，行锁与多步写入保留在同一事务中。
 """
 
-import secrets
 from datetime import timedelta
 
 from sqlalchemy import select
@@ -93,12 +92,9 @@ def _verify_user_password(row, password: str) -> None:
         raise ValueError("PHONE_PASSWORD_MISMATCH")
 
 
-def _generate_default_name() -> str:
-    """生成随机默认昵称：用户_XXXX（4位 hex）。"""
-    return f"用户_{secrets.token_hex(2).upper()}"
-
-
-def login_or_register(phone: str, password: str) -> tuple[int, bool]:
+def login_or_register(
+    phone: str, password: str, name: str | None, nickname: str
+) -> tuple[int, bool]:
     """登录或自动注册，返回 (内部用户 ID, is_new)。
 
     流程：
@@ -110,9 +106,14 @@ def login_or_register(phone: str, password: str) -> tuple[int, bool]:
     if existing_user_id is not None:
         return existing_user_id, False
 
-    # 新用户 → 自动注册（生成随机默认昵称）
+    # 新用户必须填写姓名；昵称由路由层生成后传入。
+    if not name or not name.strip():
+        raise ValueError("NAME_REQUIRED")
+    name = name.strip()
+    if len(name) > 64:
+        raise ValueError("NAME_TOO_LONG")
+
     password_hash = hash_password(password)
-    default_name = _generate_default_name()
     with _db().transaction() as conn:
         inserted = conn.execute(
             pg_insert(users)
@@ -120,7 +121,8 @@ def login_or_register(phone: str, password: str) -> tuple[int, bool]:
                 phone=get_field_encryptor().encrypt(phone),
                 phone_idx=get_field_encryptor().blind_index(phone),
                 password=password_hash,
-                name=default_name,
+                name=name,
+                nickname=nickname,
                 created_at=now(),
             )
             .on_conflict_do_nothing(index_elements=[users.c.phone_idx])
@@ -154,11 +156,11 @@ def get_user_profile(user_id: int) -> UserRow | None:
     return UserRow(**values)
 
 
-def update_user_name(user_id: int, name: str) -> bool:
+def update_user_nickname(user_id: int, nickname: str) -> bool:
     """更新用户昵称。返回是否成功。"""
     with _db().engine.connect() as conn:
         result = conn.execute(
-            users.update().where(users.c.user_id == user_id).values(name=name)
+            users.update().where(users.c.user_id == user_id).values(nickname=nickname)
         )
         conn.commit()
     return result.rowcount > 0

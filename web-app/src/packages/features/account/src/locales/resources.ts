@@ -4,6 +4,8 @@ export interface AccountResources {
     subtitle: string;
     phoneLabel: string;
     phonePlaceholder: string;
+    nameLabel: string;
+    namePlaceholder: string;
     passwordLabel: string;
     passwordPlaceholder: string;
     passwordHint: string;
@@ -16,6 +18,7 @@ export interface AccountResources {
     displayName: string;
     cancel: string;
     save: string;
+    saveError: string;
     logout: string;
     logoutError: string;
   };

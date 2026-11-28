@@ -14,16 +14,27 @@ import { useTranslation } from "@ming/i18n";
  */
 export function useAccountDialogHook() {
   const open = useAccountStore((s) => s.dialogOpen);
-  const draftName = useAccountStore((s) => s.draftName);
-  const setDraftName = useAccountStore((s) => s.setDraftName);
+  const draftNickname = useAccountStore((s) => s.draftNickname);
+  const setDraftNickname = useAccountStore((s) => s.setDraftNickname);
   const closeDialog = useAccountStore((s) => s.closeDialog);
-  const { update } = useAccount();
+  const { update } = useAccount(false);
   const { t } = useTranslation("account");
   const [logoutError, setLogoutError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const save = () => {
-    void update(draftName);
-    closeDialog();
+  const save = async () => {
+    if (saving) return;
+    setSaveError("");
+    setSaving(true);
+    try {
+      await update(draftNickname);
+      closeDialog();
+    } catch {
+      setSaveError(t("dialog.saveError"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const logout = async () => {
@@ -37,5 +48,15 @@ export function useAccountDialogHook() {
     }
   };
 
-  return { open, draftName, setDraftName, closeDialog, save, logout, logoutError };
+  return {
+    open,
+    draftNickname,
+    setDraftNickname,
+    closeDialog,
+    save,
+    saveError,
+    saving,
+    logout,
+    logoutError,
+  };
 }

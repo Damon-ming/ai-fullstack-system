@@ -1,6 +1,6 @@
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 _PASSWORD_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[._]).{8,64}$")
 
@@ -28,11 +28,26 @@ class LoginRequest(BaseModel):
         description="登录密码：≥8 位，含大小写字母、数字、. 或 _ 至少一个",
         examples=["Abc123_456"],
     )
+    name: str | None = Field(
+        None,
+        max_length=64,
+        description="首次注册必填的姓名；已有账号登录可省略",
+    )
 
     @field_validator("password")
     @classmethod
     def _check_password(cls, v: str) -> str:
         return _validate_password(v)
+
+    @field_validator("name")
+    @classmethod
+    def _check_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("姓名不能为空")
+        return value
 
 
 class TokenResponseData(BaseModel):
@@ -47,4 +62,28 @@ class TokenResponseData(BaseModel):
 class ProfileResponseData(BaseModel):
     """用户资料响应数据。"""
 
-    name: str = Field(..., description="用户昵称")
+    user_id: int = Field(..., ge=100000, le=999999, description="六位用户编号")
+    name: str = Field(..., description="首次注册时填写的姓名")
+    nickname: str = Field(..., description="可修改的昵称")
+
+
+class UpdateProfileResponseData(BaseModel):
+    """昵称更新响应。"""
+
+    nickname: str = Field(..., description="更新后的昵称")
+
+
+class UpdateProfileRequest(BaseModel):
+    """昵称更新请求；用户编号不接受客户端修改。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nickname: str = Field(..., min_length=1, max_length=64, description="新昵称")
+
+    @field_validator("nickname")
+    @classmethod
+    def _check_nickname(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("昵称不能为空")
+        return value

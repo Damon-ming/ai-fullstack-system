@@ -20,6 +20,7 @@ import {
   clearEncryptionSession,
 } from "../api";
 import type { LoginRequest } from "../api";
+import { useAccountStore } from "@ming/store/biz/account-state";
 
 const log = createLogger("account/hook");
 
@@ -72,14 +73,28 @@ export function validatePassword(password: string): ValidationResult {
   return { valid: true, error: "" };
 }
 
+/** 首次注册姓名；已有用户登录时可留空 */
+export function validateName(name: string): ValidationResult {
+  if (name.trim().length > 64) {
+    return { valid: false, error: "姓名最长 64 个字符" };
+  }
+  return { valid: true, error: "" };
+}
+
 /** 校验登录表单（手机号 + 密码） */
 export function validateLoginForm(
   phone: string,
   password: string,
-): { phone: ValidationResult; password: ValidationResult } {
+  name = "",
+): {
+  phone: ValidationResult;
+  password: ValidationResult;
+  name: ValidationResult;
+} {
   return {
     phone: validatePhone(phone),
     password: validatePassword(password),
+    name: validateName(name),
   };
 }
 
@@ -133,10 +148,13 @@ export type LoginStatus = "idle" | "loading" | "success" | "error";
 export interface UseLoginPageHookReturn {
   phone: string;
   password: string;
+  name: string;
   setPhone: (v: string) => void;
   setPassword: (v: string) => void;
+  setName: (v: string) => void;
   phoneError: string;
   passwordError: string;
+  nameError: string;
   submitError: string;
   status: LoginStatus;
   isNewUser: boolean;
@@ -148,8 +166,10 @@ export function useLoginPageHook(
 ): UseLoginPageHookReturn {
   const [phone, setPhoneState] = useState("");
   const [password, setPasswordState] = useState("");
+  const [name, setNameState] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [nameError, setNameError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [status, setStatus] = useState<LoginStatus>("idle");
   const [isNewUser, setIsNewUser] = useState(false);
@@ -166,12 +186,23 @@ export function useLoginPageHook(
     setSubmitError("");
   }, []);
 
+  const setName = useCallback((v: string) => {
+    setNameState(v);
+    setNameError("");
+    setSubmitError("");
+  }, []);
+
   const handleSubmit = useCallback(async () => {
-    const validation = validateLoginForm(phone, password);
+    const validation = validateLoginForm(phone, password, name);
     setPhoneError(validation.phone.error);
     setPasswordError(validation.password.error);
+    setNameError(validation.name.error);
 
-    if (!validation.phone.valid || !validation.password.valid) {
+    if (
+      !validation.phone.valid ||
+      !validation.password.valid ||
+      !validation.name.valid
+    ) {
       return;
     }
 
@@ -182,6 +213,7 @@ export function useLoginPageHook(
       const result = await login({
         phone: phone.trim(),
         password,
+        ...(name.trim() ? { name: name.trim() } : {}),
       });
       setIsNewUser(result.isNew);
       setStatus("success");
@@ -192,15 +224,18 @@ export function useLoginPageHook(
       setSubmitError(message);
       setStatus("error");
     }
-  }, [phone, password, onSuccess]);
+  }, [phone, password, name, onSuccess]);
 
   return {
     phone,
     password,
+    name,
     setPhone,
     setPassword,
+    setName,
     phoneError,
     passwordError,
+    nameError,
     submitError,
     status,
     isNewUser,
@@ -212,40 +247,43 @@ export function useLoginPageHook(
 // 用户资料 Hook
 // ---------------------------------------------------------------------------
 
-export function useAccount() {
-  const [profile, setProfile] = useState({
-    id: "",
-    name: "",
-    avatarText: "",
-  });
+export function useAccount(fetchOnMount = true) {
+  const profile = useAccountStore((s) => s.profile);
+  const setProfile = useAccountStore((s) => s.setProfile);
 
-  // 挂载时从服务端拉取昵称
+  // 挂载时从服务端拉取用户资料
   useEffect(() => {
+    if (!fetchOnMount) return;
+    let active = true;
     fetchProfile()
       .then((res) => {
-        const name = res.data?.name;
-        if (name) {
+        const data = res.data;
+        if (active && data) {
           setProfile({
-            id: name.toLowerCase(),
-            name,
-            avatarText: name.slice(0, 1).toUpperCase(),
+            userId: data.user_id,
+            name: data.name,
+            nickname: data.nickname,
+            avatarText: data.nickname.slice(0, 1).toUpperCase(),
           });
         }
       })
       .catch(() => {
         // 服务端不可用时保持空状态
       });
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [fetchOnMount, setProfile]);
 
-  const update = async (name: string) => {
-    const normalized = name.trim();
+  const update = async (nickname: string) => {
+    const normalized = nickname.trim();
     if (!normalized) return profile;
-    const res = await updateProfile({ name: normalized });
-    const savedName = res.data?.name || normalized;
+    const res = await updateProfile({ nickname: normalized });
+    const savedNickname = res.data?.nickname || normalized;
     const next = {
-      id: savedName.toLowerCase(),
-      name: savedName,
-      avatarText: savedName.slice(0, 1).toUpperCase(),
+      ...profile,
+      nickname: savedNickname,
+      avatarText: savedNickname.slice(0, 1).toUpperCase(),
     };
     setProfile(next);
     return next;

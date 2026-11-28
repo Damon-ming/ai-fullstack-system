@@ -17,11 +17,11 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger,
     Boolean,
     Column,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Table,
     Text,
@@ -36,7 +36,12 @@ history_conversations = Table(
     "history_conversations",
     metadata,
     Column("id", String(64), primary_key=True),
-    Column("user_id", BigInteger, ForeignKey("users.user_id"), nullable=False),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.user_id", onupdate="CASCADE"),
+        nullable=False,
+    ),
     Column("title", String(200), nullable=False),
     Column("is_pinned", Boolean, nullable=False, server_default="false"),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=_NOW),

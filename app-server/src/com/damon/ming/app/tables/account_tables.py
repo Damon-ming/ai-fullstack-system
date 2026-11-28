@@ -12,11 +12,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
-    Identity,
+    Integer,
+    Sequence,
     String,
     Table,
     Text,
@@ -27,20 +28,33 @@ from src.com.damon.ming.app.tables.base import _NOW, metadata
 # users 表
 # ---------------------------------------------------------------------------
 
+public_user_id_seq = Sequence(
+    "users_public_id_seq", start=100000, maxvalue=999999, metadata=metadata
+)
+
 users = Table(
     "users",
     metadata,
-    Column("user_id", BigInteger, Identity(start=1), primary_key=True),
+    Column(
+        "user_id",
+        Integer,
+        primary_key=True,
+        server_default=public_user_id_seq.next_value(),
+    ),
     # phone 保存 FieldEncryptor 密文；phone_idx 用于等值查找和唯一约束。
     Column("phone", String(256), nullable=False),
     Column("phone_idx", String(64), nullable=False, unique=True),
     Column("password", String(128), nullable=False, server_default=""),
-    Column("name", String(64), nullable=False, server_default=""),
+    Column("name", String(64), nullable=False),
+    Column("nickname", String(64), nullable=False),
     Column(
         "created_at",
         DateTime(timezone=True),
         nullable=False,
         server_default=_NOW,
+    ),
+    CheckConstraint(
+        "user_id BETWEEN 100000 AND 999999", name="ck_users_user_id_six_digits"
     ),
 )
 
@@ -51,6 +65,7 @@ class UserRow:
     phone: str
     password: str = ""
     name: str = ""
+    nickname: str = ""
     created_at: datetime | None = None
 
 
@@ -89,7 +104,12 @@ sessions = Table(
     "sessions",
     metadata,
     Column("session_id", String(64), primary_key=True),
-    Column("user_id", BigInteger, ForeignKey("users.user_id"), nullable=False),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.user_id", onupdate="CASCADE"),
+        nullable=False,
+    ),
     Column("device_id", String(64), nullable=False),
     Column(
         "created_at",

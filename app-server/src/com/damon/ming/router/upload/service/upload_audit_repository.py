@@ -18,7 +18,7 @@ def get_file_uploader_map() -> dict[str, str]:
     try:
         with get_default_db().engine.connect() as conn:
             rows = conn.execute(
-                select(upload_records.c.file_path, users.c.name)
+                select(upload_records.c.file_path, users.c.nickname)
                 .select_from(
                     upload_records.outerjoin(
                         users, upload_records.c.user_id == users.c.user_id

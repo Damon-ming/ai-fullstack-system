@@ -34,7 +34,7 @@ class UploadService:
         file_list: list[UploadFile],
         upload_config,
         knowledge_index: KnowledgeIndexService,
-        user_id: int | None = None,
+        user_id: int,
         device_id: str = "",
     ) -> dict:
         success_files: list[dict] = []
@@ -182,7 +182,7 @@ class UploadService:
 
                 logger.info(
                     "收到用户上传文件 | user_id=%s | device=%s | filename=%s | size=%s | type=%s",
-                    user_id if user_id is not None else "anon",
+                    user_id,
                     device_id[:8] if device_id else "-",
                     repr(file_name),
                     len(content),
@@ -350,9 +350,7 @@ class AuditUpdateFailure(RuntimeError):
 
 async def _update_audit(file_id: str, **kwargs) -> None:
     try:
-        await run_in_pool(
-            get_database_pool(), update_upload_record, file_id, **kwargs
-        )
+        await run_in_pool(get_database_pool(), update_upload_record, file_id, **kwargs)
     except Exception as exc:
         raise AuditUpdateFailure("写入上传审计状态失败") from exc
 

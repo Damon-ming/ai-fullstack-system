@@ -7,7 +7,7 @@
 向量库按 file_sha256 去重，审计表按 file_id 记录每次上传。
 """
 
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, String, Table, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text
 from src.com.damon.ming.app.tables.base import _NOW, metadata
 
 # ---------------------------------------------------------------------------
@@ -22,7 +22,12 @@ upload_records = Table(
     Column("file_path", String(512), nullable=True),
     Column("file_name", String(512), nullable=False),
     Column("file_size", String(20), nullable=False, default="0"),
-    Column("user_id", BigInteger, ForeignKey("users.user_id"), nullable=True),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.user_id", onupdate="CASCADE"),
+        nullable=False,
+    ),
     Column("device_id", String(64), nullable=False, server_default=""),
     Column("status", String(24), nullable=False, server_default="processing"),
     Column("error_stage", String(64), nullable=True),
