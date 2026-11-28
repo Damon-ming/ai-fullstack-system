@@ -37,6 +37,19 @@ def get_io_pool() -> ThreadPoolExecutor:
     return ThreadPoolManager().get_pool("io", "default")
 
 
+def create_background_pool() -> ThreadPoolExecutor:
+    """创建周期后台任务专用线程池，避免占用请求 I/O 线程。"""
+    manager = ThreadPoolManager()
+    return manager.create_pool(
+        "background", "default", manager.get_group_limit("background")
+    )
+
+
+def get_background_pool() -> ThreadPoolExecutor:
+    """获取周期后台任务专用线程池。"""
+    return ThreadPoolManager().get_pool("background", "default")
+
+
 async def run_in_pool(
     pool: ThreadPoolExecutor,
     func: Callable[..., Any],

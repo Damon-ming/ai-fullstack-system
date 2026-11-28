@@ -1,9 +1,9 @@
 # app-server/src/com/damon/ming/app/config/thread/thread-pool-config.yaml
 # 全局线程资源预算。各资源组在自己的模块内部创建并分配线程池。
-thread_pools:
-  max_total_workers: 22
+max_total_workers: 23
 
-  groups:
-    rag: 17
-    database: 3
-    io: 2
+groups:
+  rag: 17
+  database: 3
+  io: 2
+  background: 1

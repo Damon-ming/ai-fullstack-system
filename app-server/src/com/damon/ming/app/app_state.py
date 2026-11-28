@@ -12,6 +12,7 @@
   config      配置快照（启动时从 YAML 装载，运行期只读）
   ai          AI 子系统运行时（RAG / 推理）
   threads     全局线程池运行时（跨 RAG、数据库等模块共享）
+  background  进程内周期任务调度器
   storage     持久化
   encryption  加密
 
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 
     from src.com.damon.ming.ai.inference.inference_gateway import InferenceGateway
     from src.com.damon.ming.ai.rag.rag_tool import RagChoreographer
+    from src.com.damon.ming.app.background import BackgroundTaskScheduler
     from src.com.damon.ming.app.config.ai.rag.config import RagConfig
     from src.com.damon.ming.app.config.system.system_config_loader import SystemConfig
     from src.com.damon.ming.app.config.upload.upload_config_loader import UploadConfig
@@ -51,6 +53,13 @@ class ThreadRuntime:
     """进程级线程池管理器，供各业务模块共享。"""
 
     pool_mgr: ThreadPoolManager
+
+
+@dataclass
+class BackgroundRuntime:
+    """进程内周期任务调度器。"""
+
+    scheduler: BackgroundTaskScheduler
 
 
 @dataclass

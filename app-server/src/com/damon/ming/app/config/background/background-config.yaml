@@ -1,0 +1,4 @@
+# 周期后台任务调度配置；任务由业务模块注册。
+startup_delay_seconds: 30  # 服务启动后等待多久执行第一轮
+interval_seconds: 300       # 两轮调度之间的间隔
+batch_size: 10              # 每轮最多提交多少个任务

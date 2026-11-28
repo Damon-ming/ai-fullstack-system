@@ -9,6 +9,7 @@
   - RAG 知识库
   - LLM 推理客户端
   - 上传服务 SHA 缓存
+  - 周期后台任务调度器
 """
 
 from contextlib import asynccontextmanager
@@ -41,11 +42,10 @@ class AppInitializer:
         self.session_service = None
         self.limiter = None
         self.pool_mgr = None
+        self.background_tasks = None
         self.rag_choreographer = None
         self.inference_gateway = None
         self.embedding_gateway = None
-
-        # 上传改为逐文件同步入库，无需后台任务
 
     # -----------------------------------------------------------------------
     # 生命周期
@@ -68,6 +68,7 @@ class AppInitializer:
         self._init_sign_context()
         self._init_rate_limiter()
         self._init_ai()
+        self._init_background_tasks()
 
         logger.info("应用启动完成")
 
@@ -81,6 +82,7 @@ class AppInitializer:
         from src.com.damon.ming.app.app_state import (
             AIRuntime,
             AppConfig,
+            BackgroundRuntime,
             EncryptionState,
             InferenceRuntime,
             RagRuntime,
@@ -94,6 +96,7 @@ class AppInitializer:
         )
 
         app.state.threads = ThreadRuntime(pool_mgr=self.pool_mgr)
+        app.state.background = BackgroundRuntime(scheduler=self.background_tasks)
 
         app.state.ai = AIRuntime(
             rag=RagRuntime(
@@ -122,7 +125,10 @@ class AppInitializer:
         """关闭所有子系统，释放资源。"""
         logger.info("应用关闭，释放资源")
 
-        # 1. 关闭线程池
+        # 1. 停止新任务提交，再关闭线程池
+        if self.background_tasks is not None:
+            self.background_tasks.stop()
+
         if self.pool_mgr is not None:
             self.pool_mgr.shutdown(wait=True, cancel_futures=True)
             logger.info("线程池管理器已关闭")
@@ -139,6 +145,21 @@ class AppInitializer:
     # -----------------------------------------------------------------------
     # 子系统初始化
     # -----------------------------------------------------------------------
+
+    def _init_background_tasks(self) -> None:
+        """启动周期任务调度器；具体业务任务由各模块按需注册。"""
+        from src.com.damon.ming.app.background import BackgroundTaskScheduler
+        from src.com.damon.ming.app.config.background import BackgroundTaskConfigLoader
+        from src.com.damon.ming.app.thread_pools import create_background_pool
+
+        config = BackgroundTaskConfigLoader().load()
+        self.background_tasks = BackgroundTaskScheduler(
+            default_executor=create_background_pool(),
+            startup_delay_seconds=config.startup_delay_seconds,
+            interval_seconds=config.interval_seconds,
+            batch_size=config.batch_size,
+        )
+        self.background_tasks.start()
 
     def _init_i18n(self) -> None:
         """i18n 模块初始化：加载 YAML 配置 + 交给 i18n 自己装配。"""

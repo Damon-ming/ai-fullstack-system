@@ -21,29 +21,26 @@ class ThreadPoolConfigLoader:
     def load(self) -> ThreadPoolBudget:
         raw = load_yaml(self._config_dir, allow_empty=True)
         if not isinstance(raw, dict):
-            raise TypeError("thread_pools 配置必须是键值对")
-        config = raw.get("thread_pools")
-        if not isinstance(config, dict):
-            raise TypeError("thread_pools 必须是键值对")
+            raise TypeError("线程池配置必须是键值对")
 
         total_limit = self._positive_int(
-            config.get("max_total_workers"), "thread_pools.max_total_workers"
+            raw.get("max_total_workers"), "max_total_workers"
         )
-        raw_groups = config.get("groups")
+        raw_groups = raw.get("groups")
         if not isinstance(raw_groups, dict) or not raw_groups:
-            raise TypeError("thread_pools.groups 必须是非空键值对")
+            raise TypeError("groups 必须是非空键值对")
 
         group_limits: dict[str, int] = {}
         for group_name, value in raw_groups.items():
             if not isinstance(group_name, str) or not group_name.strip():
                 raise ValueError("线程资源组名称必须是非空字符串")
             group_limits[group_name] = self._positive_int(
-                value, f"thread_pools.groups.{group_name}"
+                value, f"groups.{group_name}"
             )
 
         if sum(group_limits.values()) > total_limit:
             raise ValueError(
-                f"线程资源组预算总和超过 thread_pools.max_total_workers={total_limit}"
+                f"线程资源组预算总和超过 max_total_workers={total_limit}"
             )
 
         return ThreadPoolBudget(total_limit, group_limits)
