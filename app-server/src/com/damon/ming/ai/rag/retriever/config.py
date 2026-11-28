@@ -36,7 +36,6 @@ class RetrieverConfig:
             try:
                 roles[name] = RetrieverRoleParams(
                     name=name,
-                    top_k=section["top_k"],
                     retrieve_top_k=section["retrieve_top_k"],
                     dense_top_k=section["dense_top_k"],
                     sparse_top_k=section["sparse_top_k"],

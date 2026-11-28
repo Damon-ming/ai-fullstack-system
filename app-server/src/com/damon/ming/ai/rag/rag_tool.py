@@ -173,7 +173,6 @@ class RagChoreographer:
             retrieval_pool=self.thread_pools.get_retrieval_pool(),
             config=self.config.get_retriever_config(),
         )
-        self.retriever_config = self.retriever_manager.get_hybrid_config()
         self.hybrid_retriever = self.retriever_manager.get_hybrid()
 
         # 步骤7：初始化分割器
@@ -226,11 +225,7 @@ class RagChoreographer:
         线程池由统一管理器统计和回收；组件通过 RAG 专属接口获取需要的池。
           - 取消时 CancelledError 穿透所有 await 层，无需手动检查
 
-        取消联动：
-        参数：
-          - 候选池大小和最终输出大小均由 YAML 配置驱动，不再提供函数入参：
-            retrieve_top_k — 检索器返回多少 section 给 reranker（候选池，决定 precision 上限）
-            top_k          — reranker 精选后保留多少 section（最终上下文量级）
+        检索与重排参数在初始化时分别注入对应组件。
 
         Returns:
             检索结果文本。取消时抛出 asyncio.CancelledError。
@@ -239,33 +234,20 @@ class RagChoreographer:
             asyncio.CancelledError: 客户端断开或超时时向上传播。
         """
         max_context_tokens = self.choreographer_config.context_max_tokens
-        cfg = self.retriever_config
-        # 候选池大小（retrieve）与最终输出大小（rerank）分离，全部由 YAML 配置驱动：
-        #   retrieve_top_k — 检索器返回多少 section 给 reranker（候选池，决定 precision 上限）
-        #   top_k          — reranker 精选后保留多少 section（最终上下文量级）
-        # TODO: 支持由外层调用参数动态传入 retrieve_top_k 和 rerank_top_k。
-        retrieve_top_k = cfg.retrieve_top_k
-        rerank_top_k = cfg.top_k
 
         logger.info(
-            "RAG 检索开始 | query_length=%s | retrieve_top_k=%s | rerank_top_k=%s",
+            "RAG 检索开始 | query_length=%s",
             len(query),
-            retrieve_top_k,
-            rerank_top_k,
         )
 
         # 协作取消信号：超时或客户端断开时通知线程池中的 rerank 提前退出
         cancel_event = threading.Event()
 
         try:
-            # ── 阶段 1: 混合检索（参数全部来自 YAML 配置） ──
+            # ── 阶段 1: 混合检索 ──
             # 传入 cancel_event，使稠密/稀疏检索之间可感知取消信号
             raw_nodes = await self.hybrid_retriever.retrieve(
                 query=query,
-                top_k=retrieve_top_k,
-                dedup_by_section=cfg.dedup_by_section,
-                dense_top_k=cfg.dense_top_k,
-                sparse_top_k=cfg.sparse_top_k,
                 metadata_filter=None,
                 cancel_event=cancel_event,
             )
@@ -290,7 +272,6 @@ class RagChoreographer:
                 self.reranker.rerank,
                 query,
                 reconstructed_nodes,
-                rerank_top_k,
                 cancel_event,
             )
             if not ranked_nodes:

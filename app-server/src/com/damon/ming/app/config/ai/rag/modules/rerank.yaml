@@ -5,6 +5,7 @@ model_dir: "${model_dir}/rerank"
 roles:
   bge_reranker_v2_m3:
     model_name: bge-reranker-v2-m3
+    top_k: 5  # 重排后最终保留的 section 数
     batch_size: 16
     max_seq_len: 1024
     device: cuda

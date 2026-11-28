@@ -113,10 +113,9 @@ class CrossEncoderReranker(BaseReranker):
         self,
         query: str,
         nodes: list[TextNode],
-        top_k: int | None = None,
         cancel_event: threading.Event | None = None,
     ) -> list[TextNode]:
-        if not nodes or (top_k is not None and top_k <= 0):
+        if not nodes:
             return []
         if cancel_event is not None and cancel_event.is_set():
             return []
@@ -180,8 +179,7 @@ class CrossEncoderReranker(BaseReranker):
             node.metadata["_rerank_score"] = float(score)
             out_nodes.append(node)
 
-        if top_k is not None:
-            out_nodes = out_nodes[:top_k]
+        out_nodes = out_nodes[: self.params.top_k]
 
         self.logger.info(
             f"[Rerank] 候选数量:{len(nodes)} | 窗口总数:{len(all_texts)} → 输出:{len(out_nodes)}"

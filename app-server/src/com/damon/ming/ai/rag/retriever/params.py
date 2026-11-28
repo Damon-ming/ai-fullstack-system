@@ -9,7 +9,6 @@ from dataclasses import dataclass
 @dataclass(frozen=True, kw_only=True)
 class RetrieverRoleParams:
     name: str
-    top_k: int
     retrieve_top_k: int
     dense_top_k: int
     sparse_top_k: int
@@ -25,7 +24,6 @@ class RetrieverRoleParams:
         if not isinstance(self.name, str) or not self.name.strip():
             raise ValueError("retriever role 名称不能为空")
         for name in (
-            "top_k",
             "retrieve_top_k",
             "dense_top_k",
             "sparse_top_k",

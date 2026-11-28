@@ -10,6 +10,7 @@ from src.com.damon.ming.ai.rag.retriever.base_retriever import (
     DenseRetriever,
     SparseRetriever,
 )
+from src.com.damon.ming.ai.rag.retriever.params import RetrieverRoleParams
 from src.com.damon.ming.ai.rag.retriever.rrf import ReciprocalRankFusion
 from src.com.damon.ming.app.thread_pools import submit_to_pool
 from src.com.damon.ming.log import pin
@@ -31,40 +32,26 @@ class HybridRetriever:
       True：Dense/Sparse 各自去重 + RRF 后去重 + 循环扩大，尽力填满 top_k。
       False：跳过所有 section 去重和循环扩大，直接返回 RRF 原始结果。
 
-    注意：dedup_by_section / dense_top_k / sparse_top_k 无默认值，调用方必须显式传入。
-          max_section_oversample_multiplier / rrf_oversample_multiplier 为构造参数。
+    检索策略由初始化配置注入；每次调用只提供查询和运行上下文。
     """
 
     def __init__(
         self,
         dense_retriever: DenseRetriever,
         sparse_retriever: SparseRetriever,
-        dense_weight: float,
-        sparse_weight: float,
-        fuse_k: int,
-        max_section_oversample_multiplier: int,
-        rrf_oversample_multiplier: int,
-        retrieval_timeout_seconds: float,
+        params: RetrieverRoleParams,
         retrieval_pool: ThreadPoolExecutor,
     ):
         self.dense_retriever = dense_retriever
         self.sparse_retriever = sparse_retriever
-        self.dense_weight = dense_weight
-        self.sparse_weight = sparse_weight
-        self.fuser = ReciprocalRankFusion(k=fuse_k)
-        self.max_section_oversample_multiplier = max_section_oversample_multiplier
-        self.rrf_oversample_multiplier = rrf_oversample_multiplier
-        self.retrieval_timeout_seconds = retrieval_timeout_seconds
+        self.params = params
+        self.fuser = ReciprocalRankFusion(k=params.fuse_k)
         self._executor = retrieval_pool
         self.logger = pin("HybridRetriever")
 
     async def retrieve(
         self,
         query: str,
-        top_k: int,
-        dedup_by_section: bool,
-        dense_top_k: int,
-        sparse_top_k: int,
         metadata_filter: dict[str, Any] | None = None,
         cancel_event: threading.Event | None = None,
     ) -> list[TextNode]:
@@ -73,12 +60,6 @@ class HybridRetriever:
 
         Args:
             query: 查询文本。
-            top_k: 返回结果数量上限。
-            dedup_by_section: True 时保证 section 多样性并尽力填满 top_k；
-                              False 时跳过所有 section 去重，直接返回 RRF 原始结果。
-                              必须显式传入，无默认值。
-            dense_top_k: 稠密检索候选数。
-            sparse_top_k: 稀疏检索候选数。
             metadata_filter: 元数据过滤条件。
             cancel_event: 协作取消信号，稠密检索完成后检查，已取消则跳过稀疏检索。
 
@@ -86,17 +67,13 @@ class HybridRetriever:
             融合后的检索结果列表。
         """
         self.logger.info(
-            f"[HybridRetriever] 开始混合检索 | query={query[:50]} | dedup_by_section={dedup_by_section}"
+            f"[HybridRetriever] 开始混合检索 | query={query[:50]} | dedup_by_section={self.params.dedup_by_section}"
         )
 
         return await self._retrieve_with_executor(
             query,
-            top_k,
-            dense_top_k,
-            sparse_top_k,
             metadata_filter,
             self._executor,
-            dedup_by_section,
             cancel_event,
         )
 
@@ -105,17 +82,17 @@ class HybridRetriever:
     async def _retrieve_with_executor(
         self,
         query: str,
-        top_k: int,
-        dense_top_k: int,
-        sparse_top_k: int,
         metadata_filter: dict[str, Any] | None,
         executor: ThreadPoolExecutor,
-        dedup_by_section: bool,
         cancel_event: threading.Event | None = None,
     ) -> list[TextNode]:
         """并发检索路径。dedup_by_section=False 时不做循环扩大。"""
 
-        max_mult = max(self.max_section_oversample_multiplier, 1)
+        top_k = self.params.retrieve_top_k
+        dense_top_k = self.params.dense_top_k
+        sparse_top_k = self.params.sparse_top_k
+        dedup_by_section = self.params.dedup_by_section
+        max_mult = self.params.max_section_oversample_multiplier
 
         deduped: list[TextNode] = []
         sparse_ranked_candidates: list[tuple[TextNode, float]] = []
@@ -138,9 +115,7 @@ class HybridRetriever:
 
             sparse_future = None
             if not sparse_candidates_loaded:
-                max_sparse_top_k = sparse_top_k * (
-                    max_mult if dedup_by_section else 1
-                )
+                max_sparse_top_k = sparse_top_k * (max_mult if dedup_by_section else 1)
                 sparse_future = submit_to_pool(
                     executor,
                     self.sparse_retriever.get_ranked_candidates,
@@ -162,7 +137,7 @@ class HybridRetriever:
                 pending.add(sparse_async_future)
             completed = set()
             loop = asyncio.get_running_loop()
-            deadline = loop.time() + self.retrieval_timeout_seconds
+            deadline = loop.time() + self.params.retrieval_timeout_seconds
 
             try:
                 while pending:
@@ -210,7 +185,7 @@ class HybridRetriever:
                 dense_async_future.cancel()
                 self.logger.error(
                     "[HybridRetriever] 稠密检索超时 "
-                    f"(总等待上限 {self.retrieval_timeout_seconds} 秒)"
+                    f"(总等待上限 {self.params.retrieval_timeout_seconds} 秒)"
                 )
 
             if sparse_async_future is not None:
@@ -226,7 +201,7 @@ class HybridRetriever:
                     # 保持原有失败重试行为；cancel() 无法停止已运行的线程任务。
                     self.logger.error(
                         "[HybridRetriever] 稀疏检索超时 "
-                        f"(总等待上限 {self.retrieval_timeout_seconds} 秒)"
+                        f"(总等待上限 {self.params.retrieval_timeout_seconds} 秒)"
                     )
 
             if sparse_candidates_loaded and sparse_ranked_candidates:
@@ -248,12 +223,12 @@ class HybridRetriever:
             # ② RRF 融合
             self.logger.info("[HybridRetriever] 执行 RRF 融合")
             if dedup_by_section:
-                rrf_top_k = top_k * self.rrf_oversample_multiplier
+                rrf_top_k = top_k * self.params.rrf_oversample_multiplier
             else:
                 rrf_top_k = top_k
             fused_results = self.fuser.fuse_with_weights(
                 results_list=[dense_results, sparse_results],
-                weights=[self.dense_weight, self.sparse_weight],
+                weights=[self.params.dense_weight, self.params.sparse_weight],
                 top_k=rrf_top_k,
             )
 
@@ -272,7 +247,7 @@ class HybridRetriever:
                 self.logger.info(
                     f"[HybridRetriever] 检索完成 | 返回 {len(deduped)} 个不同 section"
                 )
-                return deduped[:top_k]
+                return [node for node, _ in deduped[:top_k]]
 
             # ⑥ 不够 → 扩大检索范围再试
             self.logger.info(

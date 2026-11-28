@@ -12,6 +12,7 @@ class RerankerParams:
     """Validated initialization parameters consumed by a reranker engine."""
 
     model_name: str
+    top_k: int
     max_seq_len: int
     batch_size: int
     window_overlap: int
@@ -25,6 +26,8 @@ class RerankerParams:
     def __post_init__(self) -> None:
         if not isinstance(self.model_name, str) or not self.model_name.strip():
             raise ValueError("model_name 必须是非空字符串")
+        if type(self.top_k) is not int or self.top_k <= 0:
+            raise ValueError("top_k 必须是正整数")
         if type(self.max_seq_len) is not int or self.max_seq_len <= 0:
             raise ValueError("max_seq_len 必须是正整数")
         if type(self.batch_size) is not int or self.batch_size <= 0:

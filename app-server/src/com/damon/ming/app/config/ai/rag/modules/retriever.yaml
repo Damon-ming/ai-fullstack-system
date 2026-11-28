@@ -1,8 +1,8 @@
+# app-server/src/com/damon/ming/app/config/ai/rag/modules/retriever.yaml
 # retriever 模块配置。
 roles:
   hybrid:
-    # reranker 精选后的 section 数；候选池大小由 retrieve_top_k 控制。
-    top_k: 5
+    # 送入 reranker 的 section 候选池大小。
     retrieve_top_k: 20
     dense_top_k: 30
     sparse_top_k: 30
