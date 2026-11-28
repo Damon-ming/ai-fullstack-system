@@ -30,6 +30,8 @@ class BaseReranker(ABC):
         query: str,
         nodes: list[TextNode],
         cancel_event: threading.Event | None = None,
+        *,
+        top_k: int | None = None,
     ) -> list[TextNode]:
         """
         对候选文档进行重排序。
@@ -38,5 +40,6 @@ class BaseReranker(ABC):
         :param nodes: 召回得到的候选TextNode列表
         :param cancel_event: 协作取消信号。实现方应在循环中定期检查，
                             已设置时立即返回空列表（不写入任何分数）。
+        :param top_k: 本轮最终保留数量；None 使用初始化配置。
         :return: 重排后的TextNode（在metadata写入重排分数 _rerank_score）
         """

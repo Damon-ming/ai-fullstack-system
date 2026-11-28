@@ -211,6 +211,7 @@ class RagChoreographer:
     async def build_rag_context(
         self,
         query: str,
+        top_k: int | None = None,
     ) -> str:
         """RAG 检索主流程。
 
@@ -226,6 +227,8 @@ class RagChoreographer:
           - 取消时 CancelledError 穿透所有 await 层，无需手动检查
 
         检索与重排参数在初始化时分别注入对应组件。
+        top_k 可覆盖本轮重排后保留的 section 数；不传时使用 rerank YAML 默认值。
+        超过检索候选上限时按 retrieve_top_k 执行。
 
         Returns:
             检索结果文本。取消时抛出 asyncio.CancelledError。
@@ -233,6 +236,10 @@ class RagChoreographer:
         Raises:
             asyncio.CancelledError: 客户端断开或超时时向上传播。
         """
+        if top_k is not None and (type(top_k) is not int or top_k <= 0):
+            raise ValueError("top_k 必须是正整数")
+        retrieve_top_k = self.hybrid_retriever.params.retrieve_top_k
+        effective_top_k = None if top_k is None else min(top_k, retrieve_top_k)
         max_context_tokens = self.choreographer_config.context_max_tokens
 
         logger.info(
@@ -273,6 +280,7 @@ class RagChoreographer:
                 query,
                 reconstructed_nodes,
                 cancel_event,
+                top_k=effective_top_k,
             )
             if not ranked_nodes:
                 logger.info("RAG 重排后无有效结果")
